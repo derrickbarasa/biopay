@@ -128,6 +128,81 @@ function goBack() {
   router.push({ name: 'households' })
 }
 
+const printing = ref(false)
+
+function escapeHtml(s: string): string {
+  return String(s ?? '').replace(/[&<>"']/g, (c) => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string
+  ))
+}
+
+// Fetches the self-contained voucher (name + photo + QR, all inlined as data URIs)
+// and opens a print-ready window.
+async function printVoucher() {
+  printing.value = true
+  try {
+    const res = await dispatch<{ results: { householdNumber: string; householdName: string; organisationCode: string; photo?: string; qr?: string } }>(
+      'GET_HOUSEHOLD_VOUCHER', { householdNumber: householdNumber.value },
+    )
+    const v = res.results
+    const w = window.open('', '_blank', 'width=760,height=920')
+    if (!w) {
+      toast.error('Allow pop-ups to print the voucher')
+      return
+    }
+    const photo = v.photo
+      ? `<img class="photo" src="${v.photo}" alt="Beneficiary photo" />`
+      : `<div class="photo placeholder">No photo</div>`
+    const qr = v.qr ? `<img class="qr" src="${v.qr}" alt="Household QR code" />` : ''
+    w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Payment Voucher - ${escapeHtml(v.householdNumber)}</title>
+      <style>
+        * { box-sizing: border-box; font-family: Arial, Helvetica, sans-serif; }
+        body { margin: 0; padding: 32px; color: #0f172a; }
+        .voucher { max-width: 620px; margin: 0 auto; border: 2px solid #0d9488; border-radius: 14px; padding: 28px; }
+        .head { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 1px solid #e2e8f0; padding-bottom: 14px; margin-bottom: 20px; }
+        .title { font-size: 22px; font-weight: 800; color: #0f766e; letter-spacing: -.01em; }
+        .sub { color: #64748b; font-size: 13px; margin-top: 2px; }
+        .body { display: flex; gap: 24px; align-items: center; }
+        .photo { width: 150px; height: 150px; object-fit: cover; border-radius: 10px; border: 1px solid #e2e8f0; }
+        .placeholder { display: flex; align-items: center; justify-content: center; color: #94a3b8; background: #f1f5f9; font-size: 13px; }
+        .info { flex: 1; }
+        .name { font-size: 24px; font-weight: 700; margin: 0 0 6px; }
+        .row { font-size: 14px; color: #334155; margin: 3px 0; }
+        .label { color: #64748b; }
+        .qrwrap { text-align: center; }
+        .qr { width: 150px; height: 150px; }
+        .qrcap { font-size: 11px; color: #94a3b8; margin-top: 4px; }
+        .foot { margin-top: 24px; border-top: 1px dashed #cbd5e1; padding-top: 12px; font-size: 12px; color: #94a3b8; display: flex; justify-content: space-between; }
+        @media print { body { padding: 0; } .voucher { border-color: #0d9488; } }
+      </style></head>
+      <body onload="window.focus()">
+        <div class="voucher">
+          <div class="head">
+            <div><div class="title">Payment Voucher</div><div class="sub">${escapeHtml(v.organisationCode ?? '')}</div></div>
+            <div class="qrwrap">${qr}<div class="qrcap">${escapeHtml(v.householdNumber)}</div></div>
+          </div>
+          <div class="body">
+            ${photo}
+            <div class="info">
+              <p class="name">${escapeHtml(v.householdName ?? '')}</p>
+              <div class="row"><span class="label">Household #:</span> ${escapeHtml(v.householdNumber)}</div>
+              <div class="row"><span class="label">Organization:</span> ${escapeHtml(v.organisationCode ?? '')}</div>
+              <div class="row"><span class="label">Issued:</span> ${escapeHtml(new Date().toLocaleDateString())}</div>
+            </div>
+          </div>
+          <div class="foot"><span>BioPay</span><span>Signature: ____________________</span></div>
+        </div>
+      </body></html>`)
+    w.document.close()
+    w.focus()
+    setTimeout(() => w.print(), 300)
+  } catch (err) {
+    toast.error(err instanceof Error ? err.message : 'Failed to generate voucher')
+  } finally {
+    printing.value = false
+  }
+}
+
 // Exports this household's alternates to CSV.
 function exportAlternates() {
   if (!alternates.value.length) {
@@ -157,6 +232,17 @@ onMounted(load)
         <div class="text-body-2 text-medium-emphasis">{{ householdNumber }}</div>
       </div>
       <v-spacer />
+      <v-btn
+        v-if="detail"
+        color="primary"
+        variant="tonal"
+        prepend-icon="mdi-printer"
+        :loading="printing"
+        class="mr-3"
+        @click="printVoucher"
+      >
+        Print Voucher
+      </v-btn>
       <v-chip
         v-if="detail"
         :color="detail.status === 1 ? 'success' : 'error'"

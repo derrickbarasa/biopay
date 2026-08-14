@@ -11,8 +11,10 @@ import io.vertx.mssqlclient.MSSQLPool;
 import io.vertx.sqlclient.Row;
 import io.vertx.sqlclient.Tuple;
 import com.biopay.databases.Datasource;
+import com.biopay.utilities.FileStore;
 import com.biopay.utilities.Logging;
 import com.biopay.utilities.OrgModules;
+import com.biopay.utilities.QrSupport;
 import com.biopay.utilities.Rows;
 import com.biopay.utilities.Utilities;
 
@@ -39,6 +41,7 @@ public class Household extends AbstractVerticle {
         eventBus.consumer("GET_HOUSEHOLD", this::getOne);
         eventBus.consumer("GET_HOUSEHOLDS", this::retrieveAll);
         eventBus.consumer("GET_HOUSEHOLD_HISTORY", this::history);
+        eventBus.consumer("GET_HOUSEHOLD_VOUCHER", this::voucher);
         eventBus.consumer("BULK_UPLOAD_HOUSEHOLDS", this::bulkUpload);
 
         eventBus.consumer("CREATE_ALTERNATE", this::createAlternate);
@@ -309,6 +312,77 @@ public class Household extends AbstractVerticle {
                         .put("results", new JsonObject()
                                 .put("payments", (JsonArray) cf.resultAt(0))
                                 .put("events", (JsonArray) cf.resultAt(1)))));
+    }
+
+    // ---- GET_HOUSEHOLD_VOUCHER (self-contained printable payment voucher) -----------
+    // Returns the household's full name, photo and a QR code (encoding the household
+    // number) all inlined as data URIs, so the web dashboard can render and print a
+    // voucher slip without any further authenticated asset fetches.
+
+    private void voucher(Message<Object> message) {
+        JsonObject payload = new JsonObject(message.body().toString());
+        String householdNumber = payload.getString("householdNumber", "").trim();
+        if (householdNumber.isEmpty()) {
+            replyError(message, "householdNumber is required");
+            return;
+        }
+        boolean anchor = isAnchor(payload);
+        String partnerCode = payload.getString("partnerCode", "");
+        String sql = "SELECT household_name, partner_code FROM households WHERE household_number=@p1"
+                + (anchor ? "" : " AND partner_code=@p2");
+        Tuple params = anchor ? Tuple.of(householdNumber) : Tuple.of(householdNumber, partnerCode);
+
+        pool.preparedQuery(sql)
+                .execute(params)
+                .onFailure(err -> onDbError(message, err))
+                .onSuccess(rows -> {
+                    if (rows.size() == 0) {
+                        reply(message, new JsonObject().put("responseCode", "999")
+                                .put("responseMessage", "Household not found or not in your organisation"));
+                        return;
+                    }
+                    Row r = rows.iterator().next();
+                    String name = Rows.str(r, "household_name");
+                    String org = Rows.str(r, "partner_code");
+
+                    pool.preparedQuery("SELECT TOP 1 photo_url FROM images WHERE beneficiary_id=@p1 AND status=1 ORDER BY created_at DESC")
+                            .execute(Tuple.of(householdNumber))
+                            .onComplete(ar -> {
+                                String photo = null;
+                                if (ar.succeeded() && ar.result().size() > 0) {
+                                    photo = inlineImage(Rows.str(ar.result().iterator().next(), "photo_url"));
+                                }
+                                String qr;
+                                try {
+                                    qr = QrSupport.dataUri(householdNumber);
+                                } catch (Exception ex) {
+                                    qr = null;
+                                }
+                                reply(message, new JsonObject()
+                                        .put("responseCode", "000")
+                                        .put("responseMessage", "OK")
+                                        .put("results", new JsonObject()
+                                                .put("householdNumber", householdNumber)
+                                                .put("householdName", name)
+                                                .put("organisationCode", org)
+                                                .put("photo", photo)
+                                                .put("qr", qr)));
+                            });
+                });
+    }
+
+    /** Reads a stored image and returns it inlined as a data URI, or null if unavailable. */
+    private static String inlineImage(String filename) {
+        if (filename == null || filename.isEmpty()) {
+            return null;
+        }
+        try {
+            byte[] bytes = FileStore.read(filename);
+            String contentType = filename.toLowerCase().endsWith(".png") ? "image/png" : "image/jpeg";
+            return "data:" + contentType + ";base64," + java.util.Base64.getEncoder().encodeToString(bytes);
+        } catch (Exception ex) {
+            return null;
+        }
     }
 
     // ---- GET_HOUSEHOLDS (one filter per parameter: village/location/county/state,
