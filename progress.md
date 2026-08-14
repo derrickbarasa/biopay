@@ -34,13 +34,14 @@ session. The work to be done is below.
 - [ ] Add more graphs and more data.
 - [ ] Generate and print payment vouchers — voucher shows full names of the person, image, and QR code for the household.
 
-### Frontend — household
-- [x] View household on a **new page (no popups)** — dedicated route `/app/households/:householdNumber` (`HouseholdDetailPage.vue`); the old detail dialog was removed and the eye action now navigates. Shows all fields the backend currently returns + alternates + biometric status.
-  - [ ] **Images**: blocked — no endpoint returns captured image filenames (GET_HOUSEHOLD only returns an `imageStatus` count). Needs a backend field (read from the `images` table) before photos can render. Backend/DB work — see decision below.
-- [~] Filters — existing: organisation, state, county, location, village, gender, status, and a name/number/ID search (document number is covered by that search). Still to add: **vulnerability status, legal status, registration date range**.
-  - [ ] `vulnerability_status` / `legal_status`: the `households` table has no such columns today (mobile captures vulnerability status, but the web schema doesn't expose it). Needs a migration + backend before these filters/graphs are real.
-- [~] Graphs — by **age, gender, status** done (client-side over the filtered rows, on the Households page, toggle "Show Breakdown"). Legal-status / vulnerability-status graphs blocked on the same missing columns.
-- [ ] Audit history — e.g. when it was paid. Blocked: needs a backend read joining `payments` / `audit_logs` for the household. Backend/DB work.
+### Frontend — household  ✅ done (backend verified by mvn compile only)
+- [x] View household on a **new page (no popups)** — dedicated route `/app/households/:householdNumber` (`HouseholdDetailPage.vue`); old dialog removed, eye action navigates.
+  - [x] **Images** now render — `GET_HOUSEHOLD` returns `images` (authed `/files` URLs, read from the `images` table); the detail page fetches each photo through `apiClient` as a blob (a plain `<img src>` can't send the JWT) and shows a gallery.
+  - [x] Fuller detail fields exposed by `summary()` — marital status, spouse, ID/document number, dependants, beneficiary type, vulnerability & legal status.
+- [x] Filters — added **vulnerability status, legal status, registration date range** (`GET_HOUSEHOLDS` new params) on top of existing organisation/state/county/location/village/gender/status/search. (Document number is covered by the name/number/ID search.)
+  - Migration **`009_household_attributes.sql`** adds `vulnerability_status` + `legal_status` columns (+ indexes) to `households`. **Must be applied before those filters/graphs return data.**
+- [x] Graphs — age, gender, status, **vulnerability status, legal status** (client-side over the filtered rows; "Show Breakdown" toggle on the Households page).
+- [x] Audit history — new `GET_HOUSEHOLD_HISTORY` returns the household's `payments` (amount/status/cycle/date — "when it was paid") and `audit_logs` events; both shown on the detail page.
 
 ### Verifications
 - [ ] OTP (mobile does **not** require OTP), email, TOTP.
@@ -94,4 +95,9 @@ session. The work to be done is below.
   - Data export (household/alternate/payment) — mostly frontend CSV, partially doable now.
   - Generated-data columns (voucher & payment cycles) — needs backend to surface those on the list.
 - **Deliverable 3 — CSV exports (done, frontend-only):** household export (Households page), per-household alternate export (detail page); payment export already existed. `vue-tsc` + `vite build` pass. Local commit added.
-- Next candidates (frontend-verifiable): "voucher/payment cycle" columns if backend already returns them; datatables search polish on remaining pages. Backend-gated items await the compile-only decision or the subscription/face-rec product calls.
+- **Deliverable 4 — Household deep-dive backend (done; backend compile-only, frontend verified):**
+  - Migration `009_household_attributes.sql` (vulnerability_status, legal_status + indexes).
+  - `Household.java`: fuller `summary()`; new GET_HOUSEHOLDS filters (vulnerability/legal/date range); `GET_HOUSEHOLD` now returns real image URLs; new `GET_HOUSEHOLD_HISTORY` (payments + audit).
+  - Frontend: detail page shows photos (authed blob fetch) + payment/audit history + new fields; Households page gains the new filters and vulnerability/legal breakdown charts.
+  - Verified: `mvn compile` (backend, exit 0), `vue-tsc -b` + `vite build` (frontend, exit 0). **Not** runtime-tested — no MSSQL here; **migration 009 must be applied** on the target DB.
+- **Still open:** generated-data (voucher/payment-cycle) columns; verifications UI; deduplication; subscription (needs billing decision); mobile face-recognition (needs SDK decision). Local commits: `0fba6fb`, `721862e`, `72b42dc`, + this one — all unpushed (GitHub read-only).
