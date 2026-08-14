@@ -18,6 +18,8 @@ interface HouseholdRow {
   bomaCode?: string
   vulnerabilityStatus?: string
   legalStatus?: string
+  voucherCount?: number
+  paymentCycleCount?: number
   status: number
 }
 
@@ -77,6 +79,8 @@ const headers = [
   { title: 'Organization', key: 'organisationCode' },
   { title: 'Village', key: 'bomaCode' },
   { title: 'Size', key: 'householdSize' },
+  { title: 'Vouchers', key: 'voucherCount' },
+  { title: 'Cycles', key: 'paymentCycleCount' },
   { title: 'Status', key: 'status' },
   { title: 'Actions', key: 'actions', sortable: false, align: 'end' as const },
 ]
@@ -207,10 +211,11 @@ function exportCsv() {
     return
   }
   const csv = toCsv(
-    ['Household #', 'Head of Household', 'Organization', 'Age', 'Gender', 'Phone', 'Size', 'Village', 'Status'],
+    ['Household #', 'Head of Household', 'Organization', 'Age', 'Gender', 'Phone', 'Size', 'Village', 'Vouchers', 'Payment Cycles', 'Status'],
     households.value.map((h) => [
       h.householdNumber, h.householdName, h.organisationCode, h.age ?? '', h.gender ?? '',
-      h.phoneNumber ?? '', h.householdSize ?? '', h.bomaCode ?? '', h.status === 1 ? 'Active' : 'Inactive',
+      h.phoneNumber ?? '', h.householdSize ?? '', h.bomaCode ?? '', h.voucherCount ?? 0, h.paymentCycleCount ?? 0,
+      h.status === 1 ? 'Active' : 'Inactive',
     ]),
   )
   downloadCsv(`households-${new Date().toISOString().slice(0, 10)}.csv`, csv)
@@ -432,6 +437,16 @@ async function submitBulk() {
         </v-row>
       </v-card-text>
       <v-data-table :headers="headers" :items="households" :loading="loading">
+        <template #item.voucherCount="{ item }">
+          <v-chip size="small" :color="item.voucherCount ? 'primary' : undefined" variant="tonal">
+            {{ item.voucherCount ?? 0 }}
+          </v-chip>
+        </template>
+        <template #item.paymentCycleCount="{ item }">
+          <v-chip size="small" :color="item.paymentCycleCount ? 'secondary' : undefined" variant="tonal">
+            {{ item.paymentCycleCount ?? 0 }}
+          </v-chip>
+        </template>
         <template #item.status="{ item }">
           <v-chip size="small" :color="item.status === 1 ? 'success' : 'error'" variant="tonal">
             {{ item.status === 1 ? 'Active' : 'Inactive' }}

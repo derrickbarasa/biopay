@@ -335,7 +335,13 @@ public class Household extends AbstractVerticle {
         int pageSize = Math.min(Math.max(payload.getInteger("pageSize", 25), 1), 200);
         int offset = (page - 1) * pageSize;
 
-        String sql = "SELECT * FROM households WHERE (@p1 IS NULL OR partner_code=@p1) "
+        // Per-row "generated data" counts: how many vouchers this household has been
+        // issued, and how many distinct payment cycles it appears in. Correlated
+        // subqueries so a household with none still returns a 0 row (no join drops it).
+        String sql = "SELECT h.*, "
+                + "(SELECT COUNT(*) FROM vouchers v WHERE v.household_number = h.household_number) AS voucher_count, "
+                + "(SELECT COUNT(DISTINCT p.cycle) FROM payments p WHERE p.household_number = h.household_number) AS payment_cycle_count "
+                + "FROM households h WHERE (@p1 IS NULL OR partner_code=@p1) "
                 + "AND (@p2 IS NULL OR household_name LIKE @p2 OR household_number LIKE @p2 OR id_number LIKE @p2) "
                 + "AND (@p3 IS NULL OR state_code=@p3) AND (@p4 IS NULL OR county_code=@p4) "
                 + "AND (@p5 IS NULL OR payam_code=@p5) AND (@p6 IS NULL OR boma_code=@p6) "
@@ -388,13 +394,22 @@ public class Household extends AbstractVerticle {
                 .put("latitude", Rows.str(r, "latitude"))
                 .put("longitude", Rows.str(r, "longitude"))
                 .put("status", Rows.intVal(r, "status"))
+                // Generated-data counts -- only present on the GET_HOUSEHOLDS listing query,
+                // absent on GET_HOUSEHOLD's SELECT *, so read them defensively.
+                .put("voucherCount", intSafe(r, "voucher_count"))
+                .put("paymentCycleCount", intSafe(r, "payment_cycle_count"))
                 .put("createdAt", Rows.str(r, "created_at"))
                 .put("updatedAt", Rows.str(r, "updated_at"));
     }
 
-    /** Null-safe read of a column that may not exist yet (e.g. pre-migration-009 columns). */
+    /** Null-safe read of a column that may not exist on this row (e.g. pre-migration-009 columns). */
     private static String strSafe(Row r, String column) {
         return r.getColumnIndex(column) < 0 ? null : Rows.str(r, column);
+    }
+
+    /** Null-safe integer read of a column that may not exist on this row (e.g. listing-only aggregates). */
+    private static Integer intSafe(Row r, String column) {
+        return r.getColumnIndex(column) < 0 ? null : Rows.intVal(r, column);
     }
 
     // ---- BULK_UPLOAD_HOUSEHOLDS { villageCode, rows:[{householdName, age, gender, ...}] } ----
