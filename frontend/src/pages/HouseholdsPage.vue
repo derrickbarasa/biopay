@@ -223,9 +223,48 @@ function exportCsv() {
 
 onMounted(() => { load(); loadGeo() })
 
+// ---- Deduplication -------------------------------------------------------------
+interface DuplicateCandidate {
+  householdNumber: string
+  householdName?: string
+  phoneNumber?: string
+  bomaCode?: string
+  reasons: string[]
+}
+const checkingDup = ref(false)
+const duplicateCandidates = ref<DuplicateCandidate[]>([])
+
 function openCreate() {
   form.value = { householdName: '', age: null, gender: '', phoneNumber: '', householdSize: null, stateCode: '', countyCode: '', locationCode: '', villageCode: '' }
+  duplicateCandidates.value = []
   dialog.value = true
+}
+
+// Screens the entry against existing households before creating. If any possible
+// duplicates come back, they're shown and creation waits for an explicit "Register
+// anyway"; a clean check registers immediately.
+async function attemptSave() {
+  if (!form.value.householdName.trim()) {
+    toast.error('Head of household name is required')
+    return
+  }
+  checkingDup.value = true
+  try {
+    const res = await dispatch<{ results: DuplicateCandidate[] }>('CHECK_HOUSEHOLD_DUPLICATE', {
+      householdName: form.value.householdName,
+      phoneNumber: form.value.phoneNumber || undefined,
+      bomaCode: form.value.villageCode || undefined,
+    })
+    if (res.results.length) {
+      duplicateCandidates.value = res.results
+      return
+    }
+  } catch {
+    // If the check itself fails, don't block registration -- fall through to save.
+  } finally {
+    checkingDup.value = false
+  }
+  await save()
 }
 
 async function save() {
@@ -239,6 +278,7 @@ async function save() {
     })
     toast.success('Household registered')
     dialog.value = false
+    duplicateCandidates.value = []
     await load()
   } catch (err) {
     toast.error(err instanceof Error ? err.message : 'Save failed')
@@ -479,11 +519,31 @@ async function submitBulk() {
             <v-col cols="6"><v-select v-model="form.locationCode" :items="locationsForCounty(form.countyCode)" item-title="name" item-value="code" label="Location" density="compact" /></v-col>
             <v-col cols="6"><v-select v-model="form.villageCode" :items="villagesForLocation(form.locationCode)" item-title="name" item-value="code" label="Village" density="compact" /></v-col>
           </v-row>
+
+          <v-alert
+            v-if="duplicateCandidates.length"
+            type="warning" variant="tonal" density="compact" class="mt-3"
+            icon="mdi-account-alert-outline"
+          >
+            <div class="font-weight-medium mb-1">
+              {{ duplicateCandidates.length }} possible duplicate{{ duplicateCandidates.length > 1 ? 's' : '' }} found
+            </div>
+            <div v-for="c in duplicateCandidates" :key="c.householdNumber" class="text-body-2 mb-1">
+              <strong>{{ c.householdName }}</strong> ({{ c.householdNumber }}) — {{ c.reasons.join(', ') }}
+            </div>
+            <div class="text-caption mt-1">Review these before registering a new record.</div>
+          </v-alert>
         </v-card-text>
         <v-card-actions>
           <v-spacer />
           <v-btn variant="text" @click="dialog = false">Cancel</v-btn>
-          <v-btn color="primary" :loading="saving" @click="save">Save</v-btn>
+          <v-btn
+            v-if="duplicateCandidates.length"
+            color="warning" variant="flat" :loading="saving" @click="save"
+          >
+            Register anyway
+          </v-btn>
+          <v-btn v-else color="primary" :loading="checkingDup || saving" @click="attemptSave">Save</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>

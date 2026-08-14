@@ -42,6 +42,7 @@ public class Household extends AbstractVerticle {
         eventBus.consumer("GET_HOUSEHOLDS", this::retrieveAll);
         eventBus.consumer("GET_HOUSEHOLD_HISTORY", this::history);
         eventBus.consumer("GET_HOUSEHOLD_VOUCHER", this::voucher);
+        eventBus.consumer("CHECK_HOUSEHOLD_DUPLICATE", this::checkDuplicate);
         eventBus.consumer("BULK_UPLOAD_HOUSEHOLDS", this::bulkUpload);
 
         eventBus.consumer("CREATE_ALTERNATE", this::createAlternate);
@@ -369,6 +370,76 @@ public class Household extends AbstractVerticle {
                                                 .put("qr", qr)));
                             });
                 });
+    }
+
+    // ---- CHECK_HOUSEHOLD_DUPLICATE ---------------------------------------------------
+    // Screens a would-be registration against existing households in the same
+    // organisation on the product's stated match key -- same ID/document number
+    // (strongest), same phone number, or same name in the same village -- and
+    // returns candidate matches with the reason(s) each one matched. Advisory: the
+    // caller decides whether to proceed (mirrors how the mobile app records a
+    // duplicate flag rather than hard-blocking).
+
+    private void checkDuplicate(Message<Object> message) {
+        JsonObject payload = new JsonObject(message.body().toString());
+        String partnerCode = isAnchor(payload) ? payload.getString("organisationCode", "") : payload.getString("partnerCode", "");
+        if (partnerCode == null || partnerCode.isEmpty()) {
+            reply(message, new JsonObject().put("responseCode", "000").put("responseMessage", "OK").put("results", new JsonArray()));
+            return;
+        }
+        String name = emptyToNull(payload.getString("householdName", ""));
+        String phone = emptyToNull(payload.getString("phoneNumber", ""));
+        String idNumber = emptyToNull(payload.getString("idNumber", ""));
+        // The chosen village narrows a name match (same name in a different village is far
+        // weaker evidence). bomaCode is the village code, matching CREATE_HOUSEHOLD.
+        String bomaCode = emptyToNull(payload.getString("bomaCode", ""));
+
+        if (name == null && phone == null && idNumber == null) {
+            reply(message, new JsonObject().put("responseCode", "000").put("responseMessage", "OK").put("results", new JsonArray()));
+            return;
+        }
+
+        String sql = "SELECT TOP 20 household_number, household_name, phone_number, id_number, boma_code FROM households "
+                + "WHERE status=1 AND partner_code=@p1 AND ("
+                + "(@p2 IS NOT NULL AND id_number=@p2) "
+                + "OR (@p3 IS NOT NULL AND phone_number=@p3) "
+                + "OR (@p4 IS NOT NULL AND household_name=@p4 AND (@p5 IS NULL OR boma_code=@p5))"
+                + ")";
+
+        pool.preparedQuery(sql)
+                .execute(Tuple.of(partnerCode, idNumber, phone, name, bomaCode))
+                .onFailure(err -> onDbError(message, err))
+                .onSuccess(rows -> {
+                    JsonArray results = new JsonArray();
+                    for (Row r : rows) {
+                        JsonArray reasons = new JsonArray();
+                        if (idNumber != null && idNumber.equalsIgnoreCase(Rows.str(r, "id_number"))) {
+                            reasons.add("Same ID/document number");
+                        }
+                        if (phone != null && phone.equalsIgnoreCase(Rows.str(r, "phone_number"))) {
+                            reasons.add("Same phone number");
+                        }
+                        if (name != null && name.equalsIgnoreCase(Rows.str(r, "household_name"))) {
+                            reasons.add(bomaCode != null && bomaCode.equalsIgnoreCase(Rows.str(r, "boma_code"))
+                                    ? "Same name in the same village" : "Same name");
+                        }
+                        results.add(new JsonObject()
+                                .put("householdNumber", Rows.str(r, "household_number"))
+                                .put("householdName", Rows.str(r, "household_name"))
+                                .put("phoneNumber", Rows.str(r, "phone_number"))
+                                .put("idNumber", Rows.str(r, "id_number"))
+                                .put("bomaCode", Rows.str(r, "boma_code"))
+                                .put("reasons", reasons));
+                    }
+                    reply(message, new JsonObject()
+                            .put("responseCode", "000")
+                            .put("responseMessage", results.isEmpty() ? "No duplicates found" : "Possible duplicates found")
+                            .put("results", results));
+                });
+    }
+
+    private static String emptyToNull(String s) {
+        return (s == null || s.trim().isEmpty()) ? null : s.trim();
     }
 
     /** Reads a stored image and returns it inlined as a data URI, or null if unavailable. */
