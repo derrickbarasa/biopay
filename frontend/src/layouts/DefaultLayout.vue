@@ -1,11 +1,52 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { dispatch } from '@/api/client'
+import { useToast } from '@/composables/useToast'
 
 const auth = useAuthStore()
 const router = useRouter()
+const toast = useToast()
 const drawer = ref(true)
+
+// ---- Subscription lifecycle (per anchor) --------------------------------------
+interface SubscriptionStatus {
+  status: 'NONE' | 'ACTIVE' | 'GRACE' | 'ARCHIVED'
+  expiresAt?: string
+  daysToExpiry?: number
+  daysToArchive?: number
+}
+const subscription = ref<SubscriptionStatus>({ status: 'NONE' })
+const renewing = ref(false)
+
+async function fetchSubscription() {
+  try {
+    const res = await dispatch<{ results: SubscriptionStatus }>('GET_SUBSCRIPTION')
+    subscription.value = res.results ?? { status: 'NONE' }
+  } catch {
+    // Fail-open: never block the app because the status check itself failed.
+    subscription.value = { status: 'NONE' }
+  }
+}
+
+async function renewSubscription() {
+  renewing.value = true
+  try {
+    await dispatch('RENEW_SUBSCRIPTION')
+    toast.success('Subscription renewed')
+    await fetchSubscription()
+  } catch (err) {
+    toast.error(err instanceof Error ? err.message : 'Renewal failed')
+  } finally {
+    renewing.value = false
+  }
+}
+
+const isArchived = computed(() => subscription.value.status === 'ARCHIVED')
+const inGrace = computed(() => subscription.value.status === 'GRACE')
+
+onMounted(fetchSubscription)
 
 interface NavItem {
   title: string
@@ -136,7 +177,46 @@ async function handleLogout() {
 
   <v-main class="dashboard-main">
     <v-container fluid class="pa-4 pa-md-7">
-      <router-view />
+      <!-- Grace period: subscription lapsed but still within the 30-day window. -->
+      <v-alert
+        v-if="inGrace"
+        type="warning" variant="tonal" class="mb-4" border="start"
+        icon="mdi-clock-alert-outline"
+      >
+        <div class="d-flex align-center flex-wrap ga-2">
+          <div>
+            <strong>Subscription expired.</strong>
+            You have {{ subscription.daysToArchive ?? 0 }} day(s) of grace left before data is archived.
+          </div>
+          <v-spacer />
+          <v-btn v-if="auth.isAnchor" color="warning" variant="flat" size="small" :loading="renewing" @click="renewSubscription">
+            Renew now
+          </v-btn>
+        </div>
+      </v-alert>
+
+      <!-- Archived: grace exhausted -> gate access behind renewal. -->
+      <div v-if="isArchived" class="archived-gate">
+        <v-card variant="flat" border class="pa-8 text-center" max-width="520">
+          <v-icon icon="mdi-lock-clock" size="48" color="error" class="mb-3" />
+          <h2 class="text-h6 font-weight-bold mb-2">Subscription expired</h2>
+          <p class="text-body-2 text-medium-emphasis mb-4">
+            The 30-day grace period has ended and your data is archived. Renew the subscription
+            to restore access.
+          </p>
+          <v-btn v-if="auth.isAnchor" color="primary" :loading="renewing" @click="renewSubscription">
+            Renew subscription
+          </v-btn>
+          <p v-else class="text-caption text-medium-emphasis">
+            Please contact your anchor administrator to renew.
+          </p>
+          <div class="mt-4">
+            <v-btn variant="text" size="small" prepend-icon="mdi-logout" @click="handleLogout">Log out</v-btn>
+          </div>
+        </v-card>
+      </div>
+
+      <router-view v-else />
     </v-container>
   </v-main>
 </template>
@@ -152,4 +232,5 @@ async function handleLogout() {
 .drawer-subheader { font-size: .68rem; letter-spacing: .08em; text-transform: uppercase; opacity: .55; padding-inline-start: 20px !important; }
 .app-bar { background: rgba(255, 255, 255, .94) !important; backdrop-filter: blur(12px); }
 .dashboard-main { background: radial-gradient(circle at 100% 0, #ecfeff 0, transparent 28rem), #f8fafc; min-height: 100vh; }
+.archived-gate { display: flex; justify-content: center; padding-top: 8vh; }
 </style>

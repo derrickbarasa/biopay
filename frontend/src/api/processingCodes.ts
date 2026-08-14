@@ -63,6 +63,9 @@ export type ProcessingCode =
   // organisation modules
   | 'GET_ORGANIZATION_MODULES'
   | 'UPDATE_ORGANIZATION_MODULES'
+  // subscription
+  | 'GET_SUBSCRIPTION'
+  | 'RENEW_SUBSCRIPTION'
   // geography (states / counties / locations / villages)
   | 'GET_STATES'
   | 'CREATE_STATE'

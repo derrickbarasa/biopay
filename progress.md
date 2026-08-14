@@ -21,9 +21,24 @@ session. The work to be done is below.
 
 ## Roadmap / work to be done
 
-### Mobile — `mobile/nca` (field agent app)
-- [ ] **Facial recognition** — a person can decide to register by face **or** fingerprint **or** both.
-- [ ] **Voucher redemption** — one can redeem a voucher on the device.
+### Mobile — `mobile/nca` (field agent app)  — 📋 planned only (per decision; no code written)
+Context: Android `com.flexmoney.nca`, Java/Kotlin, Morpho fingerprint SDK, offline `ContentProvider`+`SyncAdapter`, Volley/OkHttp to the backend dispatch API. Cannot be built/tested in the web session (no Android SDK/NDK), so this is a concrete plan for later.
+
+#### A. Facial recognition (register by face / fingerprint / both)
+- **SDK choice (recommended): fully on-device, offline-first** — Google **ML Kit Face Detection** (free) to find/validate a single clear face + **TensorFlow Lite MobileFaceNet** (or FaceNet) to compute a 128/512-d embedding for 1:1 verification. Add liveness later (commercial SDKs — Innovatrics/Regula/Neurotechnology — if higher assurance is required; they carry licensing cost). Rationale: matches the existing offline-first, no-signal-at-capture model and needs no per-match server call.
+- **Enrollment**: add a "Register by: Fingerprint / Face / Both" choice in the registration flow (reuse existing `PhotoActivity` for capture). Compute the embedding on-device, encrypt at rest with the existing `Crypto` (same as fingerprint templates), store locally + sync.
+- **Backend** (mirror fingerprints): migration `faces` table (supervisor_id, beneficiary_type, beneficiary_id, uuid, embedding [encrypted], partner_code, status, created_at, stored_at). New codes in `Biometric.java`: `ENROLL_FACE`, `VERIFY_FACE` (cosine-similarity threshold, e.g. ≥0.6 — mirrors the placeholder `VERIFY_FINGERPRINT`), `SYNC_FACES` (offline bundle, like `SYNC_FINGERPRINTS`; also add faces to `BIOMETRIC_LOGIN`).
+- **Verification at payment**: `PaymentVerificationActivity` offers fingerprint OR face; face path captures → embeds → compares against the synced enrolled embedding for the household on-device (offline).
+- **Data model**: add a `registration_method` (FINGERPRINT/FACE/BOTH) column to households/alternates so the app knows which verification to offer.
+
+#### B. Voucher redemption on device
+- **Backend is already primed**: `REDEEM_VOUCHER` accepts optional biometric-match fields (matchedFingerprint/latitude/longitude) for exactly this flow (see `Voucher.java` javadoc); the `vouchers` table has `redeemed_by_officer_id`, `matched_fp`, lat/long. Add `SYNC_VOUCHERS` (mirror `SYNC_PAYMENTS`) so issued vouchers can be validated offline.
+- **Mobile flow**: new `VoucherRedemptionActivity` — scan the printed voucher QR (add `zxing-android-embedded`) or pick from the synced list → verify household biometric (fingerprint/face) → call `REDEEM_VOUCHER { voucherCode, matchedFingerprint, latitude, longitude }`. Queue offline and sync via the existing `SyncAdapter`. Add a "Redeem Voucher" entry to `MainActivity` gated by the VOUCHERS org module; add a `RecyclerVoucherAdapter`.
+- **QR note**: the web-printed voucher QR currently encodes the **household number**; for direct scan-to-redeem, either encode `voucher_code` on the voucher QR or have the app resolve the household → its issued vouchers.
+
+#### Files to touch (later)
+- Backend: `database/migrations/0xx_faces.sql`; `Biometric.java` (ENROLL_FACE/VERIFY_FACE/SYNC_FACES); `Voucher.java` (SYNC_VOUCHERS); processing-code catalog.
+- Mobile: registration-method choice UI; TFLite model asset + embedding util; face capture/verify activities; `VoucherRedemptionActivity` + adapter; `SyncAdapter`/provider extended to faces + voucher redemptions; QR-scanner dependency.
 
 ### Frontend — website (public marketing site)  ✅ done
 - [x] Global theme adapted away from green → teal/blue-green (`plugins/vuetify.ts` primary `#0D9488`). Green kept only for success states.
@@ -47,8 +62,11 @@ session. The work to be done is below.
 - [x] Audit result: already fully built — login OTP with **EMAIL / TOTP** method choice (`VerifyOtpPage.vue`), email always-on + **TOTP enable/disable with QR** in Settings (`SettingsPage.vue`, codes `TOTP_SETUP_INIT/CONFIRM/DISABLE`), and password reset flow. Mobile logs in via `BIOMETRIC_LOGIN` (no OTP) — satisfies "mobile doesn't require OTP".
 - [x] Fixed the one loose end: the 5 auth pages' background gradients were still green (`#062f2d`/`#047857`) → retuned to teal for theme consistency.
 
-### Subscription
-- [ ] Implement subscription — archive data once subscription ends; to access it they pay; 30-day grace period.
+### Subscription  ✅ done (lifecycle + manual renewal; backend verified by mvn compile only)
+- [x] Per-anchor subscription (`migration 010_subscriptions.sql`): `expires_at` + `grace_days` (default 30); **status derived in SQL** (ACTIVE / GRACE / ARCHIVED), never stored.
+- [x] `Subscription` verticle (deployed in `EntryPoint`): `GET_SUBSCRIPTION` (status + days-to-expiry/archive), `RENEW_SUBSCRIPTION` (manual admin upsert, extends one month from the later of current expiry/today — anchor-only). No external billing gateway (manual renewal, per decision).
+- [x] Frontend gating (`DefaultLayout.vue`): a **grace-period banner** with a Renew action, and an **archived gate** that replaces page content with a renew prompt once the grace window ends (anchors renew; orgs are told to contact their anchor). Fail-open if the status check errors.
+- **Follow-up (documented, not done):** hard **server-side** enforcement. Today gating is client-side; for defense-in-depth add an anchor-subscription check at the single dispatch chokepoint in `EntryPoint`'s `/api/v1/req` handler (allowlist auth/profile/subscription codes; reject data codes when ARCHIVED; fail-open on lookup error). Left out here because it's an untestable change to the core request path with no DB to verify against.
 
 ### Data export  ✅ done
 - [x] Household data — "Export CSV" on the Households page exports the currently filtered rows (`HouseholdsPage.vue`, uses `utils/csv`).
@@ -109,6 +127,8 @@ session. The work to be done is below.
 - **Deliverable 7 — Website landing redesign (done, frontend-only):** teal recolor, pricing removed, request-a-demo form (mailto), links repointed. `vue-tsc`/`vite build` pass; verified with a production-build screenshot.
 - **Deliverable 8 — Verifications audit (done, frontend-only):** confirmed OTP/email/TOTP already implemented; retuned the 5 auth-page gradients green → teal. `vue-tsc`/`vite build` pass.
 - **Push:** still blocked (GitHub read-only, fixed at session start). Work handed off via `biopay-work.bundle` (regenerate after new commits). Local commits: `0fba6fb`, `721862e`, `72b42dc`, `55b5485`, `1056b96`, `de550f4`, `c70eab3`, + this one.
-- **Deliverable 9 — Deduplication (done; backend compile-only, frontend verified):** `CHECK_HOUSEHOLD_DUPLICATE` (ID/phone/name+village) + Add-Household "Register anyway" flow. `mvn compile` + `vue-tsc`/`vite build` pass.
-- **Still open:** subscription (needs billing decision); mobile face-recognition (needs SDK decision) + mobile voucher redemption; optional datatables search-polish.
-- **Push:** still blocked (GitHub read-only). Regenerate `biopay-work.bundle` from `origin/main..HEAD` to hand off. Local commits now: `0fba6fb`, `721862e`, `72b42dc`, `55b5485`, `1056b96`, `de550f4`, `c70eab3`, `0a4ded5`, + this one (9 total).
+- **Deliverable 9 — Deduplication (done; backend compile-only, frontend verified):** `CHECK_HOUSEHOLD_DUPLICATE` (ID/phone/name+village) + Add-Household "Register anyway" flow.
+- **Deliverable 10 — Subscription (done; backend compile-only, frontend verified):** decision = lifecycle + manual renewal. Migration 010, `Subscription` verticle (GET/RENEW), grace banner + archived gate in `DefaultLayout`. `mvn compile` + `vue-tsc`/`vite build` pass. Server-side dispatch enforcement noted as follow-up.
+- **Deliverable 11 — Mobile plan (done):** decision = plan only. Concrete face-recognition + voucher-redemption implementation plan written into the Mobile section above (SDK choice, enrollment/verification flows, backend endpoints, files to touch). No code.
+- **Roadmap now complete** except deliberately-deferred items: mobile code (planned), subscription server-side enforcement (follow-up), and optional datatables search-polish. Original `progress.md` items are all addressed.
+- **Push:** still blocked (GitHub read-only, fixed at session start). Hand off via `biopay-work.bundle` (regenerate from `origin/main..HEAD` after each commit). Local commits: `0fba6fb`, `721862e`, `72b42dc`, `55b5485`, `1056b96`, `de550f4`, `c70eab3`, `0a4ded5`, `b7adc83`, + this one (10 code deliverables).

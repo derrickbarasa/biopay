@@ -27,6 +27,7 @@ import com.biopay.services.Officer;
 import com.biopay.services.Organization;
 import com.biopay.services.Payment;
 import com.biopay.services.Payroll;
+import com.biopay.services.Subscription;
 import com.biopay.services.Voucher;
 import com.biopay.utilities.JwtSupport;
 import com.biopay.utilities.Logging;
@@ -77,6 +78,7 @@ public class EntryPoint extends AbstractVerticle {
         vertx.deployVerticle(Notification.class.getName(), options);
         vertx.deployVerticle(Geography.class.getName(), options);
         vertx.deployVerticle(Voucher.class.getName(), options);
+        vertx.deployVerticle(Subscription.class.getName(), options);
     }
 
     @Override
