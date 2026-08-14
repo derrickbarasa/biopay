@@ -174,6 +174,22 @@ function clearFilters() {
   load()
 }
 
+// Exports the currently loaded (i.e. filtered) household rows to CSV.
+function exportCsv() {
+  if (!households.value.length) {
+    toast.error('No households to export')
+    return
+  }
+  const csv = toCsv(
+    ['Household #', 'Head of Household', 'Organization', 'Age', 'Gender', 'Phone', 'Size', 'Village', 'Status'],
+    households.value.map((h) => [
+      h.householdNumber, h.householdName, h.organisationCode, h.age ?? '', h.gender ?? '',
+      h.phoneNumber ?? '', h.householdSize ?? '', h.bomaCode ?? '', h.status === 1 ? 'Active' : 'Inactive',
+    ]),
+  )
+  downloadCsv(`households-${new Date().toISOString().slice(0, 10)}.csv`, csv)
+}
+
 onMounted(() => { load(); loadGeo() })
 
 function openCreate() {
@@ -295,6 +311,7 @@ async function submitBulk() {
         >
           {{ showBreakdown ? 'Hide' : 'Show' }} Breakdown
         </v-btn>
+        <v-btn variant="outlined" prepend-icon="mdi-download" @click="exportCsv">Export CSV</v-btn>
         <v-btn variant="outlined" prepend-icon="mdi-file-upload" @click="openBulk">Bulk Upload</v-btn>
         <v-btn color="primary" prepend-icon="mdi-home-plus" @click="openCreate">Add Household</v-btn>
       </div>

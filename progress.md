@@ -48,8 +48,10 @@ session. The work to be done is below.
 ### Subscription
 - [ ] Implement subscription — archive data once subscription ends; to access it they pay; 30-day grace period.
 
-### Data export
-- [ ] Export household data, alternate data, payment data.
+### Data export  ✅ done
+- [x] Household data — "Export CSV" on the Households page exports the currently filtered rows (`HouseholdsPage.vue`, uses `utils/csv`).
+- [x] Alternate data — "Export" on the household detail page exports that household's alternates (`HouseholdDetailPage.vue`). (No list-all-alternates endpoint exists, so export is per-household.)
+- [x] Payment data — already present on the Payments page ("Export CSV", `PaymentsPage.vue`); left as-is.
 
 ### Generated data visibility
 - [ ] Way to show generated data — add column to show voucher and payment cycles.
@@ -91,4 +93,5 @@ session. The work to be done is below.
   - Subscription/billing approach; mobile face-recognition SDK/licensing.
   - Data export (household/alternate/payment) — mostly frontend CSV, partially doable now.
   - Generated-data columns (voucher & payment cycles) — needs backend to surface those on the list.
-- Next candidates (frontend-verifiable): data export buttons (CSV) on list pages; "voucher/payment cycle" columns if backend already returns them; datatables search polish on remaining pages.
+- **Deliverable 3 — CSV exports (done, frontend-only):** household export (Households page), per-household alternate export (detail page); payment export already existed. `vue-tsc` + `vite build` pass. Local commit added.
+- Next candidates (frontend-verifiable): "voucher/payment cycle" columns if backend already returns them; datatables search polish on remaining pages. Backend-gated items await the compile-only decision or the subscription/face-rec product calls.
