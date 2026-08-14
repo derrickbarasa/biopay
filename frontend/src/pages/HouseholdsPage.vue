@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { dispatch } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
 import { downloadCsv, parseCsv, toCsv } from '@/utils/csv'
+import BarChart from '@/components/BarChart.vue'
 
 interface HouseholdRow {
   householdNumber: string
@@ -27,12 +29,12 @@ interface GeoNode {
 
 const auth = useAuthStore()
 const toast = useToast()
+const router = useRouter()
 const loading = ref(true)
 const households = ref<HouseholdRow[]>([])
 const dialog = ref(false)
 const saving = ref(false)
-const detailDialog = ref(false)
-const detail = ref<Record<string, any> | null>(null)
+const showBreakdown = ref(false)
 
 const states = ref<GeoNode[]>([])
 const counties = ref<GeoNode[]>([])
@@ -72,6 +74,43 @@ const headers = [
   { title: 'Status', key: 'status' },
   { title: 'Actions', key: 'actions', sortable: false, align: 'end' as const },
 ]
+
+// ---- Client-side breakdown graphs over the currently loaded (filtered) rows ----
+const genderBreakdown = computed(() => {
+  const counts = { Male: 0, Female: 0, Other: 0 }
+  for (const h of households.value) {
+    if (h.gender === 'M') counts.Male++
+    else if (h.gender === 'F') counts.Female++
+    else counts.Other++
+  }
+  return [
+    { label: 'Male', value: counts.Male },
+    { label: 'Female', value: counts.Female },
+    { label: 'Other', value: counts.Other },
+  ]
+})
+
+const ageBreakdown = computed(() => {
+  const buckets = [
+    { label: '0-17', value: 0 }, { label: '18-34', value: 0 }, { label: '35-49', value: 0 },
+    { label: '50-64', value: 0 }, { label: '65+', value: 0 }, { label: 'Unknown', value: 0 },
+  ]
+  for (const h of households.value) {
+    const a = h.age
+    if (a == null) buckets[5].value++
+    else if (a < 18) buckets[0].value++
+    else if (a < 35) buckets[1].value++
+    else if (a < 50) buckets[2].value++
+    else if (a < 65) buckets[3].value++
+    else buckets[4].value++
+  }
+  return buckets
+})
+
+const statusBreakdown = computed(() => [
+  { label: 'Active', value: households.value.filter((h) => h.status === 1).length },
+  { label: 'Inactive', value: households.value.filter((h) => h.status !== 1).length },
+])
 
 const countiesForState = (stateCode: string) => stateCode ? counties.value.filter((c) => c.stateCode === stateCode) : counties.value
 const locationsForCounty = (countyCode: string) => countyCode ? locations.value.filter((l) => l.countyCode === countyCode) : locations.value
@@ -161,17 +200,8 @@ async function save() {
   }
 }
 
-async function viewDetail(row: HouseholdRow) {
-  try {
-    const [h, alts] = await Promise.all([
-      dispatch<{ results: any[] }>('GET_HOUSEHOLD', { householdNumber: row.householdNumber }),
-      dispatch<{ results: any[] }>('GET_ALTERNATES', { householdNumber: row.householdNumber }),
-    ])
-    detail.value = { ...h.results[0], alternates: alts.results }
-    detailDialog.value = true
-  } catch (err) {
-    toast.error(err instanceof Error ? err.message : 'Failed to load household')
-  }
+function viewDetail(row: HouseholdRow) {
+  router.push({ name: 'household-detail', params: { householdNumber: row.householdNumber } })
 }
 
 async function remove(row: HouseholdRow) {
@@ -258,10 +288,40 @@ async function submitBulk() {
     <div class="d-flex align-center justify-space-between mb-4">
       <h1 class="text-h5 font-weight-bold">Households</h1>
       <div class="d-flex ga-2">
+        <v-btn
+          variant="outlined"
+          :prepend-icon="showBreakdown ? 'mdi-chart-box-outline' : 'mdi-chart-bar'"
+          @click="showBreakdown = !showBreakdown"
+        >
+          {{ showBreakdown ? 'Hide' : 'Show' }} Breakdown
+        </v-btn>
         <v-btn variant="outlined" prepend-icon="mdi-file-upload" @click="openBulk">Bulk Upload</v-btn>
         <v-btn color="primary" prepend-icon="mdi-home-plus" @click="openCreate">Add Household</v-btn>
       </div>
     </div>
+
+    <v-expand-transition>
+      <v-row v-if="showBreakdown" dense class="mb-2">
+        <v-col cols="12" md="4">
+          <v-card variant="flat" border>
+            <v-card-title class="text-subtitle-2">By gender</v-card-title>
+            <v-card-text><BarChart :data="genderBreakdown" color="#0D9488" /></v-card-text>
+          </v-card>
+        </v-col>
+        <v-col cols="12" md="4">
+          <v-card variant="flat" border>
+            <v-card-title class="text-subtitle-2">By age group</v-card-title>
+            <v-card-text><BarChart :data="ageBreakdown" color="#0F766E" /></v-card-text>
+          </v-card>
+        </v-col>
+        <v-col cols="12" md="4">
+          <v-card variant="flat" border>
+            <v-card-title class="text-subtitle-2">By status</v-card-title>
+            <v-card-text><BarChart :data="statusBreakdown" color="#F59E0B" /></v-card-text>
+          </v-card>
+        </v-col>
+      </v-row>
+    </v-expand-transition>
 
     <v-card variant="flat" border>
       <v-card-text>
@@ -373,41 +433,5 @@ async function submitBulk() {
       </v-card>
     </v-dialog>
 
-    <v-dialog v-model="detailDialog" max-width="640">
-      <v-card v-if="detail">
-        <v-card-title>{{ detail.householdName }}</v-card-title>
-        <v-card-text>
-          <v-tabs v-model="detail._tab" color="primary">
-            <v-tab value="info">Info</v-tab>
-            <v-tab value="alternates">Alternates ({{ detail.alternates?.length ?? 0 }})</v-tab>
-            <v-tab value="fingerprints">Fingerprints</v-tab>
-          </v-tabs>
-          <v-window v-model="detail._tab" class="pt-4">
-            <v-window-item value="info">
-              <div>Household #: {{ detail.householdNumber }}</div>
-              <div>Organization: {{ detail.organisationCode }}</div>
-              <div>Phone: {{ detail.phoneNumber }}</div>
-              <div>Fingerprint status: <v-chip size="small">{{ detail.fingerprintStatus }}</v-chip></div>
-              <div>Image status: <v-chip size="small">{{ detail.imageStatus }}</v-chip></div>
-            </v-window-item>
-            <v-window-item value="alternates">
-              <v-list>
-                <v-list-item v-for="a in detail.alternates" :key="a.alternateNumber" :title="a.alternateName" :subtitle="a.relationship" />
-                <v-list-item v-if="!detail.alternates?.length" title="No alternates registered" />
-              </v-list>
-            </v-window-item>
-            <v-window-item value="fingerprints">
-              <v-alert type="info" variant="tonal" density="compact">
-                Fingerprints are captured through the BioPay Android field app.
-              </v-alert>
-            </v-window-item>
-          </v-window>
-        </v-card-text>
-        <v-card-actions>
-          <v-spacer />
-          <v-btn variant="text" @click="detailDialog = false">Close</v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
   </div>
 </template>
