@@ -5,6 +5,23 @@ const mobileNavOpen = ref(false)
 const revealRoot = ref<HTMLElement | null>(null)
 let observer: IntersectionObserver | null = null
 
+// Request-a-demo form. With no CRM/email endpoint on the backend, submitting opens
+// the visitor's mail client addressed to the demo inbox with their details prefilled
+// -- honest and functional without pretending a server received it.
+const demo = ref({ name: '', organisation: '', email: '', message: '' })
+const demoSubmitted = ref(false)
+
+function submitDemo() {
+  const { name, organisation, email, message } = demo.value
+  if (!name.trim() || !email.trim()) return
+  const subject = encodeURIComponent(`Demo request from ${name}${organisation ? ` (${organisation})` : ''}`)
+  const body = encodeURIComponent(
+    `Name: ${name}\nOrganisation: ${organisation}\nEmail: ${email}\n\n${message}`,
+  )
+  window.location.href = `mailto:demo@biopay.app?subject=${subject}&body=${body}`
+  demoSubmitted.value = true
+}
+
 // Hero carousel -- five value props, each with a full-bleed background photo.
 // Drop the actual files into frontend/public/hero/ using the filenames below
 // (landscape, 1800px+ wide works well as background-size:cover) and they'll
@@ -116,11 +133,10 @@ onBeforeUnmount(() => {
           <a href="#how">How it works</a>
           <a href="#platform">Platform</a>
           <a href="#showcase">Product</a>
-          <a href="#pricing">Pricing</a>
         </nav>
         <div class="nav-actions">
           <router-link class="nav-login" to="/login">Log in</router-link>
-          <a class="btn btn-primary" href="#pricing">Get a quote</a>
+          <a class="btn btn-primary" href="#demo">Request a demo</a>
           <button class="nav-toggle" aria-label="Toggle navigation" @click="mobileNavOpen = !mobileNavOpen">☰</button>
         </div>
       </div>
@@ -129,7 +145,7 @@ onBeforeUnmount(() => {
         <a href="#how" @click="closeMobileNav">How it works</a>
         <a href="#platform" @click="closeMobileNav">Platform</a>
         <a href="#showcase" @click="closeMobileNav">Product</a>
-        <a href="#pricing" @click="closeMobileNav">Pricing</a>
+        <a href="#demo" @click="closeMobileNav">Request a demo</a>
         <router-link to="/login" @click="closeMobileNav">Log in</router-link>
       </nav>
     </header>
@@ -182,7 +198,7 @@ onBeforeUnmount(() => {
               <p class="lede">{{ heroSlides[activeHero].copy }}</p>
             </div>
             <div class="hero-ctas">
-              <a class="btn btn-primary" href="#pricing">See pricing</a>
+              <a class="btn btn-primary" href="#demo">Request a demo</a>
               <a class="btn btn-ghost" href="#how">How it works</a>
             </div>
             <div class="hero-dots" aria-label="Hero slides">
@@ -441,83 +457,47 @@ onBeforeUnmount(() => {
         </div>
       </section>
 
-      <!-- PRICING -->
-      <section id="pricing">
-        <div class="wrap">
-          <span class="eyebrow">Pricing</span>
-          <h2 style="margin-top: 0.6rem">Plans start at $1,000. You only meter what you use.</h2>
-          <p style="max-width: 56ch; color: var(--color-text-muted); margin-top: 0.75rem">
-            Every plan is a fixed platform fee per anchor. Deduplication runs and AI agent review
-            are usage-based on top of it, so a small pilot and a national rollout are never on
-            the same bill by accident.
-          </p>
-
-          <div class="price-ledger">
-            <div class="price-row featured">
-              <div>
-                <div class="price-tier-name">Starter</div>
-                <div class="price-tier-note">One anchor, up to two organisations</div>
-              </div>
-              <div class="price-amount"><span class="cur">USD</span>1,000<span class="per">/mo</span></div>
-              <ul class="price-includes">
-                <li>Unlimited household registration</li>
-                <li>Offline field agent app</li>
-                <li>Fingerprint verification</li>
-                <li>GPS tagging on every record</li>
-                <li>Standard dashboard &amp; reporting</li>
-                <li>Deduplication, metered per check</li>
-              </ul>
-            </div>
-            <div class="price-row">
-              <div>
-                <div class="price-tier-name">Growth</div>
-                <div class="price-tier-note">Multiple organisations under one anchor</div>
-              </div>
-              <div class="price-amount"><span class="cur">USD</span>2,500<span class="per">/mo</span></div>
-              <ul class="price-includes">
-                <li>Everything in Starter</li>
-                <li>Face recognition verification</li>
-                <li>Deduplication, fair-use volume included</li>
-                <li>AI agent review, standard tuning</li>
-                <li>Payroll maker-checker workflow</li>
-                <li>Priority email support</li>
-              </ul>
-            </div>
-            <div class="price-row">
-              <div>
-                <div class="price-tier-name">Enterprise</div>
-                <div class="price-tier-note">National or multi-country programmes</div>
-              </div>
-              <div class="price-amount">Custom</div>
-              <ul class="price-includes">
-                <li>Everything in Growth</li>
-                <li>Unlimited organisations</li>
-                <li>AI agent tuned to your fraud patterns</li>
-                <li>Dedicated onboarding &amp; migration</li>
-                <li>SLA-backed support</li>
-                <li>Custom data residency</li>
-              </ul>
-            </div>
+      <!-- REQUEST A DEMO -->
+      <section id="demo">
+        <div class="wrap demo-grid">
+          <div class="demo-copy">
+            <span class="eyebrow">Request a demo</span>
+            <h2 style="margin-top: 0.6rem">See BioPay against your own programme</h2>
+            <p style="max-width: 46ch; color: var(--color-text-muted); margin-top: 0.9rem">
+              Tell us about your anchor, your organisations, and how many households you're
+              registering this cycle. We'll walk you through registration, biometric verification
+              and reconciliation on a live environment.
+            </p>
+            <ul class="demo-points">
+              <li>Offline-first field registration &amp; payment</li>
+              <li>Fingerprint and face verification</li>
+              <li>Anchor → organisation → officer oversight</li>
+            </ul>
           </div>
 
-          <div class="metered-note">
-            <span class="tag">Metered</span>
-            <span>Deduplication runs and AI agent usage beyond your plan's included volume are
-              billed monthly per unit consumed — ask for volume pricing if you're planning a
-              large rollout.</span>
+          <div class="demo-card">
+            <div v-if="demoSubmitted" class="demo-thanks">
+              <div class="demo-check">✓</div>
+              <h4>Thanks, {{ demo.name }}.</h4>
+              <p>Your email app should have opened with your request ready to send. If it didn't,
+                email us at <a href="mailto:demo@biopay.app">demo@biopay.app</a>.</p>
+            </div>
+            <form v-else class="demo-form" @submit.prevent="submitDemo">
+              <label>Full name
+                <input v-model="demo.name" type="text" required placeholder="Your name" />
+              </label>
+              <label>Organisation
+                <input v-model="demo.organisation" type="text" placeholder="Anchor or organisation" />
+              </label>
+              <label>Work email
+                <input v-model="demo.email" type="email" required placeholder="you@organisation.org" />
+              </label>
+              <label>What would you like to see?
+                <textarea v-model="demo.message" rows="3" placeholder="Tell us about your programme"></textarea>
+              </label>
+              <button class="btn btn-primary demo-submit" type="submit">Request a demo</button>
+            </form>
           </div>
-        </div>
-      </section>
-
-      <!-- CTA BAND -->
-      <section class="cta-band">
-        <div class="wrap">
-          <div>
-            <h2>Ready to reach the people your programme is actually meant to serve?</h2>
-            <p class="lede">Talk to us about your anchor, your organisations, and how many
-              households you're registering this cycle.</p>
-          </div>
-          <a class="btn btn-primary" href="#top">Request a demo</a>
         </div>
       </section>
     </main>
@@ -540,7 +520,7 @@ onBeforeUnmount(() => {
             <div class="foot-col">
               <h5>Company</h5>
               <a href="#mission">Mission</a>
-              <a href="#pricing">Pricing</a>
+              <a href="#demo">Request a demo</a>
               <router-link to="/login">Log in</router-link>
             </div>
           </div>
@@ -566,8 +546,8 @@ onBeforeUnmount(() => {
   --color-surface-2: #F0FDFA;
   --color-text: #0F172A;
   --color-text-muted: #475569;
-  --color-primary: #059669;
-  --color-primary-deep: #047857;
+  --color-primary: #0D9488;
+  --color-primary-deep: #0F766E;
   --color-primary-soft: #CCFBF1;
   --color-accent: #F59E0B;
   --color-accent-deep: #EA580C;
@@ -769,7 +749,7 @@ onBeforeUnmount(() => {
 .landing-root .hero-image, .landing-root .hero-scrim { position: absolute; inset: 0; }
 .landing-root .hero-image { opacity: 0; background-size: cover; background-position: center; background-color: var(--color-primary-deep); filter: saturate(1.2) contrast(1.05); transform: scale(1.03); transition: opacity 900ms ease, transform 7s ease; z-index: -2; }
 .landing-root .hero-image.active { opacity: 1; transform: scale(1); }
-.landing-root .hero-scrim { z-index: -1; background: radial-gradient(circle at 85% 18%, rgba(251, 191, 36, .34), transparent 26rem), linear-gradient(90deg, rgba(2, 44, 40, .92) 0%, rgba(2, 79, 68, .74) 45%, rgba(2, 44, 40, .28) 100%); }
+.landing-root .hero-scrim { z-index: -1; background: radial-gradient(circle at 85% 18%, rgba(251, 191, 36, .34), transparent 26rem), linear-gradient(90deg, rgba(4, 47, 46, .92) 0%, rgba(15, 118, 110, .74) 45%, rgba(4, 47, 46, .28) 100%); }
 .landing-root .hero-visual .wrap { position: relative; z-index: 1; width: 100%; }
 /* .hero-grid deliberately does NOT set its own max-width/margin -- it inherits .wrap's
    1180px/auto-margin/padding exactly like the nav and every other section, so the hero's
@@ -925,24 +905,28 @@ onBeforeUnmount(() => {
 
 .landing-root .showcase-caption { margin-top: var(--space-3); font-size: 0.85rem; color: var(--color-text-muted); text-align: center; }
 
-/* Pricing */
-.landing-root .price-ledger { margin-top: var(--space-5); border: 1px solid var(--color-line); border-radius: var(--radius-card); overflow: hidden; background: var(--color-surface); }
-.landing-root .price-row { display: grid; grid-template-columns: 1.1fr 0.7fr 2fr; gap: var(--space-4); padding: var(--space-4); align-items: center; }
-.landing-root .price-row + .price-row { border-top: 1px solid var(--color-line); }
-.landing-root .price-row.featured { background: var(--color-primary-soft); }
-@media (max-width: 760px) { .landing-root .price-row { grid-template-columns: 1fr; gap: var(--space-2); } }
-.landing-root .price-tier-name { font-family: var(--font-display); font-size: 1.2rem; font-weight: 700; }
-.landing-root .price-tier-note { font-size: 0.8rem; color: var(--color-text-muted); margin-top: 0.2rem; }
-.landing-root .price-amount { font-family: var(--font-mono); font-size: 1.6rem; font-weight: 700; font-variant-numeric: tabular-nums; }
-.landing-root .price-amount .cur { font-size: 0.95rem; vertical-align: 0.35em; margin-right: 0.1em; color: var(--color-text-muted); }
-.landing-root .price-amount .per { font-size: 0.8rem; font-weight: 400; color: var(--color-text-muted); font-family: var(--font-body); }
-.landing-root .price-includes { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 0.35rem 1rem; font-size: 0.86rem; }
-@media (max-width: 480px) { .landing-root .price-includes { grid-template-columns: 1fr; } }
-.landing-root .price-includes li { display: flex; gap: 0.5em; }
-.landing-root .price-includes li::before { content: "—"; color: var(--color-primary); flex-shrink: 0; }
-
-.landing-root .metered-note { margin-top: var(--space-3); border: 1px dashed var(--color-line); border-radius: 10px; padding: var(--space-3); font-size: 0.86rem; color: var(--color-text-muted); display: flex; gap: 0.7em; }
-.landing-root .metered-note .tag { font-family: var(--font-mono); font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--color-accent-deep); background: var(--color-accent-soft); border-radius: 4px; padding: 0.2em 0.5em; height: fit-content; flex-shrink: 0; }
+/* Request a demo */
+.landing-root #demo { background: var(--color-surface-2); }
+.landing-root .demo-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-5); align-items: center; }
+@media (max-width: 860px) { .landing-root .demo-grid { grid-template-columns: 1fr; } }
+.landing-root .demo-copy h2 { font-size: var(--step-h2); }
+.landing-root .demo-points { list-style: none; margin: var(--space-3) 0 0; padding: 0; display: grid; gap: 0.45rem; font-size: 0.92rem; color: var(--color-text-muted); }
+.landing-root .demo-points li { display: flex; gap: 0.5em; }
+.landing-root .demo-points li::before { content: "✓"; color: var(--color-primary); font-weight: 700; flex-shrink: 0; }
+.landing-root .demo-card { background: var(--color-surface); border: 1px solid var(--color-line); border-radius: var(--radius-card); padding: var(--space-4); box-shadow: 0 30px 60px -34px var(--shadow-color); }
+.landing-root .demo-form { display: grid; gap: var(--space-3); }
+.landing-root .demo-form label { display: grid; gap: 0.35rem; font-size: 0.82rem; font-weight: 600; color: var(--color-text); }
+.landing-root .demo-form input, .landing-root .demo-form textarea {
+  font-family: var(--font-body); font-size: 0.92rem; font-weight: 400; color: var(--color-text);
+  background: var(--color-bg); border: 1px solid var(--color-line); border-radius: 8px; padding: 0.7em 0.85em; width: 100%; resize: vertical;
+}
+.landing-root .demo-form input:focus, .landing-root .demo-form textarea:focus { outline: 2px solid var(--color-primary); outline-offset: 1px; border-color: var(--color-primary); }
+.landing-root .demo-submit { justify-content: center; margin-top: 0.2rem; }
+.landing-root .demo-thanks { text-align: center; padding: var(--space-3) 0; }
+.landing-root .demo-thanks h4 { font-size: 1.2rem; margin-bottom: 0.4rem; }
+.landing-root .demo-thanks p { color: var(--color-text-muted); font-size: 0.9rem; }
+.landing-root .demo-thanks a { color: var(--color-primary); }
+.landing-root .demo-check { width: 46px; height: 46px; margin: 0 auto var(--space-2); border-radius: 50%; background: var(--color-primary-soft); color: var(--color-primary-deep); display: grid; place-items: center; font-size: 1.4rem; font-weight: 700; }
 
 /* CTA + footer */
 .landing-root .cta-band { background: var(--color-primary-deep); color: #fff; text-align: left; }
