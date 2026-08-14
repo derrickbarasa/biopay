@@ -71,8 +71,10 @@ session. The work to be done is below.
 - [x] Footer — Log out pinned to drawer bottom (`#append`), red-tinted.
 - Gap: `anchors`, `users`, `permissions/roles` have no routes/pages yet — deferred until those pages/backends exist.
 
-### Deduplication
-- [ ] Implement deduplication across (beneficiaries).
+### Deduplication  ✅ done (backend verified by mvn compile only)
+- [x] New `CHECK_HOUSEHOLD_DUPLICATE` screens a would-be registration against existing households in the same organisation on the product's stated match key: **same ID/document number** (strongest), **same phone number**, or **same name in the same village**. Returns candidates with per-match reasons (advisory, not a hard block — mirrors the mobile `duplicate`/`matching_score` model).
+- [x] Wired into the Add-Household flow: Save runs the check first; if candidates are found they're listed with reasons and creation waits for an explicit **"Register anyway"**.
+- Match key was taken from the existing product (landing copy + the `duplicate`/`matching_score` columns), not a new decision — easy to tune (add name+DOB, fuzzy/phonetic matching, or distance-based location matching later).
 
 ---
 
@@ -107,4 +109,6 @@ session. The work to be done is below.
 - **Deliverable 7 — Website landing redesign (done, frontend-only):** teal recolor, pricing removed, request-a-demo form (mailto), links repointed. `vue-tsc`/`vite build` pass; verified with a production-build screenshot.
 - **Deliverable 8 — Verifications audit (done, frontend-only):** confirmed OTP/email/TOTP already implemented; retuned the 5 auth-page gradients green → teal. `vue-tsc`/`vite build` pass.
 - **Push:** still blocked (GitHub read-only, fixed at session start). Work handed off via `biopay-work.bundle` (regenerate after new commits). Local commits: `0fba6fb`, `721862e`, `72b42dc`, `55b5485`, `1056b96`, `de550f4`, `c70eab3`, + this one.
-- **Still open (all need a product decision):** deduplication (match-key); subscription (billing model); mobile face-recognition (SDK) + mobile voucher redemption. Plus optional datatables search-polish.
+- **Deliverable 9 — Deduplication (done; backend compile-only, frontend verified):** `CHECK_HOUSEHOLD_DUPLICATE` (ID/phone/name+village) + Add-Household "Register anyway" flow. `mvn compile` + `vue-tsc`/`vite build` pass.
+- **Still open:** subscription (needs billing decision); mobile face-recognition (needs SDK decision) + mobile voucher redemption; optional datatables search-polish.
+- **Push:** still blocked (GitHub read-only). Regenerate `biopay-work.bundle` from `origin/main..HEAD` to hand off. Local commits now: `0fba6fb`, `721862e`, `72b42dc`, `55b5485`, `1056b96`, `de550f4`, `c70eab3`, `0a4ded5`, + this one (9 total).
