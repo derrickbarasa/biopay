@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.cardview.widget.CardView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/cvNominee"
+    android:layout_margin="5dp"
+    android:elevation="4dp"
+    android:background="@color/white"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content">
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+
+
+        <com.google.android.material.chip.Chip
+            android:id="@+id/chipNomineeName"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="16dp"
+            android:layout_marginTop="8dp"
+            android:layout_marginBottom="8dp"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toStartOf="@+id/chipNomineeAge"
+            app:layout_constraintHorizontal_bias="0.5"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <com.google.android.material.chip.Chip
+            android:id="@+id/chipNomineeAge"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="16dp"
+            app:layout_constraintBottom_toBottomOf="@+id/chipNomineeName"
+            app:layout_constraintEnd_toStartOf="@+id/chipNomineeGender"
+            app:layout_constraintHorizontal_bias="0.5"
+            app:layout_constraintStart_toEndOf="@+id/chipNomineeName"
+            app:layout_constraintTop_toTopOf="@+id/chipNomineeName" />
+
+        <com.google.android.material.chip.Chip
+            android:id="@+id/chipNomineeGender"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="16dp"
+            app:layout_constraintBottom_toBottomOf="@+id/chipNomineeAge"
+            app:layout_constraintEnd_toStartOf="@+id/chipNomineeRelationship"
+            app:layout_constraintHorizontal_bias="0.5"
+            app:layout_constraintStart_toEndOf="@+id/chipNomineeAge"
+            app:layout_constraintTop_toTopOf="@+id/chipNomineeAge" />
+
+        <com.google.android.material.chip.Chip
+            android:id="@+id/chipNomineeRelationship"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="16dp"
+            app:layout_constraintBottom_toBottomOf="@+id/chipNomineeGender"
+            app:layout_constraintEnd_toStartOf="@+id/chipNomineeOccupation"
+            app:layout_constraintHorizontal_bias="0.5"
+            app:layout_constraintStart_toEndOf="@+id/chipNomineeGender"
+            app:layout_constraintTop_toTopOf="@+id/chipNomineeGender" />
+
+        <com.google.android.material.chip.Chip
+            android:id="@+id/chipNomineeOccupation"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="16dp"
+            app:layout_constraintBottom_toBottomOf="@+id/chipNomineeRelationship"
+            app:layout_constraintEnd_toStartOf="@+id/chipNomineeOtherOccupation"
+            app:layout_constraintHorizontal_bias="0.5"
+            app:layout_constraintStart_toEndOf="@+id/chipNomineeRelationship"
+            app:layout_constraintTop_toTopOf="@+id/chipNomineeRelationship" />
+
+        <com.google.android.material.chip.Chip
+            android:id="@+id/chipNomineeOtherOccupation"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="16dp"
+            android:layout_marginEnd="16dp"
+            app:layout_constraintBottom_toBottomOf="@+id/chipNomineeOccupation"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintHorizontal_bias="0.5"
+            app:layout_constraintStart_toEndOf="@+id/chipNomineeOccupation"
+            app:layout_constraintTop_toTopOf="@+id/chipNomineeOccupation" />
+    </androidx.constraintlayout.widget.ConstraintLayout>
+</androidx.cardview.widget.CardView>

@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/bp_background">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="16dp">
+
+        <TextView style="@style/BioPay.SectionHeader" android:text="@string/section_personal_info" />
+        <EditText android:id="@+id/etHouseholdName" style="@style/BioPay.FormField" android:hint="@string/field_household_name" />
+        <EditText android:id="@+id/etIdNumber" style="@style/BioPay.FormField" android:hint="@string/field_id_number" />
+        <EditText android:id="@+id/etPhoneNumber" style="@style/BioPay.FormField" android:hint="@string/field_phone_number" android:inputType="phone" />
+        <EditText android:id="@+id/etAge" style="@style/BioPay.FormField" android:hint="@string/field_age" android:inputType="number" />
+        <Spinner android:id="@+id/spinnerGender" style="@style/BioPay.FormField" />
+
+        <TextView style="@style/BioPay.SectionHeader" android:text="@string/section_location" />
+        <EditText android:id="@+id/etStateCode" style="@style/BioPay.FormField" android:hint="@string/field_state_code" />
+        <EditText android:id="@+id/etBomaCode" style="@style/BioPay.FormField" android:hint="@string/field_boma_code" />
+
+        <TextView style="@style/BioPay.SectionHeader" android:text="@string/section_household_breakdown" />
+        <EditText android:id="@+id/etHouseholdSize" style="@style/BioPay.FormField" android:hint="@string/field_household_size" android:inputType="number" />
+        <EditText android:id="@+id/etMaleDependants" style="@style/BioPay.FormField" android:hint="@string/field_male_dependants" android:inputType="number" />
+        <EditText android:id="@+id/etFemaleDependants" style="@style/BioPay.FormField" android:hint="@string/field_female_dependants" android:inputType="number" />
+        <CheckBox android:id="@+id/cbDisabledMembers" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/field_has_disabled_members" />
+
+        <TextView style="@style/BioPay.SectionHeader" android:text="@string/section_vulnerability_literacy" />
+        <CheckBox android:id="@+id/cbLiteracy" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/field_literate" />
+        <CheckBox android:id="@+id/cbEligible" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/field_eligible" android:checked="true" />
+
+        <Button
+            android:id="@+id/btnSave"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:backgroundTint="@color/bp_primary"
+            android:text="@string/household_save_continue" />
+
+    </LinearLayout>
+</ScrollView>

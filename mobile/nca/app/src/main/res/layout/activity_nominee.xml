@@ -1,0 +1,178 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:scrollbarSize="18dp"
+    android:scrollbars="vertical"
+    app:layout_behavior="@string/appbar_scrolling_view_behavior"
+    tools:context=".households.NomineeActivity">
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_margin="8dp"
+        android:background="@color/white"
+        android:paddingBottom="16dp">
+
+        <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/tilEligibility"
+            style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="16dp"
+            android:layout_marginTop="24dp"
+            android:layout_marginEnd="16dp"
+            app:hintTextColor="@color/black"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent">
+
+            <AutoCompleteTextView
+                android:id="@+id/actvEligibility"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="@string/eligibility"
+                android:imeOptions="actionDone"
+                android:textAppearance="?android:attr/textAppearanceListItemSmall"
+                android:inputType="none"
+                android:textColorHint="@color/black" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/tilIneligibility"
+            style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:visibility="invisible"
+            app:hintTextColor="@color/black"
+            app:layout_constraintEnd_toStartOf="@+id/tilIneligibilityOtherReason"
+            app:layout_constraintHorizontal_bias="0.5"
+            app:layout_constraintStart_toStartOf="@+id/tilEligibility"
+            app:layout_constraintTop_toBottomOf="@+id/tilEligibility">
+
+            <AutoCompleteTextView
+                android:id="@+id/actvIneligibility"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="@string/ineligibility_reason"
+                android:imeOptions="actionDone"
+                android:inputType="none"
+                android:textAppearance="?android:attr/textAppearanceListItemSmall"
+                android:textColorHint="@color/black" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/tilIneligibilityOtherReason"
+            style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="16dp"
+            android:visibility="invisible"
+            app:hintTextColor="@color/black"
+            app:layout_constraintEnd_toEndOf="@+id/tilEligibility"
+            app:layout_constraintHorizontal_bias="0.5"
+            app:layout_constraintStart_toEndOf="@+id/tilIneligibility"
+            app:layout_constraintTop_toTopOf="@+id/tilIneligibility">
+
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/tietIneligibilityOtherReason"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="@string/ineligibility_other_reason"
+                android:imeOptions="actionDone"
+                android:inputType="textCapWords"
+                android:textColorHint="@color/black" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <RelativeLayout
+            android:id="@+id/dividerNominee"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_centerVertical="true"
+            android:layout_marginTop="16dp"
+            android:layout_marginEnd="16dp"
+            app:layout_constraintEnd_toEndOf="@+id/tilIneligibilityOtherReason"
+            app:layout_constraintStart_toStartOf="@+id/tilIneligibility"
+            app:layout_constraintTop_toBottomOf="@+id/tilIneligibility">
+
+            <TextView
+                android:id="@+id/tvText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_centerInParent="true"
+                android:layout_marginLeft="10dp"
+                android:layout_marginRight="10dp"
+                android:text="Nominee List"
+                android:textColor="@color/black" />
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="2dp"
+                android:layout_centerVertical="true"
+                android:layout_marginLeft="16dp"
+                android:layout_toLeftOf="@id/tvText"
+                android:background="@android:color/darker_gray" />
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="2dp"
+                android:layout_centerVertical="true"
+                android:layout_marginRight="16dp"
+                android:layout_toRightOf="@id/tvText"
+                android:background="@android:color/darker_gray" />
+
+        </RelativeLayout>
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/rvNominees"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="16dp"
+            android:layout_marginTop="16dp"
+            android:layout_marginEnd="16dp"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@+id/dividerNominee" />
+
+
+        <Button
+            android:id="@+id/btnNomineeBack"
+            android:layout_width="0dp"
+            android:layout_height="56dp"
+            android:backgroundTint="@color/darkRed"
+            android:layout_marginStart="16dp"
+            android:layout_marginTop="32dp"
+            android:layout_marginBottom="24dp"
+            android:text="@string/back"
+            android:textAllCaps="false"
+            android:textColor="@android:color/white"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toStartOf="@+id/btnNomineeNext"
+            app:layout_constraintHorizontal_bias="0.5"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@+id/rvNominees" />
+
+        <Button
+            android:id="@+id/btnNomineeNext"
+            android:layout_width="0dp"
+            android:layout_height="56dp"
+            android:backgroundTint="@color/darkGreen"
+            android:layout_marginStart="16dp"
+            android:layout_marginEnd="16dp"
+            android:text="@string/next"
+            android:textAllCaps="false"
+            android:textColor="@android:color/white"
+            app:layout_constraintBottom_toBottomOf="@+id/btnNomineeBack"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintHorizontal_bias="0.5"
+            app:layout_constraintStart_toEndOf="@+id/btnNomineeBack"
+            app:layout_constraintTop_toTopOf="@+id/btnNomineeBack" />
+
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
+</ScrollView>

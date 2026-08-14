@@ -1,0 +1,360 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:scrollbarSize="18dp"
+    android:scrollbars="vertical"
+    app:layout_behavior="@string/appbar_scrolling_view_behavior"
+    tools:context=".households.PersonalInfoActivity">
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_margin="8dp"
+        android:background="@color/white"
+        android:paddingBottom="16dp">
+
+        <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/tilHouseholdName"
+            style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="16dp"
+            android:layout_marginTop="16dp"
+            android:layout_marginEnd="16dp"
+            android:textColorHint="@color/black"
+            app:layout_constraintEnd_toStartOf="@+id/tilHouseholdHeadRelationship"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/tietHouseholdName"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="@string/household_name"
+                android:imeOptions="actionDone"
+                android:inputType="textPersonName|textCapWords"
+                android:textColorHint="@color/black" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+
+        <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/tilHouseholdHeadRelationship"
+            style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:textColorHint="@color/black"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toEndOf="@+id/tilHouseholdName"
+            app:layout_constraintTop_toTopOf="@+id/tilHouseholdName">
+
+            <AutoCompleteTextView
+                android:id="@+id/actvHouseholdHeadRelationship"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="@string/household_head_relationship"
+                android:imeOptions="actionDone"
+                android:inputType="none"
+                android:textAppearance="?android:attr/textAppearanceListItemSmall"
+                android:textColorHint="@color/black" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/tilAge"
+            style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:textColorHint="@color/black"
+            app:layout_constraintEnd_toEndOf="@+id/tilHouseholdName"
+            app:layout_constraintStart_toStartOf="@+id/tilHouseholdName"
+            app:layout_constraintTop_toBottomOf="@+id/tilHouseholdName">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/tietAge"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="@string/age"
+                android:imeOptions="actionDone"
+                android:inputType="number"
+                android:maxLength="2"
+                android:textColorHint="@color/black" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/tilGender"
+            style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:textColorHint="@color/black"
+            app:layout_constraintEnd_toEndOf="@+id/tilHouseholdHeadRelationship"
+            app:layout_constraintStart_toStartOf="@+id/tilHouseholdHeadRelationship"
+            app:layout_constraintTop_toTopOf="@+id/tilAge">
+
+            <AutoCompleteTextView
+                android:id="@+id/actvGender"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="@string/gender"
+                android:textAppearance="?android:attr/textAppearanceListItemSmall"
+                android:imeOptions="actionDone"
+                android:inputType="none"
+                android:textColorHint="@color/black" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/tilIdNumber"
+            style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:textColorHint="@color/black"
+            app:layout_constraintEnd_toEndOf="@+id/tilAge"
+            app:layout_constraintStart_toStartOf="@+id/tilAge"
+            app:layout_constraintTop_toBottomOf="@+id/tilAge">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/tietIdNumber"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="@string/id_no"
+                android:imeOptions="actionDone"
+                android:inputType="textCapCharacters"
+                android:textColorHint="@color/black" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/tilPhonenumber"
+            style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:textColorHint="@color/black"
+            app:layout_constraintEnd_toEndOf="@+id/tilGender"
+            app:layout_constraintStart_toStartOf="@+id/tilGender"
+            app:layout_constraintTop_toTopOf="@+id/tilIdNumber">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/tietPhonenumber"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="@string/phonenumber"
+                android:imeOptions="actionDone"
+                android:inputType="number"
+                android:maxLength="10"
+                android:textColorHint="@color/black" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/tilLegalStatus"
+            style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:textColorHint="@color/black"
+            app:layout_constraintEnd_toEndOf="@+id/tilIdNumber"
+            app:layout_constraintStart_toStartOf="@+id/tilIdNumber"
+            app:layout_constraintTop_toBottomOf="@+id/tilIdNumber">
+
+            <AutoCompleteTextView
+                android:id="@+id/actvLegalStatus"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="@string/legal_status"
+                android:textAppearance="?android:attr/textAppearanceListItemSmall"
+                android:imeOptions="actionDone"
+                android:inputType="none"
+                android:textColorHint="@color/black" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/tilAverageIncome"
+            style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:textColorHint="@color/black"
+            app:layout_constraintEnd_toEndOf="@+id/tilPhonenumber"
+            app:layout_constraintStart_toStartOf="@+id/tilPhonenumber"
+            app:layout_constraintTop_toTopOf="@+id/tilLegalStatus">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/tietAverageIncome"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="@string/average_income"
+                android:imeOptions="actionDone"
+                android:inputType="number"
+                android:textColorHint="@color/black" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/tilLiteracy"
+            style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:textColorHint="@color/black"
+            app:layout_constraintEnd_toEndOf="@+id/tilLegalStatus"
+            app:layout_constraintStart_toStartOf="@+id/tilLegalStatus"
+            app:layout_constraintTop_toBottomOf="@+id/tilLegalStatus">
+
+            <AutoCompleteTextView
+                android:id="@+id/actvLiteracy"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="@string/literacy"
+                android:imeOptions="actionDone"
+                android:inputType="none"
+                android:textAppearance="?android:attr/textAppearanceListItemSmall"
+                android:textColorHint="@color/black" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/tilIncomeSource"
+            style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:textColorHint="@color/black"
+            app:layout_constraintEnd_toEndOf="@+id/tilLiteracy"
+            app:layout_constraintStart_toStartOf="@+id/tilLiteracy"
+            app:layout_constraintTop_toBottomOf="@+id/tilLiteracy">
+
+            <AutoCompleteTextView
+                android:id="@+id/actvIncomeSource"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="@string/income_source"
+                android:imeOptions="actionDone"
+                android:inputType="none"
+                android:textAppearance="?android:attr/textAppearanceListItemSmall"
+                android:textColorHint="@color/black" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+
+        <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/tilOtherIncomeSource"
+            style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:textColorHint="@color/black"
+            app:layout_constraintEnd_toEndOf="@+id/tilAverageIncome"
+            app:layout_constraintStart_toStartOf="@+id/tilAverageIncome"
+            app:layout_constraintTop_toTopOf="@+id/tilIncomeSource">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/tietOtherIncomeSource"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="@string/other_income_source"
+                android:imeOptions="actionDone"
+                android:inputType="textCapWords"
+                android:textColorHint="@color/black" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/tilMaritalStatus"
+            style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:textColorHint="@color/black"
+            app:layout_constraintEnd_toEndOf="@+id/tilIncomeSource"
+            app:layout_constraintStart_toStartOf="@+id/tilIncomeSource"
+            app:layout_constraintTop_toBottomOf="@+id/tilIncomeSource">
+
+            <AutoCompleteTextView
+                android:id="@+id/actvMaritalStatus"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="@string/marital_status"
+                android:imeOptions="actionDone"
+                android:inputType="none"
+                android:textAppearance="?android:attr/textAppearanceListItemSmall"
+                android:textColorHint="@color/black" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/tilSpouseName"
+            style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:textColorHint="@color/black"
+            app:layout_constraintEnd_toEndOf="@+id/tilOtherIncomeSource"
+            app:layout_constraintStart_toStartOf="@+id/tilOtherIncomeSource"
+            app:layout_constraintTop_toTopOf="@+id/tilMaritalStatus">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/tietSpouseName"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="@string/spouse"
+                android:imeOptions="actionDone"
+                android:inputType="textCapWords"
+                android:textColorHint="@color/black" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+
+        <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/tilSelectionCriteria"
+            style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:textColorHint="@color/black"
+            app:layout_constraintEnd_toEndOf="@+id/tilMaritalStatus"
+            app:layout_constraintHorizontal_bias="0.5"
+            app:layout_constraintStart_toStartOf="@+id/tilMaritalStatus"
+            app:layout_constraintTop_toBottomOf="@+id/tilMaritalStatus">
+
+            <AutoCompleteTextView
+                android:id="@+id/actvSelectionCriteria"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="@string/selection_criteria"
+                android:imeOptions="actionDone"
+                android:inputType="none"
+                android:textAppearance="?android:attr/textAppearanceListItemSmall"
+                android:textColorHint="@color/black" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+
+        <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/tilSelectionReason"
+            style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:textColorHint="@color/black"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintHorizontal_bias="0.5"
+            app:layout_constraintStart_toStartOf="@+id/tilSpouseName"
+            app:layout_constraintTop_toTopOf="@+id/tilSelectionCriteria">
+
+            <MultiAutoCompleteTextView
+                android:id="@+id/mactvSelectionReason"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="@string/selection_reason"
+                android:imeOptions="actionDone"
+                android:inputType="none"
+                android:textColorHint="@color/black" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <Button
+            android:id="@+id/btnPersonalInfo"
+            android:layout_width="0dp"
+            android:layout_height="56dp"
+            android:backgroundTint="@color/darkGreen"
+            android:layout_marginStart="16dp"
+            android:layout_marginTop="32dp"
+            android:layout_marginEnd="16dp"
+            android:text="@string/next"
+            android:textAllCaps="false"
+            android:textColor="@android:color/white"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@+id/tilSelectionReason" />
+    </androidx.constraintlayout.widget.ConstraintLayout>
+</ScrollView>

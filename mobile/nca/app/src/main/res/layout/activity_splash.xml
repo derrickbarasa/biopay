@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    tools:context=".login.SplashActivity">
+
+    <TextView
+        android:id="@+id/tvFpHouseholds"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="32dp"
+        android:layout_marginTop="96dp"
+        android:layout_marginEnd="32dp"
+        android:text="@string/download_household_fingerprints"
+        android:textSize="24sp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <ProgressBar
+        android:id="@+id/pBFpHouseholds"
+        style="?android:attr/progressBarStyleHorizontal"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:minHeight="24sp"
+        app:layout_constraintEnd_toEndOf="@+id/tvFpHouseholds"
+        app:layout_constraintStart_toStartOf="@+id/tvFpHouseholds"
+        app:layout_constraintTop_toBottomOf="@+id/tvFpHouseholds" />
+
+    <TextView
+        android:id="@+id/tvPayments"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:text="@string/download_payments"
+        android:textSize="24sp"
+        app:layout_constraintEnd_toEndOf="@+id/pBFpHouseholds"
+        app:layout_constraintStart_toStartOf="@+id/pBFpHouseholds"
+        app:layout_constraintTop_toBottomOf="@+id/pBFpHouseholds" />
+    <ProgressBar
+        android:id="@+id/pBPayments"
+        style="?android:attr/progressBarStyleHorizontal"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        app:layout_constraintEnd_toEndOf="@+id/tvPayments"
+        app:layout_constraintStart_toStartOf="@+id/tvPayments"
+        app:layout_constraintTop_toBottomOf="@+id/tvPayments" />
+
+    <TextView
+        android:id="@+id/tvFpAlternates"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="32dp"
+        android:text="@string/download_alternate_fingerprints"
+        android:textSize="24sp"
+        app:layout_constraintEnd_toEndOf="@+id/pBPayments"
+        app:layout_constraintStart_toStartOf="@+id/pBPayments"
+        app:layout_constraintTop_toBottomOf="@+id/pBPayments" />
+
+
+    <ProgressBar
+        android:id="@+id/pBFpAlternates"
+        style="?android:attr/progressBarStyleHorizontal"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        app:layout_constraintEnd_toEndOf="@+id/tvFpAlternates"
+        app:layout_constraintStart_toStartOf="@+id/tvFpAlternates"
+        app:layout_constraintTop_toBottomOf="@+id/tvFpAlternates" />
+
+    <TextView
+        android:id="@+id/tvImageAlternates"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:text="@string/download_alternate_images"
+        android:textSize="24sp"
+        app:layout_constraintEnd_toEndOf="@+id/pBFpAlternates"
+        app:layout_constraintHorizontal_bias="0.0"
+        app:layout_constraintStart_toStartOf="@+id/pBFpAlternates"
+        app:layout_constraintTop_toBottomOf="@+id/pBFpAlternates" />
+    <ProgressBar
+        android:id="@+id/pBImageAlternates"
+        style="?android:attr/progressBarStyleHorizontal"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        app:layout_constraintEnd_toEndOf="@+id/tvImageAlternates"
+        app:layout_constraintHorizontal_bias="0.0"
+        app:layout_constraintStart_toStartOf="@+id/tvImageAlternates"
+        app:layout_constraintTop_toBottomOf="@+id/tvImageAlternates" />
+</androidx.constraintlayout.widget.ConstraintLayout>

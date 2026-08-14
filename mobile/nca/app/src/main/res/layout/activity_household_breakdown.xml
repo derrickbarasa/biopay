@@ -1,0 +1,262 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:scrollbarSize="18dp"
+    android:scrollbars="vertical"
+    app:layout_behavior="@string/appbar_scrolling_view_behavior"
+    tools:context=".households.HouseholdBreakdownActivity">
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_margin="8dp"
+        android:background="@color/white"
+        android:paddingBottom="16dp">
+
+        <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/tilHouseholdSize"
+            style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="16dp"
+            android:layout_marginTop="32dp"
+            android:layout_marginEnd="16dp"
+            android:textColorHint="@color/black"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/tietHouseholdSize"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="@string/household_size"
+                android:inputType="number"
+                android:imeOptions="actionDone"
+                android:textColorHint="@color/black" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+
+        <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/tilMaleDependants"
+            style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:textColorHint="@color/black"
+            app:layout_constraintEnd_toStartOf="@+id/tilFemaleDependants"
+            app:layout_constraintHorizontal_bias="0.5"
+            app:layout_constraintStart_toStartOf="@+id/tilHouseholdSize"
+            app:layout_constraintTop_toBottomOf="@+id/tilHouseholdSize">
+
+            <AutoCompleteTextView
+                android:id="@+id/actvMaleDependants"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="@string/male_members"
+                android:imeOptions="actionDone"
+                android:inputType="none"
+                android:textAppearance="?android:attr/textAppearanceListItemSmall"
+                android:textColorHint="@color/black" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/tilFemaleDependants"
+            style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="16dp"
+            android:textColorHint="@color/black"
+            app:layout_constraintEnd_toEndOf="@+id/tilHouseholdSize"
+            app:layout_constraintHorizontal_bias="0.5"
+            app:layout_constraintStart_toEndOf="@+id/tilMaleDependants"
+            app:layout_constraintTop_toTopOf="@+id/tilMaleDependants">
+
+            <AutoCompleteTextView
+                android:id="@+id/actvFemaleDependants"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="@string/female_members"
+                android:imeOptions="actionDone"
+                android:inputType="none"
+                android:textAppearance="?android:attr/textAppearanceListItemSmall"
+                android:textColorHint="@color/black" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+
+
+        <View
+            android:id="@+id/dividerBreakdown"
+            android:layout_width="0dp"
+            android:layout_height="2dp"
+            android:layout_marginTop="16dp"
+            android:background="@android:color/darker_gray"
+            app:layout_constraintEnd_toEndOf="@+id/tilFemaleDependants"
+            app:layout_constraintStart_toStartOf="@+id/tilMaleDependants"
+            app:layout_constraintTop_toBottomOf="@+id/tilMaleDependants" />
+
+        <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/tilZeroTwo"
+            style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:textColorHint="@color/black"
+            app:layout_constraintEnd_toEndOf="@+id/tilMaleDependants"
+            app:layout_constraintStart_toStartOf="@+id/tilMaleDependants"
+            app:layout_constraintTop_toBottomOf="@+id/dividerBreakdown">
+
+            <AutoCompleteTextView
+                android:id="@+id/actvZeroTwo"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="@string/zero_two"
+                android:imeOptions="actionDone"
+                android:inputType="none"
+                android:textAppearance="?android:attr/textAppearanceListItemSmall"
+                android:textColorHint="@color/black" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/tilThreeFive"
+            style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:textColorHint="@color/black"
+            app:layout_constraintEnd_toEndOf="@+id/tilFemaleDependants"
+            app:layout_constraintStart_toStartOf="@+id/tilFemaleDependants"
+            app:layout_constraintTop_toTopOf="@+id/tilZeroTwo">
+
+            <AutoCompleteTextView
+                android:id="@+id/actvThreeFive"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="@string/three_five"
+                android:imeOptions="actionDone"
+                android:inputType="none"
+                android:textAppearance="?android:attr/textAppearanceListItemSmall"
+                android:textColorHint="@color/black" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/tilSixSeventeen"
+            style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:textColorHint="@color/black"
+            app:layout_constraintEnd_toEndOf="@+id/tilZeroTwo"
+            app:layout_constraintStart_toStartOf="@+id/tilZeroTwo"
+            app:layout_constraintTop_toBottomOf="@+id/tilZeroTwo">
+
+            <AutoCompleteTextView
+                android:id="@+id/actvSixSeventeen"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="@string/six_seventeen"
+                android:imeOptions="actionDone"
+                android:inputType="none"
+                android:textAppearance="?android:attr/textAppearanceListItemSmall"
+                android:textColorHint="@color/black" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/tilEighteenThirtyFive"
+            style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:textColorHint="@color/black"
+            app:layout_constraintEnd_toEndOf="@+id/tilThreeFive"
+            app:layout_constraintStart_toStartOf="@+id/tilThreeFive"
+            app:layout_constraintTop_toTopOf="@+id/tilSixSeventeen">
+
+            <AutoCompleteTextView
+                android:id="@+id/actvEighteenThirtyFive"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="@string/eighteen_thirty_five"
+                android:imeOptions="actionDone"
+                android:inputType="none"
+                android:textAppearance="?android:attr/textAppearanceListItemSmall"
+                android:textColorHint="@color/black" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/tilThirtySixSixtyFour"
+            style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:textColorHint="@color/black"
+            app:layout_constraintEnd_toEndOf="@+id/tilSixSeventeen"
+            app:layout_constraintStart_toStartOf="@+id/tilSixSeventeen"
+            app:layout_constraintTop_toBottomOf="@+id/tilSixSeventeen">
+
+            <AutoCompleteTextView
+                android:id="@+id/actvThirtySixSixtyFour"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="@string/thirty_six_sixty_four"
+                android:imeOptions="actionDone"
+                android:inputType="none"
+                android:textAppearance="?android:attr/textAppearanceListItemSmall"
+                android:textColorHint="@color/black" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/tilSixtyFivePlus"
+            style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:textColorHint="@color/black"
+            app:layout_constraintEnd_toEndOf="@+id/tilEighteenThirtyFive"
+            app:layout_constraintStart_toStartOf="@+id/tilEighteenThirtyFive"
+            app:layout_constraintTop_toTopOf="@+id/tilThirtySixSixtyFour">
+
+            <AutoCompleteTextView
+                android:id="@+id/actvSixtyFivePlus"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="@string/sixty_five_plus"
+                android:imeOptions="actionDone"
+                android:inputType="none"
+                android:textAppearance="?android:attr/textAppearanceListItemSmall"
+                android:textColorHint="@color/black" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <Button
+            android:id="@+id/btnHouseholdBreakdownBack"
+            android:layout_width="0dp"
+            android:layout_height="56dp"
+            android:backgroundTint="@color/darkRed"
+            android:layout_marginStart="16dp"
+            android:layout_marginTop="32dp"
+            android:text="@string/back"
+            android:textAllCaps="false"
+            android:textColor="@android:color/white"
+            app:layout_constraintEnd_toStartOf="@+id/btnHouseholdBreakdownNext"
+            app:layout_constraintHorizontal_bias="0.5"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@+id/tilSixtyFivePlus" />
+
+        <Button
+            android:id="@+id/btnHouseholdBreakdownNext"
+            android:layout_width="0dp"
+            android:layout_height="56dp"
+            android:backgroundTint="@color/darkGreen"
+            android:layout_marginStart="16dp"
+            android:layout_marginEnd="16dp"
+            android:text="@string/next"
+            android:textAllCaps="false"
+            android:textColor="@android:color/white"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintHorizontal_bias="0.5"
+            app:layout_constraintStart_toEndOf="@+id/btnHouseholdBreakdownBack"
+            app:layout_constraintTop_toTopOf="@+id/btnHouseholdBreakdownBack" />
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
+</ScrollView>

@@ -1,0 +1,152 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+    <uses-permission
+        android:name="android.permission.AUTHENTICATE_ACCOUNTS"
+        android:maxSdkVersion="21" />
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.WRITE_SYNC_SETTINGS" />
+    <application
+        android:name="com.alphabank.dca.objects.GlobalApplication"
+        android:allowBackup="true"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:largeHeap="true"
+        android:usesCleartextTraffic="true"
+        android:theme="@style/Theme.Dca"
+        tools:targetApi="31" >
+        <provider
+            android:name="com.alphabank.dca.data.BiometricsProvider"
+            android:authorities="@string/content_authority"
+            android:exported="false"
+            android:multiprocess="true"
+            android:syncable="true" />
+
+        <service
+            android:name="com.alphabank.dca.sync.BiometricsAuthenticatorService"
+            android:exported="true"
+            android:process=":sync">
+            <intent-filter>
+                <action android:name="android.accounts.AccountAuthenticator" />
+            </intent-filter>
+
+            <meta-data
+                android:name="android.accounts.AccountAuthenticator"
+                android:resource="@xml/authenticator" />
+        </service>
+        <service
+            android:name="com.alphabank.dca.sync.BiometricsSyncAdapterService"
+            android:exported="true"
+            android:process=":sync">
+            <intent-filter>
+                <action android:name="android.content.SyncAdapter" />
+            </intent-filter>
+
+            <meta-data
+                android:name="android.content.SyncAdapter"
+                android:resource="@xml/syncadapter" />
+        </service>
+
+        <activity android:exported="false" android:name="com.alphabank.dca.attendance.AttendanceValidationActivity" />
+        <activity android:exported="false" android:name="com.alphabank.dca.attendance.AttendanceBeneficiariesActivity" />
+        <activity android:exported="false" android:name="com.alphabank.dca.attendance.AttendanceReaderActivity" />
+        <activity
+            android:exported="false"
+            android:name="com.alphabank.dca.reports.ReportActivity"
+            android:label="@string/title_activity_report"
+            android:theme="@style/Theme.Dca.NoActionBar" />
+        <activity
+            android:exported="false"
+            android:name="com.alphabank.dca.reports.UploadActivity"
+            android:label="@string/upload"
+            android:theme="@style/Theme.Dca.NoActionBar" />
+        <activity
+            android:exported="false"
+            android:name="com.alphabank.dca.alternates.EditAlternateActivity"
+            android:label="@string/edit_alternate" />
+        <activity
+            android:exported="false"
+            android:name="com.alphabank.dca.households.EditHouseholdActivity"
+            android:label="@string/edit_households" />
+        <activity
+            android:exported="false"
+            android:name="com.alphabank.dca.payments.PaymentVerificationActivity"
+            android:label="@string/payment_verification" />
+        <activity
+            android:exported="false"
+            android:name="com.alphabank.dca.payments.PaymentBeneficiariesActivity"
+            android:label="@string/payment_ben_list" />
+        <activity
+            android:exported="false"
+            android:name="com.alphabank.dca.payments.PaymentHouseholdsActivity"
+            android:label="@string/payment_households" />
+        <activity
+            android:exported="false"
+            android:name="com.alphabank.dca.payments.PaymentPreSetupActivity"
+            android:label="@string/payment_setup" />
+        <activity
+            android:exported="false"
+            android:name="com.alphabank.dca.alternates.AlternateFingerprintsActivity"
+            android:label="@string/alt_fp" />
+        <activity
+            android:exported="false"
+            android:name="com.alphabank.dca.alternates.AlternatesActivity"
+            android:label="@string/alternate_reg" />
+        <activity
+            android:exported="false"
+            android:name="com.alphabank.dca.alternates.AlternatesHouseholdsActivity"
+            android:label="@string/alternate_households" />
+        <activity
+            android:exported="false"
+            android:name="com.alphabank.dca.households.ReviewActivity"
+            android:label="@string/complete_registration" />
+        <activity
+            android:exported="false"
+            android:name="com.alphabank.dca.households.FingerprintsActivity"
+            android:label="@string/fingerprint" />
+        <activity
+            android:exported="false"
+            android:name="com.alphabank.dca.households.PhotoActivity"
+            android:label="@string/capture_photo" />
+        <activity
+            android:exported="false"
+            android:name="com.alphabank.dca.households.HouseholdActivity"
+            android:label="@string/alternate_households" />
+        <activity
+            android:exported="false"
+            android:name="com.alphabank.dca.households.PersonalInfoActivity"
+            android:label="@string/personal_information" />
+        <activity
+            android:exported="false"
+            android:name="com.alphabank.dca.households.LocationActivity"
+            android:label="@string/targetLocation" />
+        <activity
+            android:name="com.alphabank.dca.home.MainActivity"
+            android:exported="false"
+            android:label="@string/title_activity_main"
+            android:theme="@style/Theme.Dca.NoActionBar" />
+        <activity
+            android:exported="false"
+            android:name="com.alphabank.dca.login.SplashActivity"
+            android:label="@string/login" />
+        <activity
+            android:name="com.alphabank.dca.login.LoginActivity"
+            android:label="@string/app_name"
+            android:exported="true"
+            android:theme="@style/Theme.Dca.NoActionBar">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+    </application>
+
+</manifest>
