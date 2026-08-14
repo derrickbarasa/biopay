@@ -35,10 +35,12 @@ session. The work to be done is below.
 - [ ] Generate and print payment vouchers — voucher shows full names of the person, image, and QR code for the household.
 
 ### Frontend — household
-- [ ] View household on a **new page (no popups)**, showing all household detail and images.
-- [ ] Filters — by village, location, county, state, vulnerability status, legal status, time, name, document number.
-- [ ] Graphs — by age, gender, legal status, vulnerability status, and other.
-- [ ] Audit history — e.g. when it was paid.
+- [x] View household on a **new page (no popups)** — dedicated route `/app/households/:householdNumber` (`HouseholdDetailPage.vue`); the old detail dialog was removed and the eye action now navigates. Shows all fields the backend currently returns + alternates + biometric status.
+  - [ ] **Images**: blocked — no endpoint returns captured image filenames (GET_HOUSEHOLD only returns an `imageStatus` count). Needs a backend field (read from the `images` table) before photos can render. Backend/DB work — see decision below.
+- [~] Filters — existing: organisation, state, county, location, village, gender, status, and a name/number/ID search (document number is covered by that search). Still to add: **vulnerability status, legal status, registration date range**.
+  - [ ] `vulnerability_status` / `legal_status`: the `households` table has no such columns today (mobile captures vulnerability status, but the web schema doesn't expose it). Needs a migration + backend before these filters/graphs are real.
+- [~] Graphs — by **age, gender, status** done (client-side over the filtered rows, on the Households page, toggle "Show Breakdown"). Legal-status / vulnerability-status graphs blocked on the same missing columns.
+- [ ] Audit history — e.g. when it was paid. Blocked: needs a backend read joining `payments` / `audit_logs` for the household. Backend/DB work.
 
 ### Verifications
 - [ ] OTP (mobile does **not** require OTP), email, TOTP.
@@ -79,5 +81,14 @@ session. The work to be done is below.
   - Theme primary green → teal (`plugins/vuetify.ts`).
   - Sidebar restructured into Dashboard / Configs / Transfers / Settings groups, lighter `surface` color, logout footer (`layouts/DefaultLayout.vue`).
   - Verified: `npm install` + `vue-tsc -b` type-check pass (exit 0).
-- Still needing decisions before their workstreams start: subscription/billing approach; mobile face-recognition SDK/licensing. Will ask when reached.
-- Next up: datatables polish (search/pagination on all tables), then household deep-dive.
+- **Deliverable 2 — Household detail page + breakdown graphs (done, frontend-only):**
+  - New route + `HouseholdDetailPage.vue` (no popups); removed the old dialog; eye action navigates.
+  - Client-side breakdown graphs (gender / age / status) on the Households page behind a "Show Breakdown" toggle, using existing `BarChart`.
+  - Verified: `vue-tsc -b` type-check + `vite build` both pass (exit 0).
+- **Push status:** GitHub write blocked (403, read-only integration). Per user, building locally only; commits stay local until write access is granted. Local commits so far: `0fba6fb` (deliverable 1) + this one.
+- **Blocked pending decisions / backend work I can't runtime-verify without the MSSQL DB (can only compile):**
+  - Household images endpoint, vulnerability/legal-status columns (migration), household audit/payment history.
+  - Subscription/billing approach; mobile face-recognition SDK/licensing.
+  - Data export (household/alternate/payment) — mostly frontend CSV, partially doable now.
+  - Generated-data columns (voucher & payment cycles) — needs backend to surface those on the list.
+- Next candidates (frontend-verifiable): data export buttons (CSV) on list pages; "voucher/payment cycle" columns if backend already returns them; datatables search polish on remaining pages.
