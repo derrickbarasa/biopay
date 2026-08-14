@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    tools:context=".home.ui.home.HomeFragment">
+
+    <Button
+        android:id="@+id/btnHouseholds"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="16dp"
+        android:layout_marginTop="64dp"
+        android:background="@android:color/transparent"
+        android:drawableTop="@drawable/households"
+        android:text="@string/households"
+        android:textAllCaps="false"
+        android:textColor="@color/black"
+
+        app:layout_constraintEnd_toStartOf="@+id/btnAlternates"
+        app:layout_constraintHorizontal_bias="0.5"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <Button
+        android:id="@+id/btnAlternates"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="32dp"
+        android:layout_marginEnd="16dp"
+        android:background="@android:color/transparent"
+        android:drawableTop="@drawable/alternates"
+        android:text="@string/alternates"
+        android:textAllCaps="false"
+        android:textColor="@color/black"
+
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintHorizontal_bias="0.5"
+        app:layout_constraintStart_toEndOf="@+id/btnHouseholds"
+        app:layout_constraintTop_toTopOf="@+id/btnHouseholds" />
+
+    <Button
+        android:id="@+id/btnAttendance"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="32dp"
+        android:background="@android:color/transparent"
+        android:drawableTop="@drawable/attendance"
+        android:text="@string/attendance"
+        android:textAllCaps="false"
+        android:textColor="@color/black"
+        android:visibility="gone"
+        app:layout_constraintEnd_toEndOf="@+id/btnHouseholds"
+        app:layout_constraintStart_toStartOf="@+id/btnHouseholds"
+        app:layout_constraintTop_toBottomOf="@+id/btnHouseholds" />
+
+    <Button
+        android:id="@+id/btnPayments"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="32dp"
+        android:background="@android:color/transparent"
+        android:drawableTop="@drawable/payments"
+        android:text="@string/payments"
+        android:textAllCaps="false"
+        android:textColor="@color/black"
+
+        app:layout_constraintEnd_toEndOf="@+id/btnAlternates"
+        app:layout_constraintHorizontal_bias="1.0"
+        app:layout_constraintStart_toStartOf="@+id/btnAlternates"
+        app:layout_constraintTop_toBottomOf="@+id/btnAlternates" />
+
+    <Button
+        android:id="@+id/btnReports"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="32dp"
+        android:background="@android:color/transparent"
+        android:drawableTop="@drawable/order"
+        android:text="@string/reports"
+        android:textAllCaps="false"
+        android:textColor="@color/black"
+        app:layout_constraintEnd_toEndOf="@+id/btnAttendance"
+        app:layout_constraintStart_toStartOf="@+id/btnAttendance"
+        app:layout_constraintTop_toBottomOf="@+id/btnAttendance" />
+</androidx.constraintlayout.widget.ConstraintLayout>

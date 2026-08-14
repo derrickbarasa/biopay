@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+    <item
+        android:id="@+id/action_splash_background"
+        android:orderInCategory="100"
+        android:title="Download data"
+        android:icon="@android:drawable/ic_menu_upload"
+        app:showAsAction="never" />
+
+</menu>

@@ -1,0 +1,212 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    tools:context=".households.FingerprintsActivity">
+
+    <ImageView
+        android:id="@+id/ivHouseholdFingerprint"
+        android:layout_width="200dp"
+        android:layout_height="200dp"
+        android:layout_marginStart="16dp"
+        android:layout_marginTop="16dp"
+        android:contentDescription="@string/fingerprint"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        app:srcCompat="@drawable/finger_edittext" />
+
+    <LinearLayout
+        android:id="@+id/llRightHand"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="16dp"
+        android:layout_marginTop="16dp"
+        android:layout_marginEnd="16dp"
+        android:orientation="horizontal"
+        android:padding="5dp"
+        android:weightSum="5"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toEndOf="@+id/ivHouseholdFingerprint"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <Button
+            android:onClick="btnEnrolFinger"
+            android:id="@+id/btnRightThumb"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:textColor="@android:color/darker_gray"
+            style="?android:attr/buttonBarButtonStyle"
+            android:background="@android:color/transparent"
+            android:drawableTop="@drawable/finger_error"
+            android:text="@string/right_thumb"
+            android:textAllCaps="false" />
+
+        <Button
+            android:onClick="btnEnrolFinger"
+            android:id="@+id/btnRightIndex"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:textColor="@android:color/darker_gray"
+            style="?android:attr/buttonBarButtonStyle"
+            android:background="@android:color/transparent"
+            android:drawableTop="@drawable/finger_error"
+            android:text="@string/right_index"
+            android:textAllCaps="false" />
+
+        <Button
+            android:onClick="btnEnrolFinger"
+            android:id="@+id/btnRightMiddle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:textColor="@android:color/darker_gray"
+            style="?android:attr/buttonBarButtonStyle"
+            android:background="@android:color/transparent"
+            android:drawableTop="@drawable/finger_error"
+            android:text="@string/right_middle"
+            android:textAllCaps="false" />
+
+        <Button
+            android:onClick="btnEnrolFinger"
+            android:id="@+id/btnRightRing"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:textColor="@android:color/darker_gray"
+            style="?android:attr/buttonBarButtonStyle"
+            android:background="@android:color/transparent"
+            android:drawableTop="@drawable/finger_error"
+            android:text="@string/right_ring"
+            android:textAllCaps="false" />
+
+        <Button
+            android:onClick="btnEnrolFinger"
+            android:id="@+id/btnRightLittle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:textColor="@android:color/darker_gray"
+            style="?android:attr/buttonBarButtonStyle"
+            android:background="@android:color/transparent"
+            android:drawableTop="@drawable/finger_error"
+            android:text="@string/right_little"
+            android:textAllCaps="false" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/llLeftHand"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="16dp"
+        android:layout_marginTop="16dp"
+        android:layout_marginEnd="16dp"
+        android:orientation="horizontal"
+        android:padding="5dp"
+        android:weightSum="5"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toEndOf="@+id/ivHouseholdFingerprint"
+        app:layout_constraintTop_toBottomOf="@+id/llRightHand">
+
+        <Button
+            android:onClick="btnEnrolFinger"
+            android:id="@+id/btnLeftThumb"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:textColor="@android:color/darker_gray"
+            style="?android:attr/buttonBarButtonStyle"
+            android:background="@android:color/transparent"
+            android:drawableTop="@drawable/finger_error"
+            android:text="@string/left_thumb"
+            android:textAllCaps="false" />
+
+        <Button
+            android:onClick="btnEnrolFinger"
+            android:id="@+id/btnLeftIndex"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:textColor="@android:color/darker_gray"
+            style="?android:attr/buttonBarButtonStyle"
+            android:background="@android:color/transparent"
+            android:drawableTop="@drawable/finger_error"
+            android:text="@string/left_index"
+            android:textAllCaps="false" />
+
+        <Button
+            android:onClick="btnEnrolFinger"
+            android:id="@+id/btnLeftMiddle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:textColor="@android:color/darker_gray"
+            style="?android:attr/buttonBarButtonStyle"
+            android:background="@android:color/transparent"
+            android:drawableTop="@drawable/finger_error"
+            android:text="@string/left_middle"
+            android:textAllCaps="false" />
+
+        <Button
+            android:onClick="btnEnrolFinger"
+            android:id="@+id/btnLeftRing"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:textColor="@android:color/darker_gray"
+            style="?android:attr/buttonBarButtonStyle"
+            android:background="@android:color/transparent"
+            android:drawableTop="@drawable/finger_error"
+            android:text="@string/left_ring"
+            android:textAllCaps="false" />
+
+        <Button
+            android:onClick="btnEnrolFinger"
+            android:id="@+id/btnLeftLittle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:textColor="@android:color/darker_gray"
+            style="?android:attr/buttonBarButtonStyle"
+            android:background="@android:color/transparent"
+            android:drawableTop="@drawable/finger_error"
+            android:text="@string/left_little"
+            android:textAllCaps="false" />
+    </LinearLayout>
+
+    <Button
+
+        android:id="@+id/btnFingerprintBack"
+        android:layout_width="0dp"
+        android:layout_marginStart="16dp"
+        android:layout_marginBottom="16dp"
+        android:layout_height="56dp"
+        android:backgroundTint="@color/darkRed"
+        android:text="@string/back"
+        android:textAllCaps="false"
+        android:textColor="@android:color/white"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toStartOf="@+id/btnFingerprintNext"
+        app:layout_constraintHorizontal_bias="0.5"
+        app:layout_constraintStart_toStartOf="parent" />
+
+    <Button
+
+        android:id="@+id/btnFingerprintNext"
+        android:layout_width="0dp"
+        android:layout_height="56dp"
+        android:layout_marginStart="16dp"
+        android:layout_marginEnd="16dp"
+        android:layout_marginBottom="16dp"
+        android:backgroundTint="@color/darkGreen"
+        android:text="@string/next"
+        android:textAllCaps="false"
+        android:textColor="@android:color/white"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintHorizontal_bias="0.5"
+        app:layout_constraintStart_toEndOf="@+id/btnFingerprintBack" />
+</androidx.constraintlayout.widget.ConstraintLayout>

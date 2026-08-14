@@ -1,0 +1,244 @@
+<resources>
+    <string name="app_name">dca</string>
+    <string name="title_activity_main">Home</string>
+    <string name="navigation_drawer_open">Open navigation drawer</string>
+    <string name="navigation_drawer_close">Close navigation drawer</string>
+    <string name="nav_header_title">care</string>
+    <string name="nav_header_subtitle">biometrics@dca.com</string>
+    <string name="nav_header_desc">Navigation header</string>
+    <string name="action_settings">Settings</string>
+
+    <string name="menu_home">Home</string>
+    <string name="menu_gallery">Gallery</string>
+    <string name="menu_slideshow">Slideshow</string>
+
+
+    <string name="login">Login</string>
+    <string name="username">Username</string>
+    <string name="password">Password</string>
+
+    <string name="content_authority">com.alphabank.dca</string>
+    <string name="sync_account_type">dca.alphabank.com</string>
+
+    <string name="households">Households</string>
+    <string name="alternates">Alternates</string>
+    <string name="attendance">Attendance</string>
+    <string name="payments">Payments</string>
+    <string name="reports">Reports</string>
+
+    <string name="targetLocation">Registration Set up</string>
+    <string name="btn_location">Start Registration</string>
+    <string name="personal_information">Personal Information Registration</string>
+    <string name="household_name">Household Name</string>
+    <string name="age">Age</string>
+    <string name="id_no">Id Number</string>
+    <string name="phonenumber">Phonenumber(09********)</string>
+    <string name="start_work">Start of Work</string>
+    <string name="average_income">Monthly Average Income</string>
+    <string name="male">Male</string>
+    <string name="female">Female</string>
+    <string name="spouse">Spouse Name</string>
+    <string name="next">Next</string>
+    <string name="gender">Gender</string>
+    <string name="legal_status">Legal Status</string>
+    <string name="marital_status">Marital Status</string>
+    <string name="household_size">Household Size</string>
+    <string name="back">Back</string>
+    <string name="male_dependants">Male Dependants</string>
+    <string name="female_dependants">Female Dependants</string>
+    <string name="zero_five">0-5 yrs Old</string>
+    <string name="six_seventeen">6-17 yrs Old</string>
+    <string name="eighteen_forty_five">18-45 yrs Old</string>
+    <string name="forty_six_sixty_five">46-65 yrs Old</string>
+    <string name="sixty_six_plus">Over 66 yrs Old</string>
+    <string name="capture_photo">Capture Photo</string>
+    <string name="fingerprint">Enrol Fingerprints</string>
+    <string name="household_breakdown">Household Breakdown</string>
+
+    <string name="right_thumb">Right Thumb</string>
+    <string name="right_index">Right Index</string>
+    <string name="right_middle">Right Middle</string>
+    <string name="right_ring">Right Ring</string>
+    <string name="right_little">Right Little</string>
+    <string name="left_thumb">Left Thumb</string>
+    <string name="left_index">Left Index</string>
+    <string name="left_middle">Left Middle</string>
+    <string name="left_ring">Left Ring</string>
+    <string name="left_little">Left Little</string>
+    <string name="county">County</string>
+    <string name="state">State</string>
+    <string name="payam">Payam</string>
+    <string name="boma">Boma</string>
+    <string name="complete_registration">Review and Complete Registration</string>
+    <string name="reg_alternate">Register Alternate</string>
+    <string name="alternate_name">Alternate Name</string>
+    <string name="beneficiary_name">Beneficiary Name</string>
+    <string name="enrolment_number">Enrolment Number</string>
+    <string name="verify_fingerprint">Verify Fingerprint</string>
+    <string name="btn_scan">Scan QR Code</string>
+
+    <string name="amount">Amount</string>
+    <string name="trans_id">Transaction Number</string>
+    <string name="status">Status</string>
+    <string name="title_activity_report">Reports</string>
+    <string name="search">Search</string>
+    <string name="payment_centre">Payment Centre</string>
+    <string name="lat">Latitude</string>
+    <string name="lon">Longitude</string>
+    <string name="btn_payment_set_up">Save Payment Setups</string>
+    <string name="payment_batches">Payment Batches (Cycles)</string>
+    <string name="payment_verification">Payment Verification</string>
+    <string name="payment_reader">QRCode Reader</string>
+    <string name="payment_ben_list">Payment Beneficiaries List</string>
+    <string name="alt_fp">Alternate Fingerprints</string>
+    <string name="alternate_reg">Register Alternate</string>
+    <string name="alternate_households">Choose Household</string>
+    <string name="selection_reason">Selection Reason</string>
+    <string name="selection_criteria">Selection Criteria</string>
+    <string name="payment_setup">Setup Payments</string>
+    <string name="edit_households">Edit Households</string>
+    <string name="edit_alternate">Edit Alternate</string>
+    <string name="payment_households">Payment Households</string>
+
+    <string name="noAccessToDevice">Warning: cannot connect to fingerprint sensor.\n\nPlease open item \"Peripheral Management\" in this application main menu and check following settings :\n\t- Fingerprint sensor should be enabled\n\t- USB mode should be set to "Host". Or it should be set to "Auto" and PC shouldn\'t be connected to tablet.\n\nPlease also check that no other fingerprint sensor is connected to tablet.
+    </string>
+    <string-array name="legality">
+        <item>Select Legal Status</item>
+        <item>Host Community</item>
+        <item>IDP</item>
+        <item>Refugee</item>
+        <item>Returnee</item>
+    </string-array>
+
+    <string-array name="marital">
+        <item>Select Marital Status</item>
+        <item>Married</item>
+        <item>Single</item>
+        <item>Widow</item>
+        <item>Separated</item>
+    </string-array>
+
+    <string-array name="relationship">
+        <item>Select Alternate Relationship</item>
+        <item>Spouse</item>
+        <item>Son</item>
+        <item>Daughter</item>
+        <item>Brother</item>
+        <item>Sister</item>
+        <item>Others</item>
+    </string-array>
+
+    <string-array name="selection_criteria">
+        <item>Select Component</item>
+        <item>Component 2 (Direct Income Support)</item>
+    </string-array>
+    <string-array name="dis">
+        <item>Select Criteria (DIS)</item>
+        <item>Child-headed households with no alternate income support</item>
+        <item>Elderly-headed household lacking alternate income support and able bodied member</item>
+        <item>Persons with disability headed household lacking alternate income support and able bodied member</item>
+        <item>Chronically ill headed household lacking alternate income and able bodied member</item>
+        <item>Female-headed household lacking alternate income support and able-bodied member</item>
+    </string-array>
+    <string name="title_activity_scrolling">ScrollingActivity</string>
+    <string name="large_text">
+        "Material is the metaphor.\n\n"
+
+        "A material metaphor is the unifying theory of a rationalized space and a system of motion."
+        "The material is grounded in tactile reality, inspired by the study of paper and ink, yet "
+        "technologically advanced and open to imagination and magic.\n"
+        "Surfaces and edges of the material provide visual cues that are grounded in reality. The "
+        "use of familiar tactile attributes helps users quickly understand affordances. Yet the "
+        "flexibility of the material creates new affordances that supercede those in the physical "
+        "world, without breaking the rules of physics.\n"
+        "The fundamentals of light, surface, and movement are key to conveying how objects move, "
+        "interact, and exist in space and in relation to each other. Realistic lighting shows "
+        "seams, divides space, and indicates moving parts.\n\n"
+
+        "Bold, graphic, intentional.\n\n"
+
+        "The foundational elements of print based design typography, grids, space, scale, color, "
+        "and use of imagery guide visual treatments. These elements do far more than please the "
+        "eye. They create hierarchy, meaning, and focus. Deliberate color choices, edge to edge "
+        "imagery, large scale typography, and intentional white space create a bold and graphic "
+        "interface that immerse the user in the experience.\n"
+        "An emphasis on user actions makes core functionality immediately apparent and provides "
+        "waypoints for the user.\n\n"
+
+        "Motion provides meaning.\n\n"
+
+        "Motion respects and reinforces the user as the prime mover. Primary user actions are "
+        "inflection points that initiate motion, transforming the whole design.\n"
+        "All action takes place in a single environment. Objects are presented to the user without "
+        "breaking the continuity of experience even as they transform and reorganize.\n"
+        "Motion is meaningful and appropriate, serving to focus attention and maintain continuity. "
+        "Feedback is subtle yet clear. Transitions are efﬁcient yet coherent.\n\n"
+
+        "3D world.\n\n"
+
+        "The material environment is a 3D space, which means all objects have x, y, and z "
+        "dimensions. The z-axis is perpendicularly aligned to the plane of the display, with the "
+        "positive z-axis extending towards the viewer. Every sheet of material occupies a single "
+        "position along the z-axis and has a standard 1dp thickness.\n"
+        "On the web, the z-axis is used for layering and not for perspective. The 3D world is "
+        "emulated by manipulating the y-axis.\n\n"
+
+        "Light and shadow.\n\n"
+
+        "Within the material environment, virtual lights illuminate the scene. Key lights create "
+        "directional shadows, while ambient light creates soft shadows from all angles.\n"
+        "Shadows in the material environment are cast by these two light sources. In Android "
+        "development, shadows occur when light sources are blocked by sheets of material at "
+        "various positions along the z-axis. On the web, shadows are depicted by manipulating the "
+        "y-axis only. The following example shows the card with a height of 6dp.\n\n"
+
+        "Resting elevation.\n\n"
+
+        "All material objects, regardless of size, have a resting elevation, or default elevation "
+        "that does not change. If an object changes elevation, it should return to its resting "
+        "elevation as soon as possible.\n\n"
+
+        "Component elevations.\n\n"
+
+        "The resting elevation for a component type is consistent across apps (e.g., FAB elevation "
+        "does not vary from 6dp in one app to 16dp in another app).\n"
+        "Components may have different resting elevations across platforms, depending on the depth "
+        "of the environment (e.g., TV has a greater depth than mobile or desktop).\n\n"
+
+        "Responsive elevation and dynamic elevation offsets.\n\n"
+
+        "Some component types have responsive elevation, meaning they change elevation in response "
+        "to user input (e.g., normal, focused, and pressed) or system events. These elevation "
+        "changes are consistently implemented using dynamic elevation offsets.\n"
+        "Dynamic elevation offsets are the goal elevation that a component moves towards, relative "
+        "to the component’s resting state. They ensure that elevation changes are consistent "
+        "across actions and component types. For example, all components that lift on press have "
+        "the same elevation change relative to their resting elevation.\n"
+        "Once the input event is completed or cancelled, the component will return to its resting "
+        "elevation.\n\n"
+
+        "Avoiding elevation interference.\n\n"
+
+        "Components with responsive elevations may encounter other components as they move between "
+        "their resting elevations and dynamic elevation offsets. Because material cannot pass "
+        "through other material, components avoid interfering with one another any number of ways, "
+        "whether on a per component basis or using the entire app layout.\n"
+        "On a component level, components can move or be removed before they cause interference. "
+        "For example, a floating action button (FAB) can disappear or move off screen before a "
+        "user picks up a card, or it can move if a snackbar appears.\n"
+        "On the layout level, design your app layout to minimize opportunities for interference. "
+        "For example, position the FAB to one side of stream of a cards so the FAB won’t interfere "
+        "when a user tries to pick up one of cards.\n\n"
+    </string>
+    <string name="total_paid">Total Paid</string>
+    <string name="total_unpaid">Total Unpaid</string>
+    <string name="total_amount">Total Amount</string>
+    <string name="upload">Upload</string>
+    <string name="group_number">Group Number</string>
+    <string name="action_logout">Log out</string>
+    <string name="download_alternate_fingerprints">Download Alternate Fingerprints</string>
+    <string name="download_household_fingerprints">Download Household Fingerprints</string>
+    <string name="download_alternate_images">Download Alternate Images</string>
+    <string name="download_household_images">Download Household Images</string>
+    <string name="download_payments">Download Payments</string>
+</resources>
