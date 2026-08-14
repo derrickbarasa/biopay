@@ -27,6 +27,17 @@ const villageCountyFilter = ref<string | null>(null)
 const villageLocationFilter = ref<string | null>(null)
 
 const loading = ref(false)
+
+// Shared free-text search for the active tab's data table; cleared on tab switch.
+const tableSearch = ref('')
+watch(tab, () => { tableSearch.value = '' })
+
+const actionsHeader = { title: 'Actions', key: 'actions', sortable: false, align: 'end' as const }
+const stateHeaders = [{ title: 'Code', key: 'code' }, { title: 'Name', key: 'name' }, actionsHeader]
+const countyHeaders = [{ title: 'Code', key: 'code' }, { title: 'Name', key: 'name' }, { title: 'State', key: 'stateCode' }, actionsHeader]
+const locationHeaders = [{ title: 'Code', key: 'code' }, { title: 'Name', key: 'name' }, { title: 'County', key: 'countyCode' }, actionsHeader]
+const villageHeaders = [{ title: 'Code', key: 'code' }, { title: 'Name', key: 'name' }, { title: 'Location', key: 'locationCode' }, actionsHeader]
+
 const dialog = ref(false)
 const dialogLevel = ref<'STATE' | 'COUNTY' | 'LOCATION' | 'VILLAGE'>('STATE')
 const saving = ref(false)
@@ -145,39 +156,34 @@ async function remove(level: typeof dialogLevel.value, code: string) {
       <v-window v-model="tab">
         <v-window-item value="states">
           <v-card-text>
-            <div class="d-flex justify-end mb-2">
+            <div class="d-flex align-center ga-3 mb-2">
+              <v-text-field v-model="tableSearch" prepend-inner-icon="mdi-magnify" label="Search" clearable hide-details density="compact" style="max-width: 280px" />
+              <v-spacer />
               <v-btn size="small" color="primary" prepend-icon="mdi-plus" @click="openCreate('STATE')">Add State</v-btn>
             </div>
-            <v-table density="comfortable" :loading="loading">
-              <thead><tr><th>Code</th><th>Name</th><th class="text-right">Actions</th></tr></thead>
-              <tbody>
-                <tr v-for="s in states" :key="s.code">
-                  <td>{{ s.code }}</td><td>{{ s.name }}</td>
-                  <td class="text-right"><v-btn icon="mdi-delete" size="small" variant="text" color="error" @click="remove('STATE', s.code)" /></td>
-                </tr>
-                <tr v-if="!states.length"><td colspan="3" class="text-center text-medium-emphasis">No states configured yet</td></tr>
-              </tbody>
-            </v-table>
+            <v-data-table :headers="stateHeaders" :items="states" :search="tableSearch" :loading="loading" density="comfortable">
+              <template #item.actions="{ item }">
+                <v-btn icon="mdi-delete" size="small" variant="text" color="error" @click="remove('STATE', item.code)" />
+              </template>
+              <template #no-data><div class="text-center text-medium-emphasis py-4">No states configured yet</div></template>
+            </v-data-table>
           </v-card-text>
         </v-window-item>
 
         <v-window-item value="counties">
           <v-card-text>
             <div class="d-flex align-center ga-3 mb-2">
-              <v-select v-model="countyStateFilter" :items="states" item-title="name" item-value="code" label="Filter by state" clearable hide-details density="compact" style="max-width: 280px" />
+              <v-select v-model="countyStateFilter" :items="states" item-title="name" item-value="code" label="Filter by state" clearable hide-details density="compact" style="max-width: 240px" />
+              <v-text-field v-model="tableSearch" prepend-inner-icon="mdi-magnify" label="Search" clearable hide-details density="compact" style="max-width: 220px" />
               <v-spacer />
               <v-btn size="small" color="primary" prepend-icon="mdi-plus" @click="openCreate('COUNTY')">Add County</v-btn>
             </div>
-            <v-table density="comfortable" :loading="loading">
-              <thead><tr><th>Code</th><th>Name</th><th>State</th><th class="text-right">Actions</th></tr></thead>
-              <tbody>
-                <tr v-for="c in counties" :key="c.code">
-                  <td>{{ c.code }}</td><td>{{ c.name }}</td><td>{{ c.stateCode }}</td>
-                  <td class="text-right"><v-btn icon="mdi-delete" size="small" variant="text" color="error" @click="remove('COUNTY', c.code)" /></td>
-                </tr>
-                <tr v-if="!counties.length"><td colspan="4" class="text-center text-medium-emphasis">No counties configured yet</td></tr>
-              </tbody>
-            </v-table>
+            <v-data-table :headers="countyHeaders" :items="counties" :search="tableSearch" :loading="loading" density="comfortable">
+              <template #item.actions="{ item }">
+                <v-btn icon="mdi-delete" size="small" variant="text" color="error" @click="remove('COUNTY', item.code)" />
+              </template>
+              <template #no-data><div class="text-center text-medium-emphasis py-4">No counties configured yet</div></template>
+            </v-data-table>
           </v-card-text>
         </v-window-item>
 
@@ -185,20 +191,17 @@ async function remove(level: typeof dialogLevel.value, code: string) {
           <v-card-text>
             <div class="d-flex align-center ga-3 mb-2">
               <v-select v-model="locationStateFilter" :items="states" item-title="name" item-value="code" label="State" clearable hide-details density="compact" style="max-width: 220px" />
-              <v-select v-model="locationCountyFilter" :items="countiesForState(locationStateFilter)" item-title="name" item-value="code" label="Filter by county" clearable hide-details density="compact" style="max-width: 220px" />
+              <v-select v-model="locationCountyFilter" :items="countiesForState(locationStateFilter)" item-title="name" item-value="code" label="Filter by county" clearable hide-details density="compact" style="max-width: 200px" />
+              <v-text-field v-model="tableSearch" prepend-inner-icon="mdi-magnify" label="Search" clearable hide-details density="compact" style="max-width: 200px" />
               <v-spacer />
               <v-btn size="small" color="primary" prepend-icon="mdi-plus" @click="openCreate('LOCATION')">Add Location</v-btn>
             </div>
-            <v-table density="comfortable" :loading="loading">
-              <thead><tr><th>Code</th><th>Name</th><th>County</th><th class="text-right">Actions</th></tr></thead>
-              <tbody>
-                <tr v-for="l in locations" :key="l.code">
-                  <td>{{ l.code }}</td><td>{{ l.name }}</td><td>{{ l.countyCode }}</td>
-                  <td class="text-right"><v-btn icon="mdi-delete" size="small" variant="text" color="error" @click="remove('LOCATION', l.code)" /></td>
-                </tr>
-                <tr v-if="!locations.length"><td colspan="4" class="text-center text-medium-emphasis">No locations configured yet</td></tr>
-              </tbody>
-            </v-table>
+            <v-data-table :headers="locationHeaders" :items="locations" :search="tableSearch" :loading="loading" density="comfortable">
+              <template #item.actions="{ item }">
+                <v-btn icon="mdi-delete" size="small" variant="text" color="error" @click="remove('LOCATION', item.code)" />
+              </template>
+              <template #no-data><div class="text-center text-medium-emphasis py-4">No locations configured yet</div></template>
+            </v-data-table>
           </v-card-text>
         </v-window-item>
 
@@ -207,20 +210,17 @@ async function remove(level: typeof dialogLevel.value, code: string) {
             <div class="d-flex align-center ga-3 mb-2 flex-wrap">
               <v-select v-model="villageStateFilter" :items="states" item-title="name" item-value="code" label="State" clearable hide-details density="compact" style="max-width: 200px" />
               <v-select v-model="villageCountyFilter" :items="countiesForState(villageStateFilter)" item-title="name" item-value="code" label="County" clearable hide-details density="compact" style="max-width: 200px" />
-              <v-select v-model="villageLocationFilter" :items="locationsForCounty(villageCountyFilter)" item-title="name" item-value="code" label="Filter by location" clearable hide-details density="compact" style="max-width: 220px" />
+              <v-select v-model="villageLocationFilter" :items="locationsForCounty(villageCountyFilter)" item-title="name" item-value="code" label="Filter by location" clearable hide-details density="compact" style="max-width: 200px" />
+              <v-text-field v-model="tableSearch" prepend-inner-icon="mdi-magnify" label="Search" clearable hide-details density="compact" style="max-width: 180px" />
               <v-spacer />
               <v-btn size="small" color="primary" prepend-icon="mdi-plus" @click="openCreate('VILLAGE')">Add Village</v-btn>
             </div>
-            <v-table density="comfortable" :loading="loading">
-              <thead><tr><th>Code</th><th>Name</th><th>Location</th><th class="text-right">Actions</th></tr></thead>
-              <tbody>
-                <tr v-for="v in villages" :key="v.code">
-                  <td>{{ v.code }}</td><td>{{ v.name }}</td><td>{{ v.locationCode }}</td>
-                  <td class="text-right"><v-btn icon="mdi-delete" size="small" variant="text" color="error" @click="remove('VILLAGE', v.code)" /></td>
-                </tr>
-                <tr v-if="!villages.length"><td colspan="4" class="text-center text-medium-emphasis">No villages configured yet</td></tr>
-              </tbody>
-            </v-table>
+            <v-data-table :headers="villageHeaders" :items="villages" :search="tableSearch" :loading="loading" density="comfortable">
+              <template #item.actions="{ item }">
+                <v-btn icon="mdi-delete" size="small" variant="text" color="error" @click="remove('VILLAGE', item.code)" />
+              </template>
+              <template #no-data><div class="text-center text-medium-emphasis py-4">No villages configured yet</div></template>
+            </v-data-table>
           </v-card-text>
         </v-window-item>
       </v-window>

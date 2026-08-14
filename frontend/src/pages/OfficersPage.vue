@@ -18,6 +18,7 @@ const auth = useAuthStore()
 const toast = useToast()
 const loading = ref(true)
 const officers = ref<Officer[]>([])
+const tableSearch = ref('')
 const organizations = ref<{ organisationCode: string; name: string }[]>([])
 const dialog = ref(false)
 const saving = ref(false)
@@ -114,12 +115,15 @@ async function remove(officer: Officer) {
           <v-col cols="12" sm="4" md="3">
             <v-select v-model="filters.active" :items="[{ title: 'Active', value: '1' }, { title: 'Inactive', value: '0' }]" label="Status" clearable hide-details density="compact" />
           </v-col>
+          <v-col cols="12" sm="4" md="3">
+            <v-text-field v-model="tableSearch" prepend-inner-icon="mdi-magnify" label="Search" clearable hide-details density="compact" />
+          </v-col>
           <v-col cols="auto">
             <v-btn variant="text" size="small" @click="clearFilters">Clear filters</v-btn>
           </v-col>
         </v-row>
       </v-card-text>
-      <v-data-table :headers="headers" :items="officers" :loading="loading">
+      <v-data-table :headers="headers" :items="officers" :search="tableSearch" :loading="loading">
         <template #item.name="{ item }">{{ item.firstName }} {{ item.lastName }}</template>
         <template #item.active="{ item }">
           <v-chip size="small" :color="item.active === '1' ? 'success' : 'error'" variant="tonal">

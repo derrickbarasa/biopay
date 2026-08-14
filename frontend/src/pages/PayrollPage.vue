@@ -21,6 +21,7 @@ const toast = useToast()
 
 const loading = ref(true)
 const cycles = ref<Cycle[]>([])
+const tableSearch = ref('')
 const organizations = ref<{ organisationCode: string; name: string }[]>([])
 const statusFilter = ref<string | null>(null)
 const organisationFilter = ref<string | null>(null)
@@ -198,12 +199,15 @@ async function reject(cycle: Cycle) {
               label="Status" clearable hide-details density="compact"
             />
           </v-col>
+          <v-col cols="6" sm="4" md="3">
+            <v-text-field v-model="tableSearch" prepend-inner-icon="mdi-magnify" label="Search" clearable hide-details density="compact" />
+          </v-col>
           <v-col cols="auto">
             <v-btn variant="text" size="small" @click="clearFilters">Clear filters</v-btn>
           </v-col>
         </v-row>
       </v-card-text>
-      <v-data-table :headers="headers" :items="cycles" :loading="loading">
+      <v-data-table :headers="headers" :items="cycles" :search="tableSearch" :loading="loading">
         <template #item.period="{ item }">{{ item.periodStart }} – {{ item.periodEnd }}</template>
         <template #item.totalAmount="{ item }">{{ (item.totalAmount ?? 0).toLocaleString() }}</template>
         <template #item.status="{ item }">
