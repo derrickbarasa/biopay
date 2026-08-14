@@ -98,7 +98,7 @@ async function handleSubmit() {
 
 <style scoped>
 .login-bg {
-  background: radial-gradient(circle at 15% 15%, rgba(20, 184, 166, .38), transparent 28rem), linear-gradient(135deg, #062f2d 0%, #047857 100%);
+  background: radial-gradient(circle at 15% 15%, rgba(20, 184, 166, .38), transparent 28rem), linear-gradient(135deg, #134e4a 0%, #0f766e 100%);
   position: relative;
 }
 .login-card { border: 1px solid rgba(255,255,255,.35); box-shadow: 0 30px 70px -26px rgba(0,0,0,.45) !important; }
