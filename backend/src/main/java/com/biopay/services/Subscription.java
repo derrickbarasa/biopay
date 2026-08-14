@@ -1,6 +1,7 @@
 package com.biopay.services;
 
 import io.vertx.core.AbstractVerticle;
+import io.vertx.core.Future;
 import io.vertx.core.Promise;
 import io.vertx.core.eventbus.EventBus;
 import io.vertx.core.eventbus.Message;
@@ -55,6 +56,26 @@ public class Subscription extends AbstractVerticle {
     private static Integer anchorIdOf(JsonObject payload) {
         Object v = payload.getValue("anchorId");
         return v == null ? null : Integer.parseInt(v.toString());
+    }
+
+    /**
+     * Derived subscription status for an anchor: ACTIVE / GRACE / ARCHIVED, or
+     * NONE when there is no subscription row (un-provisioned anchor). Used by the
+     * dispatch chokepoint in EntryPoint to gate data operations. Fails open --
+     * any lookup error resolves to NONE so a transient DB issue never locks
+     * everyone out.
+     */
+    public static Future<String> statusFor(MSSQLPool pool, Integer anchorId) {
+        if (anchorId == null) {
+            return Future.succeededFuture("NONE");
+        }
+        String sql = "SELECT CASE WHEN CAST(GETDATE() AS DATE) <= expires_at THEN 'ACTIVE' "
+                + "WHEN CAST(GETDATE() AS DATE) <= DATEADD(DAY, grace_days, expires_at) THEN 'GRACE' "
+                + "ELSE 'ARCHIVED' END AS status FROM subscriptions WHERE anchor_id=@p1";
+        return pool.preparedQuery(sql)
+                .execute(Tuple.of(anchorId))
+                .map(rows -> rows.size() == 0 ? "NONE" : Rows.str(rows.iterator().next(), "status"))
+                .recover(err -> Future.succeededFuture("NONE"));
     }
 
     // ---- GET_SUBSCRIPTION -----------------------------------------------------------

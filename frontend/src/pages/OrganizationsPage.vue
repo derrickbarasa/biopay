@@ -22,6 +22,7 @@ const toast = useToast()
 const loading = ref(true)
 const statusFilter = ref<number | null>(null)
 const organizations = ref<Organization[]>([])
+const tableSearch = ref('')
 const dialog = ref(false)
 const editing = ref(false)
 const saving = ref(false)
@@ -124,12 +125,15 @@ async function toggleStatus(org: Organization) {
 
     <v-card variant="flat" border>
       <v-card-text>
-        <v-select
-          v-model="statusFilter" :items="[{ title: 'Active', value: 1 }, { title: 'Inactive', value: 0 }]"
-          label="Status" clearable hide-details density="compact" style="max-width: 220px"
-        />
+        <div class="d-flex ga-3 flex-wrap">
+          <v-select
+            v-model="statusFilter" :items="[{ title: 'Active', value: 1 }, { title: 'Inactive', value: 0 }]"
+            label="Status" clearable hide-details density="compact" style="max-width: 220px"
+          />
+          <v-text-field v-model="tableSearch" prepend-inner-icon="mdi-magnify" label="Search" clearable hide-details density="compact" style="max-width: 260px" />
+        </div>
       </v-card-text>
-      <v-data-table :headers="headers" :items="organizations" :loading="loading">
+      <v-data-table :headers="headers" :items="organizations" :search="tableSearch" :loading="loading">
         <template #item.status="{ item }">
           <v-chip size="small" :color="item.status === 1 ? 'success' : 'error'" variant="tonal">
             {{ item.status === 1 ? 'Active' : 'Inactive' }}

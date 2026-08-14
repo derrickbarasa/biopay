@@ -66,7 +66,7 @@ Context: Android `com.flexmoney.nca`, Java/Kotlin, Morpho fingerprint SDK, offli
 - [x] Per-anchor subscription (`migration 010_subscriptions.sql`): `expires_at` + `grace_days` (default 30); **status derived in SQL** (ACTIVE / GRACE / ARCHIVED), never stored.
 - [x] `Subscription` verticle (deployed in `EntryPoint`): `GET_SUBSCRIPTION` (status + days-to-expiry/archive), `RENEW_SUBSCRIPTION` (manual admin upsert, extends one month from the later of current expiry/today — anchor-only). No external billing gateway (manual renewal, per decision).
 - [x] Frontend gating (`DefaultLayout.vue`): a **grace-period banner** with a Renew action, and an **archived gate** that replaces page content with a renew prompt once the grace window ends (anchors renew; orgs are told to contact their anchor). Fail-open if the status check errors.
-- **Follow-up (documented, not done):** hard **server-side** enforcement. Today gating is client-side; for defense-in-depth add an anchor-subscription check at the single dispatch chokepoint in `EntryPoint`'s `/api/v1/req` handler (allowlist auth/profile/subscription codes; reject data codes when ARCHIVED; fail-open on lookup error). Left out here because it's an untestable change to the core request path with no DB to verify against.
+- [x] **Server-side enforcement (done):** `EntryPoint` now gates every `/api/v1/req` data operation through `dispatchGated` — when the caller's anchor is ARCHIVED it returns **402** ("Subscription expired. Renew to restore access.") instead of dispatching. `Subscription.statusFor(pool, anchorId)` derives the status; exempt codes (`GET_SUBSCRIPTION`, `RENEW_SUBSCRIPTION`, `ME`, `LOGOUT`, `CHANGE_PASSWORD`, `TOTP_*`, `GET_ORGANIZATION_MODULES`) and callers with no anchor pass through, and any non-ARCHIVED status — including a failed lookup (resolves to NONE) — **fails open** so a transient DB issue can't lock the platform out. Verified by `mvn compile` (no DB to runtime-test).
 
 ### Data export  ✅ done
 - [x] Household data — "Export CSV" on the Households page exports the currently filtered rows (`HouseholdsPage.vue`, uses `utils/csv`).
@@ -77,8 +77,10 @@ Context: Android `com.flexmoney.nca`, Java/Kotlin, Morpho fingerprint SDK, offli
 - [x] `GET_HOUSEHOLDS` now returns `voucherCount` and `paymentCycleCount` per household (correlated subqueries over `vouchers.household_number` and distinct `payments.cycle`).
 - [x] Households table shows **Vouchers** and **Cycles** columns (chips); counts also included in the CSV export.
 
-### Tables
-- [ ] Put datatables in all the tables.
+### Tables  ✅ done
+- [x] `LocationsPage` — converted its 4 raw `v-table`s (states/counties/locations/villages) to `v-data-table` with sort/pagination + a per-tab search box.
+- [x] Added a client-side search box (`:search`) to every other list datatable: Officers, Organizations, Payments, Vouchers, Payment Cycles, Attendance. Households already has server-side search.
+- Intentional exception: the two `v-table`s on the Dashboard are fixed summary widgets (org-amount + recent-activity), not searchable data grids — left as-is.
 
 ### Sidebar (adopt a lighter color)  ✅ done
 - [x] Lighter drawer color — switched from dark green (`#062f2d`) to a light `surface` drawer with teal active states (`DefaultLayout.vue`).
@@ -130,5 +132,7 @@ Context: Android `com.flexmoney.nca`, Java/Kotlin, Morpho fingerprint SDK, offli
 - **Deliverable 9 — Deduplication (done; backend compile-only, frontend verified):** `CHECK_HOUSEHOLD_DUPLICATE` (ID/phone/name+village) + Add-Household "Register anyway" flow.
 - **Deliverable 10 — Subscription (done; backend compile-only, frontend verified):** decision = lifecycle + manual renewal. Migration 010, `Subscription` verticle (GET/RENEW), grace banner + archived gate in `DefaultLayout`. `mvn compile` + `vue-tsc`/`vite build` pass. Server-side dispatch enforcement noted as follow-up.
 - **Deliverable 11 — Mobile plan (done):** decision = plan only. Concrete face-recognition + voucher-redemption implementation plan written into the Mobile section above (SDK choice, enrollment/verification flows, backend endpoints, files to touch). No code.
-- **Roadmap now complete** except deliberately-deferred items: mobile code (planned), subscription server-side enforcement (follow-up), and optional datatables search-polish. Original `progress.md` items are all addressed.
+- **Deliverable 12 — Subscription server-side enforcement (done; backend compile-only):** `EntryPoint.dispatchGated` refuses data ops with 402 when the caller's anchor is ARCHIVED, via `Subscription.statusFor`; exempt codes + no-anchor + non-ARCHIVED (incl. failed lookup) fail open. `mvn compile` passes.
+- **Deliverable 13 — Datatables (done, frontend-only):** LocationsPage's 4 raw tables → `v-data-table` + search; search box added to the other 6 list pages. `vue-tsc`/`vite build` pass.
+- **Roadmap status: every original `progress.md` item is now ✅ done** — except the Mobile code, which is intentionally **plan-only** per your decision (the plan is in the Mobile section above). Minor noted asset/UX gaps remain (hero `/hero/*.jpg` images not in repo; no anchors/users/roles admin pages yet).
 - **Push:** still blocked (GitHub read-only, fixed at session start). Hand off via `biopay-work.bundle` (regenerate from `origin/main..HEAD` after each commit). Local commits: `0fba6fb`, `721862e`, `72b42dc`, `55b5485`, `1056b96`, `de550f4`, `c70eab3`, `0a4ded5`, `b7adc83`, + this one (10 code deliverables).

@@ -22,6 +22,7 @@ const householdFilter = ref('')
 const statusFilter = ref<string | null>(null)
 const vouchers = ref<VoucherRow[]>([])
 const summary = ref<Record<string, any>>({})
+const tableSearch = ref('')
 let householdDebounce: ReturnType<typeof setTimeout> | null = null
 
 function onHouseholdFilterInput() {
@@ -225,8 +226,9 @@ function statusColor(status: string) {
           hide-details density="compact" style="max-width: 240px" @update:model-value="onHouseholdFilterInput" @click:clear="load"
         />
         <v-select v-model="statusFilter" :items="['ISSUED', 'REDEEMED', 'VOID']" label="Status" clearable hide-details density="compact" style="max-width: 200px" @update:model-value="load" />
+        <v-text-field v-model="tableSearch" prepend-inner-icon="mdi-magnify" label="Search" clearable hide-details density="compact" style="max-width: 220px" />
       </v-card-text>
-      <v-data-table :headers="headers" :items="vouchers" :loading="loading">
+      <v-data-table :headers="headers" :items="vouchers" :search="tableSearch" :loading="loading">
         <template #item.amount="{ item }">{{ currency(item.amount) }}</template>
         <template #item.status="{ item }">
           <v-chip size="small" :color="statusColor(item.status)" variant="tonal">{{ item.status }}</v-chip>

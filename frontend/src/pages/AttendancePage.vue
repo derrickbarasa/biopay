@@ -18,6 +18,7 @@ const auth = useAuthStore()
 const toast = useToast()
 const loading = ref(true)
 const records = ref<AttendanceRow[]>([])
+const tableSearch = ref('')
 const organizations = ref<{ organisationCode: string; name: string }[]>([])
 const dateFilter = ref<string | null>(null)
 const clockFilter = ref<string | null>(null)
@@ -133,12 +134,15 @@ function exportCsv() {
               label="Clock" clearable hide-details density="compact"
             />
           </v-col>
+          <v-col cols="6" sm="4" md="3">
+            <v-text-field v-model="tableSearch" prepend-inner-icon="mdi-magnify" label="Search" clearable hide-details density="compact" />
+          </v-col>
           <v-col cols="auto">
             <v-btn variant="text" size="small" @click="clearFilters">Clear filters</v-btn>
           </v-col>
         </v-row>
       </v-card-text>
-      <v-data-table :headers="headers" :items="records" :loading="loading">
+      <v-data-table :headers="headers" :items="records" :search="tableSearch" :loading="loading">
         <template #item.beneficiaryType="{ item }">{{ item.beneficiaryType === 1 ? 'Head' : 'Alternate' }}</template>
         <template #item.clock="{ item }">
           <v-chip size="small" :color="item.clock === 'I' ? 'success' : 'warning'" variant="tonal">

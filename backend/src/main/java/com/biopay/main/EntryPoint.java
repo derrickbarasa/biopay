@@ -16,6 +16,7 @@ import io.vertx.ext.web.Router;
 import io.vertx.ext.web.handler.CorsHandler;
 import io.vertx.ext.web.handler.JWTAuthHandler;
 import java.util.Arrays;
+import java.util.Set;
 import com.biopay.databases.Datasource;
 import com.biopay.services.Auth;
 import com.biopay.services.Biometric;
@@ -50,6 +51,15 @@ import com.biopay.utilities.Logging;
 public class EntryPoint extends AbstractVerticle {
 
     Dotenv dotenv = Dotenv.load();
+
+    // Processing codes that stay reachable even when an anchor's subscription is
+    // ARCHIVED, so the account can still see the situation and renew/manage itself.
+    // Everything else routed through /api/v1/req is a gated data operation.
+    private static final Set<String> SUBSCRIPTION_EXEMPT_CODES = Set.of(
+            "GET_SUBSCRIPTION", "RENEW_SUBSCRIPTION",
+            "ME", "LOGOUT", "CHANGE_PASSWORD",
+            "TOTP_SETUP_INIT", "TOTP_SETUP_CONFIRM", "TOTP_DISABLE",
+            "GET_ORGANIZATION_MODULES");
 
     public static void main(String[] args) {
         VertxOptions vertxOpts = new VertxOptions()
@@ -196,7 +206,7 @@ public class EntryPoint extends AbstractVerticle {
                         return;
                     }
 
-                    dispatch(eventBus, processingCode, data, response);
+                    dispatchGated(eventBus, processingCode, data, response);
                 } catch (Exception ex) {
                     response.end(badRequest("Error occurred: " + ex.getMessage()).toString());
                 }
@@ -231,6 +241,45 @@ public class EntryPoint extends AbstractVerticle {
             } else {
                 System.out.println("biopay failed to start !! " + resp.cause());
                 startPromise.fail(resp.cause());
+            }
+        });
+    }
+
+    /**
+     * Subscription gate in front of {@link #dispatch}: when the caller's anchor is
+     * ARCHIVED (grace period exhausted), every data operation is refused with a 402
+     * until they renew. Exempt codes ({@link #SUBSCRIPTION_EXEMPT_CODES}) and callers
+     * with no anchor pass straight through, and any status other than ARCHIVED --
+     * including a failed lookup, which resolves to NONE -- fails open so a transient
+     * DB issue can never lock the whole platform out.
+     */
+    private static void dispatchGated(EventBus eventBus, String processingCode, JsonObject data,
+            HttpServerResponse response) {
+        if (SUBSCRIPTION_EXEMPT_CODES.contains(processingCode)) {
+            dispatch(eventBus, processingCode, data, response);
+            return;
+        }
+        Integer anchorId = null;
+        Object anchorIdVal = data.getValue("anchorId");
+        if (anchorIdVal != null) {
+            try {
+                anchorId = Integer.parseInt(anchorIdVal.toString());
+            } catch (NumberFormatException ignored) {
+                anchorId = null;
+            }
+        }
+        if (anchorId == null) {
+            dispatch(eventBus, processingCode, data, response);
+            return;
+        }
+        Subscription.statusFor(Datasource.pool(), anchorId).onComplete(ar -> {
+            if (ar.succeeded() && "ARCHIVED".equals(ar.result())) {
+                response.setStatusCode(402).end(new JsonObject()
+                        .put("responseCode", "402")
+                        .put("responseMessage", "Subscription expired. Renew to restore access.")
+                        .toString());
+            } else {
+                dispatch(eventBus, processingCode, data, response);
             }
         });
     }
