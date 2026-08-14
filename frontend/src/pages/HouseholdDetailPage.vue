@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { dispatch } from '@/api/client'
 import { useToast } from '@/composables/useToast'
+import { downloadCsv, toCsv } from '@/utils/csv'
 
 // Dedicated, full-page household view (replaces the old popup dialog). Renders
 // every field the GET_HOUSEHOLD / GET_ALTERNATES endpoints currently return.
@@ -71,6 +72,21 @@ function goBack() {
   router.push({ name: 'households' })
 }
 
+// Exports this household's alternates to CSV.
+function exportAlternates() {
+  if (!alternates.value.length) {
+    toast.error('No alternates to export')
+    return
+  }
+  const csv = toCsv(
+    ['Alternate #', 'Name', 'Relationship', 'Phone'],
+    alternates.value.map((a) => [
+      a.alternateNumber ?? '', a.alternateName ?? '', a.relationship ?? '', a.phoneNumber ?? '',
+    ]),
+  )
+  downloadCsv(`alternates-${householdNumber.value}.csv`, csv)
+}
+
 onMounted(load)
 </script>
 
@@ -119,8 +135,18 @@ onMounted(load)
         </v-card>
 
         <v-card variant="flat" border>
-          <v-card-title class="text-subtitle-1 font-weight-bold">
+          <v-card-title class="text-subtitle-1 font-weight-bold d-flex align-center">
             Alternates ({{ alternates.length }})
+            <v-spacer />
+            <v-btn
+              v-if="alternates.length"
+              size="small"
+              variant="text"
+              prepend-icon="mdi-download"
+              @click="exportAlternates"
+            >
+              Export
+            </v-btn>
           </v-card-title>
           <v-divider />
           <v-list v-if="alternates.length">
