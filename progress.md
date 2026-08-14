@@ -43,8 +43,9 @@ session. The work to be done is below.
 - [x] Graphs — age, gender, status, **vulnerability status, legal status** (client-side over the filtered rows; "Show Breakdown" toggle on the Households page).
 - [x] Audit history — new `GET_HOUSEHOLD_HISTORY` returns the household's `payments` (amount/status/cycle/date — "when it was paid") and `audit_logs` events; both shown on the detail page.
 
-### Verifications
-- [ ] OTP (mobile does **not** require OTP), email, TOTP.
+### Verifications  ✅ done (already implemented; audited + theme fix)
+- [x] Audit result: already fully built — login OTP with **EMAIL / TOTP** method choice (`VerifyOtpPage.vue`), email always-on + **TOTP enable/disable with QR** in Settings (`SettingsPage.vue`, codes `TOTP_SETUP_INIT/CONFIRM/DISABLE`), and password reset flow. Mobile logs in via `BIOMETRIC_LOGIN` (no OTP) — satisfies "mobile doesn't require OTP".
+- [x] Fixed the one loose end: the 5 auth pages' background gradients were still green (`#062f2d`/`#047857`) → retuned to teal for theme consistency.
 
 ### Subscription
 - [ ] Implement subscription — archive data once subscription ends; to access it they pay; 30-day grace period.
@@ -104,4 +105,6 @@ session. The work to be done is below.
 - **Deliverable 5 — Generated-data columns (done; backend compile-only, frontend verified):** `GET_HOUSEHOLDS` returns per-household `voucherCount` + `paymentCycleCount`; Households table shows Vouchers/Cycles columns + in CSV export. `mvn compile` + `vue-tsc`/`vite build` pass.
 - **Deliverable 6 — Dashboard + printable voucher (done; voucher backend compile-only, frontend verified):** `QrSupport` (generic ZXing QR), `GET_HOUSEHOLD_VOUCHER` (name + inlined photo + QR); detail-page "Print Voucher"; dashboard org-amount chart + teal restyle. `mvn compile` + `vue-tsc`/`vite build` pass.
 - **Deliverable 7 — Website landing redesign (done, frontend-only):** teal recolor, pricing removed, request-a-demo form (mailto), links repointed. `vue-tsc`/`vite build` pass; verified with a production-build screenshot.
-- **Still open:** verifications UI audit; deduplication (needs match-key decision); subscription (needs billing decision); mobile face-recognition (needs SDK decision) + mobile voucher redemption; datatables search polish. Local commits: `0fba6fb`, `721862e`, `72b42dc`, `55b5485`, `1056b96`, `de550f4`, + this one — all unpushed (GitHub read-only).
+- **Deliverable 8 — Verifications audit (done, frontend-only):** confirmed OTP/email/TOTP already implemented; retuned the 5 auth-page gradients green → teal. `vue-tsc`/`vite build` pass.
+- **Push:** still blocked (GitHub read-only, fixed at session start). Work handed off via `biopay-work.bundle` (regenerate after new commits). Local commits: `0fba6fb`, `721862e`, `72b42dc`, `55b5485`, `1056b96`, `de550f4`, `c70eab3`, + this one.
+- **Still open (all need a product decision):** deduplication (match-key); subscription (billing model); mobile face-recognition (SDK) + mobile voucher redemption. Plus optional datatables search-polish.
