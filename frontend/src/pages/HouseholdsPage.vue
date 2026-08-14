@@ -16,6 +16,8 @@ interface HouseholdRow {
   phoneNumber?: string
   householdSize?: number
   bomaCode?: string
+  vulnerabilityStatus?: string
+  legalStatus?: string
   status: number
 }
 
@@ -51,6 +53,10 @@ const filters = ref({
   villageCode: null as string | null,
   gender: null as string | null,
   status: null as number | null,
+  vulnerabilityStatus: '',
+  legalStatus: '',
+  dateFrom: null as string | null,
+  dateTo: null as string | null,
   search: '',
 })
 let searchDebounce: ReturnType<typeof setTimeout> | null = null
@@ -112,6 +118,20 @@ const statusBreakdown = computed(() => [
   { label: 'Inactive', value: households.value.filter((h) => h.status !== 1).length },
 ])
 
+// Groups the loaded rows by a free-text attribute (vulnerability / legal status),
+// counting blanks as "Unspecified". Used for the two attribute breakdown charts.
+function groupByAttribute(pick: (h: HouseholdRow) => string | undefined) {
+  const counts = new Map<string, number>()
+  for (const h of households.value) {
+    const key = (pick(h) || 'Unspecified').trim() || 'Unspecified'
+    counts.set(key, (counts.get(key) ?? 0) + 1)
+  }
+  return Array.from(counts, ([label, value]) => ({ label, value }))
+}
+
+const vulnerabilityBreakdown = computed(() => groupByAttribute((h) => h.vulnerabilityStatus))
+const legalBreakdown = computed(() => groupByAttribute((h) => h.legalStatus))
+
 const countiesForState = (stateCode: string) => stateCode ? counties.value.filter((c) => c.stateCode === stateCode) : counties.value
 const locationsForCounty = (countyCode: string) => countyCode ? locations.value.filter((l) => l.countyCode === countyCode) : locations.value
 const villagesForLocation = (locationCode: string) => locationCode ? villages.value.filter((v) => v.locationCode === locationCode) : villages.value
@@ -148,6 +168,10 @@ async function load() {
       villageCode: filters.value.villageCode ?? undefined,
       gender: filters.value.gender ?? undefined,
       status: filters.value.status ?? undefined,
+      vulnerabilityStatus: filters.value.vulnerabilityStatus || undefined,
+      legalStatus: filters.value.legalStatus || undefined,
+      dateFrom: filters.value.dateFrom || undefined,
+      dateTo: filters.value.dateTo || undefined,
       search: filters.value.search || undefined,
     })
     households.value = res.results
@@ -168,9 +192,11 @@ watch(() => filters.value.villageCode, load)
 watch(() => filters.value.organisationCode, load)
 watch(() => filters.value.gender, load)
 watch(() => filters.value.status, load)
+watch(() => filters.value.dateFrom, load)
+watch(() => filters.value.dateTo, load)
 
 function clearFilters() {
-  filters.value = { organisationCode: null, stateCode: null, countyCode: null, locationCode: null, villageCode: null, gender: null, status: null, search: '' }
+  filters.value = { organisationCode: null, stateCode: null, countyCode: null, locationCode: null, villageCode: null, gender: null, status: null, vulnerabilityStatus: '', legalStatus: '', dateFrom: null, dateTo: null, search: '' }
   load()
 }
 
@@ -337,6 +363,18 @@ async function submitBulk() {
             <v-card-text><BarChart :data="statusBreakdown" color="#F59E0B" /></v-card-text>
           </v-card>
         </v-col>
+        <v-col cols="12" md="6">
+          <v-card variant="flat" border>
+            <v-card-title class="text-subtitle-2">By vulnerability status</v-card-title>
+            <v-card-text><BarChart :data="vulnerabilityBreakdown" color="#2196F3" /></v-card-text>
+          </v-card>
+        </v-col>
+        <v-col cols="12" md="6">
+          <v-card variant="flat" border>
+            <v-card-title class="text-subtitle-2">By legal status</v-card-title>
+            <v-card-text><BarChart :data="legalBreakdown" color="#0F766E" /></v-card-text>
+          </v-card>
+        </v-col>
       </v-row>
     </v-expand-transition>
 
@@ -363,6 +401,24 @@ async function submitBulk() {
           </v-col>
           <v-col cols="6" sm="3" md="2">
             <v-select v-model="filters.status" :items="[{ title: 'Active', value: 1 }, { title: 'Inactive', value: 0 }]" label="Status" clearable hide-details density="compact" />
+          </v-col>
+          <v-col cols="6" sm="3" md="2">
+            <v-text-field
+              v-model="filters.vulnerabilityStatus" label="Vulnerability status"
+              clearable hide-details density="compact" @update:model-value="onSearchInput" @click:clear="load"
+            />
+          </v-col>
+          <v-col cols="6" sm="3" md="2">
+            <v-text-field
+              v-model="filters.legalStatus" label="Legal status"
+              clearable hide-details density="compact" @update:model-value="onSearchInput" @click:clear="load"
+            />
+          </v-col>
+          <v-col cols="6" sm="3" md="2">
+            <v-text-field v-model="filters.dateFrom" label="Registered from" type="date" clearable hide-details density="compact" />
+          </v-col>
+          <v-col cols="6" sm="3" md="2">
+            <v-text-field v-model="filters.dateTo" label="Registered to" type="date" clearable hide-details density="compact" />
           </v-col>
           <v-col cols="12" sm="6" md="3">
             <v-text-field
