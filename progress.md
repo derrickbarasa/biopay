@@ -54,8 +54,9 @@ session. The work to be done is below.
 - [x] Alternate data — "Export" on the household detail page exports that household's alternates (`HouseholdDetailPage.vue`). (No list-all-alternates endpoint exists, so export is per-household.)
 - [x] Payment data — already present on the Payments page ("Export CSV", `PaymentsPage.vue`); left as-is.
 
-### Generated data visibility
-- [ ] Way to show generated data — add column to show voucher and payment cycles.
+### Generated data visibility  ✅ done (backend verified by mvn compile only)
+- [x] `GET_HOUSEHOLDS` now returns `voucherCount` and `paymentCycleCount` per household (correlated subqueries over `vouchers.household_number` and distinct `payments.cycle`).
+- [x] Households table shows **Vouchers** and **Cycles** columns (chips); counts also included in the CSV export.
 
 ### Tables
 - [ ] Put datatables in all the tables.
@@ -100,4 +101,5 @@ session. The work to be done is below.
   - `Household.java`: fuller `summary()`; new GET_HOUSEHOLDS filters (vulnerability/legal/date range); `GET_HOUSEHOLD` now returns real image URLs; new `GET_HOUSEHOLD_HISTORY` (payments + audit).
   - Frontend: detail page shows photos (authed blob fetch) + payment/audit history + new fields; Households page gains the new filters and vulnerability/legal breakdown charts.
   - Verified: `mvn compile` (backend, exit 0), `vue-tsc -b` + `vite build` (frontend, exit 0). **Not** runtime-tested — no MSSQL here; **migration 009 must be applied** on the target DB.
-- **Still open:** generated-data (voucher/payment-cycle) columns; verifications UI; deduplication; subscription (needs billing decision); mobile face-recognition (needs SDK decision). Local commits: `0fba6fb`, `721862e`, `72b42dc`, + this one — all unpushed (GitHub read-only).
+- **Deliverable 5 — Generated-data columns (done; backend compile-only, frontend verified):** `GET_HOUSEHOLDS` returns per-household `voucherCount` + `paymentCycleCount`; Households table shows Vouchers/Cycles columns + in CSV export. `mvn compile` + `vue-tsc`/`vite build` pass.
+- **Still open:** verifications UI audit; deduplication (needs match-key decision); subscription (needs billing decision); mobile face-recognition (needs SDK decision); website landing redesign (frontend). Local commits: `0fba6fb`, `721862e`, `72b42dc`, `55b5485`, + this one — all unpushed (GitHub read-only).
