@@ -238,8 +238,7 @@ function currency(v: number | undefined) {
 .dashboard-heading h1 { color: #0f172a; letter-spacing: -.03em; }
 .dashboard-heading p { margin: 5px 0 0; color: #64748b; }
 .overline { color: #0d9488; font-size: .72rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; margin-bottom: 6px; }
-.metric-grid :deep(.v-card) { position: relative; overflow: hidden; min-height: 135px; padding: 22px !important; background: linear-gradient(135deg, #fff, #f0fdfa) !important; }
-.metric-grid :deep(.v-card)::after { content: ''; position: absolute; width: 92px; height: 92px; right: -38px; bottom: -42px; border-radius: 50%; background: rgba(13, 148, 136, .12); }
-.metric-grid :deep(.text-h4), .metric-grid :deep(.text-h5) { color: #134e4a; margin-top: 9px; letter-spacing: -.035em; }
+.metric-grid :deep(.v-card) { position: relative; overflow: hidden; min-height: 135px; padding: 22px !important; background: #fff !important; border-top: 3px solid #0d9488; }
+.metric-grid :deep(.text-h4), .metric-grid :deep(.text-h5) { color: #0f172a; margin-top: 9px; letter-spacing: -.035em; }
 .analytics-grid :deep(.v-card) { padding: 22px !important; }
 </style>

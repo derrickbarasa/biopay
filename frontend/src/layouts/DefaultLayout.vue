@@ -231,6 +231,6 @@ async function handleLogout() {
 .app-drawer :deep(.v-list-item--active .v-list-item-title) { font-weight: 600; }
 .drawer-subheader { font-size: .68rem; letter-spacing: .08em; text-transform: uppercase; opacity: .55; padding-inline-start: 20px !important; }
 .app-bar { background: rgba(255, 255, 255, .94) !important; backdrop-filter: blur(12px); }
-.dashboard-main { background: radial-gradient(circle at 100% 0, #ecfeff 0, transparent 28rem), #f8fafc; min-height: 100vh; }
+.dashboard-main { background: #f8fafc; min-height: 100vh; }
 .archived-gate { display: flex; justify-content: center; padding-top: 8vh; }
 </style>

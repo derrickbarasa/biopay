@@ -84,10 +84,10 @@ async function handleSubmit() {
 
 <style scoped>
 .login-bg {
-  background: radial-gradient(circle at 15% 15%, rgba(20, 184, 166, .38), transparent 28rem), linear-gradient(135deg, #134e4a 0%, #0f766e 100%);
+  background: radial-gradient(circle at 15% 15%, rgba(204, 251, 241, .55), transparent 30rem), #f8fafc;
   position: relative;
 }
-.login-card { border: 1px solid rgba(255,255,255,.35); box-shadow: 0 30px 70px -26px rgba(0,0,0,.45) !important; }
+.login-card { border: 1px solid rgba(15,23,42,.08); box-shadow: 0 24px 60px -28px rgba(15,23,42,.26) !important; }
 .login-logo { width: 224px; height: auto; }
 .link { color: #0d9488; }
 .back-link {
@@ -97,10 +97,10 @@ async function handleSubmit() {
   z-index: 1;
   display: inline-flex;
   align-items: center;
-  color: rgba(255, 255, 255, .88);
+  color: #475569;
   text-decoration: none;
   font-size: .875rem;
   font-weight: 500;
 }
-.back-link:hover { color: #fff; }
+.back-link:hover { color: #0f172a; }
 </style>
