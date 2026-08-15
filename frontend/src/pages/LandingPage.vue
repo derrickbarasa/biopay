@@ -541,9 +541,9 @@ onBeforeUnmount(() => {
    rules would leak onto every other route in the SPA.
    --------------------------------------------------------------- */
 .landing-root {
-  --color-bg: #F8FAFC;
+  --color-bg: #FFFFFF;
   --color-surface: #FFFFFF;
-  --color-surface-2: #F0FDFA;
+  --color-surface-2: #F8FAFC;
   --color-text: #0F172A;
   --color-text-muted: #475569;
   --color-primary: #0D9488;
@@ -589,29 +589,8 @@ onBeforeUnmount(() => {
   -webkit-font-smoothing: antialiased;
 }
 
-@media (prefers-color-scheme: dark) {
-  .landing-root {
-    --color-bg: #0B1613;
-    --color-surface: #11201C;
-    --color-surface-2: #16251F;
-    --color-text: #EDEFE9;
-    --color-text-muted: #9EB0AA;
-    --color-primary: #35A886;
-    --color-primary-deep: #1F7A61;
-    --color-primary-soft: rgba(53, 168, 134, 0.14);
-    --color-accent: #E8A23C;
-    --color-accent-deep: #C9821F;
-    --color-accent-soft: rgba(232, 162, 60, 0.14);
-    --color-success: #45C07E;
-    --color-danger: #E5686B;
-    --color-line: rgba(237, 239, 233, 0.16);
-    --shadow-color: rgba(0, 0, 0, 0.55);
-  }
-  .landing-root .eyebrow { color: var(--color-accent); }
-  .landing-root .phone { border-color: #06110D; }
-  .landing-root .price-includes li::before { color: var(--color-accent); }
-  .landing-root .feature-foot { color: var(--color-accent); }
-}
+/* Landing is intentionally light/white regardless of the OS colour scheme --
+   no prefers-color-scheme:dark override, so it never flips to a dark teal theme. */
 
 .landing-root * { box-sizing: border-box; }
 
@@ -740,21 +719,12 @@ onBeforeUnmount(() => {
 /* Hero -- full-bleed photo carousel. Backgrounds come from heroSlides[].image
    (frontend/public/hero/*.jpg); until those files exist the section still
    works, just showing the scrim gradient with no photo underneath. */
-/* flex, not grid: a lone in-flow child (.wrap) inside an implicit CSS Grid column sizes that
-   column to the child's content width (auto-track sizing), which then centers it as a narrow
-   island instead of spanning full width -- flex's default align-items:stretch avoids that trap
-   and reliably stretches .wrap to full width, letting its own max-width/margin:auto match the
-   nav/every other section's alignment exactly. */
 .landing-root .hero-visual { position: relative; isolation: isolate; overflow: hidden; min-height: 560px; display: flex; flex-direction: column; justify-content: center; border-top: none; border-bottom: 0; }
 .landing-root .hero-image, .landing-root .hero-scrim { position: absolute; inset: 0; }
 .landing-root .hero-image { opacity: 0; background-size: cover; background-position: center; background-color: var(--color-primary-deep); filter: saturate(1.2) contrast(1.05); transform: scale(1.03); transition: opacity 900ms ease, transform 7s ease; z-index: -2; }
 .landing-root .hero-image.active { opacity: 1; transform: scale(1); }
 .landing-root .hero-scrim { z-index: -1; background: radial-gradient(circle at 85% 18%, rgba(251, 191, 36, .34), transparent 26rem), linear-gradient(90deg, rgba(4, 47, 46, .92) 0%, rgba(15, 118, 110, .74) 45%, rgba(4, 47, 46, .28) 100%); }
 .landing-root .hero-visual .wrap { position: relative; z-index: 1; width: 100%; }
-/* .hero-grid deliberately does NOT set its own max-width/margin -- it inherits .wrap's
-   1180px/auto-margin/padding exactly like the nav and every other section, so the hero's
-   left edge lines up with the logo and every heading below it. Only .hero-copy caps its
-   own reading width, without re-centering the whole block. */
 .landing-root .hero-copy { max-width: 42rem; }
 
 .landing-root .hero-slide { animation: hero-copy-in 550ms ease both; min-height: 15rem; }
@@ -804,9 +774,6 @@ onBeforeUnmount(() => {
 .landing-root .hero-arrow.prev { left: 20px; }
 .landing-root .hero-arrow.next { right: 20px; }
 @media (max-width: 780px) {
-  /* Hero copy runs nearly full-width and taller than the section on narrow screens, so
-     side arrows would sit on top of the paragraph text instead of beside it -- the dots
-     below the CTAs remain as the nav control here. */
   .landing-root .hero-arrow { display: none; }
 }
 

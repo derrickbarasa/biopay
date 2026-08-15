@@ -135,4 +135,14 @@ Context: Android `com.flexmoney.nca`, Java/Kotlin, Morpho fingerprint SDK, offli
 - **Deliverable 12 — Subscription server-side enforcement (done; backend compile-only):** `EntryPoint.dispatchGated` refuses data ops with 402 when the caller's anchor is ARCHIVED, via `Subscription.statusFor`; exempt codes + no-anchor + non-ARCHIVED (incl. failed lookup) fail open. `mvn compile` passes.
 - **Deliverable 13 — Datatables (done, frontend-only):** LocationsPage's 4 raw tables → `v-data-table` + search; search box added to the other 6 list pages. `vue-tsc`/`vite build` pass.
 - **Roadmap status: every original `progress.md` item is now ✅ done** — except the Mobile code, which is intentionally **plan-only** per your decision (the plan is in the Mobile section above). Minor noted asset/UX gaps remain (hero `/hero/*.jpg` images not in repo; no anchors/users/roles admin pages yet).
+
+### 2026-08-15 — Website/UI lightening pass (post-merge follow-up)
+- User feedback: site felt dark, too much teal; wants white page backgrounds with teal as an accent only, a split-screen login, and real photos in the hero carousel.
+- **Landing (`LandingPage.vue`):** removed the `prefers-color-scheme: dark` block (it flipped the whole site dark in OS dark mode — the main cause of "feels dark"); tokens set to white (`--color-bg #FFFFFF`, neutral `--color-surface-2 #F8FAFC`); replaced the full-bleed dark teal scrim hero with a **split hero** — copy on white (left), a rotating **photo frame** (right) sourced from `/hero/*.jpg` with a light teal placeholder fallback. Teal now only in eyebrows/accents/CTA-less bits.
+- **Login (`LoginPage.vue`):** rebuilt as a **split screen** — teal panel with brand + system description/feature list on one side, white login form on the other; responsive stack on mobile.
+- **Other auth pages** (signup/forgot/reset/verify-otp): backgrounds lightened from dark teal to a soft light gradient; card borders/back-links adjusted for light.
+- **App chrome:** removed the teal radial wash on the dashboard main area; dashboard metric cards are now white with a teal top-border instead of a teal gradient.
+- Photos: I can't slice the user's composite image here (no file access), so `public/hero/README.md` documents which composite tile → which `/hero/*.jpg` file. The hero looks clean with the placeholder until those are added.
+- Verified: `vue-tsc` + `vite build` pass; screenshotted landing + login from the production build.
+- **Delivery:** GitHub still read-only in-session; shipped on a new branch `claude/website-redesign` via `redesign.bundle` for the user to fetch + merge into `main`.
 - **Push:** still blocked (GitHub read-only, fixed at session start). Hand off via `biopay-work.bundle` (regenerate from `origin/main..HEAD` after each commit). Local commits: `0fba6fb`, `721862e`, `72b42dc`, `55b5485`, `1056b96`, `de550f4`, `c70eab3`, `0a4ded5`, `b7adc83`, + this one (10 code deliverables).
