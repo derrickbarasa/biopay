@@ -11,8 +11,10 @@ import io.vertx.mssqlclient.MSSQLPool;
 import io.vertx.sqlclient.Row;
 import io.vertx.sqlclient.Tuple;
 import com.biopay.databases.Datasource;
+import com.biopay.utilities.FileStore;
 import com.biopay.utilities.Logging;
 import com.biopay.utilities.OrgModules;
+import com.biopay.utilities.QrSupport;
 import com.biopay.utilities.Rows;
 import com.biopay.utilities.Utilities;
 
@@ -38,6 +40,9 @@ public class Household extends AbstractVerticle {
         eventBus.consumer("DELETE_HOUSEHOLD", this::delete);
         eventBus.consumer("GET_HOUSEHOLD", this::getOne);
         eventBus.consumer("GET_HOUSEHOLDS", this::retrieveAll);
+        eventBus.consumer("GET_HOUSEHOLD_HISTORY", this::history);
+        eventBus.consumer("GET_HOUSEHOLD_VOUCHER", this::voucher);
+        eventBus.consumer("CHECK_HOUSEHOLD_DUPLICATE", this::checkDuplicate);
         eventBus.consumer("BULK_UPLOAD_HOUSEHOLDS", this::bulkUpload);
 
         eventBus.consumer("CREATE_ALTERNATE", this::createAlternate);
@@ -204,14 +209,16 @@ public class Household extends AbstractVerticle {
                     Row r = rows.iterator().next();
                     Future<Integer> alternatesCount = countWhere("alternates", "household_number", householdNumber);
                     Future<Integer> fingerprintsCount = countWhere("fingerprints", "beneficiary_id", householdNumber);
-                    Future<Integer> imagesCount = countWhere("images", "beneficiary_id", householdNumber);
+                    Future<JsonArray> imageList = imageUrls(householdNumber);
 
-                    Future.all(alternatesCount, fingerprintsCount, imagesCount).onComplete(ar -> {
+                    Future.all(alternatesCount, fingerprintsCount, imageList).onComplete(ar -> {
                         JsonObject household = summary(r);
                         if (ar.succeeded()) {
+                            JsonArray images = ar.result().resultAt(2);
                             household.put("alternatesCount", ar.result().resultAt(0))
                                     .put("fingerprintStatus", ((Integer) ar.result().resultAt(1)) > 0 ? "ENROLLED" : "PENDING")
-                                    .put("imageStatus", ((Integer) ar.result().resultAt(2)) > 0 ? "UPLOADED" : "PENDING");
+                                    .put("imageStatus", images.isEmpty() ? "PENDING" : "UPLOADED")
+                                    .put("images", images);
                         }
                         reply(message, new JsonObject()
                                 .put("responseCode", "000")
@@ -228,6 +235,227 @@ public class Household extends AbstractVerticle {
                 .recover(err -> Future.succeededFuture(0));
     }
 
+    /** Authenticated file URLs for a household's captured photos (served via /files/:filename). */
+    private Future<JsonArray> imageUrls(String householdNumber) {
+        return pool.preparedQuery("SELECT photo_url FROM images WHERE beneficiary_id=@p1 AND status=1 ORDER BY created_at DESC")
+                .execute(Tuple.of(householdNumber))
+                .map(rows -> {
+                    JsonArray arr = new JsonArray();
+                    for (Row r : rows) {
+                        String f = Rows.str(r, "photo_url");
+                        if (f != null && !f.isEmpty()) {
+                            arr.add("/biopay/api/v1/files/" + f);
+                        }
+                    }
+                    return arr;
+                })
+                .recover(err -> Future.succeededFuture(new JsonArray()));
+    }
+
+    // ---- GET_HOUSEHOLD_HISTORY (payment records + audit trail for one household) ----
+    // Backs the household detail page's "audit history / when it was paid" section.
+
+    private void history(Message<Object> message) {
+        JsonObject payload = new JsonObject(message.body().toString());
+        String householdNumber = payload.getString("householdNumber", "").trim();
+        if (householdNumber.isEmpty()) {
+            replyError(message, "householdNumber is required");
+            return;
+        }
+        boolean anchor = isAnchor(payload);
+        String partnerCode = payload.getString("partnerCode", "");
+
+        String paymentSql = "SELECT id, amount, status, cycle, approved, created_at FROM payments "
+                + "WHERE household_number=@p1" + (anchor ? "" : " AND partner_code=@p2") + " ORDER BY created_at DESC";
+        Tuple paymentParams = anchor ? Tuple.of(householdNumber) : Tuple.of(householdNumber, partnerCode);
+
+        Future<JsonArray> paymentsFut = pool.preparedQuery(paymentSql)
+                .execute(paymentParams)
+                .map(rows -> {
+                    JsonArray arr = new JsonArray();
+                    for (Row r : rows) {
+                        arr.add(new JsonObject()
+                                .put("id", Rows.intVal(r, "id"))
+                                .put("amount", Rows.dbl(r, "amount"))
+                                .put("status", Rows.intVal(r, "status"))
+                                .put("cycle", Rows.str(r, "cycle"))
+                                .put("approved", Rows.intVal(r, "approved"))
+                                .put("createdAt", Rows.str(r, "created_at")));
+                    }
+                    return arr;
+                })
+                .recover(err -> Future.succeededFuture(new JsonArray()));
+
+        String auditSql = "SELECT action, entity_type, details, created_at FROM audit_logs "
+                + "WHERE entity_id=@p1" + (anchor ? "" : " AND partner_code=@p2") + " ORDER BY created_at DESC";
+        Tuple auditParams = anchor ? Tuple.of(householdNumber) : Tuple.of(householdNumber, partnerCode);
+
+        Future<JsonArray> auditFut = pool.preparedQuery(auditSql)
+                .execute(auditParams)
+                .map(rows -> {
+                    JsonArray arr = new JsonArray();
+                    for (Row r : rows) {
+                        arr.add(new JsonObject()
+                                .put("action", Rows.str(r, "action"))
+                                .put("entityType", Rows.str(r, "entity_type"))
+                                .put("details", Rows.str(r, "details"))
+                                .put("createdAt", Rows.str(r, "created_at")));
+                    }
+                    return arr;
+                })
+                .recover(err -> Future.succeededFuture(new JsonArray()));
+
+        Future.all(paymentsFut, auditFut)
+                .onFailure(err -> onDbError(message, err))
+                .onSuccess(cf -> reply(message, new JsonObject()
+                        .put("responseCode", "000")
+                        .put("responseMessage", "OK")
+                        .put("results", new JsonObject()
+                                .put("payments", (JsonArray) cf.resultAt(0))
+                                .put("events", (JsonArray) cf.resultAt(1)))));
+    }
+
+    // ---- GET_HOUSEHOLD_VOUCHER (self-contained printable payment voucher) -----------
+    // Returns the household's full name, photo and a QR code (encoding the household
+    // number) all inlined as data URIs, so the web dashboard can render and print a
+    // voucher slip without any further authenticated asset fetches.
+
+    private void voucher(Message<Object> message) {
+        JsonObject payload = new JsonObject(message.body().toString());
+        String householdNumber = payload.getString("householdNumber", "").trim();
+        if (householdNumber.isEmpty()) {
+            replyError(message, "householdNumber is required");
+            return;
+        }
+        boolean anchor = isAnchor(payload);
+        String partnerCode = payload.getString("partnerCode", "");
+        String sql = "SELECT household_name, partner_code FROM households WHERE household_number=@p1"
+                + (anchor ? "" : " AND partner_code=@p2");
+        Tuple params = anchor ? Tuple.of(householdNumber) : Tuple.of(householdNumber, partnerCode);
+
+        pool.preparedQuery(sql)
+                .execute(params)
+                .onFailure(err -> onDbError(message, err))
+                .onSuccess(rows -> {
+                    if (rows.size() == 0) {
+                        reply(message, new JsonObject().put("responseCode", "999")
+                                .put("responseMessage", "Household not found or not in your organisation"));
+                        return;
+                    }
+                    Row r = rows.iterator().next();
+                    String name = Rows.str(r, "household_name");
+                    String org = Rows.str(r, "partner_code");
+
+                    pool.preparedQuery("SELECT TOP 1 photo_url FROM images WHERE beneficiary_id=@p1 AND status=1 ORDER BY created_at DESC")
+                            .execute(Tuple.of(householdNumber))
+                            .onComplete(ar -> {
+                                String photo = null;
+                                if (ar.succeeded() && ar.result().size() > 0) {
+                                    photo = inlineImage(Rows.str(ar.result().iterator().next(), "photo_url"));
+                                }
+                                String qr;
+                                try {
+                                    qr = QrSupport.dataUri(householdNumber);
+                                } catch (Exception ex) {
+                                    qr = null;
+                                }
+                                reply(message, new JsonObject()
+                                        .put("responseCode", "000")
+                                        .put("responseMessage", "OK")
+                                        .put("results", new JsonObject()
+                                                .put("householdNumber", householdNumber)
+                                                .put("householdName", name)
+                                                .put("organisationCode", org)
+                                                .put("photo", photo)
+                                                .put("qr", qr)));
+                            });
+                });
+    }
+
+    // ---- CHECK_HOUSEHOLD_DUPLICATE ---------------------------------------------------
+    // Screens a would-be registration against existing households in the same
+    // organisation on the product's stated match key -- same ID/document number
+    // (strongest), same phone number, or same name in the same village -- and
+    // returns candidate matches with the reason(s) each one matched. Advisory: the
+    // caller decides whether to proceed (mirrors how the mobile app records a
+    // duplicate flag rather than hard-blocking).
+
+    private void checkDuplicate(Message<Object> message) {
+        JsonObject payload = new JsonObject(message.body().toString());
+        String partnerCode = isAnchor(payload) ? payload.getString("organisationCode", "") : payload.getString("partnerCode", "");
+        if (partnerCode == null || partnerCode.isEmpty()) {
+            reply(message, new JsonObject().put("responseCode", "000").put("responseMessage", "OK").put("results", new JsonArray()));
+            return;
+        }
+        String name = emptyToNull(payload.getString("householdName", ""));
+        String phone = emptyToNull(payload.getString("phoneNumber", ""));
+        String idNumber = emptyToNull(payload.getString("idNumber", ""));
+        // The chosen village narrows a name match (same name in a different village is far
+        // weaker evidence). bomaCode is the village code, matching CREATE_HOUSEHOLD.
+        String bomaCode = emptyToNull(payload.getString("bomaCode", ""));
+
+        if (name == null && phone == null && idNumber == null) {
+            reply(message, new JsonObject().put("responseCode", "000").put("responseMessage", "OK").put("results", new JsonArray()));
+            return;
+        }
+
+        String sql = "SELECT TOP 20 household_number, household_name, phone_number, id_number, boma_code FROM households "
+                + "WHERE status=1 AND partner_code=@p1 AND ("
+                + "(@p2 IS NOT NULL AND id_number=@p2) "
+                + "OR (@p3 IS NOT NULL AND phone_number=@p3) "
+                + "OR (@p4 IS NOT NULL AND household_name=@p4 AND (@p5 IS NULL OR boma_code=@p5))"
+                + ")";
+
+        pool.preparedQuery(sql)
+                .execute(Tuple.of(partnerCode, idNumber, phone, name, bomaCode))
+                .onFailure(err -> onDbError(message, err))
+                .onSuccess(rows -> {
+                    JsonArray results = new JsonArray();
+                    for (Row r : rows) {
+                        JsonArray reasons = new JsonArray();
+                        if (idNumber != null && idNumber.equalsIgnoreCase(Rows.str(r, "id_number"))) {
+                            reasons.add("Same ID/document number");
+                        }
+                        if (phone != null && phone.equalsIgnoreCase(Rows.str(r, "phone_number"))) {
+                            reasons.add("Same phone number");
+                        }
+                        if (name != null && name.equalsIgnoreCase(Rows.str(r, "household_name"))) {
+                            reasons.add(bomaCode != null && bomaCode.equalsIgnoreCase(Rows.str(r, "boma_code"))
+                                    ? "Same name in the same village" : "Same name");
+                        }
+                        results.add(new JsonObject()
+                                .put("householdNumber", Rows.str(r, "household_number"))
+                                .put("householdName", Rows.str(r, "household_name"))
+                                .put("phoneNumber", Rows.str(r, "phone_number"))
+                                .put("idNumber", Rows.str(r, "id_number"))
+                                .put("bomaCode", Rows.str(r, "boma_code"))
+                                .put("reasons", reasons));
+                    }
+                    reply(message, new JsonObject()
+                            .put("responseCode", "000")
+                            .put("responseMessage", results.isEmpty() ? "No duplicates found" : "Possible duplicates found")
+                            .put("results", results));
+                });
+    }
+
+    private static String emptyToNull(String s) {
+        return (s == null || s.trim().isEmpty()) ? null : s.trim();
+    }
+
+    /** Reads a stored image and returns it inlined as a data URI, or null if unavailable. */
+    private static String inlineImage(String filename) {
+        if (filename == null || filename.isEmpty()) {
+            return null;
+        }
+        try {
+            byte[] bytes = FileStore.read(filename);
+            String contentType = filename.toLowerCase().endsWith(".png") ? "image/png" : "image/jpeg";
+            return "data:" + contentType + ";base64," + java.util.Base64.getEncoder().encodeToString(bytes);
+        } catch (Exception ex) {
+            return null;
+        }
+    }
+
     // ---- GET_HOUSEHOLDS (one filter per parameter: village/location/county/state,
     //      gender, status, plus a household name/number/ID lookup -- all server-side) ----
 
@@ -242,20 +470,34 @@ public class Household extends AbstractVerticle {
         String villageCode = payload.getString("villageCode", null);
         String gender = payload.getString("gender", null);
         Integer status = payload.getInteger("status");
+        String vulnerabilityStatus = payload.getString("vulnerabilityStatus", null);
+        String legalStatus = payload.getString("legalStatus", null);
+        // Registration date range (the "time" filter). created_at is DATETIME; string
+        // bounds are implicitly converted, same as Payment#retrieveAll's date_from filter.
+        String dateFrom = payload.getString("dateFrom", null);
+        String dateTo = payload.getString("dateTo", null);
         int page = Math.max(payload.getInteger("page", 1), 1);
         int pageSize = Math.min(Math.max(payload.getInteger("pageSize", 25), 1), 200);
         int offset = (page - 1) * pageSize;
 
-        String sql = "SELECT * FROM households WHERE (@p1 IS NULL OR partner_code=@p1) "
+        // Per-row "generated data" counts: how many vouchers this household has been
+        // issued, and how many distinct payment cycles it appears in. Correlated
+        // subqueries so a household with none still returns a 0 row (no join drops it).
+        String sql = "SELECT h.*, "
+                + "(SELECT COUNT(*) FROM vouchers v WHERE v.household_number = h.household_number) AS voucher_count, "
+                + "(SELECT COUNT(DISTINCT p.cycle) FROM payments p WHERE p.household_number = h.household_number) AS payment_cycle_count "
+                + "FROM households h WHERE (@p1 IS NULL OR partner_code=@p1) "
                 + "AND (@p2 IS NULL OR household_name LIKE @p2 OR household_number LIKE @p2 OR id_number LIKE @p2) "
                 + "AND (@p3 IS NULL OR state_code=@p3) AND (@p4 IS NULL OR county_code=@p4) "
                 + "AND (@p5 IS NULL OR payam_code=@p5) AND (@p6 IS NULL OR boma_code=@p6) "
                 + "AND (@p7 IS NULL OR gender=@p7) AND (@p8 IS NULL OR status=@p8) "
-                + "ORDER BY created_at DESC OFFSET @p9 ROWS FETCH NEXT @p10 ROWS ONLY";
+                + "AND (@p9 IS NULL OR vulnerability_status=@p9) AND (@p10 IS NULL OR legal_status=@p10) "
+                + "AND (@p11 IS NULL OR created_at >= @p11) AND (@p12 IS NULL OR created_at <= @p12) "
+                + "ORDER BY created_at DESC OFFSET @p13 ROWS FETCH NEXT @p14 ROWS ONLY";
 
         pool.preparedQuery(sql)
                 .execute(Tuple.of(partnerCode, search, stateCode, countyCode, locationCode, villageCode,
-                        gender, status, offset, pageSize))
+                        gender, status, vulnerabilityStatus, legalStatus, dateFrom, dateTo, offset, pageSize))
                 .onFailure(err -> onDbError(message, err))
                 .onSuccess(rows -> {
                     JsonArray results = new JsonArray();
@@ -276,10 +518,20 @@ public class Household extends AbstractVerticle {
                 .put("householdNumber", Rows.str(r, "household_number"))
                 .put("householdName", Rows.str(r, "household_name"))
                 .put("organisationCode", Rows.str(r, "partner_code"))
+                .put("beneficiaryType", Rows.str(r, "beneficiary_type"))
                 .put("age", Rows.intVal(r, "age"))
                 .put("gender", Rows.str(r, "gender"))
+                .put("maritalStatus", Rows.str(r, "marital_status"))
+                .put("spouseName", Rows.str(r, "spouse_name"))
+                .put("idNumber", Rows.str(r, "id_number"))
                 .put("phoneNumber", Rows.str(r, "phone_number"))
                 .put("householdSize", Rows.intVal(r, "household_size"))
+                .put("femaleDependants", Rows.intVal(r, "female_dependants"))
+                .put("maleDependants", Rows.intVal(r, "male_dependants"))
+                // vulnerability_status / legal_status arrive with migration 009; guard the
+                // read so listing still works if the migration hasn't been applied yet.
+                .put("vulnerabilityStatus", strSafe(r, "vulnerability_status"))
+                .put("legalStatus", strSafe(r, "legal_status"))
                 .put("stateCode", Rows.str(r, "state_code"))
                 .put("countyCode", Rows.str(r, "county_code"))
                 .put("payamCode", Rows.str(r, "payam_code"))
@@ -287,8 +539,22 @@ public class Household extends AbstractVerticle {
                 .put("latitude", Rows.str(r, "latitude"))
                 .put("longitude", Rows.str(r, "longitude"))
                 .put("status", Rows.intVal(r, "status"))
+                // Generated-data counts -- only present on the GET_HOUSEHOLDS listing query,
+                // absent on GET_HOUSEHOLD's SELECT *, so read them defensively.
+                .put("voucherCount", intSafe(r, "voucher_count"))
+                .put("paymentCycleCount", intSafe(r, "payment_cycle_count"))
                 .put("createdAt", Rows.str(r, "created_at"))
                 .put("updatedAt", Rows.str(r, "updated_at"));
+    }
+
+    /** Null-safe read of a column that may not exist on this row (e.g. pre-migration-009 columns). */
+    private static String strSafe(Row r, String column) {
+        return r.getColumnIndex(column) < 0 ? null : Rows.str(r, column);
+    }
+
+    /** Null-safe integer read of a column that may not exist on this row (e.g. listing-only aggregates). */
+    private static Integer intSafe(Row r, String column) {
+        return r.getColumnIndex(column) < 0 ? null : Rows.intVal(r, column);
     }
 
     // ---- BULK_UPLOAD_HOUSEHOLDS { villageCode, rows:[{householdName, age, gender, ...}] } ----

@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { dispatch } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
 import { downloadCsv, parseCsv, toCsv } from '@/utils/csv'
+import BarChart from '@/components/BarChart.vue'
 
 interface HouseholdRow {
   householdNumber: string
@@ -14,6 +16,10 @@ interface HouseholdRow {
   phoneNumber?: string
   householdSize?: number
   bomaCode?: string
+  vulnerabilityStatus?: string
+  legalStatus?: string
+  voucherCount?: number
+  paymentCycleCount?: number
   status: number
 }
 
@@ -27,12 +33,12 @@ interface GeoNode {
 
 const auth = useAuthStore()
 const toast = useToast()
+const router = useRouter()
 const loading = ref(true)
 const households = ref<HouseholdRow[]>([])
 const dialog = ref(false)
 const saving = ref(false)
-const detailDialog = ref(false)
-const detail = ref<Record<string, any> | null>(null)
+const showBreakdown = ref(false)
 
 const states = ref<GeoNode[]>([])
 const counties = ref<GeoNode[]>([])
@@ -49,6 +55,10 @@ const filters = ref({
   villageCode: null as string | null,
   gender: null as string | null,
   status: null as number | null,
+  vulnerabilityStatus: '',
+  legalStatus: '',
+  dateFrom: null as string | null,
+  dateTo: null as string | null,
   search: '',
 })
 let searchDebounce: ReturnType<typeof setTimeout> | null = null
@@ -69,9 +79,62 @@ const headers = [
   { title: 'Organization', key: 'organisationCode' },
   { title: 'Village', key: 'bomaCode' },
   { title: 'Size', key: 'householdSize' },
+  { title: 'Vouchers', key: 'voucherCount' },
+  { title: 'Cycles', key: 'paymentCycleCount' },
   { title: 'Status', key: 'status' },
   { title: 'Actions', key: 'actions', sortable: false, align: 'end' as const },
 ]
+
+// ---- Client-side breakdown graphs over the currently loaded (filtered) rows ----
+const genderBreakdown = computed(() => {
+  const counts = { Male: 0, Female: 0, Other: 0 }
+  for (const h of households.value) {
+    if (h.gender === 'M') counts.Male++
+    else if (h.gender === 'F') counts.Female++
+    else counts.Other++
+  }
+  return [
+    { label: 'Male', value: counts.Male },
+    { label: 'Female', value: counts.Female },
+    { label: 'Other', value: counts.Other },
+  ]
+})
+
+const ageBreakdown = computed(() => {
+  const buckets = [
+    { label: '0-17', value: 0 }, { label: '18-34', value: 0 }, { label: '35-49', value: 0 },
+    { label: '50-64', value: 0 }, { label: '65+', value: 0 }, { label: 'Unknown', value: 0 },
+  ]
+  for (const h of households.value) {
+    const a = h.age
+    if (a == null) buckets[5].value++
+    else if (a < 18) buckets[0].value++
+    else if (a < 35) buckets[1].value++
+    else if (a < 50) buckets[2].value++
+    else if (a < 65) buckets[3].value++
+    else buckets[4].value++
+  }
+  return buckets
+})
+
+const statusBreakdown = computed(() => [
+  { label: 'Active', value: households.value.filter((h) => h.status === 1).length },
+  { label: 'Inactive', value: households.value.filter((h) => h.status !== 1).length },
+])
+
+// Groups the loaded rows by a free-text attribute (vulnerability / legal status),
+// counting blanks as "Unspecified". Used for the two attribute breakdown charts.
+function groupByAttribute(pick: (h: HouseholdRow) => string | undefined) {
+  const counts = new Map<string, number>()
+  for (const h of households.value) {
+    const key = (pick(h) || 'Unspecified').trim() || 'Unspecified'
+    counts.set(key, (counts.get(key) ?? 0) + 1)
+  }
+  return Array.from(counts, ([label, value]) => ({ label, value }))
+}
+
+const vulnerabilityBreakdown = computed(() => groupByAttribute((h) => h.vulnerabilityStatus))
+const legalBreakdown = computed(() => groupByAttribute((h) => h.legalStatus))
 
 const countiesForState = (stateCode: string) => stateCode ? counties.value.filter((c) => c.stateCode === stateCode) : counties.value
 const locationsForCounty = (countyCode: string) => countyCode ? locations.value.filter((l) => l.countyCode === countyCode) : locations.value
@@ -109,6 +172,10 @@ async function load() {
       villageCode: filters.value.villageCode ?? undefined,
       gender: filters.value.gender ?? undefined,
       status: filters.value.status ?? undefined,
+      vulnerabilityStatus: filters.value.vulnerabilityStatus || undefined,
+      legalStatus: filters.value.legalStatus || undefined,
+      dateFrom: filters.value.dateFrom || undefined,
+      dateTo: filters.value.dateTo || undefined,
       search: filters.value.search || undefined,
     })
     households.value = res.results
@@ -129,17 +196,75 @@ watch(() => filters.value.villageCode, load)
 watch(() => filters.value.organisationCode, load)
 watch(() => filters.value.gender, load)
 watch(() => filters.value.status, load)
+watch(() => filters.value.dateFrom, load)
+watch(() => filters.value.dateTo, load)
 
 function clearFilters() {
-  filters.value = { organisationCode: null, stateCode: null, countyCode: null, locationCode: null, villageCode: null, gender: null, status: null, search: '' }
+  filters.value = { organisationCode: null, stateCode: null, countyCode: null, locationCode: null, villageCode: null, gender: null, status: null, vulnerabilityStatus: '', legalStatus: '', dateFrom: null, dateTo: null, search: '' }
   load()
+}
+
+// Exports the currently loaded (i.e. filtered) household rows to CSV.
+function exportCsv() {
+  if (!households.value.length) {
+    toast.error('No households to export')
+    return
+  }
+  const csv = toCsv(
+    ['Household #', 'Head of Household', 'Organization', 'Age', 'Gender', 'Phone', 'Size', 'Village', 'Vouchers', 'Payment Cycles', 'Status'],
+    households.value.map((h) => [
+      h.householdNumber, h.householdName, h.organisationCode, h.age ?? '', h.gender ?? '',
+      h.phoneNumber ?? '', h.householdSize ?? '', h.bomaCode ?? '', h.voucherCount ?? 0, h.paymentCycleCount ?? 0,
+      h.status === 1 ? 'Active' : 'Inactive',
+    ]),
+  )
+  downloadCsv(`households-${new Date().toISOString().slice(0, 10)}.csv`, csv)
 }
 
 onMounted(() => { load(); loadGeo() })
 
+// ---- Deduplication -------------------------------------------------------------
+interface DuplicateCandidate {
+  householdNumber: string
+  householdName?: string
+  phoneNumber?: string
+  bomaCode?: string
+  reasons: string[]
+}
+const checkingDup = ref(false)
+const duplicateCandidates = ref<DuplicateCandidate[]>([])
+
 function openCreate() {
   form.value = { householdName: '', age: null, gender: '', phoneNumber: '', householdSize: null, stateCode: '', countyCode: '', locationCode: '', villageCode: '' }
+  duplicateCandidates.value = []
   dialog.value = true
+}
+
+// Screens the entry against existing households before creating. If any possible
+// duplicates come back, they're shown and creation waits for an explicit "Register
+// anyway"; a clean check registers immediately.
+async function attemptSave() {
+  if (!form.value.householdName.trim()) {
+    toast.error('Head of household name is required')
+    return
+  }
+  checkingDup.value = true
+  try {
+    const res = await dispatch<{ results: DuplicateCandidate[] }>('CHECK_HOUSEHOLD_DUPLICATE', {
+      householdName: form.value.householdName,
+      phoneNumber: form.value.phoneNumber || undefined,
+      bomaCode: form.value.villageCode || undefined,
+    })
+    if (res.results.length) {
+      duplicateCandidates.value = res.results
+      return
+    }
+  } catch {
+    // If the check itself fails, don't block registration -- fall through to save.
+  } finally {
+    checkingDup.value = false
+  }
+  await save()
 }
 
 async function save() {
@@ -153,6 +278,7 @@ async function save() {
     })
     toast.success('Household registered')
     dialog.value = false
+    duplicateCandidates.value = []
     await load()
   } catch (err) {
     toast.error(err instanceof Error ? err.message : 'Save failed')
@@ -161,17 +287,8 @@ async function save() {
   }
 }
 
-async function viewDetail(row: HouseholdRow) {
-  try {
-    const [h, alts] = await Promise.all([
-      dispatch<{ results: any[] }>('GET_HOUSEHOLD', { householdNumber: row.householdNumber }),
-      dispatch<{ results: any[] }>('GET_ALTERNATES', { householdNumber: row.householdNumber }),
-    ])
-    detail.value = { ...h.results[0], alternates: alts.results }
-    detailDialog.value = true
-  } catch (err) {
-    toast.error(err instanceof Error ? err.message : 'Failed to load household')
-  }
+function viewDetail(row: HouseholdRow) {
+  router.push({ name: 'household-detail', params: { householdNumber: row.householdNumber } })
 }
 
 async function remove(row: HouseholdRow) {
@@ -258,10 +375,53 @@ async function submitBulk() {
     <div class="d-flex align-center justify-space-between mb-4">
       <h1 class="text-h5 font-weight-bold">Households</h1>
       <div class="d-flex ga-2">
+        <v-btn
+          variant="outlined"
+          :prepend-icon="showBreakdown ? 'mdi-chart-box-outline' : 'mdi-chart-bar'"
+          @click="showBreakdown = !showBreakdown"
+        >
+          {{ showBreakdown ? 'Hide' : 'Show' }} Breakdown
+        </v-btn>
+        <v-btn variant="outlined" prepend-icon="mdi-download" @click="exportCsv">Export CSV</v-btn>
         <v-btn variant="outlined" prepend-icon="mdi-file-upload" @click="openBulk">Bulk Upload</v-btn>
         <v-btn color="primary" prepend-icon="mdi-home-plus" @click="openCreate">Add Household</v-btn>
       </div>
     </div>
+
+    <v-expand-transition>
+      <v-row v-if="showBreakdown" dense class="mb-2">
+        <v-col cols="12" md="4">
+          <v-card variant="flat" border>
+            <v-card-title class="text-subtitle-2">By gender</v-card-title>
+            <v-card-text><BarChart :data="genderBreakdown" color="#0D9488" /></v-card-text>
+          </v-card>
+        </v-col>
+        <v-col cols="12" md="4">
+          <v-card variant="flat" border>
+            <v-card-title class="text-subtitle-2">By age group</v-card-title>
+            <v-card-text><BarChart :data="ageBreakdown" color="#0F766E" /></v-card-text>
+          </v-card>
+        </v-col>
+        <v-col cols="12" md="4">
+          <v-card variant="flat" border>
+            <v-card-title class="text-subtitle-2">By status</v-card-title>
+            <v-card-text><BarChart :data="statusBreakdown" color="#F59E0B" /></v-card-text>
+          </v-card>
+        </v-col>
+        <v-col cols="12" md="6">
+          <v-card variant="flat" border>
+            <v-card-title class="text-subtitle-2">By vulnerability status</v-card-title>
+            <v-card-text><BarChart :data="vulnerabilityBreakdown" color="#2196F3" /></v-card-text>
+          </v-card>
+        </v-col>
+        <v-col cols="12" md="6">
+          <v-card variant="flat" border>
+            <v-card-title class="text-subtitle-2">By legal status</v-card-title>
+            <v-card-text><BarChart :data="legalBreakdown" color="#0F766E" /></v-card-text>
+          </v-card>
+        </v-col>
+      </v-row>
+    </v-expand-transition>
 
     <v-card variant="flat" border>
       <v-card-text>
@@ -287,6 +447,24 @@ async function submitBulk() {
           <v-col cols="6" sm="3" md="2">
             <v-select v-model="filters.status" :items="[{ title: 'Active', value: 1 }, { title: 'Inactive', value: 0 }]" label="Status" clearable hide-details density="compact" />
           </v-col>
+          <v-col cols="6" sm="3" md="2">
+            <v-text-field
+              v-model="filters.vulnerabilityStatus" label="Vulnerability status"
+              clearable hide-details density="compact" @update:model-value="onSearchInput" @click:clear="load"
+            />
+          </v-col>
+          <v-col cols="6" sm="3" md="2">
+            <v-text-field
+              v-model="filters.legalStatus" label="Legal status"
+              clearable hide-details density="compact" @update:model-value="onSearchInput" @click:clear="load"
+            />
+          </v-col>
+          <v-col cols="6" sm="3" md="2">
+            <v-text-field v-model="filters.dateFrom" label="Registered from" type="date" clearable hide-details density="compact" />
+          </v-col>
+          <v-col cols="6" sm="3" md="2">
+            <v-text-field v-model="filters.dateTo" label="Registered to" type="date" clearable hide-details density="compact" />
+          </v-col>
           <v-col cols="12" sm="6" md="3">
             <v-text-field
               v-model="filters.search" prepend-inner-icon="mdi-magnify" label="Household name, number or ID"
@@ -299,6 +477,16 @@ async function submitBulk() {
         </v-row>
       </v-card-text>
       <v-data-table :headers="headers" :items="households" :loading="loading">
+        <template #item.voucherCount="{ item }">
+          <v-chip size="small" :color="item.voucherCount ? 'primary' : undefined" variant="tonal">
+            {{ item.voucherCount ?? 0 }}
+          </v-chip>
+        </template>
+        <template #item.paymentCycleCount="{ item }">
+          <v-chip size="small" :color="item.paymentCycleCount ? 'secondary' : undefined" variant="tonal">
+            {{ item.paymentCycleCount ?? 0 }}
+          </v-chip>
+        </template>
         <template #item.status="{ item }">
           <v-chip size="small" :color="item.status === 1 ? 'success' : 'error'" variant="tonal">
             {{ item.status === 1 ? 'Active' : 'Inactive' }}
@@ -331,11 +519,31 @@ async function submitBulk() {
             <v-col cols="6"><v-select v-model="form.locationCode" :items="locationsForCounty(form.countyCode)" item-title="name" item-value="code" label="Location" density="compact" /></v-col>
             <v-col cols="6"><v-select v-model="form.villageCode" :items="villagesForLocation(form.locationCode)" item-title="name" item-value="code" label="Village" density="compact" /></v-col>
           </v-row>
+
+          <v-alert
+            v-if="duplicateCandidates.length"
+            type="warning" variant="tonal" density="compact" class="mt-3"
+            icon="mdi-account-alert-outline"
+          >
+            <div class="font-weight-medium mb-1">
+              {{ duplicateCandidates.length }} possible duplicate{{ duplicateCandidates.length > 1 ? 's' : '' }} found
+            </div>
+            <div v-for="c in duplicateCandidates" :key="c.householdNumber" class="text-body-2 mb-1">
+              <strong>{{ c.householdName }}</strong> ({{ c.householdNumber }}) — {{ c.reasons.join(', ') }}
+            </div>
+            <div class="text-caption mt-1">Review these before registering a new record.</div>
+          </v-alert>
         </v-card-text>
         <v-card-actions>
           <v-spacer />
           <v-btn variant="text" @click="dialog = false">Cancel</v-btn>
-          <v-btn color="primary" :loading="saving" @click="save">Save</v-btn>
+          <v-btn
+            v-if="duplicateCandidates.length"
+            color="warning" variant="flat" :loading="saving" @click="save"
+          >
+            Register anyway
+          </v-btn>
+          <v-btn v-else color="primary" :loading="checkingDup || saving" @click="attemptSave">Save</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -373,41 +581,5 @@ async function submitBulk() {
       </v-card>
     </v-dialog>
 
-    <v-dialog v-model="detailDialog" max-width="640">
-      <v-card v-if="detail">
-        <v-card-title>{{ detail.householdName }}</v-card-title>
-        <v-card-text>
-          <v-tabs v-model="detail._tab" color="primary">
-            <v-tab value="info">Info</v-tab>
-            <v-tab value="alternates">Alternates ({{ detail.alternates?.length ?? 0 }})</v-tab>
-            <v-tab value="fingerprints">Fingerprints</v-tab>
-          </v-tabs>
-          <v-window v-model="detail._tab" class="pt-4">
-            <v-window-item value="info">
-              <div>Household #: {{ detail.householdNumber }}</div>
-              <div>Organization: {{ detail.organisationCode }}</div>
-              <div>Phone: {{ detail.phoneNumber }}</div>
-              <div>Fingerprint status: <v-chip size="small">{{ detail.fingerprintStatus }}</v-chip></div>
-              <div>Image status: <v-chip size="small">{{ detail.imageStatus }}</v-chip></div>
-            </v-window-item>
-            <v-window-item value="alternates">
-              <v-list>
-                <v-list-item v-for="a in detail.alternates" :key="a.alternateNumber" :title="a.alternateName" :subtitle="a.relationship" />
-                <v-list-item v-if="!detail.alternates?.length" title="No alternates registered" />
-              </v-list>
-            </v-window-item>
-            <v-window-item value="fingerprints">
-              <v-alert type="info" variant="tonal" density="compact">
-                Fingerprints are captured through the BioPay Android field app.
-              </v-alert>
-            </v-window-item>
-          </v-window>
-        </v-card-text>
-        <v-card-actions>
-          <v-spacer />
-          <v-btn variant="text" @click="detailDialog = false">Close</v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
   </div>
 </template>

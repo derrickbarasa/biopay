@@ -8,8 +8,11 @@ import '@mdi/font/css/materialdesignicons.css'
 const bioPayTheme = {
   dark: false,
   colors: {
-    primary: '#059669',
-    'primary-darken-1': '#047857',
+    // Primary moved from emerald green to a teal / blue-green identity
+    // ("less green, adapt the theme color"). Green is retained only for
+    // success states below.
+    primary: '#0D9488',
+    'primary-darken-1': '#0F766E',
     secondary: '#F59E0B',
     'secondary-darken-1': '#EA580C',
     accent: '#CCFBF1',

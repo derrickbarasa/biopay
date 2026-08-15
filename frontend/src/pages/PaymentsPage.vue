@@ -20,6 +20,7 @@ const auth = useAuthStore()
 const toast = useToast()
 const loading = ref(true)
 const payments = ref<PaymentRow[]>([])
+const tableSearch = ref('')
 const organizations = ref<{ organisationCode: string; name: string }[]>([])
 const summary = ref<Record<string, number>>({})
 const statusFilter = ref<number | null>(null)
@@ -144,12 +145,15 @@ function exportCsv() {
           <v-col cols="6" sm="4" md="2">
             <v-text-field v-model="dateToFilter" label="To" type="date" clearable hide-details density="compact" />
           </v-col>
+          <v-col cols="6" sm="4" md="3">
+            <v-text-field v-model="tableSearch" prepend-inner-icon="mdi-magnify" label="Search" clearable hide-details density="compact" />
+          </v-col>
           <v-col cols="auto">
             <v-btn variant="text" size="small" @click="clearFilters">Clear filters</v-btn>
           </v-col>
         </v-row>
       </v-card-text>
-      <v-data-table :headers="headers" :items="payments" :loading="loading">
+      <v-data-table :headers="headers" :items="payments" :search="tableSearch" :loading="loading">
         <template #item.amount="{ item }">{{ (item.amount ?? 0).toLocaleString() }}</template>
         <template #item.status="{ item }">
           <v-chip size="small" :color="item.status === 1 ? 'success' : 'warning'" variant="tonal">

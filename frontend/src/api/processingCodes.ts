@@ -52,6 +52,9 @@ export type ProcessingCode =
   | 'DELETE_HOUSEHOLD'
   | 'GET_HOUSEHOLD'
   | 'GET_HOUSEHOLDS'
+  | 'GET_HOUSEHOLD_HISTORY'
+  | 'GET_HOUSEHOLD_VOUCHER'
+  | 'CHECK_HOUSEHOLD_DUPLICATE'
   | 'BULK_UPLOAD_HOUSEHOLDS'
   | 'CREATE_ALTERNATE'
   | 'UPDATE_ALTERNATE'
@@ -60,6 +63,9 @@ export type ProcessingCode =
   // organisation modules
   | 'GET_ORGANIZATION_MODULES'
   | 'UPDATE_ORGANIZATION_MODULES'
+  // subscription
+  | 'GET_SUBSCRIPTION'
+  | 'RENEW_SUBSCRIPTION'
   // geography (states / counties / locations / villages)
   | 'GET_STATES'
   | 'CREATE_STATE'

@@ -59,6 +59,12 @@ const router = createRouter({
           meta: { roles: ['ANCHOR', 'ORGANISATION'], module: 'HOUSEHOLDS' },
         },
         {
+          path: 'households/:householdNumber',
+          name: 'household-detail',
+          component: () => import('@/pages/HouseholdDetailPage.vue'),
+          meta: { roles: ['ANCHOR', 'ORGANISATION'], module: 'HOUSEHOLDS' },
+        },
+        {
           path: 'officers',
           name: 'officers',
           component: () => import('@/pages/OfficersPage.vue'),
