@@ -29,7 +29,7 @@ if (-not (Get-Command sqlcmd -ErrorAction SilentlyContinue)) {
 $files = Get-ChildItem "$root\migrations\*.sql" | Sort-Object Name
 foreach ($f in $files) {
   Write-Host "==> Applying $($f.Name)" -ForegroundColor Cyan
-  sqlcmd -S $Server -d $Database -U $User -P $Password -b -i $f.FullName
+  sqlcmd -S $Server -d $Database -U $User -P $Password -C -b -i $f.FullName
   if ($LASTEXITCODE -ne 0) { Write-Error "Failed on $($f.Name) (exit $LASTEXITCODE)"; exit 1 }
 }
 
@@ -37,7 +37,7 @@ if ($IncludeSeed) {
   $seed = "$root\seed\001_seed_data.sql"
   if (Test-Path $seed) {
     Write-Host "==> Applying seed 001_seed_data.sql" -ForegroundColor Cyan
-    sqlcmd -S $Server -d $Database -U $User -P $Password -b -i $seed
+    sqlcmd -S $Server -d $Database -U $User -P $Password -C -b -i $seed
     if ($LASTEXITCODE -ne 0) { Write-Error "Seed failed (exit $LASTEXITCODE)"; exit 1 }
   }
 }
