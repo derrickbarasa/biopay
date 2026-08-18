@@ -2,6 +2,7 @@ package com.biopay.agent;
 
 import android.app.Application;
 
+import com.biopay.agent.sync.NotificationHelper;
 import com.biopay.agent.sync.SyncScheduler;
 
 public class BioPayAgentApplication extends Application {
@@ -9,6 +10,7 @@ public class BioPayAgentApplication extends Application {
     @Override
     public void onCreate() {
         super.onCreate();
+        NotificationHelper.createChannel(this);
         SyncScheduler.schedulePeriodic(this);
     }
 }

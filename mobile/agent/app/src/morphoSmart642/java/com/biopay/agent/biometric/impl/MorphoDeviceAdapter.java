@@ -79,7 +79,12 @@ public class MorphoDeviceAdapter implements BiometricDevice, Observer {
             CustomInteger nbUsbDevice = new CustomInteger();
             int ret = probe.initUsbDevicesNameEnum(nbUsbDevice);
             return ret == ErrorCodes.MORPHO_OK && nbUsbDevice.getValueOf() >= 1;
-        } catch (Exception ex) {
+        } catch (Throwable ex) {
+            // USBManager's static initializer loads the vendor .so on first touch of this class --
+            // on a device/APK combination missing that native library (e.g. no matching ABI, or no
+            // real Morpho hardware ever plugged in) that throws UnsatisfiedLinkError, an Error, not
+            // an Exception. This is a best-effort check per the BiometricDevice contract, so it must
+            // degrade to "not available" instead of crashing whatever screen called it.
             return false;
         }
     }

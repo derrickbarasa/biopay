@@ -72,7 +72,9 @@ public class MorphoDeviceAdapter implements BiometricDevice, Observer {
             probe.initUsbDevicesNameEnum(0);
             String sensorName = probe.getUsbDeviceName(0);
             return sensorName != null && !sensorName.isEmpty();
-        } catch (Exception ex) {
+        } catch (Throwable ex) {
+            // See the 6.42 adapter's isAvailable() for why this must catch Throwable, not just
+            // Exception: a missing native .so throws UnsatisfiedLinkError (an Error).
             return false;
         }
     }

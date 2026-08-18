@@ -25,8 +25,12 @@ public class HouseholdFormActivity extends BaseActivity {
 
     private static final String EXTRA_HOUSEHOLD_NUMBER = "household_number";
     private static final String[] GENDER_OPTIONS = {"Male", "Female"};
-    private static final String[] REGISTRATION_OPTIONS = {"FINGERPRINT", "FACE", "BOTH"};
-    private static final String[] REGISTRATION_LABELS = {"Fingerprint", "Face", "Fingerprint and face"};
+    // Face has no capture/matching engine wired up anywhere in the app (no FaceRecognitionEngine
+    // implementation exists) and Attendance/Voucher verification only ever checks an enrolled
+    // fingerprint -- so offering FACE/BOTH here let an officer register a household that could
+    // never be verified again. Fingerprint is the only option until face is actually implemented.
+    private static final String[] REGISTRATION_OPTIONS = {"FINGERPRINT"};
+    private static final String[] REGISTRATION_LABELS = {"Fingerprint"};
 
     public static Intent editIntent(Context context, String householdNumber) {
         Intent intent = new Intent(context, HouseholdFormActivity.class);
@@ -80,10 +84,9 @@ public class HouseholdFormActivity extends BaseActivity {
 
         spinnerGender.setAdapter(new ArrayAdapter<>(this,
                 android.R.layout.simple_dropdown_item_1line, GENDER_OPTIONS));
-        spinnerRegistrationMethod.setAdapter(new ArrayAdapter<>(this,
-                android.R.layout.simple_dropdown_item_1line, REGISTRATION_LABELS));
         spinnerGender.setText(GENDER_OPTIONS[0], false);
         spinnerRegistrationMethod.setText(REGISTRATION_LABELS[0], false);
+        spinnerRegistrationMethod.setEnabled(false);
 
         ((TextView) findViewById(R.id.tvFormTitle)).setText(editingHouseholdNumber == null
                 ? R.string.household_form_new_title : R.string.household_form_edit_title);

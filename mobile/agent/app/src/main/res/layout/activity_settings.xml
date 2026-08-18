@@ -11,6 +11,7 @@
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
+        android:clipToPadding="false"
         android:fillViewport="true">
         <LinearLayout
             android:layout_width="match_parent"
@@ -24,6 +25,74 @@
             <TextView style="@style/BioPay.ScreenTitle" android:text="@string/settings_title" />
             <TextView style="@style/BioPay.SupportingText" android:layout_marginTop="4dp" android:text="@string/settings_description" />
 
+            <!-- Account -->
+            <TextView style="@style/BioPay.SectionHeader" android:text="@string/settings_account" />
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                app:cardBackgroundColor="@color/bp_surface"
+                app:cardCornerRadius="16dp"
+                app:cardElevation="1dp"
+                app:strokeWidth="0dp">
+                <LinearLayout
+                    android:id="@+id/rowAccount"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:minHeight="72dp"
+                    android:background="?attr/selectableItemBackground"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingStart="16dp"
+                    android:paddingEnd="16dp"
+                    android:paddingTop="10dp"
+                    android:paddingBottom="10dp">
+                    <FrameLayout android:layout_width="42dp" android:layout_height="42dp" android:background="@drawable/bg_icon_container">
+                        <ImageView android:layout_width="20dp" android:layout_height="20dp" android:layout_gravity="center" android:contentDescription="@null" android:src="@drawable/ic_profile" app:tint="@color/bp_primary" />
+                    </FrameLayout>
+                    <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="14dp" android:layout_weight="1" android:orientation="vertical">
+                        <TextView android:id="@+id/tvAccountName" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="@color/bp_text_primary" android:textSize="15sp" android:textStyle="bold" />
+                        <TextView android:id="@+id/tvAccountSubtitle" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="2dp" android:textColor="@color/bp_text_secondary" android:textSize="13sp" />
+                    </LinearLayout>
+                    <ImageView android:layout_width="20dp" android:layout_height="20dp" android:contentDescription="@null" android:src="@drawable/ic_chevron_right" app:tint="@color/bp_outline" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- Notifications -->
+            <TextView style="@style/BioPay.SectionHeader" android:text="@string/settings_notifications" />
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                app:cardBackgroundColor="@color/bp_surface"
+                app:cardCornerRadius="16dp"
+                app:cardElevation="1dp"
+                app:strokeWidth="0dp">
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:minHeight="72dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingStart="16dp"
+                    android:paddingEnd="16dp"
+                    android:paddingTop="10dp"
+                    android:paddingBottom="10dp">
+                    <FrameLayout android:layout_width="42dp" android:layout_height="42dp" android:background="@drawable/bg_icon_container">
+                        <ImageView android:layout_width="20dp" android:layout_height="20dp" android:layout_gravity="center" android:contentDescription="@null" android:src="@drawable/ic_notifications" app:tint="@color/bp_primary" />
+                    </FrameLayout>
+                    <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="14dp" android:layout_weight="1" android:orientation="vertical">
+                        <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/settings_sync_alerts" android:textColor="@color/bp_text_primary" android:textSize="15sp" android:textStyle="bold" />
+                        <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="2dp" android:text="@string/settings_sync_alerts_body" android:textColor="@color/bp_text_secondary" android:textSize="13sp" />
+                    </LinearLayout>
+                    <com.google.android.material.materialswitch.MaterialSwitch
+                        android:id="@+id/swSyncAlerts"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- Connection and sync -->
             <TextView style="@style/BioPay.SectionHeader" android:text="@string/settings_connection" />
             <TextView style="@style/BioPay.SupportingText" android:text="@string/settings_server_help" />
             <com.google.android.material.textfield.TextInputLayout style="@style/BioPay.FormField" android:hint="@string/login_server_hint">
@@ -35,7 +104,118 @@
             </LinearLayout>
             <com.google.android.material.button.MaterialButton android:id="@+id/btnSyncNow" style="@style/BioPay.PrimaryButton" android:layout_marginTop="12dp" android:text="@string/settings_sync_now" app:icon="@drawable/ic_sync" />
 
+            <!-- Biometrics and scanner -->
+            <TextView style="@style/BioPay.SectionHeader" android:text="@string/settings_biometrics" />
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                app:cardBackgroundColor="@color/bp_surface"
+                app:cardCornerRadius="16dp"
+                app:cardElevation="1dp"
+                app:strokeWidth="0dp">
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:paddingBottom="6dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:minHeight="72dp"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal"
+                        android:paddingStart="16dp"
+                        android:paddingEnd="16dp"
+                        android:paddingTop="10dp">
+                        <FrameLayout android:layout_width="42dp" android:layout_height="42dp" android:background="@drawable/bg_icon_container">
+                            <ImageView android:layout_width="20dp" android:layout_height="20dp" android:layout_gravity="center" android:contentDescription="@null" android:src="@drawable/ic_fingerprint" app:tint="@color/bp_primary" />
+                        </FrameLayout>
+                        <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="14dp" android:layout_weight="1" android:orientation="vertical">
+                            <TextView android:id="@+id/tvScannerName" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="@color/bp_text_primary" android:textSize="15sp" android:textStyle="bold" />
+                            <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="2dp" android:text="@string/settings_scanner_role" android:textColor="@color/bp_text_secondary" android:textSize="13sp" />
+                        </LinearLayout>
+                        <TextView
+                            android:id="@+id/tvScannerStatus"
+                            style="@style/BioPay.StatusChip"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:background="@drawable/bg_status_warning"
+                            android:paddingStart="12dp"
+                            android:paddingTop="4dp"
+                            android:paddingEnd="12dp"
+                            android:paddingBottom="4dp"
+                            android:textColor="@color/bp_warning"
+                            android:textSize="12sp"
+                            android:textStyle="bold" />
+                    </LinearLayout>
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnTestScanner"
+                        style="@style/Widget.Material3.Button.TextButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="58dp"
+                        android:text="@string/settings_test_scanner"
+                        android:textAllCaps="false"
+                        app:icon="@drawable/ic_sync" />
+
+                    <View android:layout_width="match_parent" android:layout_height="1dp" android:layout_marginStart="16dp" android:layout_marginEnd="16dp" android:background="@color/bp_surface_variant" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="top"
+                        android:orientation="horizontal"
+                        android:paddingStart="16dp"
+                        android:paddingEnd="16dp"
+                        android:paddingTop="12dp"
+                        android:paddingBottom="12dp">
+                        <FrameLayout android:layout_width="42dp" android:layout_height="42dp" android:background="@drawable/bg_icon_container">
+                            <ImageView android:layout_width="20dp" android:layout_height="20dp" android:layout_gravity="center" android:alpha="0.5" android:contentDescription="@null" android:src="@drawable/ic_face" app:tint="@color/bp_text_secondary" />
+                        </FrameLayout>
+                        <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="14dp" android:layout_weight="1" android:orientation="vertical">
+                            <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/settings_face_title" android:textColor="@color/bp_text_primary" android:textSize="15sp" android:textStyle="bold" />
+                            <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="2dp" android:text="@string/settings_face_body" android:textColor="@color/bp_text_secondary" android:textSize="13sp" />
+                        </LinearLayout>
+                    </LinearLayout>
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- Security -->
             <TextView style="@style/BioPay.SectionHeader" android:text="@string/settings_security" />
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="16dp"
+                app:cardBackgroundColor="@color/bp_surface"
+                app:cardCornerRadius="16dp"
+                app:cardElevation="1dp"
+                app:strokeWidth="0dp">
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:minHeight="72dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingStart="16dp"
+                    android:paddingEnd="16dp"
+                    android:paddingTop="10dp"
+                    android:paddingBottom="10dp">
+                    <FrameLayout android:layout_width="42dp" android:layout_height="42dp" android:background="@drawable/bg_icon_container">
+                        <ImageView android:layout_width="20dp" android:layout_height="20dp" android:layout_gravity="center" android:contentDescription="@null" android:src="@drawable/ic_lock" app:tint="@color/bp_primary" />
+                    </FrameLayout>
+                    <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="14dp" android:layout_weight="1" android:orientation="vertical">
+                        <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/settings_app_lock" android:textColor="@color/bp_text_primary" android:textSize="15sp" android:textStyle="bold" />
+                        <TextView android:id="@+id/tvAppLockBody" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="2dp" android:text="@string/settings_app_lock_body" android:textColor="@color/bp_text_secondary" android:textSize="13sp" />
+                    </LinearLayout>
+                    <com.google.android.material.materialswitch.MaterialSwitch
+                        android:id="@+id/swAppLock"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <TextView style="@style/BioPay.SupportingText" android:text="@string/settings_change_password_intro" />
             <com.google.android.material.textfield.TextInputLayout style="@style/BioPay.FormField" android:hint="@string/settings_current_password" app:endIconMode="password_toggle">
                 <com.google.android.material.textfield.TextInputEditText android:id="@+id/etCurrentPassword" android:layout_width="match_parent" android:layout_height="wrap_content" android:inputType="textPassword" android:singleLine="true" />
             </com.google.android.material.textfield.TextInputLayout>
@@ -47,15 +227,56 @@
             </com.google.android.material.textfield.TextInputLayout>
             <com.google.android.material.button.MaterialButton android:id="@+id/btnChangePassword" style="@style/BioPay.SecondaryButton" android:layout_width="match_parent" android:layout_marginTop="8dp" android:text="@string/settings_change_password" />
 
+            <!-- Data and storage -->
+            <TextView style="@style/BioPay.SectionHeader" android:text="@string/settings_data_storage" />
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                app:cardBackgroundColor="@color/bp_surface"
+                app:cardCornerRadius="16dp"
+                app:cardElevation="1dp"
+                app:strokeWidth="0dp">
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="18dp">
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
+                        <ImageView android:layout_width="20dp" android:layout_height="20dp" android:contentDescription="@null" android:src="@drawable/ic_storage" app:tint="@color/bp_primary" />
+                        <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="10dp" android:layout_weight="1" android:text="@string/settings_data_storage_title" android:textColor="@color/bp_text_primary" android:textSize="15sp" android:textStyle="bold" />
+                    </LinearLayout>
+                    <TextView android:id="@+id/tvStorageHouseholds" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:textColor="@color/bp_text_secondary" android:textSize="14sp" />
+                    <TextView android:id="@+id/tvStoragePendingSync" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:textColor="@color/bp_text_secondary" android:textSize="14sp" />
+                    <TextView style="@style/BioPay.SupportingText" android:layout_marginTop="10dp" android:text="@string/settings_data_storage_note" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- About -->
             <TextView style="@style/BioPay.SectionHeader" android:text="@string/settings_about" />
             <com.google.android.material.card.MaterialCardView android:layout_width="match_parent" android:layout_height="wrap_content" app:cardBackgroundColor="@color/bp_primary_container" app:cardCornerRadius="16dp" app:cardElevation="0dp" app:strokeWidth="0dp">
                 <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="18dp">
                     <TextView android:text="@string/settings_offline_title" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="@color/bp_on_primary_container" android:textSize="16sp" android:textStyle="bold" />
                     <TextView android:text="@string/settings_offline_body" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:textColor="@color/bp_text_secondary" android:textSize="14sp" />
                     <TextView android:id="@+id/tvVersion" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:textColor="@color/bp_text_primary" android:textSize="13sp" />
-                    <TextView android:id="@+id/tvScanner" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:textColor="@color/bp_text_secondary" android:textSize="13sp" />
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnSendFeedback"
+                style="@style/Widget.Material3.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="@string/settings_send_feedback"
+                android:textAllCaps="false"
+                app:icon="@drawable/ic_mail" />
+
+            <!-- Log out -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnLogout"
+                style="@style/BioPay.SecondaryButton"
+                android:layout_width="match_parent"
+                android:layout_marginTop="20dp"
+                android:text="@string/menu_logout"
+                android:textColor="@color/bp_error"
+                app:icon="@drawable/ic_logout"
+                app:iconTint="@color/bp_error"
+                app:strokeColor="@color/bp_outline_variant" />
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>
 

@@ -333,17 +333,6 @@
                     android:layout_marginTop="8dp" />
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btnLogout"
-            style="@style/BioPay.SecondaryButton"
-            android:layout_width="match_parent"
-            android:layout_marginTop="24dp"
-            android:text="@string/menu_logout"
-            android:textColor="@color/bp_error"
-            app:icon="@drawable/ic_logout"
-            app:iconTint="@color/bp_error"
-            app:strokeColor="@color/bp_outline_variant" />
     </LinearLayout>
     </androidx.core.widget.NestedScrollView>
 

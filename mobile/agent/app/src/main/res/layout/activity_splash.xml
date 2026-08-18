@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/bp_background"
@@ -31,8 +32,29 @@
         android:textSize="13sp"
         android:textStyle="bold" />
     <ProgressBar
+        android:id="@+id/progressSplash"
         android:layout_width="32dp"
         android:layout_height="32dp"
         android:layout_marginTop="28dp"
         android:indeterminateTint="@color/bp_primary" />
+
+    <TextView
+        android:id="@+id/tvLockedMessage"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="28dp"
+        android:gravity="center"
+        android:text="@string/applock_locked_message"
+        android:textColor="@color/bp_text_secondary"
+        android:textSize="14sp"
+        android:visibility="gone" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnUnlockRetry"
+        style="@style/BioPay.SecondaryButton"
+        android:layout_width="wrap_content"
+        android:layout_marginTop="14dp"
+        android:text="@string/applock_retry"
+        android:visibility="gone"
+        app:icon="@drawable/ic_lock" />
 </LinearLayout>

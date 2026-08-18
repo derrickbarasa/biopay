@@ -17,14 +17,12 @@ import com.biopay.agent.data.PaymentDao;
 import com.biopay.agent.households.HouseholdListActivity;
 import com.biopay.agent.households.HouseholdFormActivity;
 import com.biopay.agent.location.LocationHelper;
-import com.biopay.agent.login.LoginActivity;
 import com.biopay.agent.payments.PaymentsActivity;
 import com.biopay.agent.reports.ReportsActivity;
 import com.biopay.agent.session.SessionManager;
 import com.biopay.agent.sync.SyncScheduler;
 import com.biopay.agent.ui.BaseActivity;
 import com.biopay.agent.vouchers.VoucherRedemptionActivity;
-import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.snackbar.Snackbar;
 
 import java.util.Arrays;
@@ -80,7 +78,6 @@ public class HomeActivity extends BaseActivity {
             SyncScheduler.triggerNow(this);
             Snackbar.make(findViewById(R.id.btnQuickSync), R.string.settings_sync_queued, Snackbar.LENGTH_SHORT).show();
         });
-        findViewById(R.id.btnLogout).setOnClickListener(v -> confirmLogout());
     }
 
     @Override
@@ -117,20 +114,5 @@ public class HomeActivity extends BaseActivity {
         chart.setBars(Arrays.asList(
                 new SimpleBarChartView.Bar("Paid", paidCount, ContextCompat.getColor(this, R.color.bp_primary)),
                 new SimpleBarChartView.Bar("Pending", pendingPaymentCount, ContextCompat.getColor(this, R.color.bp_secondary))));
-    }
-
-    private void confirmLogout() {
-        new MaterialAlertDialogBuilder(this)
-                .setTitle(R.string.logout_title)
-                .setMessage(R.string.logout_message)
-                .setNegativeButton(R.string.cancel, null)
-                .setPositiveButton(R.string.logout_confirm, (dialog, which) -> logout())
-                .show();
-    }
-
-    private void logout() {
-        sessionManager.clear();
-        startActivity(new Intent(this, LoginActivity.class));
-        finish();
     }
 }

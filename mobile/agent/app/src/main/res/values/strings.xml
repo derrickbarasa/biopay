@@ -1,8 +1,17 @@
 <resources>
-    <string name="app_name">BioPay Agent</string>
+    <string name="app_name">BioPay</string>
     <string name="biopay_logo_description">BioPay fingerprint logo</string>
     <string name="back">Back</string>
     <string name="splash_scanner_label">Scanner profile: %1$s</string>
+    <string name="applock_prompt_title">Unlock BioPay</string>
+    <string name="applock_prompt_subtitle">Confirm it\'s you before opening beneficiary and biometric data</string>
+    <string name="applock_locked_message">BioPay stays locked until you confirm your fingerprint, face, or PIN.</string>
+    <string name="applock_retry">Try again</string>
+
+    <string name="notification_channel_sync_name">Sync alerts</string>
+    <string name="notification_channel_sync_description">Notifies you when offline records can\'t reach the BioPay server.</string>
+    <string name="notification_sync_title">Records waiting to sync</string>
+    <string name="notification_sync_body">%1$d record(s) captured on this device haven\'t reached the server yet. Open BioPay on a connection to retry.</string>
 
     <string name="login_title">Field access</string>
     <string name="login_subtitle">Sign in to access your organisation data and offline field tools.</string>
@@ -64,7 +73,7 @@
     <string name="section_household_breakdown">Household breakdown</string>
     <string name="section_vulnerability_literacy">Eligibility and support needs</string>
     <string name="section_biometric_registration">Registration method</string>
-    <string name="biometric_registration_note">Fingerprint works with the configured Morpho scanner. Face requires the approved recognition and liveness engine.</string>
+    <string name="biometric_registration_note">Households register and verify with the configured Morpho fingerprint scanner. Face recognition isn\'t available in this build yet, so it isn\'t offered here — check Settings › Biometrics for status.</string>
     <string name="field_household_name">Household name</string>
     <string name="field_id_number">ID number</string>
     <string name="field_phone_number">Phone number</string>
@@ -158,7 +167,15 @@
     <string name="profile_first_name_required">Enter your first name.</string>
 
     <string name="settings_title">Settings</string>
-    <string name="settings_description">Connection, synchronization, security, and app information.</string>
+    <string name="settings_description">Account, notifications, connection, biometrics, security, and app information.</string>
+
+    <string name="settings_account">Account</string>
+
+    <string name="settings_notifications">Notifications</string>
+    <string name="settings_sync_alerts">Sync alerts</string>
+    <string name="settings_sync_alerts_body">Notify me when captured records can\'t reach the server after several tries</string>
+    <string name="settings_sync_alerts_denied">Allow notifications for BioPay to turn on sync alerts.</string>
+
     <string name="settings_connection">Connection and sync</string>
     <string name="settings_server_help">The server address is shared by login and background synchronization.</string>
     <string name="settings_save_server">Save server</string>
@@ -167,7 +184,20 @@
     <string name="settings_server_saved">Server address saved.</string>
     <string name="settings_sync_now">Sync now</string>
     <string name="settings_sync_queued">Sync queued. It will run when a network is available.</string>
+
+    <string name="settings_biometrics">Biometrics</string>
+    <string name="settings_scanner_role">Fingerprint scanner used for enrollment and verification</string>
+    <string name="settings_test_scanner">Test scanner connection</string>
+    <string name="settings_scanner_connected">Connected</string>
+    <string name="settings_scanner_disconnected">Not connected</string>
+    <string name="settings_face_title">Face recognition</string>
+    <string name="settings_face_body">Not available in this build yet. Verification uses fingerprint only until it ships.</string>
+
     <string name="settings_security">Security</string>
+    <string name="settings_app_lock">App lock</string>
+    <string name="settings_app_lock_body">Require your phone\'s fingerprint, face, or PIN to open BioPay</string>
+    <string name="settings_app_lock_unsupported">Set up a screen lock or fingerprint on this phone to turn this on.</string>
+    <string name="settings_change_password_intro">Change your sign-in password</string>
     <string name="settings_current_password">Current password</string>
     <string name="settings_new_password">New password</string>
     <string name="settings_confirm_password">Confirm new password</string>
@@ -175,9 +205,18 @@
     <string name="settings_password_mismatch">New passwords do not match.</string>
     <string name="settings_password_length">Use at least 8 characters for the new password.</string>
     <string name="settings_password_changed">Password changed successfully.</string>
+
+    <string name="settings_data_storage">Data and storage</string>
+    <string name="settings_data_storage_title">Stored on this device</string>
+    <string name="settings_storage_households">%1$d household(s) registered locally</string>
+    <string name="settings_storage_pending">%1$d record(s) waiting to sync</string>
+    <string name="settings_data_storage_note">Captured work is never deleted automatically -- it stays until it syncs, so nothing is lost offline.</string>
+
     <string name="settings_about">About this app</string>
     <string name="settings_version">Version %1$s</string>
-    <string name="settings_scanner">Scanner profile: %1$s</string>
     <string name="settings_offline_title">Offline-first operation</string>
     <string name="settings_offline_body">Captured work stays on this device until a secure connection is available. Pending records are shown on Home.</string>
+    <string name="settings_send_feedback">Send feedback</string>
+    <string name="settings_feedback_subject">BioPay feedback (v%1$s)</string>
+    <string name="settings_feedback_no_app">No email app is set up on this device.</string>
 </resources>
