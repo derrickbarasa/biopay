@@ -28,10 +28,20 @@ export type ProcessingCode =
   // auth (authenticated)
   | 'LOGOUT'
   | 'CHANGE_PASSWORD'
+  | 'UPDATE_PROFILE'
   | 'ME'
   | 'TOTP_SETUP_INIT'
   | 'TOTP_SETUP_CONFIRM'
   | 'TOTP_DISABLE'
+  // administration
+  | 'GET_ANCHORS'
+  | 'UPDATE_ANCHOR'
+  | 'GET_USERS'
+  | 'CREATE_USER'
+  | 'TOGGLE_USER_STATUS'
+  | 'GET_ROLES'
+  | 'SAVE_ROLE'
+  | 'GET_PERMISSIONS'
   // organizations
   | 'CREATE_ORGANIZATION'
   | 'UPDATE_ORGANIZATION'
@@ -84,6 +94,7 @@ export type ProcessingCode =
   | 'GET_VOUCHER'
   | 'VOID_VOUCHER'
   | 'REDEEM_VOUCHER'
+  | 'SYNC_VOUCHERS'
   | 'VOUCHER_SUMMARY'
   // payroll
   | 'REQUEST_PAYROLL_OTP'
@@ -113,6 +124,8 @@ export type ProcessingCode =
   | 'ENROLL_FINGERPRINT'
   | 'VERIFY_FINGERPRINT'
   | 'SYNC_FINGERPRINTS'
+  | 'ENROLL_FACE'
+  | 'SYNC_FACES'
   | 'UPLOAD_IMAGE'
   | 'SYNC_IMAGES'
   | 'SYNC_PAYMENTS'

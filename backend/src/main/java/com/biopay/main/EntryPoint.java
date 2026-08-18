@@ -19,6 +19,7 @@ import java.util.Arrays;
 import java.util.Set;
 import com.biopay.databases.Datasource;
 import com.biopay.services.Auth;
+import com.biopay.services.Administration;
 import com.biopay.services.Biometric;
 import com.biopay.services.Dashboard;
 import com.biopay.services.Geography;
@@ -57,7 +58,7 @@ public class EntryPoint extends AbstractVerticle {
     // Everything else routed through /api/v1/req is a gated data operation.
     private static final Set<String> SUBSCRIPTION_EXEMPT_CODES = Set.of(
             "GET_SUBSCRIPTION", "RENEW_SUBSCRIPTION",
-            "ME", "LOGOUT", "CHANGE_PASSWORD",
+            "ME", "LOGOUT", "CHANGE_PASSWORD", "UPDATE_PROFILE",
             "TOTP_SETUP_INIT", "TOTP_SETUP_CONFIRM", "TOTP_DISABLE",
             "GET_ORGANIZATION_MODULES");
 
@@ -89,6 +90,7 @@ public class EntryPoint extends AbstractVerticle {
         vertx.deployVerticle(Geography.class.getName(), options);
         vertx.deployVerticle(Voucher.class.getName(), options);
         vertx.deployVerticle(Subscription.class.getName(), options);
+        vertx.deployVerticle(Administration.class.getName(), options);
     }
 
     @Override

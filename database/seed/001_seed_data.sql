@@ -27,6 +27,11 @@ GO
 
 -- 2. Link the existing partner (organisation) to the anchor -------------
 DECLARE @anchorId INT = (SELECT id FROM anchors WHERE anchor_code = 'ANCH001');
+IF NOT EXISTS (SELECT 1 FROM partners WHERE partner_id = '1001')
+BEGIN
+    INSERT INTO partners (partner_id, name, types, authorised_name, authorised_email, authorised_contact, address, anchor_id, status, created_by, created_at, updated_at)
+    VALUES ('1001', 'Alpha Bank Programme', '1', 'Programme Administrator', 'admin@alphabank.example', '+211900000001', 'Juba, South Sudan', @anchorId, 1, 'SEED', GETDATE(), GETDATE());
+END
 UPDATE partners SET anchor_id = @anchorId, status = 1 WHERE partner_id = '1001' AND anchor_id IS NULL;
 GO
 

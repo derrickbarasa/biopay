@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1448" height="1086" viewBox="0 0 1448 1086">
+  <defs>
+    <linearGradient id="voucherBand" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#e8f7f4"/>
+      <stop offset="1" stop-color="#f8fbfa"/>
+    </linearGradient>
+    <linearGradient id="voucherScreenSheen" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#ffffff" stop-opacity=".04"/>
+      <stop offset=".55" stop-color="#ffffff" stop-opacity=".28"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity=".04"/>
+    </linearGradient>
+  </defs>
+  <image href="../voucher-redemption-v3-base.png" width="1448" height="1086"/>
+  <rect x="469" y="654" width="220" height="39" rx="3" fill="url(#voucherBand)"/>
+  <path d="M473 691 H685" stroke="#0d9488" stroke-width="1.5" opacity=".5"/>
+  <image href="../../biopay_logo_horizontal.svg" x="480" y="660" width="100" height="27"/>
+  <g transform="rotate(-7 862 552)">
+    <rect x="812" y="535" width="102" height="38" rx="5" fill="url(#voucherBand)"/>
+    <path d="M816 570 H910" stroke="#0d9488" stroke-width="1.2" opacity=".42"/>
+    <image href="../../biopay_logo_horizontal.svg" x="826" y="542" width="76" height="21"/>
+    <rect x="812" y="535" width="102" height="38" rx="5" fill="url(#voucherScreenSheen)"/>
+  </g>
+</svg>

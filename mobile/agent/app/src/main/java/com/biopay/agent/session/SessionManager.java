@@ -87,6 +87,13 @@ public class SessionManager {
         return name.isEmpty() ? getEmail() : name;
     }
 
+    public void updateProfile(String firstName, String lastName) {
+        prefs.edit()
+                .putString(KEY_FIRST_NAME, firstName)
+                .putString(KEY_LAST_NAME, lastName)
+                .apply();
+    }
+
     public Integer getAnchorId() {
         int stored = prefs.getInt(KEY_ANCHOR_ID, -1);
         return stored == -1 ? null : stored;

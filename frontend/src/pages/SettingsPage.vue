@@ -11,6 +11,25 @@ const oldPassword = ref('')
 const newPassword = ref('')
 const confirmPassword = ref('')
 const saving = ref(false)
+const savingProfile = ref(false)
+const profileFirstName = ref(auth.user?.firstName ?? '')
+const profileLastName = ref(auth.user?.lastName ?? auth.user?.otherNames ?? '')
+
+async function saveProfile() {
+  if (!profileFirstName.value.trim()) {
+    toast.error('First name is required')
+    return
+  }
+  savingProfile.value = true
+  try {
+    await auth.updateProfile(profileFirstName.value.trim(), profileLastName.value.trim())
+    toast.success('Profile updated')
+  } catch (err) {
+    toast.error(err instanceof Error ? err.message : 'Failed to update profile')
+  } finally {
+    savingProfile.value = false
+  }
+}
 
 async function changePassword() {
   if (newPassword.value.length < 8) {
@@ -118,6 +137,11 @@ async function confirmDisable() {
             <div v-if="auth.user?.partnerCode" class="mt-2 text-body-2">
               Organization: {{ auth.user.partnerCode }}
             </div>
+            <v-divider class="my-4" />
+            <v-text-field v-model="profileFirstName" label="First name" autocomplete="given-name" />
+            <v-text-field v-model="profileLastName" label="Last name" autocomplete="family-name" />
+            <v-text-field :model-value="auth.user?.email" label="Email address" readonly hint="Contact an administrator to change the sign-in email." persistent-hint />
+            <v-btn color="primary" class="mt-4" :loading="savingProfile" @click="saveProfile">Save profile</v-btn>
           </v-card-text>
         </v-card>
 

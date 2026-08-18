@@ -131,7 +131,7 @@ async function remove(officer: Officer) {
           </v-chip>
         </template>
         <template #item.actions="{ item }">
-          <v-btn icon="mdi-delete" variant="text" size="small" color="error" @click="remove(item)" />
+          <v-btn icon="mdi-delete" variant="text" size="small" color="error" :aria-label="`Remove officer ${item.firstName} ${item.lastName}`" @click="remove(item)" />
         </template>
       </v-data-table>
     </v-card>

@@ -140,7 +140,7 @@ async function toggleStatus(org: Organization) {
           </v-chip>
         </template>
         <template #item.actions="{ item }">
-          <v-btn icon="mdi-pencil" variant="text" size="small" @click="openEdit(item)" />
+          <v-btn icon="mdi-pencil" variant="text" size="small" :aria-label="`Edit ${item.name}`" @click="openEdit(item)" />
           <v-btn
             :icon="item.status === 1 ? 'mdi-toggle-switch-off-outline' : 'mdi-toggle-switch'"
             variant="text" size="small" @click="toggleStatus(item)"

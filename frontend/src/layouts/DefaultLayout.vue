@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import { useDisplay } from 'vuetify'
 import { useAuthStore } from '@/stores/auth'
 import { dispatch } from '@/api/client'
 import { useToast } from '@/composables/useToast'
@@ -8,7 +9,12 @@ import { useToast } from '@/composables/useToast'
 const auth = useAuthStore()
 const router = useRouter()
 const toast = useToast()
-const drawer = ref(true)
+const { mdAndUp } = useDisplay()
+const drawer = ref(mdAndUp.value)
+
+watch(mdAndUp, (isDesktop) => {
+  drawer.value = isDesktop
+})
 
 // ---- Subscription lifecycle (per anchor) --------------------------------------
 interface SubscriptionStatus {
@@ -74,7 +80,10 @@ const navSections: NavSection[] = [
   {
     title: 'Configs',
     items: [
+      { title: 'Anchor', icon: 'mdi-bank-outline', to: '/app/anchors', roles: ['ANCHOR'] },
       { title: 'Organizations', icon: 'mdi-domain', to: '/app/organizations', roles: ['ANCHOR'] },
+      { title: 'Users', icon: 'mdi-account-multiple-outline', to: '/app/users', roles: ['ANCHOR', 'ORGANISATION'] },
+      { title: 'Roles & Permissions', icon: 'mdi-shield-account-outline', to: '/app/roles', roles: ['ANCHOR'] },
       { title: 'Officers', icon: 'mdi-account-tie', to: '/app/officers', roles: ['ANCHOR', 'ORGANISATION'] },
       { title: 'Locations', icon: 'mdi-map-marker-radius', to: '/app/locations', roles: ['ANCHOR', 'ORGANISATION'] },
     ],
@@ -84,7 +93,7 @@ const navSections: NavSection[] = [
     items: [
       { title: 'Households', icon: 'mdi-home-group', to: '/app/households', roles: ['ANCHOR', 'ORGANISATION'], module: 'HOUSEHOLDS' },
       { title: 'Payments', icon: 'mdi-cash-multiple', to: '/app/payments', roles: ['ANCHOR', 'ORGANISATION'], module: 'CASH_TRANSFERS' },
-      { title: 'Payment Cycles', icon: 'mdi-calendar-cash', to: '/app/payroll', roles: ['ANCHOR', 'ORGANISATION'], module: 'CASH_TRANSFERS' },
+      { title: 'Payment Cycles', icon: 'mdi-calendar-month-outline', to: '/app/payroll', roles: ['ANCHOR', 'ORGANISATION'], module: 'CASH_TRANSFERS' },
       { title: 'Vouchers', icon: 'mdi-ticket-confirmation', to: '/app/vouchers', roles: ['ANCHOR', 'ORGANISATION'], module: 'VOUCHERS' },
       { title: 'Attendance', icon: 'mdi-calendar-check', to: '/app/attendance', roles: ['ANCHOR', 'ORGANISATION'] },
     ],
@@ -117,9 +126,9 @@ async function handleLogout() {
 </script>
 
 <template>
-  <v-navigation-drawer v-model="drawer" color="surface" class="app-drawer">
-    <div class="pa-5 d-flex align-center">
-      <img src="/biopay_logo_dark.svg" alt="BioPay" class="drawer-logo" />
+  <v-navigation-drawer v-model="drawer" color="primary-darken-1" theme="dark" class="app-drawer">
+    <div class="drawer-brand d-flex align-center">
+      <img src="/biopay_logo_horizontal.svg" alt="BioPay — Biometric Payment Solutions" class="drawer-logo" />
     </div>
     <v-divider />
 
@@ -156,19 +165,19 @@ async function handleLogout() {
     <v-app-bar-nav-icon @click="drawer = !drawer" />
     <v-breadcrumbs :items="[{ title: $route.name?.toString() ?? '' }]" class="text-capitalize" />
     <v-spacer />
-    <v-chip class="mr-3 font-weight-bold" color="secondary" variant="tonal" size="small">{{ auth.roleLabel }}</v-chip>
+    <v-chip class="role-chip mr-3 font-weight-bold" color="secondary" variant="tonal" size="small">{{ auth.roleLabel }}</v-chip>
     <v-menu>
       <template #activator="{ props }">
         <v-btn v-bind="props" variant="text" class="text-none">
           <v-avatar color="primary" size="32" class="mr-2">
             <span class="text-caption">{{ auth.initials }}</span>
           </v-avatar>
-          {{ auth.fullName }}
+          <span class="user-name">{{ auth.fullName }}</span>
           <v-icon icon="mdi-chevron-down" class="ml-1" />
         </v-btn>
       </template>
       <v-list density="compact">
-        <v-list-item to="/settings" prepend-icon="mdi-account" title="Profile & Settings" />
+        <v-list-item to="/app/settings" prepend-icon="mdi-account" title="Profile & Settings" />
         <v-divider />
         <v-list-item prepend-icon="mdi-logout" title="Log out" @click="handleLogout" />
       </v-list>
@@ -222,15 +231,22 @@ async function handleLogout() {
 </template>
 
 <style scoped>
-.drawer-logo { width: 176px; height: auto; }
-.app-drawer { border-right: 1px solid rgba(15, 23, 42, .08); }
+.drawer-brand { min-height: 78px; margin: 12px; padding: 12px 14px; border-radius: 14px; background: #fff; }
+.drawer-logo { display: block; width: min(100%, 190px); height: auto; }
+.app-drawer { border-right: 1px solid rgba(15, 118, 110, .65); background: #0f766e !important; }
 .app-drawer :deep(.v-list) { display: flex; flex-direction: column; }
-.app-drawer :deep(.v-list-item) { margin: 3px 12px; min-height: 44px; color: #334155; }
+.app-drawer :deep(.v-list-item) { margin: 3px 12px; min-height: 44px; color: rgba(255, 255, 255, .86); }
 .app-drawer :deep(.v-list-item-title) { font-weight: 500; }
-.app-drawer :deep(.v-list-item--active) { background: rgba(13, 148, 136, .12); color: #0f766e; }
+.app-drawer :deep(.v-list-item--active) { background: rgba(255, 255, 255, .16); color: #fff; }
 .app-drawer :deep(.v-list-item--active .v-list-item-title) { font-weight: 600; }
-.drawer-subheader { font-size: .68rem; letter-spacing: .08em; text-transform: uppercase; opacity: .55; padding-inline-start: 20px !important; }
+.drawer-subheader { color: rgba(255, 255, 255, .68) !important; font-size: .68rem; letter-spacing: .08em; text-transform: uppercase; padding-inline-start: 20px !important; }
+.app-drawer :deep(.v-divider) { border-color: rgba(255, 255, 255, .18); }
 .app-bar { background: rgba(255, 255, 255, .94) !important; backdrop-filter: blur(12px); }
 .dashboard-main { background: #f8fafc; min-height: 100vh; }
 .archived-gate { display: flex; justify-content: center; padding-top: 8vh; }
+@media (max-width: 600px) {
+  .role-chip, .user-name { display: none; }
+  .app-bar :deep(.v-breadcrumbs) { padding-inline: 8px; }
+  .app-bar :deep(.v-btn) { min-width: 40px; padding-inline: 4px; }
+}
 </style>

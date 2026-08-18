@@ -89,15 +89,20 @@ public class Dashboard extends AbstractVerticle {
         Future<Integer> pendingPayrolls = scalarInt(
                 "SELECT COUNT(*) AS v FROM payroll_cycles WHERE anchor_id=@p1 AND status='PENDING_APPROVAL'", Tuple.of(anchorId));
         Future<JsonArray> recentTransactions = pool.preparedQuery(
-                        "SELECT TOP 10 * FROM payments WHERE anchor_id=@p1 ORDER BY created_at DESC")
+                        "SELECT TOP 10 pay.*, h.household_name AS resolved_household_name, "
+                                + "p.name AS organisation_name FROM payments pay "
+                                + "LEFT JOIN households h ON h.household_number=pay.household_number "
+                                + "LEFT JOIN partners p ON p.partner_id=pay.partner_code "
+                                + "WHERE pay.anchor_id=@p1 ORDER BY pay.created_at DESC")
                 .execute(Tuple.of(anchorId))
                 .map(rows -> {
                     JsonArray arr = new JsonArray();
                     for (Row r : rows) {
                         arr.add(new JsonObject()
                                 .put("id", Rows.intVal(r, "id"))
-                                .put("householdName", Rows.str(r, "household_name"))
+                                .put("householdName", Rows.str(r, "resolved_household_name"))
                                 .put("organisationCode", Rows.str(r, "partner_code"))
+                                .put("organisationName", Rows.str(r, "organisation_name"))
                                 .put("amount", Rows.dbl(r, "amount"))
                                 .put("status", Rows.intVal(r, "status"))
                                 .put("createdAt", Rows.str(r, "created_at")));

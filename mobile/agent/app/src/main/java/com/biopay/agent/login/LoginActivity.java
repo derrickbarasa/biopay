@@ -3,18 +3,19 @@ package com.biopay.agent.login;
 import android.content.Intent;
 import android.os.Bundle;
 import android.view.View;
+import android.view.inputmethod.EditorInfo;
+import android.view.inputmethod.InputMethodManager;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ProgressBar;
 import android.widget.TextView;
-
-import androidx.appcompat.app.AppCompatActivity;
 
 import com.biopay.agent.R;
 import com.biopay.agent.home.HomeActivity;
 import com.biopay.agent.network.ApiCallback;
 import com.biopay.agent.network.ApiClient;
 import com.biopay.agent.session.SessionManager;
+import com.biopay.agent.ui.BaseActivity;
 
 import org.json.JSONObject;
 
@@ -22,10 +23,11 @@ import java.util.HashMap;
 import java.util.Map;
 
 /** LOGIN_SUPERVISOR against the BioPay backend -- the app's only login path (field officers only). */
-public class LoginActivity extends AppCompatActivity {
+public class LoginActivity extends BaseActivity {
 
     private EditText etEmail;
     private EditText etPassword;
+    private EditText etServerUrl;
     private TextView tvErrorMessage;
     private ProgressBar progressBar;
     private Button btnLogin;
@@ -39,18 +41,35 @@ public class LoginActivity extends AppCompatActivity {
         sessionManager = new SessionManager(this);
         etEmail = findViewById(R.id.etEmail);
         etPassword = findViewById(R.id.etPassword);
+        etServerUrl = findViewById(R.id.etServerUrl);
+        etServerUrl.setText(ApiClient.getBaseUrl(this));
         tvErrorMessage = findViewById(R.id.tvErrorMessage);
         progressBar = findViewById(R.id.progressBar);
         btnLogin = findViewById(R.id.btnLogin);
 
         btnLogin.setOnClickListener(v -> attemptLogin());
+        etPassword.setOnEditorActionListener((view, actionId, event) -> {
+            if (actionId == EditorInfo.IME_ACTION_DONE) {
+                attemptLogin();
+                return true;
+            }
+            return false;
+        });
     }
 
     private void attemptLogin() {
+        hideKeyboard();
+        tvErrorMessage.setVisibility(View.GONE);
         String email = etEmail.getText().toString().trim();
         String password = etPassword.getText().toString();
         if (email.isEmpty() || password.isEmpty()) {
             showError(getString(R.string.login_error_required));
+            return;
+        }
+        try {
+            ApiClient.setBaseUrl(this, etServerUrl.getText().toString());
+        } catch (IllegalArgumentException ex) {
+            showError(ex.getMessage());
             return;
         }
         setLoading(true);
@@ -90,6 +109,20 @@ public class LoginActivity extends AppCompatActivity {
     private void setLoading(boolean loading) {
         progressBar.setVisibility(loading ? View.VISIBLE : View.GONE);
         btnLogin.setEnabled(!loading);
+        etServerUrl.setEnabled(!loading);
+        etEmail.setEnabled(!loading);
+        etPassword.setEnabled(!loading);
+    }
+
+    private void hideKeyboard() {
+        View focusedView = getCurrentFocus();
+        if (focusedView == null) {
+            return;
+        }
+        InputMethodManager inputMethodManager =
+                (InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
+        inputMethodManager.hideSoftInputFromWindow(focusedView.getWindowToken(), 0);
+        focusedView.clearFocus();
     }
 
     private void showError(String message) {

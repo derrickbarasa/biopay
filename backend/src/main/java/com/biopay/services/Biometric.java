@@ -14,6 +14,7 @@ import io.vertx.sqlclient.Tuple;
 import com.biopay.databases.Datasource;
 import com.biopay.utilities.Crypto;
 import com.biopay.utilities.FileStore;
+import com.biopay.utilities.FaceEmbedding;
 import com.biopay.utilities.Logging;
 import com.biopay.utilities.Rows;
 import com.biopay.utilities.Utilities;
@@ -46,6 +47,8 @@ public class Biometric extends AbstractVerticle {
         eventBus.consumer("ENROLL_FINGERPRINT", this::enrollFingerprint);
         eventBus.consumer("VERIFY_FINGERPRINT", this::verify);
         eventBus.consumer("SYNC_FINGERPRINTS", this::syncFingerprints);
+        eventBus.consumer("ENROLL_FACE", this::enrollFace);
+        eventBus.consumer("SYNC_FACES", this::syncFaces);
         eventBus.consumer("UPLOAD_IMAGE", this::uploadImage);
         eventBus.consumer("SYNC_IMAGES", this::syncImages);
         eventBus.consumer("SYNC_PAYMENTS", this::syncPayments);
@@ -86,8 +89,8 @@ public class Biometric extends AbstractVerticle {
 
         String sql = "INSERT INTO households (supervisor_id, partner_code, household_number, household_name, age, "
                 + "gender, phone_number, household_size, boma_code, latitude, longitude, duplicate, duplicate_number, "
-                + "matching_score, status, created_by, created_at, updated_at, stored_at) "
-                + "VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,@p12,@p13,@p14,1,@p15,GETDATE(),GETDATE(),GETDATE())";
+                + "matching_score, registration_method, status, created_by, created_at, updated_at, stored_at) "
+                + "VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,@p12,@p13,@p14,@p15,1,@p16,GETDATE(),GETDATE(),GETDATE())";
 
         pool.preparedQuery(sql)
                 .execute(Tuple.of(
@@ -97,7 +100,8 @@ public class Biometric extends AbstractVerticle {
                         payload.getInteger("householdSize"), payload.getString("bomaCode"),
                         payload.getString("latitude"), payload.getString("longitude"),
                         payload.getInteger("duplicate", 0), payload.getString("duplicateNumber"),
-                        payload.getString("matchingScore"), String.valueOf(payload.getValue("actorId"))))
+                        payload.getString("matchingScore"), payload.getString("registrationMethod", "FINGERPRINT"),
+                        String.valueOf(payload.getValue("actorId"))))
                 .onFailure(err -> onDbError(message, err))
                 .onSuccess(rows -> reply(message, new JsonObject()
                         .put("responseCode", "000")
@@ -119,8 +123,8 @@ public class Biometric extends AbstractVerticle {
 
         String sql = "INSERT INTO alternates (supervisor_id, household_number, partner_code, alternate_number, "
                 + "alternate_name, relationship, age, phone_number, gender, duplicate, duplicate_number, matching_score, "
-                + "status, created_by, created_at, stored_at) "
-                + "VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,@p12,1,@p13,GETDATE(),GETDATE())";
+                + "registration_method, status, created_by, created_at, stored_at) "
+                + "VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,@p12,@p13,1,@p14,GETDATE(),GETDATE())";
 
         pool.preparedQuery(sql)
                 .execute(Tuple.of(
@@ -128,7 +132,8 @@ public class Biometric extends AbstractVerticle {
                         payload.getString("alternateName", "").trim(), payload.getString("relationship"),
                         payload.getInteger("age"), payload.getString("phoneNumber"), payload.getString("gender"),
                         payload.getInteger("duplicate", 0), payload.getString("duplicateNumber"),
-                        payload.getString("matchingScore"), String.valueOf(payload.getValue("actorId"))))
+                        payload.getString("matchingScore"), payload.getString("registrationMethod", "FINGERPRINT"),
+                        String.valueOf(payload.getValue("actorId"))))
                 .onFailure(err -> onDbError(message, err))
                 .onSuccess(rows -> reply(message, new JsonObject()
                         .put("responseCode", "000")
@@ -177,6 +182,14 @@ public class Biometric extends AbstractVerticle {
 
     private void verify(Message<Object> message) {
         JsonObject payload = new JsonObject(message.body().toString());
+        // Production matching belongs on the Android device where the licensed IDEMIA SDK
+        // performs a scored live 1:1 verify. The legacy server equality matcher is disabled by
+        // default and can only be enabled explicitly for migration diagnostics.
+        if (!Boolean.parseBoolean(io.github.cdimascio.dotenv.Dotenv.load()
+                .get("ALLOW_LEGACY_FINGERPRINT_MATCH", "false"))) {
+            replyError(message, "Server fingerprint matching is disabled; use the approved on-device biometric SDK");
+            return;
+        }
         String partnerCode = partnerCodeOf(payload);
         String templateData = payload.getString("templateData", "");
         String householdHint = payload.getString("householdNumber", null);
@@ -251,6 +264,83 @@ public class Biometric extends AbstractVerticle {
                     }
                     reply(message, new JsonObject().put("responseCode", "000").put("responseMessage", "OK").put("results", results));
                 });
+    }
+
+    // ---- FACE EMBEDDINGS (encrypted transport/store; matching remains on-device) ----
+
+    private void enrollFace(Message<Object> message) {
+        JsonObject payload = new JsonObject(message.body().toString());
+        String partnerCode = partnerCodeOf(payload);
+        String beneficiaryId = payload.getString("beneficiaryId", "").trim();
+        int beneficiaryType = payload.getInteger("beneficiaryType", 1);
+        String modelVersion = payload.getString("modelVersion", "").trim();
+        JsonArray embedding = payload.getJsonArray("embedding");
+        int dimensions = payload.getInteger("embeddingDimensions", embedding == null ? 0 : embedding.size());
+        String uuid = payload.getString("uuid", Utilities.newUuid()).trim();
+
+        if (partnerCode.isEmpty() || beneficiaryId.isEmpty() || modelVersion.isEmpty() || uuid.isEmpty()) {
+            replyError(message, "beneficiaryId, uuid, modelVersion and embedding are required");
+            return;
+        }
+        try {
+            FaceEmbedding.validate(embedding, dimensions);
+        } catch (IllegalArgumentException ex) {
+            replyError(message, ex.getMessage());
+            return;
+        }
+
+        final String encryptedEmbedding;
+        try {
+            encryptedEmbedding = Crypto.encrypt(embedding.encode());
+        } catch (Exception ex) {
+            replyError(message, "Failed to secure face embedding");
+            return;
+        }
+
+        String sql = "IF NOT EXISTS (SELECT 1 FROM faces WHERE uuid=@p1) "
+                + "INSERT INTO faces (supervisor_id, beneficiary_type, beneficiary_id, uuid, embedding, "
+                + "embedding_dimensions, model_version, quality_score, partner_code, status, created_by, created_at, stored_at) "
+                + "VALUES (@p2,@p3,@p4,@p1,@p5,@p6,@p7,@p8,@p9,1,@p10,GETDATE(),GETDATE())";
+        pool.preparedQuery(sql)
+                .execute(Tuple.from(java.util.Arrays.asList(uuid, String.valueOf(payload.getValue("actorId")),
+                        beneficiaryType, beneficiaryId, encryptedEmbedding, dimensions, modelVersion,
+                        payload.getDouble("qualityScore"), partnerCode, String.valueOf(payload.getValue("actorId")))))
+                .onFailure(err -> onDbError(message, err))
+                .onSuccess(rows -> reply(message, new JsonObject().put("responseCode", "000")
+                        .put("responseMessage", "Face embedding enrolled successfully").put("uuid", uuid)));
+    }
+
+    private void syncFaces(Message<Object> message) {
+        JsonObject payload = new JsonObject(message.body().toString());
+        String partnerCode = partnerCodeOf(payload);
+        if (partnerCode.isEmpty()) {
+            replyError(message, "This action requires a supervisor session");
+            return;
+        }
+        pool.preparedQuery("SELECT * FROM faces WHERE partner_code=@p1 AND status=1")
+                .execute(Tuple.of(partnerCode))
+                .onFailure(err -> onDbError(message, err))
+                .onSuccess(rows -> reply(message, new JsonObject().put("responseCode", "000")
+                        .put("responseMessage", "OK").put("results", facesArray(rows))));
+    }
+
+    private static JsonArray facesArray(RowSet<Row> rows) {
+        JsonArray results = new JsonArray();
+        for (Row r : rows) {
+            try {
+                results.add(new JsonObject()
+                        .put("uuid", Rows.str(r, "uuid"))
+                        .put("beneficiaryId", Rows.str(r, "beneficiary_id"))
+                        .put("beneficiaryType", Rows.intVal(r, "beneficiary_type"))
+                        .put("embedding", new JsonArray(Crypto.decrypt(Rows.str(r, "embedding"))))
+                        .put("embeddingDimensions", Rows.intVal(r, "embedding_dimensions"))
+                        .put("modelVersion", Rows.str(r, "model_version"))
+                        .put("qualityScore", Rows.dbl(r, "quality_score")));
+            } catch (Exception ignored) {
+                // A corrupt/undecryptable record must not prevent the remaining offline bundle.
+            }
+        }
+        return results;
     }
 
     // ---- UPLOAD_IMAGE ---------------------------------------------------------------
@@ -540,8 +630,11 @@ public class Biometric extends AbstractVerticle {
                     }
                     return arr;
                 });
+        Future<JsonArray> faces = pool.preparedQuery("SELECT * FROM faces WHERE partner_code=@p1 AND status=1")
+                .execute(Tuple.of(partnerCode))
+                .map(Biometric::facesArray);
 
-        Future.all(households, alternates, fingerprints, images, payments)
+        Future.all(households, alternates, fingerprints, images, payments, faces)
                 .onFailure(err -> onDbError(message, err))
                 .onSuccess(cf -> reply(message, new JsonObject()
                         .put("responseCode", "000")
@@ -551,7 +644,8 @@ public class Biometric extends AbstractVerticle {
                                 .put("alternates", (JsonArray) cf.resultAt(1))
                                 .put("fingerprints", (JsonArray) cf.resultAt(2))
                                 .put("images", (JsonArray) cf.resultAt(3))
-                                .put("payments", (JsonArray) cf.resultAt(4)))));
+                                .put("payments", (JsonArray) cf.resultAt(4))
+                                .put("faces", (JsonArray) cf.resultAt(5)))));
     }
 
     // ---- audit ------------------------------------------------------------------------

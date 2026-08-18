@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1448" height="1086" viewBox="0 0 1448 1086">
+  <image href="../voucher-redemption-v2-base.png" width="1448" height="1086"/>
+  <rect x="462" y="556" width="186" height="54" rx="3" fill="#fff"/>
+  <image href="../../biopay_logo_horizontal.svg" x="465" y="559" width="180" height="48"/>
+  <g transform="rotate(-7 868 552)">
+    <rect x="812" y="536" width="101" height="32" rx="3" fill="#fff"/>
+    <image href="../../biopay_logo_horizontal.svg" x="829" y="542" width="74" height="20"/>
+  </g>
+</svg>

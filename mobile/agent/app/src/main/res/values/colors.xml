@@ -1,14 +1,27 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="bp_primary">#0F5C4D</color>
-    <color name="bp_primary_dark">#0A3F35</color>
-    <color name="bp_secondary">#D98E2B</color>
-    <color name="bp_secondary_dark">#B9741A</color>
-    <color name="bp_background">#F5F7F6</color>
+    <color name="bp_primary">#006B5B</color>
+    <color name="bp_primary_dark">#004D42</color>
+    <color name="bp_primary_container">#D8F3EC</color>
+    <color name="bp_on_primary_container">#00201A</color>
+    <color name="bp_secondary">#E87918</color>
+    <color name="bp_secondary_dark">#A94C00</color>
+    <color name="bp_secondary_container">#FFE2C3</color>
+    <color name="bp_on_secondary_container">#331300</color>
+    <color name="bp_background">#F5F8F7</color>
     <color name="bp_surface">#FFFFFF</color>
-    <color name="bp_error">#D64545</color>
-    <color name="bp_success">#2E9E5B</color>
+    <color name="bp_surface_variant">#E7EEEB</color>
+    <color name="bp_surface_brand">#EDF9F5</color>
+    <color name="bp_outline">#71807B</color>
+    <color name="bp_outline_variant">#C1CCC8</color>
+    <color name="bp_error">#BA1A1A</color>
+    <color name="bp_error_container">#FFDAD6</color>
+    <color name="bp_success">#18794E</color>
+    <color name="bp_success_container">#D7F5E3</color>
+    <color name="bp_warning">#A65300</color>
+    <color name="bp_warning_container">#FFE2C3</color>
     <color name="bp_on_primary">#FFFFFF</color>
-    <color name="bp_text_primary">#1A1A1A</color>
-    <color name="bp_text_secondary">#6B6B6B</color>
+    <color name="bp_text_primary">#17201E</color>
+    <color name="bp_text_secondary">#52615D</color>
+    <color name="bp_disabled">#9AA6A2</color>
 </resources>

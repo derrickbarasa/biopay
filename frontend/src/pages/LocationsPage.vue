@@ -163,7 +163,7 @@ async function remove(level: typeof dialogLevel.value, code: string) {
             </div>
             <v-data-table :headers="stateHeaders" :items="states" :search="tableSearch" :loading="loading" density="comfortable">
               <template #item.actions="{ item }">
-                <v-btn icon="mdi-delete" size="small" variant="text" color="error" @click="remove('STATE', item.code)" />
+                <v-btn icon="mdi-delete" size="small" variant="text" color="error" :aria-label="`Delete state ${item.name}`" @click="remove('STATE', item.code)" />
               </template>
               <template #no-data><div class="text-center text-medium-emphasis py-4">No states configured yet</div></template>
             </v-data-table>
@@ -180,7 +180,7 @@ async function remove(level: typeof dialogLevel.value, code: string) {
             </div>
             <v-data-table :headers="countyHeaders" :items="counties" :search="tableSearch" :loading="loading" density="comfortable">
               <template #item.actions="{ item }">
-                <v-btn icon="mdi-delete" size="small" variant="text" color="error" @click="remove('COUNTY', item.code)" />
+                <v-btn icon="mdi-delete" size="small" variant="text" color="error" :aria-label="`Delete county ${item.name}`" @click="remove('COUNTY', item.code)" />
               </template>
               <template #no-data><div class="text-center text-medium-emphasis py-4">No counties configured yet</div></template>
             </v-data-table>
@@ -198,7 +198,7 @@ async function remove(level: typeof dialogLevel.value, code: string) {
             </div>
             <v-data-table :headers="locationHeaders" :items="locations" :search="tableSearch" :loading="loading" density="comfortable">
               <template #item.actions="{ item }">
-                <v-btn icon="mdi-delete" size="small" variant="text" color="error" @click="remove('LOCATION', item.code)" />
+                <v-btn icon="mdi-delete" size="small" variant="text" color="error" :aria-label="`Delete location ${item.name}`" @click="remove('LOCATION', item.code)" />
               </template>
               <template #no-data><div class="text-center text-medium-emphasis py-4">No locations configured yet</div></template>
             </v-data-table>
@@ -217,7 +217,7 @@ async function remove(level: typeof dialogLevel.value, code: string) {
             </div>
             <v-data-table :headers="villageHeaders" :items="villages" :search="tableSearch" :loading="loading" density="comfortable">
               <template #item.actions="{ item }">
-                <v-btn icon="mdi-delete" size="small" variant="text" color="error" @click="remove('VILLAGE', item.code)" />
+                <v-btn icon="mdi-delete" size="small" variant="text" color="error" :aria-label="`Delete village ${item.name}`" @click="remove('VILLAGE', item.code)" />
               </template>
               <template #no-data><div class="text-center text-medium-emphasis py-4">No villages configured yet</div></template>
             </v-data-table>

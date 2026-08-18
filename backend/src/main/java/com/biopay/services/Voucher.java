@@ -42,6 +42,7 @@ public class Voucher extends AbstractVerticle {
         eventBus.consumer("VOID_VOUCHER", this::voidVoucher);
         eventBus.consumer("REDEEM_VOUCHER", this::redeem);
         eventBus.consumer("VOUCHER_SUMMARY", this::summary);
+        eventBus.consumer("SYNC_VOUCHERS", this::syncVouchers);
         startPromise.complete();
     }
 
@@ -279,6 +280,11 @@ public class Voucher extends AbstractVerticle {
             replyError(message, "voucherCode is required");
             return;
         }
+        if ("SUPERVISOR".equalsIgnoreCase(payload.getString("actorRole", ""))
+                && payload.getString("matchedFingerprint", "").isBlank()) {
+            replyError(message, "A successful fingerprint verification is required for mobile redemption");
+            return;
+        }
         String scopeClause = isAnchor(payload) ? "" : " AND partner_code=@p6";
         Object actorId = payload.getValue("actorId");
 
@@ -301,6 +307,26 @@ public class Voucher extends AbstractVerticle {
                     } else {
                         replyError(message, "Voucher not found, not issued, expired, or not in your organisation");
                     }
+                });
+    }
+
+    // ---- SYNC_VOUCHERS (offline field app bundle) ---------------------------------
+
+    private void syncVouchers(Message<Object> message) {
+        JsonObject payload = new JsonObject(message.body().toString());
+        if (!"SUPERVISOR".equalsIgnoreCase(payload.getString("actorRole", ""))) {
+            replyError(message, "Only a field officer can sync vouchers");
+            return;
+        }
+        pool.preparedQuery("SELECT * FROM vouchers WHERE partner_code=@p1 AND status='ISSUED' "
+                        + "AND (expires_at IS NULL OR expires_at>=GETDATE()) ORDER BY created_at DESC")
+                .execute(Tuple.of(payload.getString("partnerCode", "")))
+                .onFailure(err -> onDbError(message, err))
+                .onSuccess(rows -> {
+                    JsonArray results = new JsonArray();
+                    for (Row row : rows) results.add(summary(row));
+                    reply(message, new JsonObject().put("responseCode", "000")
+                            .put("responseMessage", "Vouchers synced").put("results", results));
                 });
     }
 

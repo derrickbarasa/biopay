@@ -1,0 +1,128 @@
+/*
+ * Material Design Icons subset used by BioPay and Vuetify's built-in aliases.
+ * Keeping these selectors explicit avoids shipping MDI's ~800 kB all-icons CSS
+ * and legacy EOT/TTF/WOFF font variants while preserving the existing icon API.
+ */
+@font-face {
+  font-family: 'Material Design Icons';
+  src: url('@mdi/font/fonts/materialdesignicons-webfont.woff2?v=7.4.47') format('woff2');
+  font-weight: normal;
+  font-style: normal;
+  font-display: block;
+}
+
+.mdi::before,
+.mdi-set {
+  display: inline-block;
+  font: normal normal normal 24px/1 'Material Design Icons';
+  font-size: inherit;
+  line-height: inherit;
+  text-rendering: auto;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.mdi-account::before { content: "\F0004"; }
+.mdi-account-alert-outline::before { content: "\F0B50"; }
+.mdi-account-child-outline::before { content: "\F10C8"; }
+.mdi-account-multiple-outline::before { content: "\F000F"; }
+.mdi-account-outline::before { content: "\F0013"; }
+.mdi-account-plus::before { content: "\F0014"; }
+.mdi-account-plus-outline::before { content: "\F0801"; }
+.mdi-account-tie::before { content: "\F0CE3"; }
+.mdi-alert-circle::before { content: "\F0028"; }
+.mdi-apple-keyboard-command::before { content: "\F0633"; }
+.mdi-apple-keyboard-control::before { content: "\F0634"; }
+.mdi-apple-keyboard-option::before { content: "\F0635"; }
+.mdi-apple-keyboard-shift::before { content: "\F0636"; }
+.mdi-arrow-down::before { content: "\F0045"; }
+.mdi-arrow-left::before { content: "\F004D"; }
+.mdi-arrow-right::before { content: "\F0054"; }
+.mdi-arrow-up::before { content: "\F005D"; }
+.mdi-backspace::before { content: "\F006E"; }
+.mdi-bank::before { content: "\F0070"; }
+.mdi-bank-outline::before { content: "\F0E80"; }
+.mdi-cached::before { content: "\F00E8"; }
+.mdi-calendar::before { content: "\F00ED"; }
+.mdi-calendar-check::before { content: "\F00EF"; }
+.mdi-calendar-month-outline::before { content: "\F0E18"; }
+.mdi-cash::before { content: "\F0114"; }
+.mdi-cash-multiple::before { content: "\F0116"; }
+.mdi-cellphone-key::before { content: "\F094E"; }
+.mdi-chart-bar::before { content: "\F0128"; }
+.mdi-chart-box-outline::before { content: "\F154E"; }
+.mdi-check::before { content: "\F012C"; }
+.mdi-checkbox-blank-outline::before { content: "\F0131"; }
+.mdi-checkbox-marked::before { content: "\F0132"; }
+.mdi-check-circle::before { content: "\F05E0"; }
+.mdi-chevron-down::before { content: "\F0140"; }
+.mdi-chevron-left::before { content: "\F0141"; }
+.mdi-chevron-right::before { content: "\F0142"; }
+.mdi-chevron-up::before { content: "\F0143"; }
+.mdi-circle::before { content: "\F0765"; }
+.mdi-clock-alert-outline::before { content: "\F05CE"; }
+.mdi-close::before { content: "\F0156"; }
+.mdi-close-circle::before { content: "\F0159"; }
+.mdi-cloud-upload::before { content: "\F0167"; }
+.mdi-cog-outline::before { content: "\F08BB"; }
+.mdi-delete::before { content: "\F01B4"; }
+.mdi-domain::before { content: "\F01D7"; }
+.mdi-domain-plus::before { content: "\F10AD"; }
+.mdi-download::before { content: "\F01DA"; }
+.mdi-email-check-outline::before { content: "\F0AB2"; }
+.mdi-email-outline::before { content: "\F01F0"; }
+.mdi-eye::before { content: "\F0208"; }
+.mdi-eyedropper::before { content: "\F020A"; }
+.mdi-eye-off::before { content: "\F0209"; }
+.mdi-file-upload::before { content: "\F0A4D"; }
+.mdi-fingerprint::before { content: "\F0237"; }
+.mdi-fullscreen::before { content: "\F0293"; }
+.mdi-fullscreen-exit::before { content: "\F0294"; }
+.mdi-history::before { content: "\F02DA"; }
+.mdi-home-group::before { content: "\F0DD4"; }
+.mdi-home-plus::before { content: "\F0975"; }
+.mdi-information::before { content: "\F02FC"; }
+.mdi-keyboard-return::before { content: "\F0311"; }
+.mdi-keyboard-space::before { content: "\F1050"; }
+.mdi-lock-check-outline::before { content: "\F16A8"; }
+.mdi-lock-clock::before { content: "\F097F"; }
+.mdi-lock-outline::before { content: "\F0341"; }
+.mdi-logout::before { content: "\F0343"; }
+.mdi-magnify::before { content: "\F0349"; }
+.mdi-map-marker-outline::before { content: "\F07D9"; }
+.mdi-map-marker-radius::before { content: "\F0352"; }
+.mdi-menu::before { content: "\F035C"; }
+.mdi-menu-down::before { content: "\F035D"; }
+.mdi-menu-right::before { content: "\F035F"; }
+.mdi-minus::before { content: "\F0374"; }
+.mdi-minus-box::before { content: "\F0375"; }
+.mdi-page-first::before { content: "\F0600"; }
+.mdi-page-last::before { content: "\F0601"; }
+.mdi-palette::before { content: "\F03D8"; }
+.mdi-paperclip::before { content: "\F03E2"; }
+.mdi-pause::before { content: "\F03E4"; }
+.mdi-pencil::before { content: "\F03EB"; }
+.mdi-phone-outline::before { content: "\F0DF0"; }
+.mdi-play::before { content: "\F040A"; }
+.mdi-plus::before { content: "\F0415"; }
+.mdi-printer::before { content: "\F042A"; }
+.mdi-radiobox-blank::before { content: "\F043D"; }
+.mdi-radiobox-marked::before { content: "\F043E"; }
+.mdi-shield-account-outline::before { content: "\F0A12"; }
+.mdi-shield-check-outline::before { content: "\F0CC8"; }
+.mdi-shield-key-outline::before { content: "\F0BC5"; }
+.mdi-star::before { content: "\F04CE"; }
+.mdi-star-half-full::before { content: "\F04D0"; }
+.mdi-star-outline::before { content: "\F04D2"; }
+.mdi-ticket-confirmation::before { content: "\F0518"; }
+.mdi-ticket-confirmation-outline::before { content: "\F13AA"; }
+.mdi-toggle-switch::before { content: "\F0521"; }
+.mdi-toggle-switch-off-outline::before { content: "\F0A19"; }
+.mdi-unfold-more-horizontal::before { content: "\F054F"; }
+.mdi-vector-link::before { content: "\F0FE8"; }
+.mdi-view-dashboard-outline::before { content: "\F0A1D"; }
+.mdi-volume-high::before { content: "\F057E"; }
+.mdi-volume-low::before { content: "\F057F"; }
+.mdi-volume-medium::before { content: "\F0580"; }
+.mdi-volume-variant-off::before { content: "\F0E08"; }
+.mdi-wifi-off::before { content: "\F05AA"; }

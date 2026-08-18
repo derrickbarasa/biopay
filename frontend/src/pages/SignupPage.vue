@@ -13,6 +13,8 @@ const form = ref({
   password: '', confirmPassword: '',
 })
 const showPassword = ref(false)
+const showConfirmPassword = ref(false)
+const formRef = ref()
 const loading = ref(false)
 const errorMessage = ref('')
 
@@ -24,9 +26,9 @@ const rules = {
 
 async function handleSubmit() {
   errorMessage.value = ''
-  if (!form.value.name || !form.value.email || !form.value.password) return
-  if (form.value.password.length < 8) {
-    errorMessage.value = 'Password must be at least 8 characters'
+  const validation = await formRef.value?.validate()
+  if (!validation?.valid) {
+    errorMessage.value = 'Check the highlighted fields and try again.'
     return
   }
   if (form.value.password !== form.value.confirmPassword) {
@@ -35,9 +37,18 @@ async function handleSubmit() {
   }
   loading.value = true
   try {
-    await auth.signup(form.value)
-    toast.success('Account created. Verify to continue')
-    router.push({ name: 'verify-otp' })
+    const requiresOtp = await auth.signup(form.value)
+    if (requiresOtp) {
+      toast.success('Account created. Verify to continue')
+      await router.push({ name: 'verify-otp' })
+    } else {
+      toast.success('Account created. You are signed in')
+      try {
+        await router.replace('/app/dashboard')
+      } catch {
+        window.location.assign('/app/dashboard')
+      }
+    }
   } catch (err) {
     errorMessage.value = err instanceof Error ? err.message : 'Signup failed'
   } finally {
@@ -66,7 +77,7 @@ async function handleSubmit() {
               </v-card-text>
 
               <v-card-text>
-                <v-form @submit.prevent="handleSubmit">
+                <v-form ref="formRef" validate-on="submit" @submit.prevent="handleSubmit">
                   <v-alert v-if="errorMessage" type="error" variant="tonal" class="mb-4" density="compact">
                     {{ errorMessage }}
                   </v-alert>
@@ -84,10 +95,14 @@ async function handleSubmit() {
                   />
                   <v-text-field
                     v-model="form.confirmPassword" label="Confirm password" prepend-inner-icon="mdi-lock-check-outline"
-                    :type="showPassword ? 'text' : 'password'" :rules="[rules.required]" class="mt-2" autocomplete="new-password"
+                    :type="showConfirmPassword ? 'text' : 'password'"
+                    :append-inner-icon="showConfirmPassword ? 'mdi-eye-off' : 'mdi-eye'"
+                    :rules="[rules.required, (v: string) => v === form.password || 'Passwords do not match']"
+                    class="mt-2" autocomplete="new-password"
+                    @click:append-inner="showConfirmPassword = !showConfirmPassword"
                   />
 
-                  <v-btn type="submit" block color="primary" size="large" :loading="loading" class="mt-4">
+                  <v-btn type="submit" block color="primary" size="large" :loading="loading" :disabled="loading" class="mt-4">
                     Create account
                   </v-btn>
                 </v-form>

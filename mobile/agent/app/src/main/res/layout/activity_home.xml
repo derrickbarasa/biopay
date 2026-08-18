@@ -1,51 +1,316 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/bp_background">
+    android:background="@color/bp_background"
+    android:fitsSystemWindows="true"
+    android:orientation="vertical">
+
+    <androidx.core.widget.NestedScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:clipToPadding="false"
+        android:fillViewport="true">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="16dp">
+        android:paddingStart="16dp"
+        android:paddingTop="20dp"
+        android:paddingEnd="16dp"
+        android:paddingBottom="32dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_brand_panel"
+            android:orientation="vertical"
+            android:padding="20dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+                <ImageView
+                    android:layout_width="42dp"
+                    android:layout_height="42dp"
+                    android:contentDescription="@string/biopay_logo_description"
+                    android:scaleType="fitCenter"
+                    android:src="@drawable/biopay_logo_mark" />
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="10dp"
+                    android:layout_weight="1"
+                    android:text="@string/home_field_workspace"
+                    android:textColor="@color/bp_on_primary"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/tvWelcome"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="18dp"
+                android:textColor="@color/bp_on_primary"
+                android:textSize="26sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tvOrgLabel"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:alpha="0.84"
+                android:textColor="@color/bp_on_primary"
+                android:textSize="13sp" />
+
+            <TextView
+                android:id="@+id/tvSyncMessage"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:drawablePadding="7dp"
+                android:drawableStart="@drawable/ic_sync"
+                android:drawableTint="@color/bp_on_primary"
+                android:text="@string/home_local_ready"
+                android:textColor="@color/bp_on_primary"
+                android:textSize="13sp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="18dp"
+                android:orientation="horizontal">
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnQuickRegister"
+                    style="@style/Widget.Material3.Button"
+                    android:layout_width="0dp"
+                    android:layout_height="52dp"
+                    android:layout_weight="1"
+                    android:text="@string/home_register_quick"
+                    android:textAllCaps="false"
+                    android:textColor="@color/bp_primary_dark"
+                    app:backgroundTint="@color/bp_primary_container"
+                    app:icon="@drawable/ic_add"
+                    app:iconTint="@color/bp_primary" />
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnQuickSync"
+                    style="@style/Widget.Material3.Button.OutlinedButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="52dp"
+                    android:layout_marginStart="8dp"
+                    android:text="@string/home_sync_now"
+                    android:textAllCaps="false"
+                    android:textColor="@color/bp_on_primary"
+                    app:icon="@drawable/ic_sync"
+                    app:iconTint="@color/bp_on_primary"
+                    app:strokeColor="@color/bp_on_primary" />
+            </LinearLayout>
+        </LinearLayout>
 
         <TextView
-            android:id="@+id/tvWelcome"
+            style="@style/BioPay.SectionHeader"
+            android:text="@string/home_overview" />
+
+        <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:textColor="@color/bp_text_primary"
-            android:textSize="20sp"
-            android:textStyle="bold" />
+            app:cardBackgroundColor="@color/bp_surface"
+            app:cardCornerRadius="16dp"
+            app:cardElevation="1dp"
+            app:strokeWidth="0dp">
 
-        <TextView
-            android:id="@+id/tvOrgLabel"
+            <GridLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:columnCount="2"
+                android:padding="8dp"
+                android:rowCount="2">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_columnWeight="1"
+                    android:orientation="vertical"
+                    android:padding="12dp">
+                    <TextView android:id="@+id/tvKpiHouseholds" style="@style/BioPay.KpiValue" />
+                    <TextView style="@style/BioPay.KpiLabel" android:text="@string/home_kpi_households" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_columnWeight="1"
+                    android:orientation="vertical"
+                    android:padding="12dp">
+                    <TextView android:id="@+id/tvKpiPendingSync" style="@style/BioPay.KpiValue" android:textColor="@color/bp_warning" />
+                    <TextView style="@style/BioPay.KpiLabel" android:text="@string/home_kpi_pending_sync" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_columnWeight="1"
+                    android:orientation="vertical"
+                    android:padding="12dp">
+                    <TextView android:id="@+id/tvKpiPaid" style="@style/BioPay.KpiValue" android:textColor="@color/bp_success" />
+                    <TextView style="@style/BioPay.KpiLabel" android:text="@string/home_kpi_paid" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_columnWeight="1"
+                    android:orientation="vertical"
+                    android:padding="12dp">
+                    <TextView android:id="@+id/tvKpiPending" style="@style/BioPay.KpiValue" android:textColor="@color/bp_secondary_dark" />
+                    <TextView style="@style/BioPay.KpiLabel" android:text="@string/home_kpi_pending_payment" />
+                </LinearLayout>
+            </GridLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <TextView style="@style/BioPay.SectionHeader" android:text="@string/home_tasks" />
+
+        <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:textColor="@color/bp_text_secondary"
-            android:layout_marginBottom="12dp" />
+            app:cardBackgroundColor="@color/bp_surface"
+            app:cardCornerRadius="16dp"
+            app:cardElevation="1dp"
+            app:strokeWidth="0dp">
 
-        <!-- KPI cards -->
-        <GridLayout
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:paddingTop="6dp"
+                android:paddingBottom="6dp">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnHouseholds"
+                    style="@style/Widget.Material3.Button.TextButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="64dp"
+                    android:gravity="start|center_vertical"
+                    android:paddingStart="16dp"
+                    android:paddingEnd="16dp"
+                    android:text="@string/menu_households"
+                    android:textColor="@color/bp_text_primary"
+                    android:textSize="16sp"
+                    app:icon="@drawable/ic_households"
+                    app:iconPadding="14dp"
+                    app:iconTint="@color/bp_primary" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnAttendance"
+                    style="@style/Widget.Material3.Button.TextButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="64dp"
+                    android:gravity="start|center_vertical"
+                    android:paddingStart="16dp"
+                    android:paddingEnd="16dp"
+                    android:text="@string/menu_attendance"
+                    android:textColor="@color/bp_text_primary"
+                    android:textSize="16sp"
+                    app:icon="@drawable/ic_attendance"
+                    app:iconPadding="14dp"
+                    app:iconTint="@color/bp_primary" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnVouchers"
+                    style="@style/Widget.Material3.Button.TextButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="64dp"
+                    android:gravity="start|center_vertical"
+                    android:paddingStart="16dp"
+                    android:paddingEnd="16dp"
+                    android:text="@string/menu_vouchers"
+                    android:textColor="@color/bp_text_primary"
+                    android:textSize="16sp"
+                    app:icon="@drawable/ic_voucher"
+                    app:iconPadding="14dp"
+                    app:iconTint="@color/bp_secondary" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <TextView style="@style/BioPay.SectionHeader" android:text="@string/home_records" />
+
+        <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:columnCount="2"
-            android:rowCount="2">
+            app:cardBackgroundColor="@color/bp_surface"
+            app:cardCornerRadius="16dp"
+            app:cardElevation="1dp"
+            app:strokeWidth="0dp">
 
-            <TextView android:id="@+id/tvKpiHouseholds" style="@style/BioPay.KpiCard" android:layout_columnWeight="1" />
-            <TextView android:id="@+id/tvKpiPendingSync" style="@style/BioPay.KpiCard" android:layout_columnWeight="1" />
-            <TextView android:id="@+id/tvKpiPaid" style="@style/BioPay.KpiCard" android:layout_columnWeight="1" />
-            <TextView android:id="@+id/tvKpiPending" style="@style/BioPay.KpiCard" android:layout_columnWeight="1" />
-        </GridLayout>
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:paddingTop="6dp"
+                android:paddingBottom="6dp">
 
-        <!-- Dashboard chart -->
-        <androidx.cardview.widget.CardView
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnAlternates"
+                    style="@style/Widget.Material3.Button.TextButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="64dp"
+                    android:gravity="start|center_vertical"
+                    android:paddingStart="16dp"
+                    android:paddingEnd="16dp"
+                    android:text="@string/menu_alternates"
+                    android:textColor="@color/bp_text_primary"
+                    android:textSize="16sp"
+                    app:icon="@drawable/ic_alternates"
+                    app:iconPadding="14dp"
+                    app:iconTint="@color/bp_primary" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnPayments"
+                    style="@style/Widget.Material3.Button.TextButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="64dp"
+                    android:gravity="start|center_vertical"
+                    android:paddingStart="16dp"
+                    android:paddingEnd="16dp"
+                    android:text="@string/menu_payments"
+                    android:textColor="@color/bp_text_primary"
+                    android:textSize="16sp"
+                    app:icon="@drawable/ic_payments"
+                    app:iconPadding="14dp"
+                    app:iconTint="@color/bp_primary" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnReports"
+                    style="@style/Widget.Material3.Button.TextButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="64dp"
+                    android:gravity="start|center_vertical"
+                    android:paddingStart="16dp"
+                    android:paddingEnd="16dp"
+                    android:text="@string/menu_reports"
+                    android:textColor="@color/bp_text_primary"
+                    android:textSize="16sp"
+                    app:icon="@drawable/ic_reports"
+                    app:iconPadding="14dp"
+                    app:iconTint="@color/bp_primary" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            app:cardCornerRadius="12dp"
-            app:cardElevation="1dp">
+            android:layout_marginTop="24dp"
+            app:cardBackgroundColor="@color/bp_surface"
+            app:cardCornerRadius="16dp"
+            app:cardElevation="1dp"
+            app:strokeWidth="0dp">
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -54,33 +319,42 @@
                 android:padding="16dp">
 
                 <TextView
-                    android:layout_width="wrap_content"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="@string/home_chart_title"
-                    android:textStyle="bold"
-                    android:layout_marginBottom="8dp" />
+                    android:textColor="@color/bp_text_primary"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
 
                 <com.biopay.agent.home.SimpleBarChartView
                     android:id="@+id/chartPayments"
                     android:layout_width="match_parent"
-                    android:layout_height="180dp" />
+                    android:layout_height="180dp"
+                    android:layout_marginTop="8dp" />
             </LinearLayout>
-        </androidx.cardview.widget.CardView>
+        </com.google.android.material.card.MaterialCardView>
 
-        <!-- Menu grid -->
-        <GridLayout
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnLogout"
+            style="@style/BioPay.SecondaryButton"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:columnCount="3">
-
-            <Button android:id="@+id/btnHouseholds" style="@style/BioPay.MenuButton" android:text="@string/menu_households" android:layout_columnWeight="1" />
-            <Button android:id="@+id/btnAlternates" style="@style/BioPay.MenuButton" android:text="@string/menu_alternates" android:layout_columnWeight="1" />
-            <Button android:id="@+id/btnPayments" style="@style/BioPay.MenuButton" android:text="@string/menu_payments" android:layout_columnWeight="1" />
-            <Button android:id="@+id/btnAttendance" style="@style/BioPay.MenuButton" android:text="@string/menu_attendance" android:layout_columnWeight="1" />
-            <Button android:id="@+id/btnReports" style="@style/BioPay.MenuButton" android:text="@string/menu_reports" android:layout_columnWeight="1" />
-            <Button android:id="@+id/btnLogout" style="@style/BioPay.MenuButton" android:text="@string/menu_logout" android:layout_columnWeight="1" />
-        </GridLayout>
-
+            android:layout_marginTop="24dp"
+            android:text="@string/menu_logout"
+            android:textColor="@color/bp_error"
+            app:icon="@drawable/ic_logout"
+            app:iconTint="@color/bp_error"
+            app:strokeColor="@color/bp_outline_variant" />
     </LinearLayout>
-</ScrollView>
+    </androidx.core.widget.NestedScrollView>
+
+    <com.google.android.material.bottomnavigation.BottomNavigationView
+        android:id="@+id/bottomNavigation"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@color/bp_surface"
+        android:minHeight="72dp"
+        app:itemIconTint="@color/navigation_item_color"
+        app:itemTextColor="@color/navigation_item_color"
+        app:labelVisibilityMode="labeled"
+        app:menu="@menu/main_navigation" />
+</LinearLayout>

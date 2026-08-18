@@ -1,43 +1,122 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/bp_background">
+    android:background="@color/bp_background"
+    android:fitsSystemWindows="true"
+    android:orientation="vertical">
 
-    <LinearLayout
+    <com.google.android.material.appbar.MaterialToolbar
+        android:id="@+id/toolbar"
+        style="@style/BioPay.Toolbar"
+        app:navigationIcon="@drawable/ic_arrow_back"
+        app:navigationIconTint="@color/bp_text_primary" />
+
+    <androidx.core.widget.NestedScrollView
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:padding="16dp">
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:clipToPadding="false"
+        android:fillViewport="true">
 
-        <TextView style="@style/BioPay.SectionHeader" android:text="@string/section_personal_info" />
-        <EditText android:id="@+id/etHouseholdName" style="@style/BioPay.FormField" android:hint="@string/field_household_name" />
-        <EditText android:id="@+id/etIdNumber" style="@style/BioPay.FormField" android:hint="@string/field_id_number" />
-        <EditText android:id="@+id/etPhoneNumber" style="@style/BioPay.FormField" android:hint="@string/field_phone_number" android:inputType="phone" />
-        <EditText android:id="@+id/etAge" style="@style/BioPay.FormField" android:hint="@string/field_age" android:inputType="number" />
-        <Spinner android:id="@+id/spinnerGender" style="@style/BioPay.FormField" />
-
-        <TextView style="@style/BioPay.SectionHeader" android:text="@string/section_location" />
-        <EditText android:id="@+id/etStateCode" style="@style/BioPay.FormField" android:hint="@string/field_state_code" />
-        <EditText android:id="@+id/etBomaCode" style="@style/BioPay.FormField" android:hint="@string/field_boma_code" />
-
-        <TextView style="@style/BioPay.SectionHeader" android:text="@string/section_household_breakdown" />
-        <EditText android:id="@+id/etHouseholdSize" style="@style/BioPay.FormField" android:hint="@string/field_household_size" android:inputType="number" />
-        <EditText android:id="@+id/etMaleDependants" style="@style/BioPay.FormField" android:hint="@string/field_male_dependants" android:inputType="number" />
-        <EditText android:id="@+id/etFemaleDependants" style="@style/BioPay.FormField" android:hint="@string/field_female_dependants" android:inputType="number" />
-        <CheckBox android:id="@+id/cbDisabledMembers" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/field_has_disabled_members" />
-
-        <TextView style="@style/BioPay.SectionHeader" android:text="@string/section_vulnerability_literacy" />
-        <CheckBox android:id="@+id/cbLiteracy" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/field_literate" />
-        <CheckBox android:id="@+id/cbEligible" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/field_eligible" android:checked="true" />
-
-        <Button
-            android:id="@+id/btnSave"
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="24dp"
-            android:backgroundTint="@color/bp_primary"
-            android:text="@string/household_save_continue" />
+            android:orientation="vertical"
+            android:paddingStart="16dp"
+            android:paddingTop="8dp"
+            android:paddingEnd="16dp"
+            android:paddingBottom="24dp">
 
-    </LinearLayout>
-</ScrollView>
+            <TextView
+                android:id="@+id/tvFormTitle"
+                style="@style/BioPay.ScreenTitle" />
+            <TextView
+                style="@style/BioPay.SupportingText"
+                android:layout_marginTop="4dp"
+                android:text="@string/household_form_offline_note" />
+
+            <TextView style="@style/BioPay.SectionHeader" android:text="@string/section_personal_info" />
+
+            <com.google.android.material.textfield.TextInputLayout style="@style/BioPay.FormField" android:hint="@string/field_household_name">
+                <com.google.android.material.textfield.TextInputEditText android:id="@+id/etHouseholdName" android:layout_width="match_parent" android:layout_height="wrap_content" android:inputType="textCapWords" android:imeOptions="actionNext" android:singleLine="true" />
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <com.google.android.material.textfield.TextInputLayout style="@style/BioPay.FormField" android:hint="@string/field_id_number">
+                <com.google.android.material.textfield.TextInputEditText android:id="@+id/etIdNumber" android:layout_width="match_parent" android:layout_height="wrap_content" android:inputType="text" android:imeOptions="actionNext" android:singleLine="true" />
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <com.google.android.material.textfield.TextInputLayout style="@style/BioPay.FormField" android:hint="@string/field_phone_number">
+                <com.google.android.material.textfield.TextInputEditText android:id="@+id/etPhoneNumber" android:layout_width="match_parent" android:layout_height="wrap_content" android:inputType="phone" android:imeOptions="actionNext" android:singleLine="true" />
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <com.google.android.material.textfield.TextInputLayout style="@style/BioPay.FormField" android:hint="@string/field_age">
+                <com.google.android.material.textfield.TextInputEditText android:id="@+id/etAge" android:layout_width="match_parent" android:layout_height="wrap_content" android:inputType="number" android:imeOptions="actionNext" android:singleLine="true" />
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <com.google.android.material.textfield.TextInputLayout
+                style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="12dp"
+                android:hint="@string/field_gender">
+                <com.google.android.material.textfield.MaterialAutoCompleteTextView android:id="@+id/spinnerGender" android:layout_width="match_parent" android:layout_height="wrap_content" android:inputType="none" />
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <TextView style="@style/BioPay.SectionHeader" android:text="@string/section_biometric_registration" />
+            <com.google.android.material.textfield.TextInputLayout
+                style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="10dp"
+                android:hint="@string/field_registration_method">
+                <com.google.android.material.textfield.MaterialAutoCompleteTextView android:id="@+id/spinnerRegistrationMethod" android:layout_width="match_parent" android:layout_height="wrap_content" android:inputType="none" />
+            </com.google.android.material.textfield.TextInputLayout>
+            <TextView style="@style/BioPay.SupportingText" android:text="@string/biometric_registration_note" />
+
+            <TextView style="@style/BioPay.SectionHeader" android:text="@string/section_location" />
+            <com.google.android.material.textfield.TextInputLayout style="@style/BioPay.FormField" android:hint="@string/field_state_code">
+                <com.google.android.material.textfield.TextInputEditText android:id="@+id/etStateCode" android:layout_width="match_parent" android:layout_height="wrap_content" android:inputType="textCapCharacters" android:imeOptions="actionNext" android:singleLine="true" />
+            </com.google.android.material.textfield.TextInputLayout>
+            <com.google.android.material.textfield.TextInputLayout style="@style/BioPay.FormField" android:hint="@string/field_boma_code">
+                <com.google.android.material.textfield.TextInputEditText android:id="@+id/etBomaCode" android:layout_width="match_parent" android:layout_height="wrap_content" android:inputType="textCapCharacters" android:imeOptions="actionNext" android:singleLine="true" />
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <TextView style="@style/BioPay.SectionHeader" android:text="@string/section_household_breakdown" />
+            <com.google.android.material.textfield.TextInputLayout style="@style/BioPay.FormField" android:hint="@string/field_household_size">
+                <com.google.android.material.textfield.TextInputEditText android:id="@+id/etHouseholdSize" android:layout_width="match_parent" android:layout_height="wrap_content" android:inputType="number" android:imeOptions="actionNext" android:singleLine="true" />
+            </com.google.android.material.textfield.TextInputLayout>
+            <com.google.android.material.textfield.TextInputLayout style="@style/BioPay.FormField" android:hint="@string/field_male_dependants">
+                <com.google.android.material.textfield.TextInputEditText android:id="@+id/etMaleDependants" android:layout_width="match_parent" android:layout_height="wrap_content" android:inputType="number" android:imeOptions="actionNext" android:singleLine="true" />
+            </com.google.android.material.textfield.TextInputLayout>
+            <com.google.android.material.textfield.TextInputLayout style="@style/BioPay.FormField" android:hint="@string/field_female_dependants">
+                <com.google.android.material.textfield.TextInputEditText android:id="@+id/etFemaleDependants" android:layout_width="match_parent" android:layout_height="wrap_content" android:inputType="number" android:imeOptions="actionDone" android:singleLine="true" />
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <TextView style="@style/BioPay.SectionHeader" android:text="@string/section_vulnerability_literacy" />
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                app:cardBackgroundColor="@color/bp_surface"
+                app:cardCornerRadius="14dp"
+                app:cardElevation="1dp"
+                app:strokeWidth="0dp">
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="8dp">
+                    <com.google.android.material.checkbox.MaterialCheckBox android:id="@+id/cbDisabledMembers" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="52dp" android:text="@string/field_has_disabled_members" />
+                    <com.google.android.material.checkbox.MaterialCheckBox android:id="@+id/cbLiteracy" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="52dp" android:text="@string/field_literate" />
+                    <com.google.android.material.checkbox.MaterialCheckBox android:id="@+id/cbEligible" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="52dp" android:checked="true" android:text="@string/field_eligible" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnSave"
+        style="@style/BioPay.PrimaryButton"
+        android:layout_marginStart="16dp"
+        android:layout_marginTop="8dp"
+        android:layout_marginEnd="16dp"
+        android:layout_marginBottom="16dp"
+        android:text="@string/household_save_continue" />
+</LinearLayout>

@@ -493,8 +493,8 @@ async function submitBulk() {
           </v-chip>
         </template>
         <template #item.actions="{ item }">
-          <v-btn icon="mdi-eye" variant="text" size="small" @click="viewDetail(item)" />
-          <v-btn icon="mdi-delete" variant="text" size="small" color="error" @click="remove(item)" />
+          <v-btn icon="mdi-eye" variant="text" size="small" :aria-label="`View household ${item.householdName}`" @click="viewDetail(item)" />
+          <v-btn icon="mdi-delete" variant="text" size="small" color="error" :aria-label="`Delete household ${item.householdName}`" @click="remove(item)" />
         </template>
       </v-data-table>
     </v-card>

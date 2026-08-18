@@ -36,7 +36,9 @@ import com.biopay.utilities.Utilities;
  * #verifyLoginOtp} accept, and only over the public /authentication route,
  * never the JWT-protected one -- so a pending token can't be replayed
  * against any real endpoint. The real session (access + refresh tokens) is
- * only minted once the OTP step succeeds, in {@link #finishLogin}.
+ * only minted once the OTP step succeeds, in {@link #finishLogin}. Development
+ * and test environments may explicitly set {@code OTP_REQUIRED=false}; every
+ * missing or unrecognised value keeps OTP enabled.
  */
 public class Auth extends AbstractVerticle {
 
@@ -66,6 +68,7 @@ public class Auth extends AbstractVerticle {
         eventBus.consumer("REFRESH_TOKEN", this::refreshToken);
         eventBus.consumer("LOGOUT", this::logout);
         eventBus.consumer("CHANGE_PASSWORD", this::changePassword);
+        eventBus.consumer("UPDATE_PROFILE", this::updateProfile);
         eventBus.consumer("ME", this::me);
         eventBus.consumer("TOTP_SETUP_INIT", this::totpSetupInit);
         eventBus.consumer("TOTP_SETUP_CONFIRM", this::totpSetupConfirm);
@@ -95,6 +98,14 @@ public class Auth extends AbstractVerticle {
 
     private static String frontendBaseUrl() {
         return Dotenv.load().get("FRONTEND_BASE_URL", "http://localhost:5173");
+    }
+
+    static boolean isOtpRequired(String configuredValue) {
+        return configuredValue == null || !"false".equalsIgnoreCase(configuredValue.trim());
+    }
+
+    private static boolean otpRequired() {
+        return isOtpRequired(Dotenv.load().get("OTP_REQUIRED", "true"));
     }
 
     /** JWTOptions#setSubject serializes "sub" as a string per the JWT spec, overriding whatever
@@ -171,7 +182,11 @@ public class Auth extends AbstractVerticle {
                     Integer anchorId = intOr(r, "anchor_id", null);
                     String partnerCode = "ORGANISATION".equalsIgnoreCase(scope) ? Rows.str(r, "partner_code") : null;
                     boolean totpEnabled = Boolean.TRUE.equals(r.getBoolean("totp_enabled"));
-                    startOtpChallenge(message, id, scope, anchorId, partnerCode, email, totpEnabled);
+                    if (otpRequired()) {
+                        startOtpChallenge(message, id, scope, anchorId, partnerCode, email, totpEnabled);
+                    } else {
+                        finishLogin(message, id, ip);
+                    }
                 });
     }
 
@@ -378,25 +393,72 @@ public class Auth extends AbstractVerticle {
         String passwordHash = Passwords.hash(password);
         String displayName = authorisedName.isEmpty() ? name : authorisedName;
 
-        Future<Integer> anchorIdF = pool.preparedQuery(
+        pool.withTransaction(connection -> connection.preparedQuery(
                         "INSERT INTO anchors (anchor_code, name, authorised_name, authorised_email, authorised_contact, "
                                 + "address, status, created_by, created_at) OUTPUT INSERTED.id "
                                 + "VALUES (@p1,@p2,@p3,@p4,@p5,@p6,1,@p7,GETDATE())")
                 .execute(Tuple.of(anchorCode, name, authorisedName, email, phone, address, "SIGNUP"))
-                .map(rows -> intOr(rows.iterator().next(), "id", 0));
-
-        anchorIdF.compose(anchorId -> pool.preparedQuery(
+                .map(rows -> intOr(rows.iterator().next(), "id", 0))
+                .compose(anchorId -> connection.preparedQuery(
                                 "INSERT INTO users (partner_code, email, username, password, first_name, other_names, "
                                         + "role_id, active, status, anchor_id, user_scope, created_at, updated_at) OUTPUT INSERTED.id "
-                                        + "VALUES (NULL, @p1, @p1, @p2, @p3, '', 1, 1, 1, @p4, 'ANCHOR', GETDATE(), GETDATE())")
+                                        + "VALUES (NULL, @p1, @p1, @p2, @p3, '', "
+                                        + "(SELECT TOP 1 id FROM roles WHERE role_name='Anchor Administrator' AND status=1), "
+                                        + "1, 1, @p4, 'ANCHOR', GETDATE(), GETDATE())")
                         .execute(Tuple.of(email, passwordHash, displayName, anchorId))
-                        .map(rows -> new JsonObject().put("anchorId", anchorId).put("userId", intOr(rows.iterator().next(), "id", 0))))
+                        .map(rows -> new JsonObject()
+                                .put("anchorId", anchorId)
+                                .put("userId", intOr(rows.iterator().next(), "id", 0)))))
                 .onFailure(err -> onDbError(message, err))
                 .onSuccess(ids -> {
                     int userId = ids.getInteger("userId");
                     int anchorId = ids.getInteger("anchorId");
                     audit(userId, anchorId, "USER", null, "SIGNUP_SUCCESS", ip, new JsonObject());
-                    startOtpChallenge(message, userId, "ANCHOR", anchorId, null, email, false);
+                    if (otpRequired()) {
+                        startOtpChallenge(message, userId, "ANCHOR", anchorId, null, email, false);
+                    } else {
+                        finishLogin(message, userId, ip);
+                    }
+                });
+    }
+
+    // ---- UPDATE_PROFILE (authenticated) ----------------------------------------
+
+    private void updateProfile(Message<Object> message) {
+        JsonObject payload = new JsonObject(message.body().toString());
+        String actorRole = payload.getString("actorRole", "");
+        Object actorIdVal = payload.getValue("actorId");
+        String firstName = payload.getString("firstName", "").trim();
+        String lastName = payload.getString("lastName", "").trim();
+
+        if (actorIdVal == null || firstName.isEmpty()) {
+            replyError(message, "First name is required");
+            return;
+        }
+        if (firstName.length() > 100 || lastName.length() > 150) {
+            replyError(message, "Profile names are too long");
+            return;
+        }
+
+        int actorId = Integer.parseInt(actorIdVal.toString());
+        boolean supervisor = "SUPERVISOR".equalsIgnoreCase(actorRole);
+        String sql = supervisor
+                ? "UPDATE supervisors SET firstname=@p1, lastname=@p2 WHERE id=@p3"
+                : "UPDATE users SET first_name=@p1, other_names=@p2, updated_at=GETDATE() WHERE id=@p3";
+
+        pool.preparedQuery(sql)
+                .execute(Tuple.of(firstName, lastName, actorId))
+                .onFailure(err -> onDbError(message, err))
+                .onSuccess(rows -> {
+                    if (rows.rowCount() == 0) {
+                        replyError(message, "Account not found");
+                        return;
+                    }
+                    reply(message, new JsonObject()
+                            .put("responseCode", "000")
+                            .put("responseMessage", "Profile updated")
+                            .put("firstName", firstName)
+                            .put("lastName", lastName));
                 });
     }
 

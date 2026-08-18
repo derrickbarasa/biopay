@@ -224,7 +224,7 @@ onMounted(load)
 <template>
   <div>
     <div class="d-flex align-center mb-4 ga-3">
-      <v-btn icon="mdi-arrow-left" variant="text" @click="goBack" />
+      <v-btn icon="mdi-arrow-left" variant="text" aria-label="Back to households" @click="goBack" />
       <div>
         <h1 class="text-h5 font-weight-bold mb-0">
           {{ detail?.householdName ?? 'Household' }}

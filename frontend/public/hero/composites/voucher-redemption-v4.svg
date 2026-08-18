@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1448" height="1086" viewBox="0 0 1448 1086">
+  <defs>
+    <clipPath id="voucher"><polygon points="470,654 685,654 688,738 471,739"/></clipPath>
+    <clipPath id="phone"><polygon points="799,526 891,512 935,693 841,718"/></clipPath>
+  </defs>
+  <image href="../voucher-redemption-v4-base.png" width="1448" height="1086"/>
+  <g clip-path="url(#voucher)">
+    <image href="../../biopay_logo_horizontal.svg" x="486" y="658" width="112" height="30" preserveAspectRatio="xMidYMid meet"/>
+  </g>
+  <g clip-path="url(#phone)" transform="rotate(-9 858 556)">
+    <image href="../../biopay_logo_horizontal.svg" x="819" y="540" width="80" height="22" preserveAspectRatio="xMidYMid meet"/>
+  </g>
+</svg>

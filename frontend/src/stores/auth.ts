@@ -13,6 +13,12 @@ interface SessionResponse {
   user: SessionUser
 }
 
+type LoginResponse = PendingLogin | SessionResponse
+
+function isSessionResponse(data: LoginResponse): data is SessionResponse {
+  return 'accessToken' in data && 'refreshToken' in data && 'user' in data
+}
+
 export const useAuthStore = defineStore('auth', () => {
   const token = ref<string | null>(storedToken())
   const user = ref<SessionUser | null>(readStoredUser<SessionUser>())
@@ -69,20 +75,27 @@ export const useAuthStore = defineStore('auth', () => {
     pendingLogin.value = null
   }
 
-  /** Anchor and organisation admins share one sign-in form now -- the backend reads which
-   *  one off the row, the caller doesn't say. Password verified is NOT logged in yet: this
-   *  only returns the OTP challenge (see requestLoginOtp / verifyLoginOtp). */
-  async function login(email: string, password: string): Promise<PendingLogin> {
-    const data = await dispatch<PendingLogin>('LOGIN_USER', { email, password })
+  /** Returns true when the server requires the OTP page, or false when the current
+   *  environment explicitly permits password-only login and returned a full session. */
+  async function login(email: string, password: string): Promise<boolean> {
+    const data = await dispatch<LoginResponse>('LOGIN_USER', { email, password })
+    if (isSessionResponse(data)) {
+      applySession(data)
+      return false
+    }
     pendingLogin.value = data
-    return data
+    return true
   }
 
-  /** Same password-then-OTP flow as login(), just creating the anchor account first. */
-  async function signup(fields: { name: string; authorisedName?: string; email: string; phone?: string; address?: string; password: string }): Promise<PendingLogin> {
-    const data = await dispatch<PendingLogin>('SIGNUP_ANCHOR', fields)
+  /** Account creation follows the server's configured OTP mode too. */
+  async function signup(fields: { name: string; authorisedName?: string; email: string; phone?: string; address?: string; password: string }): Promise<boolean> {
+    const data = await dispatch<LoginResponse>('SIGNUP_ANCHOR', fields)
+    if (isSessionResponse(data)) {
+      applySession(data)
+      return false
+    }
     pendingLogin.value = data
-    return data
+    return true
   }
 
   /** EMAIL sends a fresh code; TOTP has nothing to send (the code comes from the user's app). */
@@ -133,10 +146,15 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.setItem('bp_user', JSON.stringify(data.user))
   }
 
+  async function updateProfile(firstName: string, lastName: string) {
+    await dispatch('UPDATE_PROFILE', { firstName, lastName })
+    await refreshProfile()
+  }
+
   return {
     token, user, pendingLogin, isAuthenticated, role, isAnchor, isOrganisation, isSupervisor,
     fullName, initials, roleLabel, can, hasModule,
     login, signup, requestLoginOtp, verifyLoginOtp, cancelPendingLogin, requestPasswordReset, resetPassword,
-    logout, refreshProfile,
+    logout, refreshProfile, updateProfile,
   }
 })

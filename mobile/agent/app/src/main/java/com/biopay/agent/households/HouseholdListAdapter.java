@@ -7,6 +7,7 @@ import android.view.ViewGroup;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
+import androidx.core.content.ContextCompat;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.biopay.agent.R;
@@ -47,10 +48,14 @@ public class HouseholdListAdapter extends RecyclerView.Adapter<HouseholdListAdap
         HouseholdDao.Household household = households.get(position);
         Context context = holder.itemView.getContext();
         holder.tvName.setText(household.householdName);
-        holder.tvSubtitle.setText(context.getString(R.string.household_subtitle, household.householdNumber, household.bomaCode));
+        String boma = household.bomaCode == null || household.bomaCode.isEmpty() ? "-" : household.bomaCode;
+        holder.tvSubtitle.setText(context.getString(
+                R.string.household_subtitle, household.householdNumber, boma));
         boolean synced = household.syncStatus == DatabaseHelper.SYNC_SYNCED;
         holder.tvSyncStatus.setText(synced ? R.string.household_synced : R.string.household_pending_sync);
-        holder.tvSyncStatus.setTextColor(context.getColor(synced ? R.color.bp_success : R.color.bp_secondary));
+        holder.tvSyncStatus.setTextColor(ContextCompat.getColor(context, synced ? R.color.bp_success : R.color.bp_secondary));
+        holder.tvSyncStatus.setBackgroundResource(
+                synced ? R.drawable.bg_status_success : R.drawable.bg_status_warning);
         holder.itemView.setOnClickListener(v -> listener.onHouseholdClick(household));
     }
 

@@ -23,7 +23,7 @@ function submitDemo() {
 }
 
 // Hero carousel -- five value props, each with a full-bleed background photo.
-// Drop the actual files into frontend/public/hero/ using the filenames below
+// Project-owned AI-generated carousel images live in frontend/public/hero/.
 // (landscape, 1800px+ wide works well as background-size:cover) and they'll
 // pick up automatically -- nothing else needs to change.
 const heroSlides = [
@@ -31,31 +31,31 @@ const heroSlides = [
     icon: 'cash', tone: 'primary', eyebrow: 'Cash transfers',
     title: 'Cash assistance, delivered with certainty.',
     copy: 'Generate a payment cycle, verify each recipient by fingerprint or face, and disburse — with a maker-checker approval trail from anchor to organisation.',
-    image: '/hero/cash-transfers.jpg',
+    image: '/hero/cash-transfers-v3.png',
   },
   {
     icon: 'voucher', tone: 'accent', eyebrow: 'Voucher redemption',
     title: 'Choice at the market, accountability at every step.',
     copy: 'Issue biometric-verified vouchers households can redeem with confidence, while every issue, redemption and void stays on a traceable ledger.',
-    image: '/hero/voucher-redemption.jpg',
+    image: '/hero/voucher-redemption-v4.png',
   },
   {
     icon: 'fingerprint', tone: 'primary', eyebrow: 'Biometric verification',
     title: 'The right person gets paid — every single time.',
     copy: 'A live fingerprint or face scan checked against the enrolled template at the moment of payment, even with no signal to check it against a server.',
-    image: '/hero/biometric-verification.jpg',
+    image: '/hero/biometric-verification-v3.png',
   },
   {
     icon: 'dedup', tone: 'accent', eyebrow: 'Deduplication',
     title: 'One household, one record — fraud stopped before it starts.',
     copy: 'Every new registration is screened against existing records for the same name, phone number and location before it is ever accepted.',
-    image: '/hero/deduplication.jpg',
+    image: '/hero/deduplication-v3.png',
   },
   {
     icon: 'ai', tone: 'primary', eyebrow: 'AI agent',
     title: 'An agent that never stops watching the ledger.',
     copy: 'Registrations and disbursements are reviewed as they land, flagging the patterns a person reviewing thousands of rows would miss.',
-    image: '/hero/ai-agent.jpg',
+    image: '/hero/ai-agent-v3.png',
   },
 ]
 const activeHero = ref(0)
@@ -581,6 +581,8 @@ onBeforeUnmount(() => {
   --max-width: 1180px;
 
   display: block;
+  width: 100%;
+  overflow-x: clip;
   background: var(--color-bg);
   color: var(--color-text);
   font-family: var(--font-body);
@@ -593,6 +595,16 @@ onBeforeUnmount(() => {
    no prefers-color-scheme:dark override, so it never flips to a dark teal theme. */
 
 .landing-root * { box-sizing: border-box; }
+
+:global(html) {
+  scroll-behavior: smooth;
+  scroll-padding-top: 5rem;
+}
+
+.landing-root section,
+.landing-root footer {
+  scroll-margin-top: 5rem;
+}
 
 .landing-root h1, .landing-root h2, .landing-root h3, .landing-root h4 {
   font-family: var(--font-display);
@@ -613,6 +625,34 @@ onBeforeUnmount(() => {
 }
 @media (max-width: 640px) {
   .landing-root .wrap { padding-left: var(--space-3); padding-right: var(--space-3); }
+}
+
+/* Use the extra canvas on large monitors without stretching readable copy.
+   Laptop/tablet layouts keep the original 1180px measure. */
+@media (min-width: 1440px) {
+  .landing-root {
+    --max-width: 1440px;
+    --step-body-lg: 1.25rem;
+    --step-h1: clamp(4rem, 3rem + 1.35vw, 4.75rem);
+    --step-h2: clamp(2.5rem, 2rem + 0.75vw, 3rem);
+  }
+
+  .landing-root .wrap {
+    padding-left: 3rem;
+    padding-right: 3rem;
+  }
+
+}
+
+@media (min-width: 2200px) {
+  .landing-root {
+    --max-width: 1680px;
+    --step-body: 1.0625rem;
+    --step-body-lg: 1.375rem;
+    --step-h1: 5rem;
+    --step-h2: 3.125rem;
+  }
+
 }
 
 .landing-root .eyebrow {
@@ -710,6 +750,12 @@ onBeforeUnmount(() => {
   .landing-root .nav-links { display: none; }
   .landing-root .nav-toggle { display: inline-flex; }
 }
+@media (max-width: 480px) {
+  .landing-root .brand-logo { width: 150px; }
+  .landing-root .nav-login { display: none; }
+  .landing-root .nav-actions { gap: var(--space-1); }
+  .landing-root .nav-actions .btn { padding: 0.75em 1em; font-size: 0.84rem; }
+}
 .landing-root .mobile-nav { display: none; flex-direction: column; align-items: flex-start; gap: 0; padding: 0 1.25rem 1rem; }
 @media (max-width: 860px) {
   .landing-root .mobile-nav { display: flex; }
@@ -717,7 +763,7 @@ onBeforeUnmount(() => {
 .landing-root .mobile-nav a { padding: 0.5rem 0; text-decoration: none; color: var(--color-text-muted); }
 
 /* Hero -- full-bleed photo carousel. Backgrounds come from heroSlides[].image
-   (frontend/public/hero/*.jpg); until those files exist the section still
+   (frontend/public/hero/ versioned PNGs); until those files exist the section still
    works, just showing the scrim gradient with no photo underneath. */
 .landing-root .hero-visual { position: relative; isolation: isolate; overflow: hidden; min-height: 560px; display: flex; flex-direction: column; justify-content: center; border-top: none; border-bottom: 0; }
 .landing-root .hero-image, .landing-root .hero-scrim { position: absolute; inset: 0; }
@@ -740,9 +786,9 @@ onBeforeUnmount(() => {
 .landing-root .hero-visual .btn-ghost { color: #fff; border-color: rgba(255, 255, 255, .55); }
 .landing-root .hero-visual .btn-ghost:hover { background: rgba(255, 255, 255, .12); border-color: #fff; }
 .landing-root .hero-dots { display: flex; gap: 9px; margin-top: var(--space-4); }
-.landing-root .hero-dots button { width: 26px; height: 4px; padding: 0; border: 0; border-radius: 99px; background: rgba(255, 255, 255, .38); cursor: pointer; transition: width .2s ease, background .2s ease; }
+.landing-root .hero-dots button { width: 42px; height: 4px; padding: 0; border: 0; border-radius: 99px; background: rgba(255, 255, 255, .38); cursor: pointer; transform: scaleX(.62); transform-origin: left center; transition: transform .2s ease, background .2s ease; }
 .landing-root .hero-dots button:hover { background: rgba(255, 255, 255, .6); }
-.landing-root .hero-dots button.active { width: 42px; background: #fbbf24; }
+.landing-root .hero-dots button.active { background: #fbbf24; transform: scaleX(1); }
 .landing-root .hero-facts { display: flex; gap: var(--space-4); margin-top: var(--space-4); flex-wrap: wrap; }
 .landing-root .hero-fact { font-size: 0.85rem; color: rgba(255, 255, 255, .78); display: flex; align-items: baseline; gap: 0.4em; }
 .landing-root .hero-fact strong { font-family: var(--font-mono); color: #fff; font-size: 0.95rem; }
@@ -779,6 +825,7 @@ onBeforeUnmount(() => {
 
 /* Mission */
 .landing-root .mission .wrap { display: grid; grid-template-columns: 0.9fr 1.1fr; gap: var(--space-5); }
+.landing-root .mission .wrap > * { min-width: 0; }
 @media (max-width: 860px) { .landing-root .mission .wrap { grid-template-columns: 1fr; } }
 .landing-root .mission h2 { font-size: var(--step-h2); }
 .landing-root .mission-body { color: var(--color-text-muted); font-size: var(--step-body-lg); }
@@ -787,6 +834,7 @@ onBeforeUnmount(() => {
 
 /* Steps */
 .landing-root .steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-4); margin-top: var(--space-5); }
+.landing-root .steps > * { min-width: 0; }
 @media (max-width: 960px) { .landing-root .steps { grid-template-columns: 1fr 1fr; } }
 @media (max-width: 560px) { .landing-root .steps { grid-template-columns: 1fr; } }
 .landing-root .step-num {
@@ -815,7 +863,19 @@ onBeforeUnmount(() => {
 }
 @media (max-width: 860px) { .landing-root .feature-grid { grid-template-columns: 1fr 1fr; } }
 @media (max-width: 560px) { .landing-root .feature-grid { grid-template-columns: 1fr; } }
-.landing-root .feature { background: var(--color-surface); padding: var(--space-4); display: flex; flex-direction: column; gap: var(--space-2); min-height: 190px; }
+.landing-root .feature {
+  position: relative;
+  z-index: 0;
+  background: var(--color-surface);
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-height: 190px;
+  transition: transform 220ms cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 220ms cubic-bezier(0.16, 1, 0.3, 1),
+    background-color 180ms ease;
+}
 .landing-root .feature-icon { width: 42px; height: 42px; border-radius: 10px; background: var(--color-primary-soft); display: grid; place-items: center; margin-bottom: 0.2rem; }
 .landing-root .feature-icon.accent { background: var(--color-accent-soft); }
 .landing-root .feature-tag { font-family: var(--font-mono); font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--color-text-muted); }
@@ -823,18 +883,46 @@ onBeforeUnmount(() => {
 .landing-root .feature p { color: var(--color-text-muted); font-size: 0.9rem; flex: 1; }
 .landing-root .feature-foot { font-family: var(--font-mono); font-size: 0.75rem; color: var(--color-primary); margin-top: auto; }
 
-.landing-root .mini-widget { border: 1px solid var(--color-line); border-radius: 10px; padding: var(--space-3); background: var(--color-surface-2); font-size: 0.82rem; }
+@media (hover: hover) and (pointer: fine) {
+  .landing-root .feature:hover {
+    z-index: 2;
+    transform: translateY(-6px);
+    background: color-mix(in srgb, var(--color-surface) 94%, var(--color-primary-soft));
+    box-shadow: 0 18px 36px -24px var(--shadow-color);
+  }
+  .landing-root .feature:hover .feature-icon {
+    transform: translateY(-2px) rotate(-2deg);
+    box-shadow: 0 10px 20px -14px var(--shadow-color);
+  }
+  .landing-root .feature:active { transform: translateY(-2px) scale(0.992); }
+}
+
+.landing-root .feature-icon {
+  transition: transform 220ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 220ms ease;
+}
+
+.landing-root .mini-widget { border: 1px solid var(--color-line); border-radius: 10px; padding: var(--space-3); background: var(--color-surface-2); font-size: 0.82rem; transition: transform 180ms ease, box-shadow 180ms ease; }
 .landing-root .mini-widget .row { display: flex; justify-content: space-between; margin-top: 0.35em; }
 .landing-root .mini-widget .row span:last-child { font-family: var(--font-mono); }
 .landing-root .mini-widget .match { color: var(--color-danger); font-weight: 700; font-family: var(--font-mono); }
 .landing-root .ai-line { display: flex; gap: 0.6em; align-items: flex-start; }
 .landing-root .ai-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--color-accent); margin-top: 6px; flex-shrink: 0; }
 
+@media (hover: hover) and (pointer: fine) {
+  .landing-root .mini-widget:hover,
+  .landing-root .kpi:hover,
+  .landing-root .phone-kpi:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 12px 24px -20px var(--shadow-color);
+  }
+}
+
 /* Showcase */
 .landing-root .showcase-grid { display: grid; grid-template-columns: 1.55fr 1fr; gap: var(--space-5); margin-top: var(--space-5); align-items: start; }
+.landing-root .showcase-grid > * { min-width: 0; }
 @media (max-width: 900px) { .landing-root .showcase-grid { grid-template-columns: 1fr; } }
 
-.landing-root .dash { background: var(--color-surface); border: 1px solid var(--color-line); border-radius: var(--radius-card); overflow: hidden; box-shadow: 0 30px 60px -30px var(--shadow-color); }
+.landing-root .dash { background: var(--color-surface); border: 1px solid var(--color-line); border-radius: var(--radius-card); overflow: hidden; box-shadow: 0 30px 60px -30px var(--shadow-color); transition: transform 260ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 260ms ease; }
 .landing-root .dash-top { background: var(--color-primary); color: #fff; padding: 0.7rem 1rem; display: flex; align-items: center; gap: 0.6rem; font-size: 0.78rem; }
 .landing-root .dash-dot { width: 8px; height: 8px; border-radius: 50%; background: rgba(255, 255, 255, 0.5); }
 .landing-root .dash-body { display: grid; grid-template-columns: 150px 1fr; min-height: 300px; }
@@ -846,7 +934,7 @@ onBeforeUnmount(() => {
 .landing-root .dash-main { padding: 1rem 1.1rem; }
 .landing-root .dash-kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.6rem; }
 @media (max-width: 480px) { .landing-root .dash-kpis { grid-template-columns: 1fr; } }
-.landing-root .kpi { border: 1px solid var(--color-line); border-radius: 10px; padding: 0.7rem 0.8rem; }
+.landing-root .kpi { border: 1px solid var(--color-line); border-radius: 10px; padding: 0.7rem 0.8rem; transition: transform 180ms ease, box-shadow 180ms ease; }
 .landing-root .kpi .lbl { font-size: 0.68rem; color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.06em; }
 .landing-root .kpi .num { font-size: 1.25rem; font-weight: 700; display: block; margin-top: 0.15rem; }
 .landing-root .dash-table { margin-top: 0.9rem; border: 1px solid var(--color-line); border-radius: 10px; overflow: hidden; font-size: 0.78rem; }
@@ -857,13 +945,13 @@ onBeforeUnmount(() => {
 .landing-root .status-pill.paid { background: color-mix(in srgb, var(--color-success) 16%, transparent); color: var(--color-success); }
 .landing-root .status-pill.pending { background: color-mix(in srgb, var(--color-accent) 18%, transparent); color: var(--color-accent-deep); }
 
-.landing-root .phone { width: 240px; margin-inline: auto; border: 10px solid var(--color-text); border-radius: 34px; overflow: hidden; box-shadow: 0 30px 60px -30px var(--shadow-color); }
+.landing-root .phone { width: 240px; margin-inline: auto; border: 10px solid var(--color-text); border-radius: 34px; overflow: hidden; box-shadow: 0 30px 60px -30px var(--shadow-color); transition: transform 260ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 260ms ease; }
 .landing-root .phone-screen { background: var(--color-surface); min-height: 430px; }
 .landing-root .phone-head { background: var(--color-primary); color: #fff; padding: 1rem 0.9rem 1.4rem; }
 .landing-root .phone-head .welcome { font-size: 0.85rem; font-weight: 700; }
 .landing-root .phone-head .org { font-size: 0.68rem; opacity: 0.85; margin-top: 2px; font-family: var(--font-mono); }
 .landing-root .phone-kpis { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; padding: 0.8rem; margin-top: -1rem; }
-.landing-root .phone-kpi { background: var(--color-surface); border: 1px solid var(--color-line); border-radius: 9px; padding: 0.5rem 0.6rem; font-size: 0.68rem; box-shadow: 0 8px 16px -10px var(--shadow-color); }
+.landing-root .phone-kpi { background: var(--color-surface); border: 1px solid var(--color-line); border-radius: 9px; padding: 0.5rem 0.6rem; font-size: 0.68rem; box-shadow: 0 8px 16px -10px var(--shadow-color); transition: transform 180ms ease, box-shadow 180ms ease; }
 .landing-root .phone-kpi b { display: block; font-size: 0.95rem; font-family: var(--font-mono); }
 .landing-root .phone-menu { padding: 0 0.8rem; display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-top: 0.3rem; }
 .landing-root .phone-btn { background: var(--color-primary); color: #fff; border-radius: 8px; padding: 0.7rem 0.5rem; font-size: 0.68rem; text-align: center; font-weight: 600; }
@@ -872,15 +960,27 @@ onBeforeUnmount(() => {
 
 .landing-root .showcase-caption { margin-top: var(--space-3); font-size: 0.85rem; color: var(--color-text-muted); text-align: center; }
 
+@media (hover: hover) and (pointer: fine) {
+  .landing-root .dash:hover { transform: translateY(-5px); box-shadow: 0 36px 70px -34px var(--shadow-color); }
+  .landing-root .phone:hover { transform: translateY(-5px) rotate(0.4deg); box-shadow: 0 36px 70px -34px var(--shadow-color); }
+  .landing-root .dash:active,
+  .landing-root .phone:active { transform: translateY(-2px) scale(0.996); }
+}
+
 /* Request a demo */
 .landing-root #demo { background: var(--color-surface-2); }
 .landing-root .demo-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-5); align-items: center; }
+.landing-root .demo-grid > * { min-width: 0; }
 @media (max-width: 860px) { .landing-root .demo-grid { grid-template-columns: 1fr; } }
 .landing-root .demo-copy h2 { font-size: var(--step-h2); }
 .landing-root .demo-points { list-style: none; margin: var(--space-3) 0 0; padding: 0; display: grid; gap: 0.45rem; font-size: 0.92rem; color: var(--color-text-muted); }
 .landing-root .demo-points li { display: flex; gap: 0.5em; }
 .landing-root .demo-points li::before { content: "✓"; color: var(--color-primary); font-weight: 700; flex-shrink: 0; }
-.landing-root .demo-card { background: var(--color-surface); border: 1px solid var(--color-line); border-radius: var(--radius-card); padding: var(--space-4); box-shadow: 0 30px 60px -34px var(--shadow-color); }
+.landing-root .demo-card { background: var(--color-surface); border: 1px solid var(--color-line); border-radius: var(--radius-card); padding: var(--space-4); box-shadow: 0 30px 60px -34px var(--shadow-color); transition: transform 240ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 240ms ease; }
+.landing-root .demo-card:focus-within { transform: translateY(-3px); box-shadow: 0 34px 64px -34px var(--shadow-color); }
+@media (hover: hover) and (pointer: fine) {
+  .landing-root .demo-card:hover { transform: translateY(-4px); box-shadow: 0 34px 64px -34px var(--shadow-color); }
+}
 .landing-root .demo-form { display: grid; gap: var(--space-3); }
 .landing-root .demo-form label { display: grid; gap: 0.35rem; font-size: 0.82rem; font-weight: 600; color: var(--color-text); }
 .landing-root .demo-form input, .landing-root .demo-form textarea {
@@ -901,20 +1001,49 @@ onBeforeUnmount(() => {
 .landing-root .cta-band h2 { font-size: var(--step-h2); color: #fff; max-width: 20ch; }
 .landing-root .cta-band .lede { color: rgba(255, 255, 255, 0.75); margin-top: 0.5rem; max-width: 40ch; }
 
-.landing-root footer { padding: var(--space-5) 0 var(--space-4); }
+.landing-root footer {
+  padding: var(--space-5) 0 var(--space-4);
+  background: var(--color-accent);
+  color: #1A1200;
+}
 .landing-root .foot-grid { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--space-4); flex-wrap: wrap; }
 .landing-root .foot-brand .brand { margin-bottom: 0.5rem; }
-.landing-root .foot-brand p { color: var(--color-text-muted); font-size: 0.85rem; max-width: 34ch; }
+.landing-root .foot-brand p { color: rgba(26, 18, 0, 0.76); font-size: 0.85rem; max-width: 34ch; }
 .landing-root .foot-links { display: flex; gap: var(--space-5); flex-wrap: wrap; }
-.landing-root .foot-col h5 { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--color-text-muted); margin-bottom: 0.6rem; }
-.landing-root .foot-col a { display: block; font-size: 0.88rem; text-decoration: none; color: var(--color-text); margin-bottom: 0.5rem; }
-.landing-root .foot-col a:hover { color: var(--color-primary); }
-.landing-root .foot-bottom { margin-top: var(--space-5); padding-top: var(--space-3); border-top: 1px solid var(--color-line); display: flex; justify-content: space-between; font-size: 0.78rem; color: var(--color-text-muted); flex-wrap: wrap; gap: 0.5rem; }
+.landing-root .foot-col h5 { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: rgba(26, 18, 0, 0.68); margin-bottom: 0.6rem; }
+.landing-root .foot-col a { display: block; font-size: 0.88rem; text-decoration: none; color: #1A1200; margin-bottom: 0.5rem; transition: color 150ms ease, transform 150ms ease; }
+.landing-root .foot-col a:hover { color: var(--color-primary-deep); transform: translateX(3px); }
+.landing-root .foot-col a:focus-visible { outline: 2px solid var(--color-primary-deep); outline-offset: 3px; }
+.landing-root .foot-bottom { margin-top: var(--space-5); padding-top: var(--space-3); border-top: 1px solid rgba(26, 18, 0, 0.24); display: flex; justify-content: space-between; font-size: 0.78rem; color: rgba(26, 18, 0, 0.72); flex-wrap: wrap; gap: 0.5rem; }
 
 /* Reveal-on-scroll */
 .landing-root .reveal { opacity: 0; transform: translateY(14px); transition: opacity 0.6s ease, transform 0.6s ease; }
 .landing-root .reveal.in { opacity: 1; transform: none; }
 @media (prefers-reduced-motion: reduce) {
+  :global(html) { scroll-behavior: auto; }
   .landing-root .reveal { opacity: 1; transform: none; transition: none; }
+  .landing-root .feature,
+  .landing-root .feature-icon,
+  .landing-root .mini-widget,
+  .landing-root .dash,
+  .landing-root .kpi,
+  .landing-root .phone,
+  .landing-root .phone-kpi,
+  .landing-root .demo-card,
+  .landing-root .foot-col a { transition: none; }
+}
+
+/* Component-level wide-screen overrides live after their base rules so the
+   cascade cannot quietly restore the smaller laptop dimensions. */
+@media (min-width: 1440px) {
+  .landing-root .hero-copy { max-width: 48rem; }
+  .landing-root .hero-visual { min-height: clamp(620px, 68vh, 820px); }
+  .landing-root .feature { min-height: 215px; }
+}
+
+@media (min-width: 2200px) {
+  .landing-root section { padding: 6.5rem 0; }
+  .landing-root .hero-copy { max-width: 52rem; }
+  .landing-root .hero-visual { min-height: clamp(720px, 70vh, 940px); }
 }
 </style>

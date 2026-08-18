@@ -29,9 +29,20 @@ async function handleSubmit() {
   if (!email.value || !password.value) return
   loading.value = true
   try {
-    await auth.login(email.value, password.value)
-    const redirect = (route.query.redirect as string) || undefined
-    router.push({ name: 'verify-otp', query: redirect ? { redirect } : {} })
+    const requiresOtp = await auth.login(email.value, password.value)
+    const requestedRedirect = typeof route.query.redirect === 'string' ? route.query.redirect : ''
+    const redirect = requestedRedirect.startsWith('/app') ? requestedRedirect : undefined
+    if (requiresOtp) {
+      await router.push({ name: 'verify-otp', query: redirect ? { redirect } : {} })
+    } else {
+      const destination = redirect || '/app/dashboard'
+      try {
+        await router.replace(destination)
+      } catch {
+        // Recover from a stale lazy-loaded route chunk after a deployment/dev-server restart.
+        window.location.assign(destination)
+      }
+    }
   } catch (err) {
     errorMessage.value = err instanceof Error ? err.message : 'Login failed'
   } finally {

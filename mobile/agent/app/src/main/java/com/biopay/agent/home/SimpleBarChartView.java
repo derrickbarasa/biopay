@@ -7,6 +7,10 @@ import android.graphics.RectF;
 import android.util.AttributeSet;
 import android.view.View;
 
+import androidx.core.content.ContextCompat;
+
+import com.biopay.agent.R;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -37,11 +41,12 @@ public class SimpleBarChartView extends View {
 
     public SimpleBarChartView(Context context, AttributeSet attrs) {
         super(context, attrs);
-        labelPaint.setTextSize(28f);
-        labelPaint.setColor(0xFF6B6B6B);
+        float scaledDensity = getResources().getDisplayMetrics().scaledDensity;
+        labelPaint.setTextSize(12f * scaledDensity);
+        labelPaint.setColor(ContextCompat.getColor(context, R.color.bp_text_secondary));
         labelPaint.setTextAlign(Paint.Align.CENTER);
-        valuePaint.setTextSize(32f);
-        valuePaint.setColor(0xFF1A1A1A);
+        valuePaint.setTextSize(14f * scaledDensity);
+        valuePaint.setColor(ContextCompat.getColor(context, R.color.bp_text_primary));
         valuePaint.setTextAlign(Paint.Align.CENTER);
         valuePaint.setFakeBoldText(true);
     }

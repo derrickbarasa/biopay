@@ -2,17 +2,21 @@ package com.biopay.agent.households;
 
 import android.content.Intent;
 import android.os.Bundle;
-import android.widget.SearchView;
+import android.view.View;
+import android.widget.TextView;
 
-import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.widget.SearchView;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.biopay.agent.R;
 import com.biopay.agent.data.HouseholdDao;
+import com.biopay.agent.ui.BaseActivity;
+
+import java.util.List;
 
 /** Searchable list of locally-registered households (dca's HouseholdActivity, which nca lacked). */
-public class HouseholdListActivity extends AppCompatActivity {
+public class HouseholdListActivity extends BaseActivity {
 
     private HouseholdDao householdDao;
     private HouseholdListAdapter adapter;
@@ -21,6 +25,7 @@ public class HouseholdListActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_household_list);
+        setupBackToolbar(R.id.toolbar);
 
         householdDao = new HouseholdDao(this);
         adapter = new HouseholdListAdapter(household ->
@@ -56,6 +61,11 @@ public class HouseholdListActivity extends AppCompatActivity {
     }
 
     private void loadHouseholds(String query) {
-        adapter.submitList(householdDao.search(query));
+        List<HouseholdDao.Household> households = householdDao.search(query);
+        adapter.submitList(households);
+        ((TextView) findViewById(R.id.tvListSummary)).setText(
+                getString(R.string.household_list_summary, households.size()));
+        findViewById(R.id.emptyState).setVisibility(households.isEmpty() ? View.VISIBLE : View.GONE);
+        findViewById(R.id.recyclerHouseholds).setVisibility(households.isEmpty() ? View.GONE : View.VISIBLE);
     }
 }

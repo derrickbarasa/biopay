@@ -42,16 +42,13 @@ final class OtpService {
                 + "VALUES (@p1, @p2, @p3, @p4, 'EMAIL', @p5, DATEADD(MINUTE, @p6, GETDATE()), 0, 0, GETDATE())";
         return pool.preparedQuery(sql)
                 .execute(Tuple.of(referenceType, referenceCode, userId, userScope, codeHash, OTP_TTL_MINUTES))
-                .map(rows -> {
-                    eventBus.send("EMAIL", new JsonObject()
+                .compose(rows -> eventBus.<JsonObject>request("EMAIL", new JsonObject()
                             .put("mailTo", emailTo)
                             .put("subject", "BioPay verification code")
                             .put("msg", "Your verification code is <strong>" + code + "</strong>. "
                                     + "It expires in " + OTP_TTL_MINUTES + " minutes. "
-                                    + "Do not share this code with anyone.")
-                            .toString());
-                    return (Void) null;
-                });
+                                    + "Do not share this code with anyone."))
+                        .map(ignored -> (Void) null));
     }
 
     /**

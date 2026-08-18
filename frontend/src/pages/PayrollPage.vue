@@ -183,7 +183,7 @@ async function reject(cycle: Cycle) {
   <div>
     <div class="d-flex align-center justify-space-between mb-4">
       <h1 class="text-h5 font-weight-bold">Payment Cycles</h1>
-      <v-btn color="primary" prepend-icon="mdi-calendar-cash" @click="openWizard">Generate Payment Cycle</v-btn>
+      <v-btn color="primary" prepend-icon="mdi-calendar-month-outline" @click="openWizard">Generate Payment Cycle</v-btn>
     </div>
 
     <v-card variant="flat" border>

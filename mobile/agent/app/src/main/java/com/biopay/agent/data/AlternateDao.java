@@ -37,6 +37,19 @@ public class AlternateDao {
         return query("sync_status=?", new String[]{String.valueOf(DatabaseHelper.SYNC_PENDING)});
     }
 
+    public List<Alternate> search(String searchText) {
+        String like = "%" + (searchText == null ? "" : searchText.trim()) + "%";
+        return query("alternate_name LIKE ? OR alternate_number LIKE ? OR household_number LIKE ?",
+                new String[]{like, like, like});
+    }
+
+    public int countAll() {
+        try (Cursor cursor = dbHelper.getReadableDatabase().query(
+                "alternates", new String[]{"COUNT(*)"}, null, null, null, null, null)) {
+            return cursor.moveToFirst() ? cursor.getInt(0) : 0;
+        }
+    }
+
     public void markSynced(String alternateNumber) {
         ContentValues values = new ContentValues();
         values.put("sync_status", DatabaseHelper.SYNC_SYNCED);

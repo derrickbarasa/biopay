@@ -1,10 +1,12 @@
 package com.biopay.agent.network;
 
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
 
+import com.biopay.agent.BuildConfig;
 import com.biopay.agent.session.SessionManager;
 
 import org.json.JSONException;
@@ -49,8 +51,8 @@ public class ApiClient {
 
     private static final String TAG = "ApiClient";
 
-    /** Change to the LAN/host address of the biopay backend before field deployment. */
-    private static final String BASE_URL = "http://10.0.2.2:7730/biopay";
+    private static final String PREFS_NAME = "biopay_network";
+    private static final String KEY_BASE_URL = "base_url";
     private static final MediaType JSON = MediaType.parse("application/json; charset=utf-8");
 
     private static final Set<String> PUBLIC_CODES = new HashSet<>();
@@ -64,11 +66,13 @@ public class ApiClient {
     private static ApiClient instance;
 
     private final OkHttpClient client;
+    private final Context appContext;
     private final SessionManager sessionManager;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
 
     private ApiClient(Context context) {
-        sessionManager = new SessionManager(context.getApplicationContext());
+        appContext = context.getApplicationContext();
+        sessionManager = new SessionManager(appContext);
         client = new OkHttpClient.Builder()
                 .connectTimeout(20, TimeUnit.SECONDS)
                 .readTimeout(20, TimeUnit.SECONDS)
@@ -81,6 +85,40 @@ public class ApiClient {
             instance = new ApiClient(context);
         }
         return instance;
+    }
+
+    public static String getBaseUrl(Context context) {
+        SharedPreferences preferences = context.getApplicationContext()
+                .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        return preferences.getString(KEY_BASE_URL, BuildConfig.BIOPAY_API_BASE_URL);
+    }
+
+    /** Accepts either a host/IP or a full URL and stores a normalized BioPay API root. */
+    public static String setBaseUrl(Context context, String enteredUrl) {
+        String normalized = normalizeBaseUrl(enteredUrl);
+        context.getApplicationContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                .edit().putString(KEY_BASE_URL, normalized).apply();
+        return normalized;
+    }
+
+    static String normalizeBaseUrl(String enteredUrl) {
+        String value = enteredUrl == null ? "" : enteredUrl.trim();
+        if (value.isEmpty()) {
+            throw new IllegalArgumentException("Enter the BioPay server address");
+        }
+        if (!value.startsWith("http://") && !value.startsWith("https://")) {
+            value = "http://" + value;
+        }
+        while (value.endsWith("/")) {
+            value = value.substring(0, value.length() - 1);
+        }
+        if (!value.endsWith("/biopay")) {
+            value += "/biopay";
+        }
+        if (okhttp3.HttpUrl.parse(value) == null) {
+            throw new IllegalArgumentException("Enter a valid BioPay server address");
+        }
+        return value;
     }
 
     public void dispatch(String processingCode, Map<String, Object> params, ApiCallback callback) {
@@ -96,7 +134,7 @@ public class ApiClient {
             @Override
             public void onFailure(Call call, IOException ex) {
                 Log.w(TAG, processingCode + " failed: " + ex.getMessage());
-                postError("Network error. Please check your connection", null, callback);
+                postError(connectionErrorMessage(ex), null, callback);
             }
 
             @Override
@@ -110,7 +148,7 @@ public class ApiClient {
                     }
                     postSuccess(body, callback);
                 } catch (IOException ex) {
-                    postError("Network error. Please check your connection", null, callback);
+                    postError(connectionErrorMessage(ex), null, callback);
                 }
             }
         });
@@ -139,7 +177,7 @@ public class ApiClient {
 
     private Request buildRequest(String processingCode, Map<String, Object> params) throws JSONException {
         boolean isPublic = PUBLIC_CODES.contains(processingCode);
-        String url = BASE_URL + (isPublic ? "/authentication" : "/api/v1/req");
+        String url = getBaseUrl(appContext) + (isPublic ? "/authentication" : "/api/v1/req");
 
         JSONObject body = new JSONObject();
         body.put("processingCode", processingCode);
@@ -167,6 +205,12 @@ public class ApiClient {
         } catch (JSONException ex) {
             throw new IOException("Invalid response body", ex);
         }
+    }
+
+    private String connectionErrorMessage(IOException error) {
+        return "BioPay is not responding at " + getBaseUrl(appContext)
+                + ". Start the backend, allow port 7730 through the computer firewall, "
+                + "and keep the phone and computer on the same Wi-Fi.";
     }
 
     private void postSuccess(JSONObject response, ApiCallback callback) {
@@ -214,7 +258,7 @@ public class ApiClient {
                             .put("processingCode", "REFRESH_TOKEN")
                             .put("refreshToken", refreshToken);
                     Request refreshRequest = new Request.Builder()
-                            .url(BASE_URL + "/authentication")
+                            .url(getBaseUrl(appContext) + "/authentication")
                             .post(RequestBody.create(refreshBody.toString(), JSON))
                             .build();
                     try (Response refreshResponse = client.newCall(refreshRequest).execute()) {

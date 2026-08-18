@@ -7,9 +7,11 @@ import android.util.Log;
 import com.biopay.agent.data.AlternateDao;
 import com.biopay.agent.data.AttendanceDao;
 import com.biopay.agent.data.FingerprintDao;
+import com.biopay.agent.data.FaceDao;
 import com.biopay.agent.data.HouseholdDao;
 import com.biopay.agent.data.ImageDao;
 import com.biopay.agent.data.PaymentDao;
+import com.biopay.agent.data.VoucherDao;
 import com.biopay.agent.network.ApiClient;
 
 import java.io.File;
@@ -35,18 +37,22 @@ public class SyncManager {
     private final HouseholdDao householdDao;
     private final AlternateDao alternateDao;
     private final FingerprintDao fingerprintDao;
+    private final FaceDao faceDao;
     private final ImageDao imageDao;
     private final AttendanceDao attendanceDao;
     private final PaymentDao paymentDao;
+    private final VoucherDao voucherDao;
 
     public SyncManager(Context context) {
         this.context = context.getApplicationContext();
         householdDao = new HouseholdDao(this.context);
         alternateDao = new AlternateDao(this.context);
         fingerprintDao = new FingerprintDao(this.context);
+        faceDao = new FaceDao(this.context);
         imageDao = new ImageDao(this.context);
         attendanceDao = new AttendanceDao(this.context);
         paymentDao = new PaymentDao(this.context);
+        voucherDao = new VoucherDao(this.context);
     }
 
     /** @return true if every pending row across every table synced successfully this pass. */
@@ -55,10 +61,25 @@ public class SyncManager {
         allSucceeded &= syncHouseholds();
         allSucceeded &= syncAlternates();
         allSucceeded &= syncFingerprints();
+        allSucceeded &= syncFaces();
         allSucceeded &= syncImages();
         allSucceeded &= syncAttendances();
         allSucceeded &= syncFieldPayments();
+        allSucceeded &= syncVoucherCatalogue();
+        allSucceeded &= syncVoucherRedemptions();
         return allSucceeded;
+    }
+
+    private boolean syncVoucherCatalogue() {
+        try {
+            org.json.JSONArray rows=ApiClient.get(context).dispatchSync("SYNC_VOUCHERS",new HashMap<>()).optJSONArray("results");
+            if(rows!=null)for(int i=0;i<rows.length();i++){org.json.JSONObject r=rows.getJSONObject(i);voucherDao.upsert(r.optString("voucherCode"),r.optString("householdNumber"),r.optDouble("amount"),r.optString("purpose",null),r.optString("expiresAt",null));}
+            return true;
+        } catch(Exception ex){Log.w(TAG,"Voucher catalogue sync failed: "+ex.getMessage());return false;}
+    }
+
+    private boolean syncVoucherRedemptions() {
+        boolean ok=true;for(VoucherDao.Voucher v:voucherDao.listPendingRedemptions())try{Map<String,Object> p=new HashMap<>();p.put("voucherCode",v.code);p.put("matchedFingerprint",v.matchedFingerprintUuid);p.put("latitude",v.latitude);p.put("longitude",v.longitude);ApiClient.get(context).dispatchSync("REDEEM_VOUCHER",p);voucherDao.markRedemptionSynced(v.code);}catch(Exception ex){Log.w(TAG,"Voucher redemption sync failed for "+v.code+": "+ex.getMessage());ok=false;}return ok;
     }
 
     private boolean syncHouseholds() {
@@ -74,6 +95,7 @@ public class SyncManager {
                 params.put("householdSize", h.householdSize);
                 params.put("bomaCode", h.bomaCode);
                 params.put("duplicate", 0);
+                params.put("registrationMethod", h.registrationMethod);
                 ApiClient.get(context).dispatchSync("UPLOAD_HOUSEHOLD_BIO", params);
                 householdDao.markSynced(h.householdNumber);
             } catch (Exception ex) {
@@ -126,6 +148,44 @@ public class SyncManager {
                 Log.w(TAG, "Fingerprint sync failed for " + p.uuid + ": " + ex.getMessage());
                 allOk = false;
             }
+        }
+        return allOk;
+    }
+
+    private boolean syncFaces() {
+        boolean allOk = true;
+        for (FaceDao.FaceRecord face : faceDao.listPending()) {
+            try {
+                Map<String, Object> params = new HashMap<>();
+                params.put("uuid", face.uuid);
+                params.put("beneficiaryId", face.beneficiaryId);
+                params.put("beneficiaryType", face.beneficiaryType);
+                params.put("embedding", new org.json.JSONArray(face.embedding));
+                params.put("embeddingDimensions", face.dimensions);
+                params.put("modelVersion", face.modelVersion);
+                params.put("qualityScore", face.qualityScore);
+                ApiClient.get(context).dispatchSync("ENROLL_FACE", params);
+                faceDao.markSynced(face.uuid);
+            } catch (Exception ex) {
+                Log.w(TAG, "Face enrolment sync failed for " + face.uuid + ": " + ex.getMessage());
+                allOk = false;
+            }
+        }
+
+        try {
+            org.json.JSONArray rows = ApiClient.get(context)
+                    .dispatchSync("SYNC_FACES", new HashMap<>()).optJSONArray("results");
+            if (rows != null) {
+                for (int i = 0; i < rows.length(); i++) {
+                    org.json.JSONObject row = rows.getJSONObject(i);
+                    faceDao.insertSynced(row.getInt("beneficiaryType"), row.getString("beneficiaryId"),
+                            row.getString("uuid"), row.getJSONArray("embedding"),
+                            row.getString("modelVersion"), row.optDouble("qualityScore", 0));
+                }
+            }
+        } catch (Exception ex) {
+            Log.w(TAG, "Face catalogue sync failed: " + ex.getMessage());
+            allOk = false;
         }
         return allOk;
     }

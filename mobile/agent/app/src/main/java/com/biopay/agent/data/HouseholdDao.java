@@ -96,6 +96,7 @@ public class HouseholdDao {
     public static class Household {
         public String householdNumber;
         public String householdName;
+        public String registrationMethod;
         public String idNumber;
         public String phoneNumber;
         public String gender;
@@ -115,6 +116,7 @@ public class HouseholdDao {
             Household h = new Household();
             h.householdNumber = c.getString(c.getColumnIndexOrThrow("household_number"));
             h.householdName = c.getString(c.getColumnIndexOrThrow("household_name"));
+            h.registrationMethod = c.getString(c.getColumnIndexOrThrow("registration_method"));
             h.idNumber = c.getString(c.getColumnIndexOrThrow("id_number"));
             h.phoneNumber = c.getString(c.getColumnIndexOrThrow("phone_number"));
             h.gender = c.getString(c.getColumnIndexOrThrow("gender"));

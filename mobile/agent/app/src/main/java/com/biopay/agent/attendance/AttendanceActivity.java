@@ -2,20 +2,23 @@ package com.biopay.agent.attendance;
 
 import android.content.Intent;
 import android.os.Bundle;
-import android.widget.SearchView;
+import android.view.View;
 
-import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.widget.SearchView;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.biopay.agent.R;
 import com.biopay.agent.data.HouseholdDao;
 import com.biopay.agent.households.HouseholdListAdapter;
+import com.biopay.agent.ui.BaseActivity;
+
+import java.util.List;
 
 /** Searchable household picker -- the entry point into attendance clock-in/out, structurally
  * identical to {@link com.biopay.agent.households.HouseholdListActivity} but routing the tap to
  * the beneficiary/verify screen instead of the household edit form. */
-public class AttendanceActivity extends AppCompatActivity {
+public class AttendanceActivity extends BaseActivity {
 
     private HouseholdDao householdDao;
     private HouseholdListAdapter adapter;
@@ -24,6 +27,7 @@ public class AttendanceActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_attendance);
+        setupBackToolbar(R.id.toolbar);
 
         householdDao = new HouseholdDao(this);
         adapter = new HouseholdListAdapter(household ->
@@ -56,6 +60,9 @@ public class AttendanceActivity extends AppCompatActivity {
     }
 
     private void loadHouseholds(String query) {
-        adapter.submitList(householdDao.search(query));
+        List<HouseholdDao.Household> households = householdDao.search(query);
+        adapter.submitList(households);
+        findViewById(R.id.emptyState).setVisibility(households.isEmpty() ? View.VISIBLE : View.GONE);
+        findViewById(R.id.recyclerHouseholds).setVisibility(households.isEmpty() ? View.GONE : View.VISIBLE);
     }
 }

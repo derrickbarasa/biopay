@@ -1,6 +1,5 @@
 package com.biopay.agent.attendance;
 
-import android.app.AlertDialog;
 import android.content.Context;
 import android.content.Intent;
 import android.location.Location;
@@ -10,7 +9,7 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
-import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.app.AlertDialog;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
@@ -25,6 +24,8 @@ import com.biopay.agent.data.FingerprintDao;
 import com.biopay.agent.data.HouseholdDao;
 import com.biopay.agent.location.LocationHelper;
 import com.biopay.agent.session.SessionManager;
+import com.biopay.agent.ui.BaseActivity;
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -38,7 +39,7 @@ import java.util.UUID;
  * also why a beneficiary with several enrolled fingers means sequential re-scan attempts here
  * rather than a single scan matched against all of them at once.
  */
-public class AttendanceBeneficiariesActivity extends AppCompatActivity {
+public class AttendanceBeneficiariesActivity extends BaseActivity {
 
     private static final String EXTRA_HOUSEHOLD_NUMBER = "household_number";
 
@@ -59,6 +60,7 @@ public class AttendanceBeneficiariesActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_attendance_beneficiaries);
+        setupBackToolbar(R.id.toolbar);
 
         householdDao = new HouseholdDao(this);
         alternateDao = new AlternateDao(this);
@@ -88,7 +90,8 @@ public class AttendanceBeneficiariesActivity extends AppCompatActivity {
         for (AlternateDao.Alternate alternate : alternateDao.findByHousehold(householdNumber)) {
             beneficiaries.add(new Beneficiary(alternate.alternateNumber, householdNumber,
                     Beneficiary.TYPE_ALTERNATE, alternate.alternateName,
-                    getString(R.string.attendance_beneficiary_alternate) + " • " + alternate.relationship));
+                    getString(R.string.alternate_detail,
+                            getString(R.string.attendance_beneficiary_alternate), alternate.relationship)));
         }
         return beneficiaries;
     }
@@ -110,7 +113,8 @@ public class AttendanceBeneficiariesActivity extends AppCompatActivity {
 
         android.view.View dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_verify_progress, null);
         TextView tvProgress = dialogView.findViewById(R.id.tvVerifyProgress);
-        AlertDialog dialog = new AlertDialog.Builder(this)
+        AlertDialog dialog = new MaterialAlertDialogBuilder(this)
+                .setTitle(R.string.attendance_people_title)
                 .setView(dialogView)
                 .setCancelable(false)
                 .setNegativeButton(R.string.attendance_cancel, (d, which) -> {

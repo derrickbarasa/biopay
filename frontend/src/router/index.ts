@@ -46,6 +46,9 @@ const router = createRouter({
       children: [
         { path: '', redirect: { name: 'dashboard' } },
         { path: 'dashboard', name: 'dashboard', component: () => import('@/pages/DashboardPage.vue') },
+        { path: 'anchors', name: 'anchors', component: () => import('@/pages/AnchorsPage.vue'), meta: { roles: ['ANCHOR'] } },
+        { path: 'users', name: 'users', component: () => import('@/pages/UsersPage.vue'), meta: { roles: ['ANCHOR', 'ORGANISATION'] } },
+        { path: 'roles', name: 'roles', component: () => import('@/pages/RolesPage.vue'), meta: { roles: ['ANCHOR'] } },
         {
           path: 'organizations',
           name: 'organizations',
@@ -125,6 +128,21 @@ router.beforeEach((to) => {
     return { name: 'dashboard' }
   }
   return true
+})
+
+// A browser can retain an old lazy-route URL after the dev server restarts or a
+// new production build is deployed. Vue Router otherwise leaves the current
+// view blank when that module fetch fails. Reload the requested application
+// route once so the browser receives the current HTML and asset manifest.
+let recoveringLazyRoute = false
+router.onError((error, to) => {
+  const message = error instanceof Error ? error.message : String(error)
+  const isLazyRouteFailure = /Failed to fetch dynamically imported module|Importing a module script failed|Loading chunk [\d]+ failed|ChunkLoadError/i.test(message)
+
+  if (isLazyRouteFailure && !recoveringLazyRoute && to.fullPath.startsWith('/app')) {
+    recoveringLazyRoute = true
+    window.location.assign(to.fullPath)
+  }
 })
 
 export default router

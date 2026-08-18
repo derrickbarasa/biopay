@@ -2,16 +2,22 @@ plugins {
     alias(libs.plugins.android.application)
 }
 
+val configuredApiBaseUrl = providers.gradleProperty("biopayApiBaseUrl")
+    .orElse("http://192.168.100.163:7730/biopay")
+    .get()
+
 android {
     namespace = "com.biopay.agent"
-    compileSdk = 34
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "com.biopay.agent"
         minSdk = 21
-        targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        targetSdk = 35
+        versionCode = 2
+        versionName = "1.1"
+
+        buildConfigField("String", "BIOPAY_API_BASE_URL", "\"${configuredApiBaseUrl.replace("\\", "\\\\").replace("\"", "\\\"")}\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

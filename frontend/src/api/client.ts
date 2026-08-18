@@ -11,9 +11,11 @@ const REFRESH_TOKEN_KEY = 'bp_refresh'
 const PROCESSING_CODE_HEADER = 'X-Processing-Code'
 
 const baseURL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:7730/biopay'
+const REQUEST_TIMEOUT_MS = 20_000
 
 export const apiClient = axios.create({
   baseURL,
+  timeout: REQUEST_TIMEOUT_MS,
   headers: { 'Content-Type': 'application/json' },
 })
 
@@ -27,7 +29,11 @@ apiClient.interceptors.request.use((config) => {
 
 /** Bare client for the renewal call itself: going through `apiClient` would attach the expired
  *  access token and, on failure, re-enter the 401 handler below and recurse. */
-const refreshClient = axios.create({ baseURL, headers: { 'Content-Type': 'application/json' } })
+const refreshClient = axios.create({
+  baseURL,
+  timeout: REQUEST_TIMEOUT_MS,
+  headers: { 'Content-Type': 'application/json' },
+})
 
 let renewalInFlight: Promise<string> | null = null
 
@@ -102,8 +108,11 @@ apiClient.interceptors.response.use(
       }
     }
 
+    const timedOut = error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT'
     const message = (error.response?.data as { responseMessage?: string } | undefined)?.responseMessage
-      ?? error.message ?? 'Request failed'
+      ?? (timedOut
+        ? 'The BioPay server took too long to respond. Check that the backend is running, then try again.'
+        : error.message || 'Request failed')
     return Promise.reject(Object.assign(new Error(message), {
       responseCode: (error.response?.data as { responseCode?: string } | undefined)?.responseCode,
       status: error.response?.status,

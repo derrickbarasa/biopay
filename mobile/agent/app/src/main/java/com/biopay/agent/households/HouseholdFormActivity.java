@@ -6,25 +6,27 @@ import android.content.Intent;
 import android.location.Location;
 import android.os.Bundle;
 import android.widget.ArrayAdapter;
+import android.widget.AutoCompleteTextView;
 import android.widget.CheckBox;
 import android.widget.EditText;
-import android.widget.Spinner;
+import android.widget.TextView;
 import android.widget.Toast;
-
-import androidx.appcompat.app.AppCompatActivity;
 
 import com.biopay.agent.R;
 import com.biopay.agent.data.HouseholdDao;
 import com.biopay.agent.location.LocationHelper;
 import com.biopay.agent.session.SessionManager;
+import com.biopay.agent.ui.BaseActivity;
 
 import java.util.Locale;
 
 /** Add or edit a household -- the form behind {@code activity_household_form.xml}. */
-public class HouseholdFormActivity extends AppCompatActivity {
+public class HouseholdFormActivity extends BaseActivity {
 
     private static final String EXTRA_HOUSEHOLD_NUMBER = "household_number";
     private static final String[] GENDER_OPTIONS = {"Male", "Female"};
+    private static final String[] REGISTRATION_OPTIONS = {"FINGERPRINT", "FACE", "BOTH"};
+    private static final String[] REGISTRATION_LABELS = {"Fingerprint", "Face", "Fingerprint and face"};
 
     public static Intent editIntent(Context context, String householdNumber) {
         Intent intent = new Intent(context, HouseholdFormActivity.class);
@@ -40,7 +42,8 @@ public class HouseholdFormActivity extends AppCompatActivity {
     private EditText etIdNumber;
     private EditText etPhoneNumber;
     private EditText etAge;
-    private Spinner spinnerGender;
+    private AutoCompleteTextView spinnerGender;
+    private AutoCompleteTextView spinnerRegistrationMethod;
     private EditText etStateCode;
     private EditText etBomaCode;
     private EditText etHouseholdSize;
@@ -54,6 +57,7 @@ public class HouseholdFormActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_household_form);
+        setupBackToolbar(R.id.toolbar);
 
         householdDao = new HouseholdDao(this);
         sessionManager = new SessionManager(this);
@@ -64,6 +68,7 @@ public class HouseholdFormActivity extends AppCompatActivity {
         etPhoneNumber = findViewById(R.id.etPhoneNumber);
         etAge = findViewById(R.id.etAge);
         spinnerGender = findViewById(R.id.spinnerGender);
+        spinnerRegistrationMethod = findViewById(R.id.spinnerRegistrationMethod);
         etStateCode = findViewById(R.id.etStateCode);
         etBomaCode = findViewById(R.id.etBomaCode);
         etHouseholdSize = findViewById(R.id.etHouseholdSize);
@@ -73,7 +78,15 @@ public class HouseholdFormActivity extends AppCompatActivity {
         cbLiteracy = findViewById(R.id.cbLiteracy);
         cbEligible = findViewById(R.id.cbEligible);
 
-        spinnerGender.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, GENDER_OPTIONS));
+        spinnerGender.setAdapter(new ArrayAdapter<>(this,
+                android.R.layout.simple_dropdown_item_1line, GENDER_OPTIONS));
+        spinnerRegistrationMethod.setAdapter(new ArrayAdapter<>(this,
+                android.R.layout.simple_dropdown_item_1line, REGISTRATION_LABELS));
+        spinnerGender.setText(GENDER_OPTIONS[0], false);
+        spinnerRegistrationMethod.setText(REGISTRATION_LABELS[0], false);
+
+        ((TextView) findViewById(R.id.tvFormTitle)).setText(editingHouseholdNumber == null
+                ? R.string.household_form_new_title : R.string.household_form_edit_title);
 
         if (editingHouseholdNumber != null) {
             populateForEdit(editingHouseholdNumber);
@@ -94,8 +107,11 @@ public class HouseholdFormActivity extends AppCompatActivity {
         int genderIndex = household.gender == null ? -1
                 : java.util.Arrays.asList(GENDER_OPTIONS).indexOf(household.gender);
         if (genderIndex >= 0) {
-            spinnerGender.setSelection(genderIndex);
+            spinnerGender.setText(GENDER_OPTIONS[genderIndex], false);
         }
+        int registrationIndex = household.registrationMethod == null ? 0
+                : java.util.Arrays.asList(REGISTRATION_OPTIONS).indexOf(household.registrationMethod);
+        spinnerRegistrationMethod.setText(REGISTRATION_LABELS[Math.max(0, registrationIndex)], false);
         etStateCode.setText(household.stateCode);
         etBomaCode.setText(household.bomaCode);
         etHouseholdSize.setText(household.householdSize == null ? "" : String.valueOf(household.householdSize));
@@ -120,7 +136,8 @@ public class HouseholdFormActivity extends AppCompatActivity {
         values.put("id_number", etIdNumber.getText().toString().trim());
         values.put("phone_number", etPhoneNumber.getText().toString().trim());
         values.put("age", parseIntOrNull(etAge.getText().toString()));
-        values.put("gender", (String) spinnerGender.getSelectedItem());
+        values.put("gender", spinnerGender.getText().toString());
+        values.put("registration_method", selectedRegistrationCode());
         values.put("state_code", etStateCode.getText().toString().trim());
         values.put("boma_code", etBomaCode.getText().toString().trim());
         values.put("household_size", parseIntOrNull(etHouseholdSize.getText().toString()));
@@ -143,8 +160,14 @@ public class HouseholdFormActivity extends AppCompatActivity {
             householdDao.insert(values);
         }
 
-        Toast.makeText(this, R.string.household_save_continue, Toast.LENGTH_SHORT).show();
+        Toast.makeText(this, R.string.household_saved, Toast.LENGTH_SHORT).show();
         finish();
+    }
+
+    private String selectedRegistrationCode() {
+        String selected = spinnerRegistrationMethod.getText().toString();
+        int index = java.util.Arrays.asList(REGISTRATION_LABELS).indexOf(selected);
+        return REGISTRATION_OPTIONS[Math.max(0, index)];
     }
 
     private static Integer parseIntOrNull(String text) {

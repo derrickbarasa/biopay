@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1448" height="1086" viewBox="0 0 1448 1086">
+  <defs>
+    <clipPath id="screen"><polygon points="62,451 577,445 616,806 88,829"/></clipPath>
+  </defs>
+  <image href="../ai-agent-v3-base.png" width="1448" height="1086"/>
+  <g clip-path="url(#screen)" transform="rotate(-0.5 158 475)">
+    <image href="../../biopay_logo_horizontal.svg" x="87" y="455" width="142" height="38" preserveAspectRatio="xMidYMid meet"/>
+  </g>
+</svg>

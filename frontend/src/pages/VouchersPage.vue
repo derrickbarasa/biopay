@@ -192,7 +192,7 @@ function statusColor(status: string) {
       <h1 class="text-h5 font-weight-bold">Vouchers</h1>
       <div class="d-flex ga-2">
         <v-btn variant="outlined" prepend-icon="mdi-file-upload" @click="openBulk">Bulk Issue</v-btn>
-        <v-btn color="primary" prepend-icon="mdi-ticket-plus" @click="openIssue">Issue Voucher</v-btn>
+        <v-btn color="primary" prepend-icon="mdi-ticket-confirmation-outline" @click="openIssue">Issue Voucher</v-btn>
       </div>
     </div>
 
