@@ -183,39 +183,8 @@
 
             <!-- Security -->
             <TextView style="@style/BioPay.SectionHeader" android:text="@string/settings_security" />
-            <com.google.android.material.card.MaterialCardView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="16dp"
-                app:cardBackgroundColor="@color/bp_surface"
-                app:cardCornerRadius="16dp"
-                app:cardElevation="1dp"
-                app:strokeWidth="0dp">
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:minHeight="72dp"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal"
-                    android:paddingStart="16dp"
-                    android:paddingEnd="16dp"
-                    android:paddingTop="10dp"
-                    android:paddingBottom="10dp">
-                    <FrameLayout android:layout_width="42dp" android:layout_height="42dp" android:background="@drawable/bg_icon_container">
-                        <ImageView android:layout_width="20dp" android:layout_height="20dp" android:layout_gravity="center" android:contentDescription="@null" android:src="@drawable/ic_lock" app:tint="@color/bp_primary" />
-                    </FrameLayout>
-                    <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="14dp" android:layout_weight="1" android:orientation="vertical">
-                        <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/settings_app_lock" android:textColor="@color/bp_text_primary" android:textSize="15sp" android:textStyle="bold" />
-                        <TextView android:id="@+id/tvAppLockBody" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="2dp" android:text="@string/settings_app_lock_body" android:textColor="@color/bp_text_secondary" android:textSize="13sp" />
-                    </LinearLayout>
-                    <com.google.android.material.materialswitch.MaterialSwitch
-                        android:id="@+id/swAppLock"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content" />
-                </LinearLayout>
-            </com.google.android.material.card.MaterialCardView>
-
-            <TextView style="@style/BioPay.SupportingText" android:text="@string/settings_change_password_intro" />
+            <TextView style="@style/BioPay.SupportingText" android:text="@string/settings_security_policy" />
+            <TextView style="@style/BioPay.SupportingText" android:layout_marginTop="8dp" android:text="@string/settings_change_password_intro" />
             <com.google.android.material.textfield.TextInputLayout style="@style/BioPay.FormField" android:hint="@string/settings_current_password" app:endIconMode="password_toggle">
                 <com.google.android.material.textfield.TextInputEditText android:id="@+id/etCurrentPassword" android:layout_width="match_parent" android:layout_height="wrap_content" android:inputType="textPassword" android:singleLine="true" />
             </com.google.android.material.textfield.TextInputLayout>

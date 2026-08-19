@@ -5,12 +5,14 @@ import { useDisplay } from 'vuetify'
 import { useAuthStore } from '@/stores/auth'
 import { dispatch } from '@/api/client'
 import { useToast } from '@/composables/useToast'
+import { useIdleLogout } from '@/composables/useIdleLogout'
 
 const auth = useAuthStore()
 const router = useRouter()
 const toast = useToast()
 const { mdAndUp } = useDisplay()
 const drawer = ref(mdAndUp.value)
+const { showPrompt: showIdlePrompt, confirmStillHere, logoutNow } = useIdleLogout()
 
 watch(mdAndUp, (isDesktop) => {
   drawer.value = isDesktop
@@ -186,6 +188,21 @@ async function handleLogout() {
 
   <v-main class="dashboard-main">
     <v-container fluid class="pa-4 pa-md-7">
+      <v-dialog v-model="showIdlePrompt" max-width="420" persistent>
+        <v-card>
+          <v-card-title>Still there?</v-card-title>
+          <v-card-text>
+            You've been inactive for a while. For your security, you'll be signed out in 30 seconds
+            unless you confirm you're still using this device.
+          </v-card-text>
+          <v-card-actions>
+            <v-spacer />
+            <v-btn variant="text" @click="logoutNow">Log out</v-btn>
+            <v-btn color="primary" @click="confirmStillHere">Yes, I'm still here</v-btn>
+          </v-card-actions>
+        </v-card>
+      </v-dialog>
+
       <!-- Grace period: subscription lapsed but still within the 30-day window. -->
       <v-alert
         v-if="inGrace"

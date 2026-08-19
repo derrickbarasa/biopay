@@ -4,6 +4,26 @@ import { onMounted, onBeforeUnmount, ref } from 'vue'
 const mobileNavOpen = ref(false)
 const revealRoot = ref<HTMLElement | null>(null)
 let observer: IntersectionObserver | null = null
+let featureObserver: IntersectionObserver | null = null
+let scrollDir: 'up' | 'down' = 'down'
+let lastScrollY = 0
+
+function trackScrollDir() {
+  const y = window.scrollY
+  if (y > lastScrollY + 2) scrollDir = 'down'
+  else if (y < lastScrollY - 2) scrollDir = 'up'
+  lastScrollY = y
+}
+
+// Nav hides the instant the page moves and drops back in once scrolling settles.
+const navHidden = ref(false)
+let navHideTimer: ReturnType<typeof setTimeout> | null = null
+
+function handleNavScroll() {
+  if (window.scrollY > 8) navHidden.value = true
+  if (navHideTimer) clearTimeout(navHideTimer)
+  navHideTimer = setTimeout(() => { navHidden.value = false }, 260)
+}
 
 // Request-a-demo form. With no CRM/email endpoint on the backend, submitting opens
 // the visitor's mail client addressed to the demo inbox with their details prefilled
@@ -23,54 +43,56 @@ function submitDemo() {
 }
 
 // Hero carousel -- five value props, each with a full-bleed background photo.
-// Project-owned AI-generated carousel images live in frontend/public/hero/.
-// (landscape, 1800px+ wide works well as background-size:cover) and they'll
-// pick up automatically -- nothing else needs to change.
+// Project-owned carousel images live in frontend/public/hero/ (landscape,
+// 1800px+ wide works well as background-size:cover).
 const heroSlides = [
   {
     icon: 'cash', tone: 'primary', eyebrow: 'Cash transfers',
     title: 'Cash assistance, delivered with certainty.',
     copy: 'Generate a payment cycle, verify each recipient by fingerprint or face, and disburse — with a maker-checker approval trail from anchor to organisation.',
-    image: '/hero/cash-transfers-v3.png',
+    image: '/hero/cash-transfer.png',
   },
   {
     icon: 'voucher', tone: 'accent', eyebrow: 'Voucher redemption',
-    title: 'Choice at the market, accountability at every step.',
+    title: 'Real choice at the market, full accountability.',
     copy: 'Issue biometric-verified vouchers households can redeem with confidence, while every issue, redemption and void stays on a traceable ledger.',
-    image: '/hero/voucher-redemption-v4.png',
+    image: '/hero/voucher-redemption.png',
   },
   {
     icon: 'fingerprint', tone: 'primary', eyebrow: 'Biometric verification',
     title: 'The right person gets paid — every single time.',
     copy: 'A live fingerprint or face scan checked against the enrolled template at the moment of payment, even with no signal to check it against a server.',
-    image: '/hero/biometric-verification-v3.png',
+    image: '/hero/biometric-verification.png',
   },
   {
     icon: 'dedup', tone: 'accent', eyebrow: 'Deduplication',
-    title: 'One household, one record — fraud stopped before it starts.',
+    title: 'One household, one record — no fraud.',
     copy: 'Every new registration is screened against existing records for the same name, phone number and location before it is ever accepted.',
-    image: '/hero/deduplication-v3.png',
+    image: '/hero/deduplication.png',
   },
   {
     icon: 'ai', tone: 'primary', eyebrow: 'AI agent',
-    title: 'An agent that never stops watching the ledger.',
+    title: 'An agent that never stops watching.',
     copy: 'Registrations and disbursements are reviewed as they land, flagging the patterns a person reviewing thousands of rows would miss.',
-    image: '/hero/ai-agent-v3.png',
+    image: '/hero/ai-agent.png',
   },
 ]
+const HERO_INTERVAL_MS = 5500
 const activeHero = ref(0)
+const heroProgressTick = ref(0)
 let heroTimer: ReturnType<typeof setInterval> | null = null
 let heroTimerReduceMotion = false
 
 function restartHeroTimer() {
   if (heroTimer) clearInterval(heroTimer)
   if (!heroTimerReduceMotion) {
-    heroTimer = setInterval(() => setHero((activeHero.value + 1) % heroSlides.length), 5500)
+    heroTimer = setInterval(() => setHero((activeHero.value + 1) % heroSlides.length), HERO_INTERVAL_MS)
   }
 }
 
 function setHero(index: number) {
   activeHero.value = index
+  heroProgressTick.value++
 }
 
 function goToHero(index: number) {
@@ -111,19 +133,53 @@ onMounted(() => {
     items.forEach((el) => observer?.observe(el))
   }
 
+  // Platform cards slide in from whichever side matches the live scroll
+  // direction -- from below while scrolling down, from above while scrolling
+  // back up -- and re-trigger every time a card re-enters the viewport.
+  const featureCards = revealRoot.value?.querySelectorAll('.feature-card-reveal') ?? []
+  lastScrollY = window.scrollY
+  window.addEventListener('scroll', trackScrollDir, { passive: true })
+  window.addEventListener('scroll', handleNavScroll, { passive: true })
+
+  if (reduceMotion || !('IntersectionObserver' in window)) {
+    featureCards.forEach((el) => el.classList.add('in'))
+  } else {
+    featureObserver = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          const el = entry.target as HTMLElement
+          if (entry.isIntersecting) {
+            el.classList.remove('enter-from-below', 'enter-from-above', 'in')
+            el.classList.add(scrollDir === 'down' ? 'enter-from-below' : 'enter-from-above')
+            void el.offsetWidth
+            requestAnimationFrame(() => el.classList.add('in'))
+          } else {
+            el.classList.remove('in')
+          }
+        })
+      },
+      { threshold: 0.2 },
+    )
+    featureCards.forEach((el) => featureObserver?.observe(el))
+  }
+
   heroTimerReduceMotion = reduceMotion
   restartHeroTimer()
 })
 
 onBeforeUnmount(() => {
   observer?.disconnect()
+  featureObserver?.disconnect()
+  window.removeEventListener('scroll', trackScrollDir)
+  window.removeEventListener('scroll', handleNavScroll)
+  if (navHideTimer) clearTimeout(navHideTimer)
   if (heroTimer) clearInterval(heroTimer)
 })
 </script>
 
 <template>
   <div class="landing-root" ref="revealRoot">
-    <header class="site-nav">
+    <header class="site-nav" :class="{ 'nav-hidden': navHidden && !mobileNavOpen }">
       <div class="wrap nav-row">
         <a class="brand" href="#top">
           <img src="/biopay_logo_horizontal.svg" alt="BioPay" class="brand-logo" />
@@ -169,6 +225,7 @@ onBeforeUnmount(() => {
 
         <div class="wrap hero-grid">
           <div class="hero-copy">
+            <Transition name="hero-fade" mode="out-in">
             <div class="hero-slide" :key="activeHero">
               <div class="hero-slide-icon" :class="heroSlides[activeHero].tone">
                 <svg v-if="heroSlides[activeHero].icon === 'cash'" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
@@ -197,6 +254,7 @@ onBeforeUnmount(() => {
               <h1>{{ heroSlides[activeHero].title }}</h1>
               <p class="lede">{{ heroSlides[activeHero].copy }}</p>
             </div>
+            </Transition>
             <div class="hero-ctas">
               <a class="btn btn-primary" href="#demo">Request a demo</a>
               <a class="btn btn-ghost" href="#how">How it works</a>
@@ -206,7 +264,14 @@ onBeforeUnmount(() => {
                 v-for="(slide, index) in heroSlides" :key="slide.eyebrow"
                 :class="{ active: index === activeHero }"
                 :aria-label="`Show ${slide.eyebrow}`" @click="goToHero(index)"
-              />
+              >
+                <span
+                  v-if="index === activeHero"
+                  :key="heroProgressTick"
+                  class="hero-dot-fill"
+                  :style="{ animationDuration: `${HERO_INTERVAL_MS}ms` }"
+                />
+              </button>
             </div>
             <div class="hero-facts">
               <div class="hero-fact"><strong>2</strong> verification methods</div>
@@ -288,14 +353,19 @@ onBeforeUnmount(() => {
           <h2 style="margin-top: 0.6rem; max-width: 20ch">Built for the field first, the office second</h2>
 
           <div class="feature-grid">
-            <div class="feature reveal">
-              <div class="feature-icon">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" style="stroke: var(--color-primary)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-                  <rect x="6" y="2.5" width="12" height="19" rx="2.4" />
-                  <path d="M10 18.5h4" />
-                  <path d="M4 9l2.5 2.5L4 14" />
-                  <path d="M20 9l-2.5 2.5L20 14" />
-                </svg>
+            <div class="feature feature-card-reveal">
+              <div class="feature-top">
+                <div class="feature-icon">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" style="stroke: var(--color-primary)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="6" y="2.5" width="12" height="19" rx="2.4" />
+                    <path d="M10 18.5h4" />
+                    <path d="M4 9l2.5 2.5L4 14" />
+                    <path d="M20 9l-2.5 2.5L20 14" />
+                  </svg>
+                </div>
+                <div class="feature-photo-chip" style="aspect-ratio: 1402 / 1122">
+                  <img src="/platform/mobile.png" alt="" loading="lazy" />
+                </div>
               </div>
               <span class="feature-tag">Mobile · offline</span>
               <h4>Works with no signal at all</h4>
@@ -305,7 +375,7 @@ onBeforeUnmount(() => {
               <div class="feature-foot">→ queued locally, uploaded automatically</div>
             </div>
 
-            <div class="feature reveal">
+            <div class="feature feature-card-reveal">
               <div class="feature-icon accent">
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" style="stroke: var(--color-accent-deep)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
                   <circle cx="9.5" cy="12" r="6.5" />
@@ -324,12 +394,17 @@ onBeforeUnmount(() => {
               </div>
             </div>
 
-            <div class="feature reveal">
-              <div class="feature-icon">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" style="stroke: var(--color-primary)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M12 21s7-6.4 7-12a7 7 0 1 0-14 0c0 5.6 7 12 7 12z" />
-                  <circle cx="12" cy="9" r="2.4" />
-                </svg>
+            <div class="feature feature-card-reveal">
+              <div class="feature-top">
+                <div class="feature-icon">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" style="stroke: var(--color-primary)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 21s7-6.4 7-12a7 7 0 1 0-14 0c0 5.6 7 12 7 12z" />
+                    <circle cx="12" cy="9" r="2.4" />
+                  </svg>
+                </div>
+                <div class="feature-photo-chip" style="aspect-ratio: 1329 / 1183">
+                  <img src="/platform/location.png" alt="" loading="lazy" />
+                </div>
               </div>
               <span class="feature-tag">Location</span>
               <h4>GPS on every capture</h4>
@@ -339,14 +414,19 @@ onBeforeUnmount(() => {
               <div class="feature-foot num">4.8517°N, 31.5825°E</div>
             </div>
 
-            <div class="feature reveal">
-              <div class="feature-icon">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" style="stroke: var(--color-primary)" stroke-width="1.6" stroke-linecap="round">
-                  <path d="M12 3a7 7 0 0 1 7 7c0 3.5-1 6-1 8.5" />
-                  <path d="M12 3a7 7 0 0 0-7 7c0 2 .3 3.6.8 5" />
-                  <path d="M9 20c1.2-2 1.5-4.5 1.5-7A4.5 4.5 0 0 1 15 8.5c1 0 2 .3 2.7 1" />
-                  <path d="M6.5 17c.8-1.7 1-3.8 1-6a4.5 4.5 0 0 1 4-4.5" />
-                </svg>
+            <div class="feature feature-card-reveal">
+              <div class="feature-top">
+                <div class="feature-icon">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" style="stroke: var(--color-primary)" stroke-width="1.6" stroke-linecap="round">
+                    <path d="M12 3a7 7 0 0 1 7 7c0 3.5-1 6-1 8.5" />
+                    <path d="M12 3a7 7 0 0 0-7 7c0 2 .3 3.6.8 5" />
+                    <path d="M9 20c1.2-2 1.5-4.5 1.5-7A4.5 4.5 0 0 1 15 8.5c1 0 2 .3 2.7 1" />
+                    <path d="M6.5 17c.8-1.7 1-3.8 1-6a4.5 4.5 0 0 1 4-4.5" />
+                  </svg>
+                </div>
+                <div class="feature-photo-chip" style="aspect-ratio: 1402 / 1122">
+                  <img src="/platform/fingerprint-verification.png" alt="" loading="lazy" />
+                </div>
               </div>
               <span class="feature-tag">Verification</span>
               <h4>Fingerprint payment</h4>
@@ -355,14 +435,19 @@ onBeforeUnmount(() => {
                 last mile.</p>
             </div>
 
-            <div class="feature reveal">
-              <div class="feature-icon accent">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" style="stroke: var(--color-accent-deep)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M4 8V6a2 2 0 0 1 2-2h2" /><path d="M16 4h2a2 2 0 0 1 2 2v2" />
-                  <path d="M20 16v2a2 2 0 0 1-2 2h-2" /><path d="M8 20H6a2 2 0 0 1-2-2v-2" />
-                  <circle cx="9" cy="10" r="1" /><circle cx="15" cy="10" r="1" />
-                  <path d="M9 15c.8.7 1.9 1 3 1s2.2-.3 3-1" />
-                </svg>
+            <div class="feature feature-card-reveal">
+              <div class="feature-top">
+                <div class="feature-icon accent">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" style="stroke: var(--color-accent-deep)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M4 8V6a2 2 0 0 1 2-2h2" /><path d="M16 4h2a2 2 0 0 1 2 2v2" />
+                    <path d="M20 16v2a2 2 0 0 1-2 2h-2" /><path d="M8 20H6a2 2 0 0 1-2-2v-2" />
+                    <circle cx="9" cy="10" r="1" /><circle cx="15" cy="10" r="1" />
+                    <path d="M9 15c.8.7 1.9 1 3 1s2.2-.3 3-1" />
+                  </svg>
+                </div>
+                <div class="feature-photo-chip" style="aspect-ratio: 1402 / 1122">
+                  <img src="/platform/facial-verification.png" alt="" loading="lazy" />
+                </div>
               </div>
               <span class="feature-tag">Verification</span>
               <h4>Face recognition payment</h4>
@@ -371,7 +456,7 @@ onBeforeUnmount(() => {
                 instead.</p>
             </div>
 
-            <div class="feature reveal">
+            <div class="feature feature-card-reveal">
               <div class="feature-icon">
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" style="stroke: var(--color-primary)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
                   <path d="M12 3v2.4M12 18.6V21M3 12h2.4M18.6 12H21M5.6 5.6l1.7 1.7M16.7 16.7l1.7 1.7M5.6 18.4l1.7-1.7M16.7 7.3l1.7-1.7" />
@@ -573,8 +658,8 @@ onBeforeUnmount(() => {
   --space-2: 0.75rem;
   --space-3: 1.25rem;
   --space-4: 2rem;
-  --space-5: 3.25rem;
-  --space-6: 5.25rem;
+  --space-5: 2.75rem;
+  --space-6: 4rem;
 
   --radius-tag: 3px;
   --radius-card: 14px;
@@ -598,12 +683,12 @@ onBeforeUnmount(() => {
 
 :global(html) {
   scroll-behavior: smooth;
-  scroll-padding-top: 5rem;
+  scroll-padding-top: 6rem;
 }
 
 .landing-root section,
 .landing-root footer {
-  scroll-margin-top: 5rem;
+  scroll-margin-top: 6rem;
 }
 
 .landing-root h1, .landing-root h2, .landing-root h3, .landing-root h4 {
@@ -632,9 +717,9 @@ onBeforeUnmount(() => {
 @media (min-width: 1440px) {
   .landing-root {
     --max-width: 1440px;
-    --step-body-lg: 1.25rem;
-    --step-h1: clamp(4rem, 3rem + 1.35vw, 4.75rem);
-    --step-h2: clamp(2.5rem, 2rem + 0.75vw, 3rem);
+    --step-body-lg: 1.2rem;
+    --step-h1: clamp(3.5rem, 3rem + 0.9vw, 4.25rem);
+    --step-h2: clamp(2.25rem, 2rem + 0.5vw, 2.75rem);
   }
 
   .landing-root .wrap {
@@ -646,11 +731,11 @@ onBeforeUnmount(() => {
 
 @media (min-width: 2200px) {
   .landing-root {
-    --max-width: 1680px;
+    --max-width: 1600px;
     --step-body: 1.0625rem;
-    --step-body-lg: 1.375rem;
-    --step-h1: 5rem;
-    --step-h2: 3.125rem;
+    --step-body-lg: 1.3rem;
+    --step-h1: 4.5rem;
+    --step-h2: 2.75rem;
   }
 
 }
@@ -705,14 +790,28 @@ onBeforeUnmount(() => {
 .landing-root .kicker-line { display: flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-3); }
 .landing-root .kicker-line::after { content: ""; height: 1px; flex: 1; background: var(--color-line); }
 
-/* Nav */
+/* Nav -- floating pill, inset from the viewport edges. Hides the instant the
+   page scrolls and drops back in once scrolling settles (handleNavScroll). */
 .landing-root .site-nav {
   position: sticky;
-  top: 0;
+  top: 0.85rem;
   z-index: 40;
-  background: color-mix(in srgb, var(--color-bg) 88%, transparent);
+  margin: 0.85rem clamp(1rem, 4vw, 3rem) 1.1rem;
+  border-radius: 16px;
+  border: 1px solid var(--color-line);
+  background: color-mix(in srgb, var(--color-bg) 90%, transparent);
   backdrop-filter: blur(10px);
-  border-bottom: 1px solid var(--color-line);
+  box-shadow: 0 12px 30px -16px rgba(2, 20, 18, 0.22);
+  transition: transform 320ms cubic-bezier(0.16, 1, 0.3, 1), opacity 260ms ease, box-shadow 220ms ease;
+}
+.landing-root .site-nav.nav-hidden {
+  transform: translateY(calc(-100% - 1.5rem));
+  opacity: 0;
+  pointer-events: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .landing-root .site-nav { transition: none; }
+  .landing-root .site-nav.nav-hidden { transform: none; opacity: 1; pointer-events: auto; }
 }
 .landing-root .nav-row { display: flex; align-items: center; justify-content: space-between; padding: 0.9rem 0; }
 .landing-root .brand {
@@ -763,9 +862,10 @@ onBeforeUnmount(() => {
 .landing-root .mobile-nav a { padding: 0.5rem 0; text-decoration: none; color: var(--color-text-muted); }
 
 /* Hero -- full-bleed photo carousel. Backgrounds come from heroSlides[].image
-   (frontend/public/hero/ versioned PNGs); until those files exist the section still
-   works, just showing the scrim gradient with no photo underneath. */
-.landing-root .hero-visual { position: relative; isolation: isolate; overflow: hidden; min-height: 560px; display: flex; flex-direction: column; justify-content: center; border-top: none; border-bottom: 0; }
+   (frontend/public/hero/) at 1402x1122; cover keeps the section filled edge to
+   edge with no gaps or seams (some crop on one axis is inherent to a full-bleed
+   background -- the scrim keeps the text side readable regardless of photo). */
+.landing-root .hero-visual { position: relative; isolation: isolate; overflow: hidden; min-height: 480px; display: flex; flex-direction: column; justify-content: center; border-top: none; border-bottom: 0; }
 .landing-root .hero-image, .landing-root .hero-scrim { position: absolute; inset: 0; }
 .landing-root .hero-image { opacity: 0; background-size: cover; background-position: center; background-color: var(--color-primary-deep); filter: saturate(1.2) contrast(1.05); transform: scale(1.03); transition: opacity 900ms ease, transform 7s ease; z-index: -2; }
 .landing-root .hero-image.active { opacity: 1; transform: scale(1); }
@@ -773,7 +873,11 @@ onBeforeUnmount(() => {
 .landing-root .hero-visual .wrap { position: relative; z-index: 1; width: 100%; }
 .landing-root .hero-copy { max-width: 42rem; }
 
-.landing-root .hero-slide { animation: hero-copy-in 550ms ease both; min-height: 15rem; }
+.landing-root .hero-slide { min-height: 13rem; }
+.landing-root .hero-fade-enter-active { transition: opacity 420ms ease, transform 420ms cubic-bezier(0.16, 1, 0.3, 1); }
+.landing-root .hero-fade-leave-active { transition: opacity 260ms ease, transform 260ms ease; }
+.landing-root .hero-fade-enter-from { opacity: 0; transform: translateY(14px); }
+.landing-root .hero-fade-leave-to { opacity: 0; transform: translateY(-10px); }
 .landing-root .hero-slide-icon {
   width: 42px; height: 42px; border-radius: 10px; display: grid; place-items: center;
   margin-bottom: var(--space-2); background: rgba(255, 255, 255, .16); color: #fff;
@@ -786,16 +890,22 @@ onBeforeUnmount(() => {
 .landing-root .hero-visual .btn-ghost { color: #fff; border-color: rgba(255, 255, 255, .55); }
 .landing-root .hero-visual .btn-ghost:hover { background: rgba(255, 255, 255, .12); border-color: #fff; }
 .landing-root .hero-dots { display: flex; gap: 9px; margin-top: var(--space-4); }
-.landing-root .hero-dots button { width: 42px; height: 4px; padding: 0; border: 0; border-radius: 99px; background: rgba(255, 255, 255, .38); cursor: pointer; transform: scaleX(.62); transform-origin: left center; transition: transform .2s ease, background .2s ease; }
-.landing-root .hero-dots button:hover { background: rgba(255, 255, 255, .6); }
-.landing-root .hero-dots button.active { background: #fbbf24; transform: scaleX(1); }
+.landing-root .hero-dots button { position: relative; width: 42px; height: 4px; padding: 0; border: 0; border-radius: 99px; background: rgba(255, 255, 255, .32); cursor: pointer; overflow: hidden; transition: background .2s ease; }
+.landing-root .hero-dots button:hover { background: rgba(255, 255, 255, .5); }
+.landing-root .hero-dot-fill { position: absolute; inset: 0; border-radius: inherit; background: #fbbf24; transform: scaleX(0); transform-origin: left center; animation-name: hero-dot-fill; animation-timing-function: linear; animation-fill-mode: forwards; will-change: transform; }
+@keyframes hero-dot-fill { from { transform: scaleX(0); } to { transform: scaleX(1); } }
 .landing-root .hero-facts { display: flex; gap: var(--space-4); margin-top: var(--space-4); flex-wrap: wrap; }
 .landing-root .hero-fact { font-size: 0.85rem; color: rgba(255, 255, 255, .78); display: flex; align-items: baseline; gap: 0.4em; }
 .landing-root .hero-fact strong { font-family: var(--font-mono); color: #fff; font-size: 0.95rem; }
 
-@keyframes hero-copy-in { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
-@media (max-width: 960px) { .landing-root .hero-visual { min-height: 520px; } }
-@media (prefers-reduced-motion: reduce) { .landing-root .hero-image, .landing-root .hero-slide { transition: none; animation: none; } }
+@media (max-width: 960px) { .landing-root .hero-visual { min-height: 440px; } }
+@media (prefers-reduced-motion: reduce) {
+  .landing-root .hero-image,
+  .landing-root .hero-slide,
+  .landing-root .hero-fade-enter-active,
+  .landing-root .hero-fade-leave-active { transition: none; animation: none; }
+  .landing-root .hero-dot-fill { animation: none; transform: scaleX(1); }
+}
 
 /* Prev/next arrows */
 .landing-root .hero-arrow {
@@ -874,7 +984,9 @@ onBeforeUnmount(() => {
   min-height: 190px;
   transition: transform 220ms cubic-bezier(0.16, 1, 0.3, 1),
     box-shadow 220ms cubic-bezier(0.16, 1, 0.3, 1),
-    background-color 180ms ease;
+    background-color 180ms ease,
+    opacity 550ms ease,
+    translate 550ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 .landing-root .feature-icon { width: 42px; height: 42px; border-radius: 10px; background: var(--color-primary-soft); display: grid; place-items: center; margin-bottom: 0.2rem; }
 .landing-root .feature-icon.accent { background: var(--color-accent-soft); }
@@ -899,6 +1011,32 @@ onBeforeUnmount(() => {
 
 .landing-root .feature-icon {
   transition: transform 220ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 220ms ease;
+}
+
+.landing-root .feature-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.75rem; margin-bottom: 0.2rem; }
+.landing-root .feature-top .feature-icon { margin-bottom: 0; }
+.landing-root .feature-photo-chip {
+  position: relative;
+  z-index: 1;
+  width: 60px;
+  flex-shrink: 0;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--color-line);
+  background: var(--color-surface-2);
+  box-shadow: 0 8px 16px -10px var(--shadow-color);
+  transform-origin: top right;
+  transition: transform 320ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 320ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.landing-root .feature-photo-chip img { display: block; width: 100%; height: 100%; object-fit: cover; }
+
+@media (hover: hover) and (pointer: fine) {
+  .landing-root .feature-photo-chip:hover {
+    z-index: 3;
+    cursor: zoom-in;
+    transform: scale(3.1);
+    box-shadow: 0 30px 60px -18px var(--shadow-color);
+  }
 }
 
 .landing-root .mini-widget { border: 1px solid var(--color-line); border-radius: 10px; padding: var(--space-3); background: var(--color-surface-2); font-size: 0.82rem; transition: transform 180ms ease, box-shadow 180ms ease; }
@@ -1019,12 +1157,25 @@ onBeforeUnmount(() => {
 /* Reveal-on-scroll */
 .landing-root .reveal { opacity: 0; transform: translateY(14px); transition: opacity 0.6s ease, transform 0.6s ease; }
 .landing-root .reveal.in { opacity: 1; transform: none; }
+
+/* Platform cards: direction-aware reveal that re-triggers on every pass --
+   slides up from below while scrolling down, down from above while scrolling
+   back up, set by JS via .enter-from-below / .enter-from-above. Uses the
+   standalone `translate` property (not `transform`) so it composes cleanly
+   with the card's own hover-lift transform instead of overriding it. */
+.landing-root .feature-card-reveal { opacity: 0; translate: 0 36px; }
+.landing-root .feature-card-reveal.enter-from-below { translate: 0 36px; }
+.landing-root .feature-card-reveal.enter-from-above { translate: 0 -36px; }
+.landing-root .feature-card-reveal.in { opacity: 1; translate: 0 0; }
+
 @media (prefers-reduced-motion: reduce) {
   :global(html) { scroll-behavior: auto; }
   .landing-root .reveal { opacity: 1; transform: none; transition: none; }
+  .landing-root .feature-card-reveal { opacity: 1; translate: 0 0; transition: none; }
   .landing-root .feature,
   .landing-root .feature-icon,
   .landing-root .mini-widget,
+  .landing-root .feature-photo-chip,
   .landing-root .dash,
   .landing-root .kpi,
   .landing-root .phone,
@@ -1036,14 +1187,14 @@ onBeforeUnmount(() => {
 /* Component-level wide-screen overrides live after their base rules so the
    cascade cannot quietly restore the smaller laptop dimensions. */
 @media (min-width: 1440px) {
-  .landing-root .hero-copy { max-width: 48rem; }
-  .landing-root .hero-visual { min-height: clamp(620px, 68vh, 820px); }
+  .landing-root .hero-copy { max-width: 46rem; }
+  .landing-root .hero-visual { min-height: clamp(480px, 52vh, 560px); }
   .landing-root .feature { min-height: 215px; }
 }
 
 @media (min-width: 2200px) {
-  .landing-root section { padding: 6.5rem 0; }
-  .landing-root .hero-copy { max-width: 52rem; }
-  .landing-root .hero-visual { min-height: clamp(720px, 70vh, 940px); }
+  .landing-root section { padding: 4.5rem 0; }
+  .landing-root .hero-copy { max-width: 48rem; }
+  .landing-root .hero-visual { min-height: clamp(520px, 54vh, 600px); }
 }
 </style>

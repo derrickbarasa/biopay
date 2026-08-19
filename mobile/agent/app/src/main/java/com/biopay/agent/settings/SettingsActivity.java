@@ -22,7 +22,6 @@ import com.biopay.agent.data.HouseholdDao;
 import com.biopay.agent.login.LoginActivity;
 import com.biopay.agent.network.ApiCallback;
 import com.biopay.agent.network.ApiClient;
-import com.biopay.agent.session.AppLockManager;
 import com.biopay.agent.session.SessionManager;
 import com.biopay.agent.sync.SyncAlertsManager;
 import com.biopay.agent.sync.SyncScheduler;
@@ -44,7 +43,6 @@ public class SettingsActivity extends BaseActivity {
     private EditText confirmPassword;
 
     private SessionManager sessionManager;
-    private AppLockManager appLockManager;
     private SyncAlertsManager syncAlertsManager;
     private TextView tvScannerStatus;
 
@@ -66,7 +64,6 @@ public class SettingsActivity extends BaseActivity {
         setupMainNavigation(R.id.bottomNavigation, R.id.navSettings);
 
         sessionManager = new SessionManager(this);
-        appLockManager = new AppLockManager(this);
         syncAlertsManager = new SyncAlertsManager(this);
 
         serverUrl = findViewById(R.id.etSettingsServer);
@@ -79,7 +76,6 @@ public class SettingsActivity extends BaseActivity {
         setupAccountRow();
         setupNotifications();
         setupBiometrics();
-        setupAppLock();
         setupDataAndStorage();
 
         findViewById(R.id.btnSaveServer).setOnClickListener(view -> saveServer());
@@ -139,17 +135,6 @@ public class SettingsActivity extends BaseActivity {
         tvScannerStatus.setText(available ? R.string.settings_scanner_connected : R.string.settings_scanner_disconnected);
         tvScannerStatus.setBackgroundResource(available ? R.drawable.bg_status_success : R.drawable.bg_status_warning);
         tvScannerStatus.setTextColor(ContextCompat.getColor(this, available ? R.color.bp_success : R.color.bp_warning));
-    }
-
-    private void setupAppLock() {
-        MaterialSwitch swAppLock = findViewById(R.id.swAppLock);
-        boolean supported = AppLockManager.isSupported(this);
-        swAppLock.setChecked(supported && appLockManager.isEnabled());
-        swAppLock.setEnabled(supported);
-        if (!supported) {
-            ((TextView) findViewById(R.id.tvAppLockBody)).setText(R.string.settings_app_lock_unsupported);
-        }
-        swAppLock.setOnCheckedChangeListener((button, checked) -> appLockManager.setEnabled(checked));
     }
 
     private void setupDataAndStorage() {

@@ -16,6 +16,8 @@ import com.google.android.material.bottomnavigation.BottomNavigationView;
 import com.biopay.agent.R;
 import com.biopay.agent.home.HomeActivity;
 import com.biopay.agent.profile.ProfileActivity;
+import com.biopay.agent.session.SessionManager;
+import com.biopay.agent.session.SessionTimeoutManager;
 import com.biopay.agent.settings.SettingsActivity;
 
 import android.content.Intent;
@@ -31,6 +33,28 @@ public abstract class BaseActivity extends AppCompatActivity {
                 .setAppearanceLightStatusBars(true);
         WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView())
                 .setAppearanceLightNavigationBars(true);
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (new SessionManager(this).isLoggedIn()) {
+            SessionTimeoutManager.get().attach(this);
+        }
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        SessionTimeoutManager.get().detach(this);
+    }
+
+    @Override
+    public void onUserInteraction() {
+        super.onUserInteraction();
+        if (new SessionManager(this).isLoggedIn()) {
+            SessionTimeoutManager.get().reset();
+        }
     }
 
     @Override

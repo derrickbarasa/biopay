@@ -3,10 +3,9 @@
     <string name="biopay_logo_description">BioPay fingerprint logo</string>
     <string name="back">Back</string>
     <string name="splash_scanner_label">Scanner profile: %1$s</string>
-    <string name="applock_prompt_title">Unlock BioPay</string>
-    <string name="applock_prompt_subtitle">Confirm it\'s you before opening beneficiary and biometric data</string>
-    <string name="applock_locked_message">BioPay stays locked until you confirm your fingerprint, face, or PIN.</string>
-    <string name="applock_retry">Try again</string>
+    <string name="session_timeout_title">Still there?</string>
+    <string name="session_timeout_message">You\'ve been inactive for a while. For your security, you\'ll be signed out in 30 seconds unless you confirm you\'re still using this device.</string>
+    <string name="session_timeout_confirm">Yes, I\'m still here</string>
 
     <string name="notification_channel_sync_name">Sync alerts</string>
     <string name="notification_channel_sync_description">Notifies you when offline records can\'t reach the BioPay server.</string>
@@ -194,9 +193,7 @@
     <string name="settings_face_body">Not available in this build yet. Verification uses fingerprint only until it ships.</string>
 
     <string name="settings_security">Security</string>
-    <string name="settings_app_lock">App lock</string>
-    <string name="settings_app_lock_body">Require your phone\'s fingerprint, face, or PIN to open BioPay</string>
-    <string name="settings_app_lock_unsupported">Set up a screen lock or fingerprint on this phone to turn this on.</string>
+    <string name="settings_security_policy">For your security, BioPay signs you out whenever you leave the app, and after 5 minutes of inactivity while it\'s open.</string>
     <string name="settings_change_password_intro">Change your sign-in password</string>
     <string name="settings_current_password">Current password</string>
     <string name="settings_new_password">New password</string>

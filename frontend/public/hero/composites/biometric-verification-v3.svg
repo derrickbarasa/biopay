@@ -1,9 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1448" height="1086" viewBox="0 0 1448 1086">
-  <defs>
-    <clipPath id="screen"><rect x="658" y="392" width="188" height="337" rx="6"/></clipPath>
-  </defs>
-  <image href="../biometric-verification-v3-base.png" width="1448" height="1086"/>
-  <g clip-path="url(#screen)">
-    <image href="../../biopay_logo_horizontal.svg" x="675" y="397" width="102" height="27" preserveAspectRatio="xMidYMid meet"/>
-  </g>
-</svg>

@@ -1,9 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1448" height="1086" viewBox="0 0 1448 1086">
-  <defs>
-    <clipPath id="screen"><polygon points="74,487 476,462 529,837 122,865"/></clipPath>
-  </defs>
-  <image href="../deduplication-v3-base.png" width="1448" height="1086"/>
-  <g clip-path="url(#screen)" transform="rotate(-3.5 177 515)">
-    <image href="../../biopay_logo_horizontal.svg" x="103" y="496" width="137" height="37" preserveAspectRatio="xMidYMid meet"/>
-  </g>
-</svg>
