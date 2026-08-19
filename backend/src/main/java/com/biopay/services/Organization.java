@@ -61,6 +61,19 @@ public class Organization extends AbstractVerticle {
         return "ANCHOR".equalsIgnoreCase(payload.getString("actorRole", ""));
     }
 
+    /** The one designated cross-anchor operator (admin@biopay.com) -- sees every anchor's
+     *  organisations instead of being scoped to just their own. Orthogonal to actorRole:
+     *  a system admin is still an ANCHOR-scope user for every permission check below. */
+    private static boolean isSystemAdmin(JsonObject payload) {
+        return payload.getBoolean("systemAdmin", false);
+    }
+
+    /** Vert.x's {@code JsonObject.getString(key, def)} only falls back to {@code def} when the
+     *  key is entirely absent -- an explicit JSON null still comes back null. */
+    private static String strOrEmpty(String s) {
+        return s == null ? "" : s;
+    }
+
     // ---- CREATE_ORGANIZATION (anchor only) -------------------------------------
 
     private void create(Message<Object> message) {
@@ -76,11 +89,23 @@ public class Organization extends AbstractVerticle {
         String authorisedEmail = payload.getString("authorisedEmail", "").trim();
         String authorisedContact = payload.getString("authorisedContact", "").trim();
         String address = payload.getString("address", "").trim();
+        // payload.getString(key, def) only substitutes def when the key is entirely absent --
+        // an explicit JSON null (e.g. a cleared Vuetify select, or the Android client's encoding
+        // of an unset optional field) still comes back null, so these go through strOrEmpty first.
+        String country = strOrEmpty(payload.getString("country")).trim();
+        String verificationMethod = strOrEmpty(payload.getString("verificationMethod")).trim().toUpperCase();
+        if (verificationMethod.isEmpty()) {
+            verificationMethod = "BIOMETRIC";
+        }
         Object anchorIdVal = payload.getValue("anchorId");
         JsonArray modules = payload.getJsonArray("modules", new JsonArray());
 
         if (partnerId.isEmpty() || name.isEmpty() || anchorIdVal == null) {
             replyError(message, "organisationCode and name are required");
+            return;
+        }
+        if (!"BIOMETRIC".equals(verificationMethod) && !"FACIAL".equals(verificationMethod)) {
+            replyError(message, "verificationMethod must be BIOMETRIC or FACIAL");
             return;
         }
         if (modules.isEmpty()) {
@@ -95,11 +120,12 @@ public class Organization extends AbstractVerticle {
         }
 
         String sql = "INSERT INTO partners (partner_id, name, types, authorised_name, authorised_email, "
-                + "authorised_contact, address, anchor_id, status, created_by, created_at, updated_at) "
-                + "VALUES (@p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10, GETDATE(), GETDATE())";
+                + "authorised_contact, address, country, verification_method, anchor_id, status, created_by, created_at, updated_at) "
+                + "VALUES (@p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10, @p11, @p12, GETDATE(), GETDATE())";
         pool.preparedQuery(sql)
                 .execute(Tuple.of(partnerId, name, "1", authorisedName, authorisedEmail, authorisedContact,
-                        address, Integer.parseInt(anchorIdVal.toString()), 1, payload.getValue("actorId")))
+                        address, country.isEmpty() ? null : country, verificationMethod,
+                        Integer.parseInt(anchorIdVal.toString()), 1, payload.getValue("actorId")))
                 .onFailure(err -> onDbError(message, err))
                 .onSuccess(rows -> {
                     if (rows.rowCount() == 0) {
@@ -193,8 +219,15 @@ public class Organization extends AbstractVerticle {
             return;
         }
 
+        String verificationMethod = strOrEmpty(payload.getString("verificationMethod")).trim().toUpperCase();
+        if (!verificationMethod.isEmpty() && !"BIOMETRIC".equals(verificationMethod) && !"FACIAL".equals(verificationMethod)) {
+            replyError(message, "verificationMethod must be BIOMETRIC or FACIAL");
+            return;
+        }
+
         String sql = "UPDATE partners SET name=@p1, authorised_name=@p2, authorised_email=@p3, "
-                + "authorised_contact=@p4, address=@p5, updated_at=GETDATE() WHERE partner_id=@p6";
+                + "authorised_contact=@p4, address=@p5, country=@p6, "
+                + "verification_method=COALESCE(NULLIF(@p7,''), verification_method), updated_at=GETDATE() WHERE partner_id=@p8";
         pool.preparedQuery(sql)
                 .execute(Tuple.of(
                         payload.getString("name", "").trim(),
@@ -202,6 +235,8 @@ public class Organization extends AbstractVerticle {
                         payload.getString("authorisedEmail", "").trim(),
                         payload.getString("authorisedContact", "").trim(),
                         payload.getString("address", "").trim(),
+                        strOrEmpty(payload.getString("country")).trim(),
+                        verificationMethod,
                         partnerId))
                 .onFailure(err -> onDbError(message, err))
                 .onSuccess(rows -> {
@@ -268,8 +303,10 @@ public class Organization extends AbstractVerticle {
         JsonObject payload = new JsonObject(message.body().toString());
         String partnerId = payload.getString("organisationCode", "").trim();
 
-        // An organisation user may only ever look up their own organisation.
-        if (!isAnchor(payload) && !partnerId.equals(payload.getString("partnerCode", ""))) {
+        // An organisation user may only ever look up their own organisation. A plain anchor
+        // admin is implicitly scoped to their own anchor's orgs by GET_ORGANIZATIONS already
+        // filtering the list they picked from; the system admin can look up any of them.
+        if (!isAnchor(payload) && !isSystemAdmin(payload) && !partnerId.equals(payload.getString("partnerCode", ""))) {
             replyError(message, "Not authorised to view this organisation");
             return;
         }
@@ -296,7 +333,11 @@ public class Organization extends AbstractVerticle {
 
         String sql;
         Tuple params;
-        if (isAnchor(payload)) {
+        if (isSystemAdmin(payload)) {
+            Integer status = payload.getInteger("status");
+            sql = "SELECT * FROM partners WHERE (@p1 IS NULL OR status=@p1) ORDER BY created_at DESC";
+            params = Tuple.of(status);
+        } else if (isAnchor(payload)) {
             Object anchorId = payload.getValue("anchorId");
             Integer status = payload.getInteger("status");
             sql = "SELECT * FROM partners WHERE (@p1 IS NULL OR anchor_id=@p1) AND (@p2 IS NULL OR status=@p2) ORDER BY created_at DESC";
@@ -330,6 +371,8 @@ public class Organization extends AbstractVerticle {
                 .put("authorisedEmail", Rows.str(r, "authorised_email"))
                 .put("authorisedContact", Rows.str(r, "authorised_contact"))
                 .put("address", Rows.str(r, "address"))
+                .put("country", Rows.str(r, "country"))
+                .put("verificationMethod", Rows.str(r, "verification_method"))
                 .put("anchorId", Rows.intVal(r, "anchor_id"))
                 .put("status", Rows.intVal(r, "status"))
                 .put("createdAt", Rows.str(r, "created_at"))

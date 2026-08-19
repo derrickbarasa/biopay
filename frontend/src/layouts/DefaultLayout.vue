@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useDisplay } from 'vuetify'
 import { useAuthStore } from '@/stores/auth'
 import { dispatch } from '@/api/client'
@@ -9,6 +9,7 @@ import { useIdleLogout } from '@/composables/useIdleLogout'
 
 const auth = useAuthStore()
 const router = useRouter()
+const route = useRoute()
 const toast = useToast()
 const { mdAndUp } = useDisplay()
 const drawer = ref(mdAndUp.value)
@@ -51,7 +52,9 @@ async function renewSubscription() {
   }
 }
 
-const isArchived = computed(() => subscription.value.status === 'ARCHIVED')
+// The Subscription page itself must stay reachable even when archived -- otherwise
+// there's no way to see invoices or reach the renew action that unlocks everything else.
+const isArchived = computed(() => subscription.value.status === 'ARCHIVED' && route.name !== 'subscription')
 const inGrace = computed(() => subscription.value.status === 'GRACE')
 
 onMounted(fetchSubscription)
@@ -103,6 +106,7 @@ const navSections: NavSection[] = [
   {
     title: '',
     items: [
+      { title: 'Subscription', icon: 'mdi-credit-card-outline', to: '/app/subscription' },
       { title: 'Settings', icon: 'mdi-cog-outline', to: '/app/settings' },
     ],
   },
@@ -236,7 +240,8 @@ async function handleLogout() {
           <p v-else class="text-caption text-medium-emphasis">
             Please contact your anchor administrator to renew.
           </p>
-          <div class="mt-4">
+          <div class="mt-4 d-flex ga-2 justify-center">
+            <v-btn variant="text" size="small" prepend-icon="mdi-credit-card-outline" to="/app/subscription">View subscription</v-btn>
             <v-btn variant="text" size="small" prepend-icon="mdi-logout" @click="handleLogout">Log out</v-btn>
           </div>
         </v-card>

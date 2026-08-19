@@ -22,6 +22,11 @@
     <string name="login_server_hint">BioPay server address</string>
     <string name="login_server_help">Use the computer Wi-Fi address. Both devices must be on the same network.</string>
 
+    <string name="subscription_locked_title">Subscription expired</string>
+    <string name="subscription_locked_message">Your organisation\'s BioPay subscription has lapsed past its grace period. Ask your anchor administrator to renew it from the web dashboard, then try again.</string>
+    <string name="subscription_locked_retry">Try again</string>
+    <string name="subscription_locked_logout">Log out</string>
+
     <string name="home_welcome">Hello, %1$s</string>
     <string name="home_subtitle">Your field workspace</string>
     <string name="home_field_workspace">BioPay field workspace</string>

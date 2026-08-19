@@ -323,13 +323,15 @@ public class Auth extends AbstractVerticle {
                     Integer anchorId = intOr(r, "anchor_id", null);
                     String partnerCode = "ORGANISATION".equalsIgnoreCase(scope) ? Rows.str(r, "partner_code") : null;
                     String email = Rows.str(r, "email");
+                    boolean systemAdmin = Boolean.TRUE.equals(r.getBoolean("is_system_admin"));
 
                     JsonObject claims = new JsonObject()
                             .put("sub", userId)
                             .put("role", scope)
                             .put("anchorId", anchorId)
                             .put("partnerCode", partnerCode)
-                            .put("email", email);
+                            .put("email", email)
+                            .put("systemAdmin", systemAdmin);
 
                     issueTokens("USER", userId, claims)
                             .onFailure(err -> onDbError(message, err))
@@ -351,6 +353,7 @@ public class Auth extends AbstractVerticle {
                                                 .put("role", scope)
                                                 .put("anchorId", anchorId)
                                                 .put("partnerCode", partnerCode)
+                                                .put("systemAdmin", systemAdmin)
                                                 .put("totpEnabled", Boolean.TRUE.equals(r.getBoolean("totp_enabled")))
                                                 .put("permissions", permsF.result() != null ? permsF.result() : new JsonArray())
                                                 .put("enabledModules", modulesF.result() != null ? modulesF.result() : new JsonArray()))));
@@ -710,7 +713,8 @@ public class Auth extends AbstractVerticle {
                             .put("role", scope)
                             .put("anchorId", intOr(r, "anchor_id", null))
                             .put("partnerCode", "ORGANISATION".equalsIgnoreCase(scope) ? Rows.str(r, "partner_code") : null)
-                            .put("email", Rows.str(r, "email"));
+                            .put("email", Rows.str(r, "email"))
+                            .put("systemAdmin", Boolean.TRUE.equals(r.getBoolean("is_system_admin")));
                 });
     }
 
@@ -829,6 +833,7 @@ public class Auth extends AbstractVerticle {
                                     .put("role", scope)
                                     .put("anchorId", intOr(r, "anchor_id", null))
                                     .put("partnerCode", partnerCode)
+                                    .put("systemAdmin", Boolean.TRUE.equals(r.getBoolean("is_system_admin")))
                                     .put("totpEnabled", Boolean.TRUE.equals(r.getBoolean("totp_enabled")))
                                     .put("permissions", permsF.result() != null ? permsF.result() : new JsonArray())
                                     .put("enabledModules", modulesF.result() != null ? modulesF.result() : new JsonArray()))));

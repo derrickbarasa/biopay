@@ -57,7 +57,7 @@ public class EntryPoint extends AbstractVerticle {
     // ARCHIVED, so the account can still see the situation and renew/manage itself.
     // Everything else routed through /api/v1/req is a gated data operation.
     private static final Set<String> SUBSCRIPTION_EXEMPT_CODES = Set.of(
-            "GET_SUBSCRIPTION", "RENEW_SUBSCRIPTION",
+            "GET_SUBSCRIPTION", "RENEW_SUBSCRIPTION", "GET_SUBSCRIPTION_INVOICES", "GET_SUBSCRIPTION_INVOICE_RECEIPT",
             "ME", "LOGOUT", "CHANGE_PASSWORD", "UPDATE_PROFILE",
             "TOTP_SETUP_INIT", "TOTP_SETUP_CONFIRM", "TOTP_DISABLE",
             "GET_ORGANIZATION_MODULES");
@@ -201,6 +201,7 @@ public class EntryPoint extends AbstractVerticle {
                     data.put("actorRole", principal.getString("role"));
                     data.put("anchorId", principal.getValue("anchorId"));
                     data.put("partnerCode", principal.getValue("partnerCode"));
+                    data.put("systemAdmin", Boolean.TRUE.equals(principal.getValue("systemAdmin")));
 
                     String processingCode = data.getString("processingCode", "").trim();
                     if (processingCode.isEmpty()) {

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { dispatch } from '@/api/client'
 import { useToast } from '@/composables/useToast'
 
@@ -59,6 +59,15 @@ async function loadVillages() {
   const res = await dispatch<{ results: GeoNode[] }>('GET_VILLAGES', { locationCode: villageLocationFilter.value })
   villages.value = res.results
 }
+
+// Parent-level columns (a county's state, a location's county, a village's location)
+// show the parent's name, not its raw code.
+const stateNameByCode = computed(() => new Map(states.value.map((s) => [s.code, s.name])))
+const countyNameByCode = computed(() => new Map(counties.value.map((c) => [c.code, c.name])))
+const locationNameByCode = computed(() => new Map(locations.value.map((l) => [l.code, l.name])))
+function stateName(code?: string) { return (code && stateNameByCode.value.get(code)) || code || '—' }
+function countyName(code?: string) { return (code && countyNameByCode.value.get(code)) || code || '—' }
+function locationName(code?: string) { return (code && locationNameByCode.value.get(code)) || code || '—' }
 
 async function loadAll() {
   loading.value = true
@@ -179,6 +188,7 @@ async function remove(level: typeof dialogLevel.value, code: string) {
               <v-btn size="small" color="primary" prepend-icon="mdi-plus" @click="openCreate('COUNTY')">Add County</v-btn>
             </div>
             <v-data-table :headers="countyHeaders" :items="counties" :search="tableSearch" :loading="loading" density="comfortable">
+              <template #item.stateCode="{ item }">{{ stateName(item.stateCode) }}</template>
               <template #item.actions="{ item }">
                 <v-btn icon="mdi-delete" size="small" variant="text" color="error" :aria-label="`Delete county ${item.name}`" @click="remove('COUNTY', item.code)" />
               </template>
@@ -197,6 +207,7 @@ async function remove(level: typeof dialogLevel.value, code: string) {
               <v-btn size="small" color="primary" prepend-icon="mdi-plus" @click="openCreate('LOCATION')">Add Location</v-btn>
             </div>
             <v-data-table :headers="locationHeaders" :items="locations" :search="tableSearch" :loading="loading" density="comfortable">
+              <template #item.countyCode="{ item }">{{ countyName(item.countyCode) }}</template>
               <template #item.actions="{ item }">
                 <v-btn icon="mdi-delete" size="small" variant="text" color="error" :aria-label="`Delete location ${item.name}`" @click="remove('LOCATION', item.code)" />
               </template>
@@ -216,6 +227,7 @@ async function remove(level: typeof dialogLevel.value, code: string) {
               <v-btn size="small" color="primary" prepend-icon="mdi-plus" @click="openCreate('VILLAGE')">Add Village</v-btn>
             </div>
             <v-data-table :headers="villageHeaders" :items="villages" :search="tableSearch" :loading="loading" density="comfortable">
+              <template #item.locationCode="{ item }">{{ locationName(item.locationCode) }}</template>
               <template #item.actions="{ item }">
                 <v-btn icon="mdi-delete" size="small" variant="text" color="error" :aria-label="`Delete village ${item.name}`" @click="remove('VILLAGE', item.code)" />
               </template>

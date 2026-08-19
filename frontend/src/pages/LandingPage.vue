@@ -71,13 +71,13 @@ const heroSlides = [
     image: '/hero/deduplication.png',
   },
   {
-    icon: 'ai', tone: 'primary', eyebrow: 'AI agent',
-    title: 'An agent that never stops watching.',
+    icon: 'ai', tone: 'primary', eyebrow: 'An AI',
+    title: 'Agent that never stops watching.',
     copy: 'Registrations and disbursements are reviewed as they land, flagging the patterns a person reviewing thousands of rows would miss.',
     image: '/hero/ai-agent.png',
   },
 ]
-const HERO_INTERVAL_MS = 5500
+const HERO_INTERVAL_MS = 9000
 const activeHero = ref(0)
 const heroProgressTick = ref(0)
 let heroTimer: ReturnType<typeof setInterval> | null = null
@@ -111,6 +111,47 @@ function prevHero() {
 function closeMobileNav() {
   mobileNavOpen.value = false
 }
+
+// "How it works" -- rotating step cards, same auto-advance + manual-dot
+// pattern as the hero carousel, driven independently.
+const howSteps = [
+  {
+    title: 'Register in the field', image: '/how-it-works/register-in-the-field.png',
+    copy: 'A field officer captures the household offline: demographics, fingerprints, a photo, and the exact GPS location — down to village level.',
+  },
+  {
+    title: 'Sync when signal returns', image: '/how-it-works/sync-when-signal-returns.png',
+    copy: "Every record sits queued on the device until a connection appears, then uploads on its own — no officer has to remember to press sync.",
+  },
+  {
+    title: 'Verify at disbursement', image: '/how-it-works/verify-at-disbursement.png',
+    copy: "Fingerprint or face match confirms it's the registered person, not whoever's holding their ID card that day.",
+  },
+  {
+    title: 'Reconcile on the dashboard', image: '/how-it-works/reconcile-on-the-dashboard.png',
+    copy: 'Anchors and organisations see every payment, time- and location-stamped, ready for donor reporting.',
+  },
+]
+const HOW_INTERVAL_MS = 6500
+const activeHow = ref(0)
+let howTimer: ReturnType<typeof setInterval> | null = null
+let howTimerReduceMotion = false
+
+function restartHowTimer() {
+  if (howTimer) clearInterval(howTimer)
+  if (!howTimerReduceMotion) {
+    howTimer = setInterval(() => { activeHow.value = (activeHow.value + 1) % howSteps.length }, HOW_INTERVAL_MS)
+  }
+}
+
+function goToHow(index: number) {
+  activeHow.value = index
+  restartHowTimer()
+}
+
+// Contact email is configurable via VITE_CONTACT_EMAIL so it can be swapped
+// for a real inbox without a code change.
+const contactEmail = import.meta.env.VITE_CONTACT_EMAIL || 'biopay@money.com'
 
 onMounted(() => {
   const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -165,6 +206,9 @@ onMounted(() => {
 
   heroTimerReduceMotion = reduceMotion
   restartHeroTimer()
+
+  howTimerReduceMotion = reduceMotion
+  restartHowTimer()
 })
 
 onBeforeUnmount(() => {
@@ -174,6 +218,7 @@ onBeforeUnmount(() => {
   window.removeEventListener('scroll', handleNavScroll)
   if (navHideTimer) clearTimeout(navHideTimer)
   if (heroTimer) clearInterval(heroTimer)
+  if (howTimer) clearInterval(howTimer)
 })
 </script>
 
@@ -192,7 +237,7 @@ onBeforeUnmount(() => {
         </nav>
         <div class="nav-actions">
           <router-link class="nav-login" to="/login">Log in</router-link>
-          <a class="btn btn-primary" href="#demo">Request a demo</a>
+          <a class="btn btn-primary btn-nav" href="#demo">Request a demo</a>
           <button class="nav-toggle" aria-label="Toggle navigation" @click="mobileNavOpen = !mobileNavOpen">☰</button>
         </div>
       </div>
@@ -303,10 +348,10 @@ onBeforeUnmount(() => {
             </p>
             <p>
               The structure mirrors how these programmes are actually run: an
-              <strong>anchor</strong> (a bank or a lead financial partner) oversees one or more
-              <strong>organisations</strong> (the NGOs actually running programmes), whose
-              <strong>field officers</strong> do the registering and paying — down to the boma,
-              payam, county and state the household lives in.
+              <strong>anchor</strong> (an organisation or lead financial partner) oversees one or
+              more <strong>organisations/programmes</strong> (the NGOs actually running them),
+              whose <strong>field officers</strong> do the registering and paying — down to the
+              village, location, county and state the household lives in.
             </p>
           </div>
         </div>
@@ -317,30 +362,51 @@ onBeforeUnmount(() => {
         <div class="wrap">
           <span class="eyebrow">The cycle</span>
           <h2 style="margin-top: 0.6rem">From registration to reconciled payment</h2>
-          <div class="steps">
-            <div class="step reveal">
-              <div class="step-num num">01</div>
-              <h4>Register in the field</h4>
-              <p>A field officer captures the household offline: demographics, fingerprints, a
-                photo, and the exact GPS location — down to boma level.</p>
+
+          <div class="how-cycle reveal">
+            <div class="cycle-visual">
+              <div class="globe" aria-hidden="true">
+                <svg class="globe-grid" viewBox="0 0 200 200" fill="none">
+                  <circle cx="100" cy="100" r="76" />
+                  <ellipse cx="100" cy="100" rx="34" ry="76" />
+                  <ellipse cx="100" cy="100" rx="60" ry="76" />
+                  <path d="M29 74h142M24 100h152M29 126h142" />
+                </svg>
+                <span>Field to finance</span>
+              </div>
+              <div class="cycle-orbit" :style="{ transform: `rotate(${-activeHow * 90}deg)` }" aria-label="BioPay process steps">
+                <button
+                  v-for="(step, index) in howSteps" :key="step.title"
+                  class="cycle-node"
+                  :class="{ active: index === activeHow }"
+                  :style="{
+                    '--step-angle': `${index * 90}deg`,
+                    '--node-upright': `${(activeHow - index) * 90}deg`,
+                  }"
+                  :aria-label="`Show step ${index + 1}: ${step.title}`"
+                  :aria-current="index === activeHow ? 'step' : undefined"
+                  @click="goToHow(index)"
+                >
+                  <img :src="step.image" alt="" />
+                  <span class="num">{{ index + 1 }}</span>
+                </button>
+              </div>
             </div>
-            <div class="step reveal">
-              <div class="step-num num">02</div>
-              <h4>Sync when signal returns</h4>
-              <p>Every record sits queued on the device until a connection appears, then uploads
-                on its own — no officer has to remember to press sync.</p>
-            </div>
-            <div class="step reveal">
-              <div class="step-num num">03</div>
-              <h4>Verify at disbursement</h4>
-              <p>Fingerprint or face match confirms it's the registered person, not whoever's
-                holding their ID card that day.</p>
-            </div>
-            <div class="step reveal">
-              <div class="step-num num">04</div>
-              <h4>Reconcile on the dashboard</h4>
-              <p>Anchors and organisations see every payment, time- and location-stamped, ready
-                for donor reporting.</p>
+
+            <div class="cycle-copy" aria-live="polite">
+              <Transition name="hero-fade" mode="out-in">
+                <div :key="activeHow">
+                  <div class="step-num num">{{ String(activeHow + 1).padStart(2, '0') }}</div>
+                  <h3>{{ howSteps[activeHow].title }}</h3>
+                  <p>{{ howSteps[activeHow].copy }}</p>
+                  <div class="cycle-progress" aria-hidden="true">
+                    <span
+                      v-for="(_, index) in howSteps" :key="index"
+                      :class="{ active: index === activeHow }"
+                    />
+                  </div>
+                </div>
+              </Transition>
             </div>
           </div>
         </div>
@@ -354,18 +420,13 @@ onBeforeUnmount(() => {
 
           <div class="feature-grid">
             <div class="feature feature-card-reveal">
-              <div class="feature-top">
-                <div class="feature-icon">
-                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" style="stroke: var(--color-primary)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-                    <rect x="6" y="2.5" width="12" height="19" rx="2.4" />
-                    <path d="M10 18.5h4" />
-                    <path d="M4 9l2.5 2.5L4 14" />
-                    <path d="M20 9l-2.5 2.5L20 14" />
-                  </svg>
-                </div>
-                <div class="feature-photo-chip" style="aspect-ratio: 1402 / 1122">
-                  <img src="/platform/mobile.png" alt="" loading="lazy" />
-                </div>
+              <div class="feature-icon">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" style="stroke: var(--color-primary)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="6" y="2.5" width="12" height="19" rx="2.4" />
+                  <path d="M10 18.5h4" />
+                  <path d="M4 9l2.5 2.5L4 14" />
+                  <path d="M20 9l-2.5 2.5L20 14" />
+                </svg>
               </div>
               <span class="feature-tag">Mobile · offline</span>
               <h4>Works with no signal at all</h4>
@@ -395,16 +456,11 @@ onBeforeUnmount(() => {
             </div>
 
             <div class="feature feature-card-reveal">
-              <div class="feature-top">
-                <div class="feature-icon">
-                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" style="stroke: var(--color-primary)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M12 21s7-6.4 7-12a7 7 0 1 0-14 0c0 5.6 7 12 7 12z" />
-                    <circle cx="12" cy="9" r="2.4" />
-                  </svg>
-                </div>
-                <div class="feature-photo-chip" style="aspect-ratio: 1329 / 1183">
-                  <img src="/platform/location.png" alt="" loading="lazy" />
-                </div>
+              <div class="feature-icon">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" style="stroke: var(--color-primary)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 21s7-6.4 7-12a7 7 0 1 0-14 0c0 5.6 7 12 7 12z" />
+                  <circle cx="12" cy="9" r="2.4" />
+                </svg>
               </div>
               <span class="feature-tag">Location</span>
               <h4>GPS on every capture</h4>
@@ -415,18 +471,13 @@ onBeforeUnmount(() => {
             </div>
 
             <div class="feature feature-card-reveal">
-              <div class="feature-top">
-                <div class="feature-icon">
-                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" style="stroke: var(--color-primary)" stroke-width="1.6" stroke-linecap="round">
-                    <path d="M12 3a7 7 0 0 1 7 7c0 3.5-1 6-1 8.5" />
-                    <path d="M12 3a7 7 0 0 0-7 7c0 2 .3 3.6.8 5" />
-                    <path d="M9 20c1.2-2 1.5-4.5 1.5-7A4.5 4.5 0 0 1 15 8.5c1 0 2 .3 2.7 1" />
-                    <path d="M6.5 17c.8-1.7 1-3.8 1-6a4.5 4.5 0 0 1 4-4.5" />
-                  </svg>
-                </div>
-                <div class="feature-photo-chip" style="aspect-ratio: 1402 / 1122">
-                  <img src="/platform/fingerprint-verification.png" alt="" loading="lazy" />
-                </div>
+              <div class="feature-icon">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" style="stroke: var(--color-primary)" stroke-width="1.6" stroke-linecap="round">
+                  <path d="M12 3a7 7 0 0 1 7 7c0 3.5-1 6-1 8.5" />
+                  <path d="M12 3a7 7 0 0 0-7 7c0 2 .3 3.6.8 5" />
+                  <path d="M9 20c1.2-2 1.5-4.5 1.5-7A4.5 4.5 0 0 1 15 8.5c1 0 2 .3 2.7 1" />
+                  <path d="M6.5 17c.8-1.7 1-3.8 1-6a4.5 4.5 0 0 1 4-4.5" />
+                </svg>
               </div>
               <span class="feature-tag">Verification</span>
               <h4>Fingerprint payment</h4>
@@ -436,24 +487,62 @@ onBeforeUnmount(() => {
             </div>
 
             <div class="feature feature-card-reveal">
-              <div class="feature-top">
-                <div class="feature-icon accent">
-                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" style="stroke: var(--color-accent-deep)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M4 8V6a2 2 0 0 1 2-2h2" /><path d="M16 4h2a2 2 0 0 1 2 2v2" />
-                    <path d="M20 16v2a2 2 0 0 1-2 2h-2" /><path d="M8 20H6a2 2 0 0 1-2-2v-2" />
-                    <circle cx="9" cy="10" r="1" /><circle cx="15" cy="10" r="1" />
-                    <path d="M9 15c.8.7 1.9 1 3 1s2.2-.3 3-1" />
-                  </svg>
-                </div>
-                <div class="feature-photo-chip" style="aspect-ratio: 1402 / 1122">
-                  <img src="/platform/facial-verification.png" alt="" loading="lazy" />
-                </div>
+              <div class="feature-icon accent">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" style="stroke: var(--color-accent-deep)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M4 8V6a2 2 0 0 1 2-2h2" /><path d="M16 4h2a2 2 0 0 1 2 2v2" />
+                  <path d="M20 16v2a2 2 0 0 1-2 2h-2" /><path d="M8 20H6a2 2 0 0 1-2-2v-2" />
+                  <circle cx="9" cy="10" r="1" /><circle cx="15" cy="10" r="1" />
+                  <path d="M9 15c.8.7 1.9 1 3 1s2.2-.3 3-1" />
+                </svg>
               </div>
               <span class="feature-tag">Verification</span>
               <h4>Face recognition payment</h4>
               <p>Where a fingerprint scanner isn't practical — older beneficiaries, manual
                 labour, injury — a face match against the enrolment photo confirms identity
                 instead.</p>
+            </div>
+
+            <div class="feature feature-card-reveal">
+              <div class="feature-icon">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" style="stroke: var(--color-primary)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="3" y="4" width="18" height="16" rx="2" /><path d="M3 9h18" />
+                  <path d="M8 14.5l2 2 4-4.5" />
+                </svg>
+              </div>
+              <span class="feature-tag">Attendance</span>
+              <h4>Event and activity attendance</h4>
+              <p>Clock beneficiaries in and out of a maternity workshop, an immunisation drive
+                or a cash-for-work day the same way a payment is verified — biometric, GPS- and
+                time-stamped, with no paper sign-in sheet to lose.</p>
+              <div class="feature-foot">→ workshops · immunisation · cash-for-work</div>
+            </div>
+
+            <div class="feature feature-card-reveal">
+              <div class="feature-icon accent">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" style="stroke: var(--color-accent-deep)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M4 8a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v1.5a2 2 0 0 0 0 5V16a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-1.5a2 2 0 0 0 0-5V8z" />
+                  <path d="M14 6.5v11" stroke-dasharray="2 2.4" />
+                </svg>
+              </div>
+              <span class="feature-tag">Vouchers</span>
+              <h4>Voucher redemption</h4>
+              <p>Print or issue a biometric-verified voucher a household redeems for food,
+                goods or services at a partner vendor — every issue, redemption and void stays
+                on one traceable ledger, not a paper stub.</p>
+            </div>
+
+            <div class="feature feature-card-reveal">
+              <div class="feature-icon">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" style="stroke: var(--color-primary)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="3" y="3.5" width="18" height="17" rx="2.4" />
+                  <path d="M8 8.5h8M8 12.5h8M8 16.5h5" />
+                </svg>
+              </div>
+              <span class="feature-tag">Subscription</span>
+              <h4>Simple per-anchor subscription</h4>
+              <p>One subscription per anchor covers every organisation under it. A grace period
+                gives time to renew before access pauses, renewal is a click for an anchor
+                admin, and pricing is set per your agreement — not listed here.</p>
             </div>
 
             <div class="feature feature-card-reveal">
@@ -503,11 +592,18 @@ onBeforeUnmount(() => {
                       <div class="kpi"><span class="lbl">Clocked in</span><span class="num">742</span></div>
                       <div class="kpi"><span class="lbl">Clocked out</span><span class="num">611</span></div>
                     </div>
+                    <div class="dash-chart">
+                      <div class="bar" style="--h: 38%"><span class="v">318</span></div>
+                      <div class="bar" style="--h: 58%"><span class="v">482</span></div>
+                      <div class="bar" style="--h: 74%"><span class="v">611</span></div>
+                      <div class="bar" style="--h: 91%"><span class="v">742</span></div>
+                      <div class="bar" style="--h: 100%"><span class="v">812</span></div>
+                    </div>
                     <div class="dash-table">
                       <div class="row head"><span>Beneficiary</span><span>Household</span><span>Clock</span></div>
-                      <div class="row"><span>Achol Deng</span><span class="num">HH8K3M2Q</span><span><span class="status-pill paid">In</span></span></div>
-                      <div class="row"><span>Nyibol Garang</span><span class="num">HH7F19XR</span><span><span class="status-pill paid">In</span></span></div>
-                      <div class="row"><span>James Lado</span><span class="num">HH2P8H6T</span><span><span class="status-pill pending">Out</span></span></div>
+                      <div class="row"><span>John Doe</span><span class="num">HH8K3M2Q</span><span><span class="status-pill paid">In</span></span></div>
+                      <div class="row"><span>Jane Doe</span><span class="num">HH7F19XR</span><span><span class="status-pill paid">In</span></span></div>
+                      <div class="row"><span>Grace Achieng</span><span class="num">HH2P8H6T</span><span><span class="status-pill pending">Out</span></span></div>
                     </div>
                   </div>
                 </div>
@@ -519,7 +615,7 @@ onBeforeUnmount(() => {
               <div class="phone reveal">
                 <div class="phone-screen">
                   <div class="phone-head">
-                    <div class="welcome">Welcome, Peter Deng</div>
+                    <div class="welcome">Welcome, John Doe</div>
                     <div class="org">PARTNER · 1002</div>
                   </div>
                   <div class="phone-kpis">
@@ -593,7 +689,8 @@ onBeforeUnmount(() => {
           <div class="foot-brand">
             <a class="brand" href="#top"><img src="/biopay_logo_horizontal.svg" alt="BioPay" class="brand-logo" /></a>
             <p>Biometric registration and payment infrastructure for anchors and organisations
-              running cash-transfer programmes.</p>
+              running cash transfers, food distribution, voucher redemption, in-kind
+              interventions (goods and items), and cash-for-work programmes.</p>
           </div>
           <div class="foot-links">
             <div class="foot-col">
@@ -607,6 +704,10 @@ onBeforeUnmount(() => {
               <a href="#mission">Mission</a>
               <a href="#demo">Request a demo</a>
               <router-link to="/login">Log in</router-link>
+            </div>
+            <div class="foot-col">
+              <h5>Contact us</h5>
+              <a :href="`mailto:${contactEmail}`">{{ contactEmail }}</a>
             </div>
           </div>
         </div>
@@ -646,24 +747,25 @@ onBeforeUnmount(() => {
   --font-body: 'Ubuntu', sans-serif;
   --font-mono: "SF Mono", "Cascadia Code", Consolas, "Liberation Mono", monospace;
 
-  --step-caption: 0.75rem;
-  --step-body: 1rem;
-  --step-body-lg: 1.1875rem;
-  --step-h4: 1.375rem;
-  --step-h3: 1.75rem;
-  --step-h2: clamp(1.75rem, 1.3rem + 1.6vw, 2.5rem);
-  --step-h1: clamp(2.5rem, 1.6rem + 3.2vw, 4rem);
+  --step-caption: 0.72rem;
+  --step-body: 0.95rem;
+  --step-body-lg: 1.1rem;
+  --step-h4: 1.3rem;
+  --step-h3: 1.65rem;
+  --step-h2: clamp(1.6rem, 1.25rem + 1.3vw, 2.15rem);
+  --step-h1: clamp(2.2rem, 1.5rem + 2.6vw, 3.25rem);
 
-  --space-1: 0.5rem;
-  --space-2: 0.75rem;
-  --space-3: 1.25rem;
-  --space-4: 2rem;
-  --space-5: 2.75rem;
-  --space-6: 4rem;
+  --space-1: 0.45rem;
+  --space-2: 0.65rem;
+  --space-3: 1.1rem;
+  --space-4: 1.75rem;
+  --space-5: 2.3rem;
+  --space-6: 3.1rem;
 
   --radius-tag: 3px;
   --radius-card: 14px;
   --max-width: 1180px;
+  --nav-height: 62px;
 
   display: block;
   width: 100%;
@@ -712,30 +814,29 @@ onBeforeUnmount(() => {
   .landing-root .wrap { padding-left: var(--space-3); padding-right: var(--space-3); }
 }
 
-/* Use the extra canvas on large monitors without stretching readable copy.
-   Laptop/tablet layouts keep the original 1180px measure. */
+/* Use the extra canvas on large monitors without stretching readable copy,
+   and without ballooning type past what fits on-screen at 100% zoom on a
+   normal 1440-1920px display -- that regression is why this block stays
+   modest rather than matching --max-width growth 1:1. */
 @media (min-width: 1440px) {
   .landing-root {
-    --max-width: 1440px;
-    --step-body-lg: 1.2rem;
-    --step-h1: clamp(3.5rem, 3rem + 0.9vw, 4.25rem);
-    --step-h2: clamp(2.25rem, 2rem + 0.5vw, 2.75rem);
+    --max-width: 1240px;
   }
 
   .landing-root .wrap {
-    padding-left: 3rem;
-    padding-right: 3rem;
+    padding-left: 2.25rem;
+    padding-right: 2.25rem;
   }
 
 }
 
 @media (min-width: 2200px) {
   .landing-root {
-    --max-width: 1600px;
-    --step-body: 1.0625rem;
-    --step-body-lg: 1.3rem;
-    --step-h1: 4.5rem;
-    --step-h2: 2.75rem;
+    --max-width: 1520px;
+    --step-body: 1rem;
+    --step-body-lg: 1.15rem;
+    --step-h1: clamp(2.6rem, 1.9rem + 1.6vw, 3.5rem);
+    --step-h2: clamp(1.75rem, 1.4rem + 0.8vw, 2.3rem);
   }
 
 }
@@ -772,11 +873,12 @@ onBeforeUnmount(() => {
 }
 .landing-root .btn:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 3px; }
 .landing-root .btn-primary {
-  background: var(--color-accent);
-  color: #1A1200;
+  background: var(--color-primary);
+  color: #fff;
   box-shadow: 0 1px 0 rgba(0, 0, 0, 0.08);
 }
-.landing-root .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 6px 16px -6px var(--shadow-color); }
+.landing-root .btn-primary:hover { background: var(--color-primary-deep); transform: translateY(-1px); box-shadow: 0 6px 16px -6px var(--shadow-color); }
+.landing-root .btn-nav { padding: 0.68em 1.15em; font-size: 0.9rem; }
 .landing-root .btn-ghost {
   background: transparent;
   color: var(--color-text);
@@ -790,22 +892,27 @@ onBeforeUnmount(() => {
 .landing-root .kicker-line { display: flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-3); }
 .landing-root .kicker-line::after { content: ""; height: 1px; flex: 1; background: var(--color-line); }
 
-/* Nav -- floating pill, inset from the viewport edges. Hides the instant the
-   page scrolls and drops back in once scrolling settles (handleNavScroll). */
+/* Nav -- fixed, edge to edge. Hides the instant the page scrolls and drops
+   back in once scrolling settles (handleNavScroll). */
 .landing-root .site-nav {
-  position: sticky;
-  top: 0.85rem;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  width: 100%;
   z-index: 40;
-  margin: 0.85rem clamp(1rem, 4vw, 3rem) 1.1rem;
-  border-radius: 16px;
-  border: 1px solid var(--color-line);
-  background: color-mix(in srgb, var(--color-bg) 90%, transparent);
+  margin: 0;
+  border-radius: 0;
+  border: 0;
+  border-bottom: 1px solid var(--color-line);
+  background: color-mix(in srgb, var(--color-bg) 92%, transparent);
   backdrop-filter: blur(10px);
   box-shadow: 0 12px 30px -16px rgba(2, 20, 18, 0.22);
   transition: transform 320ms cubic-bezier(0.16, 1, 0.3, 1), opacity 260ms ease, box-shadow 220ms ease;
 }
+.landing-root .site-nav .wrap { max-width: none; padding-left: clamp(1.25rem, 4vw, 3rem); padding-right: clamp(1.25rem, 4vw, 3rem); }
 .landing-root .site-nav.nav-hidden {
-  transform: translateY(calc(-100% - 1.5rem));
+  transform: translateY(-100%);
   opacity: 0;
   pointer-events: none;
 }
@@ -813,7 +920,9 @@ onBeforeUnmount(() => {
   .landing-root .site-nav { transition: none; }
   .landing-root .site-nav.nav-hidden { transform: none; opacity: 1; pointer-events: auto; }
 }
-.landing-root .nav-row { display: flex; align-items: center; justify-content: space-between; padding: 0.9rem 0; }
+.landing-root .nav-row { min-height: var(--nav-height); display: flex; align-items: center; justify-content: space-between; padding: 0.45rem 0; }
+/* main content sits below the now-fixed nav */
+.landing-root main { padding-top: var(--nav-height); }
 .landing-root .brand {
   display: flex;
   align-items: center;
@@ -824,7 +933,7 @@ onBeforeUnmount(() => {
   text-decoration: none;
   color: var(--color-text);
 }
-.landing-root .brand-logo { display: block; width: 196px; height: auto; }
+.landing-root .brand-logo { display: block; width: 164px; height: auto; }
 .landing-root .brand-mark {
   width: 30px;
   height: 30px;
@@ -850,7 +959,8 @@ onBeforeUnmount(() => {
   .landing-root .nav-toggle { display: inline-flex; }
 }
 @media (max-width: 480px) {
-  .landing-root .brand-logo { width: 150px; }
+  .landing-root { --nav-height: 58px; }
+  .landing-root .brand-logo { width: 138px; }
   .landing-root .nav-login { display: none; }
   .landing-root .nav-actions { gap: var(--space-1); }
   .landing-root .nav-actions .btn { padding: 0.75em 1em; font-size: 0.84rem; }
@@ -865,7 +975,7 @@ onBeforeUnmount(() => {
    (frontend/public/hero/) at 1402x1122; cover keeps the section filled edge to
    edge with no gaps or seams (some crop on one axis is inherent to a full-bleed
    background -- the scrim keeps the text side readable regardless of photo). */
-.landing-root .hero-visual { position: relative; isolation: isolate; overflow: hidden; min-height: 480px; display: flex; flex-direction: column; justify-content: center; border-top: none; border-bottom: 0; }
+.landing-root .hero-visual { position: relative; isolation: isolate; overflow: hidden; min-height: 420px; display: flex; flex-direction: column; justify-content: center; border-top: none; border-bottom: 0; }
 .landing-root .hero-image, .landing-root .hero-scrim { position: absolute; inset: 0; }
 .landing-root .hero-image { opacity: 0; background-size: cover; background-position: center; background-color: var(--color-primary-deep); filter: saturate(1.2) contrast(1.05); transform: scale(1.03); transition: opacity 900ms ease, transform 7s ease; z-index: -2; }
 .landing-root .hero-image.active { opacity: 1; transform: scale(1); }
@@ -942,11 +1052,110 @@ onBeforeUnmount(() => {
 .landing-root .mission-body p + p { margin-top: var(--space-3); }
 .landing-root .mission-body strong { color: var(--color-text); font-weight: 600; }
 
-/* Steps */
-.landing-root .steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-4); margin-top: var(--space-5); }
-.landing-root .steps > * { min-width: 0; }
-@media (max-width: 960px) { .landing-root .steps { grid-template-columns: 1fr 1fr; } }
-@media (max-width: 560px) { .landing-root .steps { grid-template-columns: 1fr; } }
+/* How it works -- a real cycle: four photographic stages orbit the field-to-finance globe. */
+.landing-root .how-cycle {
+  --orbit-size: 360px;
+  --node-size: 74px;
+  display: grid;
+  grid-template-columns: minmax(390px, 0.95fr) minmax(280px, 0.8fr);
+  align-items: center;
+  gap: clamp(2rem, 7vw, 6rem);
+  margin-top: var(--space-4);
+  min-height: 430px;
+}
+.landing-root .cycle-visual {
+  position: relative;
+  width: var(--orbit-size);
+  height: var(--orbit-size);
+  margin-inline: auto;
+}
+.landing-root .globe {
+  position: absolute;
+  inset: 82px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  color: #fff;
+  background: var(--color-primary-deep);
+  box-shadow: 0 24px 55px -22px rgba(8, 66, 61, 0.55);
+}
+.landing-root .globe::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 32% 24%, rgba(255,255,255,.28), transparent 38%);
+}
+.landing-root .globe-grid {
+  position: absolute;
+  inset: 9%;
+  width: 82%;
+  height: 82%;
+  stroke: rgba(204, 251, 241, .42);
+  stroke-width: 1.4;
+  animation: globe-turn 16s linear infinite;
+}
+.landing-root .globe > span {
+  position: relative;
+  z-index: 1;
+  max-width: 7ch;
+  color: #fff;
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1.15;
+  text-align: center;
+}
+.landing-root .cycle-orbit {
+  position: absolute;
+  inset: 0;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 34%, transparent);
+  border-radius: 50%;
+  transition: transform 850ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.landing-root .cycle-orbit::before,
+.landing-root .cycle-orbit::after {
+  content: "";
+  position: absolute;
+  inset: 22px;
+  border: 1px dashed color-mix(in srgb, var(--color-primary) 18%, transparent);
+  border-radius: 50%;
+}
+.landing-root .cycle-orbit::after { inset: 50%; width: 7px; height: 7px; border: 0; background: var(--color-accent); }
+.landing-root .cycle-node {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: var(--node-size);
+  height: var(--node-size);
+  padding: 0;
+  border: 3px solid #fff;
+  border-radius: 50%;
+  background: var(--color-surface-2);
+  box-shadow: 0 14px 30px -16px var(--shadow-color);
+  cursor: pointer;
+  overflow: visible;
+  transform: translate(-50%, -50%) rotate(var(--step-angle)) translateY(calc(var(--orbit-size) / -2)) rotate(var(--node-upright));
+  transition: transform 850ms cubic-bezier(0.16, 1, 0.3, 1), border-color 220ms ease, box-shadow 220ms ease;
+}
+.landing-root .cycle-node img { width: 100%; height: 100%; display: block; border-radius: inherit; object-fit: cover; }
+.landing-root .cycle-node .num {
+  position: absolute;
+  right: -5px;
+  bottom: -5px;
+  width: 25px;
+  height: 25px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--color-primary-deep);
+  color: #fff;
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+.landing-root .cycle-node.active { border-color: var(--color-accent); box-shadow: 0 18px 36px -14px rgba(234, 88, 12, .42); }
+.landing-root .cycle-node.active .num { background: var(--color-accent); color: #1a1200; }
+.landing-root .cycle-node:focus-visible { outline: 3px solid var(--color-primary); outline-offset: 4px; }
+.landing-root .cycle-copy { max-width: 31rem; }
 .landing-root .step-num {
   font-family: var(--font-mono);
   font-size: 0.78rem;
@@ -959,8 +1168,23 @@ onBeforeUnmount(() => {
   place-items: center;
   margin-bottom: var(--space-2);
 }
-.landing-root .step h4 { font-size: 1.05rem; margin-bottom: 0.4em; }
-.landing-root .step p { color: var(--color-text-muted); font-size: 0.92rem; }
+.landing-root .cycle-copy h3 { font-size: clamp(1.55rem, 1.25rem + 1vw, 2rem); margin-bottom: 0.55rem; }
+.landing-root .cycle-copy p { color: var(--color-text-muted); font-size: var(--step-body-lg); max-width: 42ch; }
+.landing-root .cycle-progress { display: flex; gap: 7px; margin-top: var(--space-3); }
+.landing-root .cycle-progress span { width: 46px; height: 3px; background: var(--color-line); transform: scaleX(.56); transform-origin: left; transition: transform 220ms ease, background 220ms ease; }
+.landing-root .cycle-progress span.active { background: var(--color-primary); transform: scaleX(1); }
+@keyframes globe-turn { to { transform: rotate(360deg); } }
+@media (max-width: 820px) {
+  .landing-root .how-cycle { --orbit-size: 300px; --node-size: 64px; grid-template-columns: 1fr; gap: var(--space-4); min-height: 0; }
+  .landing-root .globe { inset: 70px; }
+  .landing-root .cycle-copy { max-width: 34rem; text-align: center; margin-inline: auto; }
+  .landing-root .cycle-copy p { margin-inline: auto; }
+  .landing-root .cycle-progress { justify-content: center; }
+}
+@media (max-width: 390px) {
+  .landing-root .how-cycle { --orbit-size: 260px; --node-size: 56px; }
+  .landing-root .globe { inset: 62px; }
+}
 
 /* Feature grid */
 .landing-root .feature-grid {
@@ -1013,32 +1237,6 @@ onBeforeUnmount(() => {
   transition: transform 220ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 220ms ease;
 }
 
-.landing-root .feature-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.75rem; margin-bottom: 0.2rem; }
-.landing-root .feature-top .feature-icon { margin-bottom: 0; }
-.landing-root .feature-photo-chip {
-  position: relative;
-  z-index: 1;
-  width: 60px;
-  flex-shrink: 0;
-  border-radius: 10px;
-  overflow: hidden;
-  border: 1px solid var(--color-line);
-  background: var(--color-surface-2);
-  box-shadow: 0 8px 16px -10px var(--shadow-color);
-  transform-origin: top right;
-  transition: transform 320ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 320ms cubic-bezier(0.16, 1, 0.3, 1);
-}
-.landing-root .feature-photo-chip img { display: block; width: 100%; height: 100%; object-fit: cover; }
-
-@media (hover: hover) and (pointer: fine) {
-  .landing-root .feature-photo-chip:hover {
-    z-index: 3;
-    cursor: zoom-in;
-    transform: scale(3.1);
-    box-shadow: 0 30px 60px -18px var(--shadow-color);
-  }
-}
-
 .landing-root .mini-widget { border: 1px solid var(--color-line); border-radius: 10px; padding: var(--space-3); background: var(--color-surface-2); font-size: 0.82rem; transition: transform 180ms ease, box-shadow 180ms ease; }
 .landing-root .mini-widget .row { display: flex; justify-content: space-between; margin-top: 0.35em; }
 .landing-root .mini-widget .row span:last-child { font-family: var(--font-mono); }
@@ -1075,6 +1273,9 @@ onBeforeUnmount(() => {
 .landing-root .kpi { border: 1px solid var(--color-line); border-radius: 10px; padding: 0.7rem 0.8rem; transition: transform 180ms ease, box-shadow 180ms ease; }
 .landing-root .kpi .lbl { font-size: 0.68rem; color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.06em; }
 .landing-root .kpi .num { font-size: 1.25rem; font-weight: 700; display: block; margin-top: 0.15rem; }
+.landing-root .dash-chart { display: flex; align-items: flex-end; gap: 0.5rem; height: 72px; margin-top: 0.9rem; padding: 0 0.2rem; }
+.landing-root .dash-chart .bar { flex: 1; height: var(--h); min-height: 8px; border-radius: 5px 5px 2px 2px; background: linear-gradient(180deg, var(--color-primary) 0%, var(--color-primary-deep) 100%); position: relative; }
+.landing-root .dash-chart .v { position: absolute; top: -1.15rem; left: 50%; transform: translateX(-50%); font-family: var(--font-mono); font-size: 0.62rem; color: var(--color-text-muted); }
 .landing-root .dash-table { margin-top: 0.9rem; border: 1px solid var(--color-line); border-radius: 10px; overflow: hidden; font-size: 0.78rem; }
 .landing-root .dash-table .row { display: grid; grid-template-columns: 1.2fr 1fr 0.7fr; padding: 0.5rem 0.7rem; }
 .landing-root .dash-table .row + .row { border-top: 1px solid var(--color-line); }
@@ -1146,13 +1347,13 @@ onBeforeUnmount(() => {
 }
 .landing-root .foot-grid { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--space-4); flex-wrap: wrap; }
 .landing-root .foot-brand .brand { margin-bottom: 0.5rem; }
-.landing-root .foot-brand p { color: rgba(26, 18, 0, 0.76); font-size: 0.85rem; max-width: 34ch; }
+.landing-root .foot-brand p { color: var(--color-primary-deep); opacity: 0.82; font-size: 0.85rem; max-width: 34ch; }
 .landing-root .foot-links { display: flex; gap: var(--space-5); flex-wrap: wrap; }
-.landing-root .foot-col h5 { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: rgba(26, 18, 0, 0.68); margin-bottom: 0.6rem; }
-.landing-root .foot-col a { display: block; font-size: 0.88rem; text-decoration: none; color: #1A1200; margin-bottom: 0.5rem; transition: color 150ms ease, transform 150ms ease; }
-.landing-root .foot-col a:hover { color: var(--color-primary-deep); transform: translateX(3px); }
+.landing-root .foot-col h5 { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--color-primary-deep); opacity: 0.75; margin-bottom: 0.6rem; }
+.landing-root .foot-col a { display: block; font-size: 0.88rem; text-decoration: none; color: var(--color-primary-deep); margin-bottom: 0.5rem; transition: color 150ms ease, transform 150ms ease; }
+.landing-root .foot-col a:hover { color: #1A1200; transform: translateX(3px); }
 .landing-root .foot-col a:focus-visible { outline: 2px solid var(--color-primary-deep); outline-offset: 3px; }
-.landing-root .foot-bottom { margin-top: var(--space-5); padding-top: var(--space-3); border-top: 1px solid rgba(26, 18, 0, 0.24); display: flex; justify-content: space-between; font-size: 0.78rem; color: rgba(26, 18, 0, 0.72); flex-wrap: wrap; gap: 0.5rem; }
+.landing-root .foot-bottom { margin-top: var(--space-5); padding-top: var(--space-3); border-top: 1px solid rgba(26, 18, 0, 0.24); display: flex; justify-content: space-between; font-size: 0.78rem; color: var(--color-primary-deep); opacity: 0.85; flex-wrap: wrap; gap: 0.5rem; }
 
 /* Reveal-on-scroll */
 .landing-root .reveal { opacity: 0; transform: translateY(14px); transition: opacity 0.6s ease, transform 0.6s ease; }
@@ -1175,26 +1376,41 @@ onBeforeUnmount(() => {
   .landing-root .feature,
   .landing-root .feature-icon,
   .landing-root .mini-widget,
-  .landing-root .feature-photo-chip,
   .landing-root .dash,
   .landing-root .kpi,
   .landing-root .phone,
   .landing-root .phone-kpi,
   .landing-root .demo-card,
   .landing-root .foot-col a { transition: none; }
+  .landing-root .globe-grid { animation: none; }
+  .landing-root .cycle-orbit,
+  .landing-root .cycle-node { transition: none; }
 }
 
-/* Component-level wide-screen overrides live after their base rules so the
-   cascade cannot quietly restore the smaller laptop dimensions. */
+/* Compact desktop rhythm for ordinary laptop/desktop heights at 100% zoom. */
+@media (min-width: 1024px) and (max-height: 900px) {
+  .landing-root {
+    --step-body: 0.9rem;
+    --step-body-lg: 1rem;
+    --step-h1: clamp(2rem, 1.45rem + 2.15vw, 2.85rem);
+    --step-h2: clamp(1.45rem, 1.2rem + 1vw, 1.95rem);
+    --space-5: 2rem;
+    --space-6: 2.55rem;
+  }
+  .landing-root .hero-visual { min-height: min(410px, calc(100svh - var(--nav-height))); }
+  .landing-root .hero-slide { min-height: 11.5rem; }
+  .landing-root .hero-slide-icon { width: 38px; height: 38px; }
+}
+
+/* Component-level wide-screen overrides live after their base rules. Kept
+   modest -- the previous version scaled these up enough that the page no
+   longer fit at 100% zoom on an ordinary 1440-1920px display. */
 @media (min-width: 1440px) {
-  .landing-root .hero-copy { max-width: 46rem; }
-  .landing-root .hero-visual { min-height: clamp(480px, 52vh, 560px); }
-  .landing-root .feature { min-height: 215px; }
+  .landing-root .hero-copy { max-width: 44rem; }
 }
 
 @media (min-width: 2200px) {
-  .landing-root section { padding: 4.5rem 0; }
-  .landing-root .hero-copy { max-width: 48rem; }
-  .landing-root .hero-visual { min-height: clamp(520px, 54vh, 600px); }
+  .landing-root .hero-copy { max-width: 46rem; }
+  .landing-root .hero-visual { min-height: clamp(440px, 46vh, 500px); }
 }
 </style>

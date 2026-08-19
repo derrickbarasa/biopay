@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { dispatch } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
@@ -72,6 +72,19 @@ onMounted(async () => {
 
 const statusColor: Record<string, string> = {
   DRAFT: 'grey', PENDING_APPROVAL: 'warning', APPROVED: 'info', DISBURSED: 'success', REJECTED: 'error',
+}
+
+const orgNameByCode = computed(() => new Map(organizations.value.map((o) => [o.organisationCode, o.name])))
+function orgName(code?: string) { return (code && orgNameByCode.value.get(code)) || code || '—' }
+
+async function removeCycle(cycle: Cycle) {
+  try {
+    await dispatch('DELETE_PAYROLL', { cycleCode: cycle.cycleCode })
+    toast.success('Payroll cycle deleted')
+    await load()
+  } catch (err) {
+    toast.error(err instanceof Error ? err.message : 'Delete failed')
+  }
 }
 
 // ---- Generate wizard ----
@@ -208,10 +221,16 @@ async function reject(cycle: Cycle) {
         </v-row>
       </v-card-text>
       <v-data-table :headers="headers" :items="cycles" :search="tableSearch" :loading="loading">
+        <template #item.organisationCode="{ item }">{{ orgName(item.organisationCode) }}</template>
         <template #item.period="{ item }">{{ item.periodStart }} – {{ item.periodEnd }}</template>
         <template #item.totalAmount="{ item }">{{ (item.totalAmount ?? 0).toLocaleString() }}</template>
         <template #item.status="{ item }">
-          <v-chip size="small" :color="statusColor[item.status] ?? 'grey'" variant="tonal">{{ item.status }}</v-chip>
+          <v-tooltip v-if="item.status === 'REJECTED' && item.rejectionReason" :text="item.rejectionReason" location="top">
+            <template #activator="{ props: tip }">
+              <v-chip v-bind="tip" size="small" :color="statusColor[item.status] ?? 'grey'" variant="tonal">{{ item.status }}</v-chip>
+            </template>
+          </v-tooltip>
+          <v-chip v-else size="small" :color="statusColor[item.status] ?? 'grey'" variant="tonal">{{ item.status }}</v-chip>
         </template>
         <template #item.actions="{ item }">
           <template v-if="auth.isAnchor && item.status === 'PENDING_APPROVAL'">
@@ -221,6 +240,11 @@ async function reject(cycle: Cycle) {
           <v-btn v-if="auth.isAnchor && item.status === 'APPROVED'" size="small" color="primary" variant="tonal" @click="disburse(item)">
             Disburse
           </v-btn>
+          <v-btn
+            v-if="item.status === 'DRAFT' || item.status === 'PENDING_APPROVAL'"
+            icon="mdi-delete" variant="text" size="small" color="error"
+            :aria-label="`Delete cycle ${item.cycleCode}`" @click="removeCycle(item)"
+          />
         </template>
       </v-data-table>
     </v-card>

@@ -32,6 +32,7 @@ export const useAuthStore = defineStore('auth', () => {
   const isAnchor = computed(() => role.value === 'ANCHOR')
   const isOrganisation = computed(() => role.value === 'ORGANISATION')
   const isSupervisor = computed(() => role.value === 'SUPERVISOR')
+  const isSystemAdmin = computed(() => !!user.value?.systemAdmin)
 
   const fullName = computed(() => {
     if (!user.value) return 'User'
@@ -48,6 +49,7 @@ export const useAuthStore = defineStore('auth', () => {
   })
 
   const roleLabel = computed(() => {
+    if (isSystemAdmin.value) return 'System Administrator'
     switch (role.value) {
       case 'ANCHOR': return 'Anchor Administrator'
       case 'ORGANISATION': return 'Organisation Administrator'
@@ -152,7 +154,7 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   return {
-    token, user, pendingLogin, isAuthenticated, role, isAnchor, isOrganisation, isSupervisor,
+    token, user, pendingLogin, isAuthenticated, role, isAnchor, isOrganisation, isSupervisor, isSystemAdmin,
     fullName, initials, roleLabel, can, hasModule,
     login, signup, requestLoginOtp, verifyLoginOtp, cancelPendingLogin, requestPasswordReset, resetPassword,
     logout, refreshProfile, updateProfile,

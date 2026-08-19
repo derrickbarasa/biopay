@@ -28,11 +28,14 @@ public class Administration extends AbstractVerticle {
         vertx.eventBus().consumer("GET_ROLES", this::getRoles);
         vertx.eventBus().consumer("SAVE_ROLE", this::saveRole);
         vertx.eventBus().consumer("GET_PERMISSIONS", this::getPermissions);
+        vertx.eventBus().consumer("CREATE_PERMISSION", this::createPermission);
         startPromise.complete();
     }
 
     private static JsonObject data(Message<Object> message) { return new JsonObject(message.body().toString()); }
     private static boolean anchor(JsonObject p) { return "ANCHOR".equalsIgnoreCase(p.getString("actorRole", "")); }
+    private static boolean systemAdmin(JsonObject p) { return p.getBoolean("systemAdmin", false); }
+    private static String strOrEmpty(String s) { return s == null ? "" : s; }
     private static void ok(Message<Object> m, String text, Object results) {
         JsonObject response = new JsonObject().put("responseCode", "000").put("responseMessage", text);
         if (results != null) response.put("results", results);
@@ -46,8 +49,12 @@ public class Administration extends AbstractVerticle {
     private void getAnchors(Message<Object> message) {
         JsonObject p = data(message);
         if (!anchor(p)) { fail(message, "Only an anchor administrator can view anchor settings"); return; }
-        pool.preparedQuery("SELECT * FROM anchors WHERE id=@p1")
-                .execute(Tuple.of(Integer.parseInt(p.getValue("anchorId").toString())))
+        // The system admin can browse every anchor (for the anchor-picker on admin@biopay.com's
+        // sessions); a plain anchor admin only ever sees their own row.
+        String sql = systemAdmin(p) ? "SELECT * FROM anchors ORDER BY name" : "SELECT * FROM anchors WHERE id=@p1";
+        Tuple params = systemAdmin(p) ? Tuple.tuple() : Tuple.of(Integer.parseInt(p.getValue("anchorId").toString()));
+        pool.preparedQuery(sql)
+                .execute(params)
                 .onFailure(e -> dbFail(message, e)).onSuccess(rows -> {
                     JsonArray out = new JsonArray();
                     for (Row r : rows) out.add(new JsonObject().put("id", Rows.intVal(r,"id"))
@@ -70,11 +77,19 @@ public class Administration extends AbstractVerticle {
 
     private void getUsers(Message<Object> message) {
         JsonObject p = data(message);
-        String sql = anchor(p)
-                ? "SELECT u.*, r.role_name FROM users u LEFT JOIN roles r ON r.id=u.role_id WHERE u.anchor_id=@p1 ORDER BY u.created_at DESC"
-                : "SELECT u.*, r.role_name FROM users u LEFT JOIN roles r ON r.id=u.role_id WHERE u.partner_code=@p1 ORDER BY u.created_at DESC";
-        Object scope = anchor(p) ? Integer.parseInt(p.getValue("anchorId").toString()) : p.getString("partnerCode","");
-        pool.preparedQuery(sql).execute(Tuple.of(scope)).onFailure(e -> dbFail(message,e)).onSuccess(rows -> {
+        String sql;
+        Tuple params;
+        if (systemAdmin(p)) {
+            sql = "SELECT u.*, r.role_name FROM users u LEFT JOIN roles r ON r.id=u.role_id ORDER BY u.created_at DESC";
+            params = Tuple.tuple();
+        } else if (anchor(p)) {
+            sql = "SELECT u.*, r.role_name FROM users u LEFT JOIN roles r ON r.id=u.role_id WHERE u.anchor_id=@p1 ORDER BY u.created_at DESC";
+            params = Tuple.of(Integer.parseInt(p.getValue("anchorId").toString()));
+        } else {
+            sql = "SELECT u.*, r.role_name FROM users u LEFT JOIN roles r ON r.id=u.role_id WHERE u.partner_code=@p1 ORDER BY u.created_at DESC";
+            params = Tuple.of(p.getString("partnerCode", ""));
+        }
+        pool.preparedQuery(sql).execute(params).onFailure(e -> dbFail(message,e)).onSuccess(rows -> {
             JsonArray out = new JsonArray();
             for (Row r: rows) out.add(new JsonObject().put("id",Rows.intVal(r,"id")).put("email",Rows.str(r,"email"))
                     .put("username",Rows.str(r,"username")).put("firstName",Rows.str(r,"first_name"))
@@ -121,9 +136,32 @@ public class Administration extends AbstractVerticle {
         });
     }
 
+    private void createPermission(Message<Object> message) {
+        JsonObject p = data(message);
+        if (!anchor(p)) { fail(message, "Only an anchor administrator can create permissions"); return; }
+        // getString(key, def) only substitutes def when the key is entirely absent -- an
+        // explicit JSON null still comes back null, so these go through strOrEmpty first.
+        String name = strOrEmpty(p.getString("name")).trim().toUpperCase().replace(' ', '_');
+        String description = strOrEmpty(p.getString("description")).trim();
+        if (name.isEmpty()) { fail(message, "Permission name is required"); return; }
+        pool.preparedQuery("SELECT 1 AS v FROM permissions WHERE permission_name=@p1").execute(Tuple.of(name))
+                .onFailure(e -> dbFail(message, e)).onSuccess(existing -> {
+                    if (existing.size() > 0) { fail(message, "A permission with that name already exists"); return; }
+                    pool.preparedQuery("INSERT INTO permissions (permission_name, description, created_at) OUTPUT INSERTED.id VALUES (@p1,@p2,GETDATE())")
+                            .execute(Tuple.of(name, description.isEmpty() ? null : description))
+                            .onFailure(e -> dbFail(message, e))
+                            .onSuccess(rows -> ok(message, "Permission created",
+                                    new JsonObject().put("id", Rows.intVal(rows.iterator().next(), "id")).put("name", name).put("description", description)));
+                });
+    }
+
     private void getRoles(Message<Object> message) {
         JsonObject p=data(message); Integer anchorId=Integer.parseInt(p.getValue("anchorId").toString());
-        String sql="SELECT r.*, STRING_AGG(p.permission_name, ',') AS permission_names FROM roles r LEFT JOIN role_permissions rp ON rp.role_id=r.id AND rp.status=1 LEFT JOIN permissions p ON p.id=rp.permission_id WHERE r.anchor_id IS NULL OR r.anchor_id=@p1 GROUP BY r.id,r.role_name,r.description,r.anchor_id,r.partner_code,r.role_scope,r.status,r.created_at,r.updated_at ORDER BY r.role_name";
+        // Explicit column list rather than r.* -- MSSQL requires every selected column to be
+        // aggregated or in GROUP BY, so r.* silently breaks the moment the roles table carries
+        // any column (e.g. a legacy one on an older database) that isn't in the GROUP BY list.
+        String sql="SELECT r.id, r.role_name, r.description, r.anchor_id, r.partner_code, r.role_scope, r.status, r.created_at, r.updated_at, "
+                + "STRING_AGG(p.permission_name, ',') AS permission_names FROM roles r LEFT JOIN role_permissions rp ON rp.role_id=r.id AND rp.status=1 LEFT JOIN permissions p ON p.id=rp.permission_id WHERE r.anchor_id IS NULL OR r.anchor_id=@p1 GROUP BY r.id,r.role_name,r.description,r.anchor_id,r.partner_code,r.role_scope,r.status,r.created_at,r.updated_at ORDER BY r.role_name";
         pool.preparedQuery(sql).execute(Tuple.of(anchorId)).onFailure(e->dbFail(message,e)).onSuccess(rows->{
             JsonArray out=new JsonArray(); for(Row r:rows){String names=Rows.str(r,"permission_names"); out.add(new JsonObject().put("id",Rows.intVal(r,"id")).put("name",Rows.str(r,"role_name")).put("description",Rows.str(r,"description")).put("scope",Rows.str(r,"role_scope")).put("status",Rows.intVal(r,"status")).put("permissions",names==null?new JsonArray():new JsonArray(java.util.Arrays.asList(names.split(",")))));}
             ok(message,"Roles found",out);

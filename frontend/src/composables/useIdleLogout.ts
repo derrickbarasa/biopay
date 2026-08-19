@@ -2,12 +2,12 @@ import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 
-const IDLE_TIMEOUT_MS = 5 * 60 * 1000
+const IDLE_TIMEOUT_MS = 15 * 60 * 1000
 const PROMPT_WINDOW_MS = 30 * 1000
 const ACTIVITY_EVENTS = ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll', 'wheel'] as const
 
 /**
- * Signs the user out after 5 minutes without any mouse/keyboard/touch activity in the dashboard --
+ * Signs the user out after 15 minutes without any mouse/keyboard/touch activity in the dashboard --
  * a signed-in tab left open on a shared machine exposes beneficiary PII. Rather than logging out
  * silently, it gives a 30-second window to confirm they're still there; once that window opens,
  * further mouse movement no longer resets it (only the confirm button does) so a screensaver or

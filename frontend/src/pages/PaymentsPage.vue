@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { dispatch } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
@@ -35,7 +35,12 @@ const headers = [
   { title: 'Amount', key: 'amount' },
   { title: 'Status', key: 'status' },
   { title: 'Date', key: 'createdAt' },
+  { title: 'Actions', key: 'actions', sortable: false, align: 'end' as const },
 ]
+
+// Name-not-code lookup, matching the pattern used elsewhere in the dashboard.
+const orgNameByCode = computed(() => new Map(organizations.value.map((o) => [o.organisationCode, o.name])))
+function orgName(code?: string) { return (code && orgNameByCode.value.get(code)) || code || '—' }
 
 async function load() {
   loading.value = true
@@ -84,7 +89,7 @@ function exportCsv() {
   const rows = [
     ['Household', 'Organization', 'Cycle', 'Amount', 'Status', 'Date'],
     ...payments.value.map((p) => [
-      p.householdName, p.organisationCode, p.cycle ?? '', String(p.amount),
+      p.householdName, orgName(p.organisationCode), p.cycle ?? '', String(p.amount),
       p.status === 1 ? 'Paid' : 'Pending', p.createdAt ?? '',
     ]),
   ]
@@ -96,6 +101,26 @@ function exportCsv() {
   a.download = `payments-${new Date().toISOString().slice(0, 10)}.csv`
   a.click()
   URL.revokeObjectURL(url)
+}
+
+async function markPaid(row: PaymentRow) {
+  try {
+    await dispatch('UPDATE_PAYMENT_STATUS', { id: row.id, status: 1 })
+    toast.success('Payment marked as paid')
+    await load()
+  } catch (err) {
+    toast.error(err instanceof Error ? err.message : 'Update failed')
+  }
+}
+
+async function remove(row: PaymentRow) {
+  try {
+    await dispatch('DELETE_PAYMENT', { id: row.id })
+    toast.success('Payment deleted')
+    await load()
+  } catch (err) {
+    toast.error(err instanceof Error ? err.message : 'Delete failed')
+  }
 }
 </script>
 
@@ -154,6 +179,7 @@ function exportCsv() {
         </v-row>
       </v-card-text>
       <v-data-table :headers="headers" :items="payments" :search="tableSearch" :loading="loading">
+        <template #item.organisationCode="{ item }">{{ orgName(item.organisationCode) }}</template>
         <template #item.amount="{ item }">{{ (item.amount ?? 0).toLocaleString() }}</template>
         <template #item.status="{ item }">
           <v-chip size="small" :color="item.status === 1 ? 'success' : 'warning'" variant="tonal">
@@ -161,6 +187,16 @@ function exportCsv() {
           </v-chip>
         </template>
         <template #item.createdAt="{ item }">{{ item.createdAt ? new Date(item.createdAt).toLocaleDateString() : '-' }}</template>
+        <template #item.actions="{ item }">
+          <v-btn
+            v-if="item.status !== 1" icon="mdi-check-circle-outline" variant="text" size="small" color="success"
+            :aria-label="`Mark payment to ${item.householdName} as paid`" @click="markPaid(item)"
+          />
+          <v-btn
+            v-if="item.status !== 1" icon="mdi-delete" variant="text" size="small" color="error"
+            :aria-label="`Delete payment to ${item.householdName}`" @click="remove(item)"
+          />
+        </template>
       </v-data-table>
     </v-card>
   </div>

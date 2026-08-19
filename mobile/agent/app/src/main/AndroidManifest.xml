@@ -35,6 +35,7 @@
             android:exported="false"
             android:windowSoftInputMode="stateAlwaysHidden|adjustResize" />
         <activity android:name=".home.HomeActivity" android:exported="false" />
+        <activity android:name=".session.SubscriptionLockedActivity" android:exported="false" />
         <activity android:name=".profile.ProfileActivity" android:exported="false" />
         <activity android:name=".settings.SettingsActivity" android:exported="false" android:windowSoftInputMode="stateAlwaysHidden|adjustResize" />
         <activity android:name=".alternates.AlternatesActivity" android:exported="false" />

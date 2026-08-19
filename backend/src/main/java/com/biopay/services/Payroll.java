@@ -63,6 +63,11 @@ public class Payroll extends AbstractVerticle {
         return "ANCHOR".equalsIgnoreCase(payload.getString("actorRole", ""));
     }
 
+    /** The one designated cross-anchor operator (admin@biopay.com). */
+    private static boolean isSystemAdmin(JsonObject payload) {
+        return payload.getBoolean("systemAdmin", false);
+    }
+
     private static int actorId(JsonObject payload) {
         return Integer.parseInt(payload.getValue("actorId").toString());
     }
@@ -342,12 +347,18 @@ public class Payroll extends AbstractVerticle {
     private void retrieveAll(Message<Object> message) {
         JsonObject payload = new JsonObject(message.body().toString());
         String status = payload.getString("status", null);
+        boolean systemAdmin = isSystemAdmin(payload);
+        Object anchorIdVal = payload.getValue("anchorId");
+        Integer anchorId = anchorIdVal == null ? null : Integer.parseInt(anchorIdVal.toString());
 
-        String sql = "SELECT * FROM payroll_cycles WHERE (@p1 IS NULL OR partner_code=@p1) AND (@p2 IS NULL OR status=@p2) ORDER BY created_at DESC";
+        // payroll_cycles already carries anchor_id directly, so a plain anchor admin is
+        // scoped to it with no join needed; the system admin (@p3=1) sees every anchor.
+        String sql = "SELECT * FROM payroll_cycles WHERE (@p1 IS NULL OR partner_code=@p1) AND (@p2 IS NULL OR status=@p2) "
+                + "AND (@p3 = 1 OR anchor_id=@p4) ORDER BY created_at DESC";
         String partnerCode = isAnchor(payload) ? payload.getString("organisationCode", null) : payload.getString("partnerCode", "");
 
         pool.preparedQuery(sql)
-                .execute(Tuple.of(partnerCode, status))
+                .execute(Tuple.of(partnerCode, status).addBoolean(systemAdmin).addInteger(anchorId))
                 .onFailure(err -> onDbError(message, err))
                 .onSuccess(rows -> {
                     JsonArray results = new JsonArray();

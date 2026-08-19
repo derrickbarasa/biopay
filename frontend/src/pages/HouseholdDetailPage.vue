@@ -2,6 +2,7 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { apiClient, dispatch } from '@/api/client'
+import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
 import { downloadCsv, toCsv } from '@/utils/csv'
 
@@ -20,7 +21,10 @@ interface Alternate {
 
 const route = useRoute()
 const router = useRouter()
+const auth = useAuthStore()
 const toast = useToast()
+
+interface GeoNode { code: string; name: string }
 
 interface PaymentEvent {
   id?: number
@@ -45,6 +49,19 @@ const events = ref<AuditEvent[]>([])
 // a plain <img src> can't reach the JWT-protected /files route.
 const photoUrls = ref<string[]>([])
 
+// Name-not-code lookups, matching the pattern used on the Households list page.
+const organizations = ref<{ organisationCode: string; name: string }[]>([])
+const states = ref<GeoNode[]>([])
+const counties = ref<GeoNode[]>([])
+const locations = ref<GeoNode[]>([])
+const villages = ref<GeoNode[]>([])
+const orgNameByCode = computed(() => new Map(organizations.value.map((o) => [o.organisationCode, o.name])))
+const stateNameByCode = computed(() => new Map(states.value.map((s) => [s.code, s.name])))
+const countyNameByCode = computed(() => new Map(counties.value.map((c) => [c.code, c.name])))
+const locationNameByCode = computed(() => new Map(locations.value.map((l) => [l.code, l.name])))
+const villageNameByCode = computed(() => new Map(villages.value.map((v) => [v.code, v.name])))
+function orgName(code?: string) { return (code && orgNameByCode.value.get(code)) || code || '—' }
+
 const householdNumber = computed(() => String(route.params.householdNumber ?? ''))
 
 const genderLabel = (g?: string) => (g === 'M' ? 'Male' : g === 'F' ? 'Female' : (g || '—'))
@@ -55,7 +72,7 @@ const infoFields = computed(() => {
   return [
     { label: 'Household number', value: d.householdNumber },
     { label: 'Head of household', value: d.householdName },
-    { label: 'Organization', value: d.organisationCode },
+    { label: 'Organization', value: orgName(d.organisationCode) },
     { label: 'Age', value: d.age ?? '—' },
     { label: 'Gender', value: genderLabel(d.gender) },
     { label: 'Marital status', value: d.maritalStatus || '—' },
@@ -67,10 +84,11 @@ const infoFields = computed(() => {
     { label: 'Male dependants', value: d.maleDependants ?? '—' },
     { label: 'Vulnerability status', value: d.vulnerabilityStatus || '—' },
     { label: 'Legal status', value: d.legalStatus || '—' },
-    { label: 'State', value: d.stateCode || '—' },
-    { label: 'County', value: d.countyCode || '—' },
-    { label: 'Location', value: d.payamCode || '—' },
-    { label: 'Village', value: d.bomaCode || '—' },
+    { label: 'Review status', value: d.reviewStatus || 'PENDING' },
+    { label: 'State', value: stateNameByCode.value.get(d.stateCode) || d.stateCode || '—' },
+    { label: 'County', value: countyNameByCode.value.get(d.countyCode) || d.countyCode || '—' },
+    { label: 'Location', value: locationNameByCode.value.get(d.payamCode) || d.payamCode || '—' },
+    { label: 'Village', value: villageNameByCode.value.get(d.bomaCode) || d.bomaCode || '—' },
     { label: 'Coordinates', value: d.latitude && d.longitude ? `${d.latitude}, ${d.longitude}` : '—' },
     { label: 'Registered', value: d.createdAt || '—' },
     { label: 'Last updated', value: d.updatedAt || '—' },
@@ -119,6 +137,26 @@ async function load() {
     toast.error(err instanceof Error ? err.message : 'Failed to load household')
   } finally {
     loading.value = false
+  }
+}
+
+async function loadNameLookups() {
+  try {
+    const requests: Promise<any>[] = [
+      dispatch<{ results: GeoNode[] }>('GET_STATES'),
+      dispatch<{ results: GeoNode[] }>('GET_COUNTIES'),
+      dispatch<{ results: GeoNode[] }>('GET_LOCATIONS'),
+      dispatch<{ results: GeoNode[] }>('GET_VILLAGES'),
+    ]
+    if (auth.isAnchor) requests.push(dispatch<{ results: typeof organizations.value }>('GET_ORGANIZATIONS'))
+    const [s, c, l, v, o] = await Promise.all(requests)
+    states.value = s.results
+    counties.value = c.results
+    locations.value = l.results
+    villages.value = v.results
+    if (o) organizations.value = o.results
+  } catch {
+    // Fields just fall back to showing the raw code; the rest of the page still works.
   }
 }
 
@@ -178,7 +216,7 @@ async function printVoucher() {
       <body onload="window.focus()">
         <div class="voucher">
           <div class="head">
-            <div><div class="title">Payment Voucher</div><div class="sub">${escapeHtml(v.organisationCode ?? '')}</div></div>
+            <div><div class="title">Payment Voucher</div><div class="sub">${escapeHtml(orgName(v.organisationCode))}</div></div>
             <div class="qrwrap">${qr}<div class="qrcap">${escapeHtml(v.householdNumber)}</div></div>
           </div>
           <div class="body">
@@ -186,7 +224,7 @@ async function printVoucher() {
             <div class="info">
               <p class="name">${escapeHtml(v.householdName ?? '')}</p>
               <div class="row"><span class="label">Household #:</span> ${escapeHtml(v.householdNumber)}</div>
-              <div class="row"><span class="label">Organization:</span> ${escapeHtml(v.organisationCode ?? '')}</div>
+              <div class="row"><span class="label">Organization:</span> ${escapeHtml(orgName(v.organisationCode))}</div>
               <div class="row"><span class="label">Issued:</span> ${escapeHtml(new Date().toLocaleDateString())}</div>
             </div>
           </div>
@@ -218,7 +256,7 @@ function exportAlternates() {
   downloadCsv(`alternates-${householdNumber.value}.csv`, csv)
 }
 
-onMounted(load)
+onMounted(() => { load(); loadNameLookups() })
 </script>
 
 <template>

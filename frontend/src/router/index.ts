@@ -104,6 +104,7 @@ const router = createRouter({
           meta: { roles: ['ANCHOR', 'ORGANISATION'] },
         },
         { path: 'settings', name: 'settings', component: () => import('@/pages/SettingsPage.vue') },
+        { path: 'subscription', name: 'subscription', component: () => import('@/pages/SubscriptionPage.vue') },
       ],
     },
     { path: '/:pathMatch(.*)*', redirect: { name: 'home' } },

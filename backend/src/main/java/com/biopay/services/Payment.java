@@ -54,11 +54,19 @@ public class Payment extends AbstractVerticle {
         return "ANCHOR".equalsIgnoreCase(payload.getString("actorRole", ""));
     }
 
+    /** The one designated cross-anchor operator (admin@biopay.com). */
+    private static boolean isSystemAdmin(JsonObject payload) {
+        return payload.getBoolean("systemAdmin", false);
+    }
+
     // ---- GET_PAYMENTS (filters: organisationCode, status, dateFrom/dateTo, page) --
 
     private void retrieveAll(Message<Object> message) {
         JsonObject payload = new JsonObject(message.body().toString());
+        boolean systemAdmin = isSystemAdmin(payload);
         String partnerCode = isAnchor(payload) ? payload.getString("organisationCode", null) : payload.getString("partnerCode", "");
+        Object anchorIdVal = payload.getValue("anchorId");
+        Integer anchorId = anchorIdVal == null ? null : Integer.parseInt(anchorIdVal.toString());
         Integer status = payload.getInteger("status");
         String dateFrom = payload.getString("dateFrom", null);
         String dateTo = payload.getString("dateTo", null);
@@ -66,12 +74,18 @@ public class Payment extends AbstractVerticle {
         int pageSize = Math.min(Math.max(payload.getInteger("pageSize", 25), 1), 200);
         int offset = (page - 1) * pageSize;
 
-        String sql = "SELECT * FROM payments WHERE (@p1 IS NULL OR partner_code=@p1) AND (@p2 IS NULL OR status=@p2) "
-                + "AND (@p3 IS NULL OR date_from >= @p3) AND (@p4 IS NULL OR date_from <= @p4) "
-                + "ORDER BY created_at DESC OFFSET @p5 ROWS FETCH NEXT @p6 ROWS ONLY";
+        // Joined against partners.anchor_id (@p7/@p8) so a plain anchor admin can never see
+        // another anchor's payments even with organisationCode left blank or forged; the
+        // system admin (@p7=1) bypasses that join entirely.
+        String sql = "SELECT pay.* FROM payments pay JOIN partners p ON p.partner_id = pay.partner_code "
+                + "WHERE (@p1 IS NULL OR pay.partner_code=@p1) AND (@p2 IS NULL OR pay.status=@p2) "
+                + "AND (@p3 IS NULL OR pay.date_from >= @p3) AND (@p4 IS NULL OR pay.date_from <= @p4) "
+                + "AND (@p7 = 1 OR p.anchor_id=@p8) "
+                + "ORDER BY pay.created_at DESC OFFSET @p5 ROWS FETCH NEXT @p6 ROWS ONLY";
 
         pool.preparedQuery(sql)
-                .execute(Tuple.of(partnerCode, status, dateFrom, dateTo, offset, pageSize))
+                .execute(Tuple.of(partnerCode, status, dateFrom, dateTo, offset, pageSize)
+                        .addBoolean(systemAdmin).addInteger(anchorId))
                 .onFailure(err -> onDbError(message, err))
                 .onSuccess(rows -> {
                     JsonArray results = new JsonArray();
@@ -161,15 +175,19 @@ public class Payment extends AbstractVerticle {
 
     private void summary(Message<Object> message) {
         JsonObject payload = new JsonObject(message.body().toString());
+        boolean systemAdmin = isSystemAdmin(payload);
         String partnerCode = isAnchor(payload) ? payload.getString("organisationCode", null) : payload.getString("partnerCode", "");
+        Object anchorIdVal = payload.getValue("anchorId");
+        Integer anchorId = anchorIdVal == null ? null : Integer.parseInt(anchorIdVal.toString());
 
-        String sql = "SELECT COUNT(*) AS cnt, ISNULL(SUM(amount), 0) AS total, "
-                + "SUM(CASE WHEN status=0 THEN 1 ELSE 0 END) AS pendingCount, "
-                + "SUM(CASE WHEN status=1 THEN 1 ELSE 0 END) AS paidCount "
-                + "FROM payments WHERE (@p1 IS NULL OR partner_code=@p1)";
+        String sql = "SELECT COUNT(*) AS cnt, ISNULL(SUM(pay.amount), 0) AS total, "
+                + "SUM(CASE WHEN pay.status=0 THEN 1 ELSE 0 END) AS pendingCount, "
+                + "SUM(CASE WHEN pay.status=1 THEN 1 ELSE 0 END) AS paidCount "
+                + "FROM payments pay JOIN partners p ON p.partner_id = pay.partner_code "
+                + "WHERE (@p1 IS NULL OR pay.partner_code=@p1) AND (@p2 = 1 OR p.anchor_id=@p3)";
 
         pool.preparedQuery(sql)
-                .execute(Tuple.of(partnerCode))
+                .execute(Tuple.of(partnerCode).addBoolean(systemAdmin).addInteger(anchorId))
                 .onFailure(err -> onDbError(message, err))
                 .onSuccess(rows -> {
                     Row r = rows.iterator().next();

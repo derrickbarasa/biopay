@@ -44,6 +44,7 @@ public class Household extends AbstractVerticle {
         eventBus.consumer("GET_HOUSEHOLD_VOUCHER", this::voucher);
         eventBus.consumer("CHECK_HOUSEHOLD_DUPLICATE", this::checkDuplicate);
         eventBus.consumer("BULK_UPLOAD_HOUSEHOLDS", this::bulkUpload);
+        eventBus.consumer("SET_HOUSEHOLD_REVIEW_STATUS", this::setReviewStatus);
 
         eventBus.consumer("CREATE_ALTERNATE", this::createAlternate);
         eventBus.consumer("UPDATE_ALTERNATE", this::updateAlternate);
@@ -67,6 +68,11 @@ public class Household extends AbstractVerticle {
 
     private static boolean isAnchor(JsonObject payload) {
         return "ANCHOR".equalsIgnoreCase(payload.getString("actorRole", ""));
+    }
+
+    /** The one designated cross-anchor operator (admin@biopay.com). */
+    private static boolean isSystemAdmin(JsonObject payload) {
+        return payload.getBoolean("systemAdmin", false);
     }
 
     /** organisationCode requested by the caller, constrained to their own scope unless anchor. */
@@ -183,6 +189,53 @@ public class Household extends AbstractVerticle {
                 .onSuccess(rows -> {
                     if (rows.rowCount() > 0) {
                         reply(message, new JsonObject().put("responseCode", "000").put("responseMessage", "Household deleted successfully"));
+                    } else {
+                        replyError(message, "Household not found or not in your organisation");
+                    }
+                });
+    }
+
+    // ---- SET_HOUSEHOLD_REVIEW_STATUS (PENDING -> CHECKED -> APPROVED/REJECTED) -----
+    // A rejection must carry a reason so the household detail page always has
+    // something to show the officer who registered it.
+
+    private static final java.util.Set<String> REVIEW_STATUSES =
+            java.util.Set.of("PENDING", "CHECKED", "APPROVED", "REJECTED");
+
+    private void setReviewStatus(Message<Object> message) {
+        JsonObject payload = new JsonObject(message.body().toString());
+        // payload.getString(key, "") only substitutes the default when the key is entirely
+        // absent -- a JSON body with the key explicitly present and null (which is exactly
+        // how the Android client encodes an unset optional field) makes it return null, not
+        // "", so .trim() must go through this null-safe helper instead of chaining directly.
+        String householdNumber = strOrEmpty(payload.getString("householdNumber")).trim();
+        String reviewStatus = strOrEmpty(payload.getString("reviewStatus")).trim().toUpperCase();
+        String rejectionReason = strOrEmpty(payload.getString("rejectionReason")).trim();
+
+        if (householdNumber.isEmpty() || !REVIEW_STATUSES.contains(reviewStatus)) {
+            replyError(message, "householdNumber and a valid reviewStatus (PENDING, CHECKED, APPROVED, REJECTED) are required");
+            return;
+        }
+        if ("REJECTED".equals(reviewStatus) && rejectionReason.isEmpty()) {
+            replyError(message, "A reason is required when rejecting a household");
+            return;
+        }
+
+        String sql = "UPDATE households SET review_status=@p1, "
+                + "rejection_reason=@p2, updated_by=@p3, updated_at=GETDATE() WHERE household_number=@p4"
+                + (isAnchor(payload) ? "" : " AND partner_code=@p5");
+        Tuple params = Tuple.of(reviewStatus, "REJECTED".equals(reviewStatus) ? rejectionReason : null,
+                String.valueOf(payload.getValue("actorId")), householdNumber);
+        if (!isAnchor(payload)) {
+            params = params.addString(payload.getString("partnerCode", ""));
+        }
+
+        pool.preparedQuery(sql)
+                .execute(params)
+                .onFailure(err -> onDbError(message, err))
+                .onSuccess(rows -> {
+                    if (rows.rowCount() > 0) {
+                        reply(message, new JsonObject().put("responseCode", "000").put("responseMessage", "Household review status updated"));
                     } else {
                         replyError(message, "Household not found or not in your organisation");
                     }
@@ -442,6 +495,13 @@ public class Household extends AbstractVerticle {
         return (s == null || s.trim().isEmpty()) ? null : s.trim();
     }
 
+    /** Vert.x's {@code JsonObject.getString(key, def)} only falls back to {@code def} when the
+     *  key is entirely absent -- an explicit JSON null (which is exactly how the Android client
+     *  encodes an unset optional field) still comes back null. */
+    private static String strOrEmpty(String s) {
+        return s == null ? "" : s;
+    }
+
     /** Reads a stored image and returns it inlined as a data URI, or null if unavailable. */
     private static String inlineImage(String filename) {
         if (filename == null || filename.isEmpty()) {
@@ -461,7 +521,14 @@ public class Household extends AbstractVerticle {
 
     private void retrieveAll(Message<Object> message) {
         JsonObject payload = new JsonObject(message.body().toString());
+        boolean systemAdmin = isSystemAdmin(payload);
+        // A plain anchor admin is only ever handed organisationCode values that belong to
+        // their own anchor by GET_ORGANIZATIONS, but nothing stopped them (or a forged
+        // request) from passing another anchor's code here -- the anchor_id join below
+        // closes that instead of trusting the partner_code filter on its own.
         String partnerCode = scopedPartnerCode(payload);
+        Object anchorIdVal = payload.getValue("anchorId");
+        Integer anchorId = anchorIdVal == null ? null : Integer.parseInt(anchorIdVal.toString());
         String searchRaw = payload.getString("search", "").trim();
         String search = searchRaw.isEmpty() ? null : "%" + searchRaw + "%";
         String stateCode = payload.getString("stateCode", null);
@@ -472,6 +539,7 @@ public class Household extends AbstractVerticle {
         Integer status = payload.getInteger("status");
         String vulnerabilityStatus = payload.getString("vulnerabilityStatus", null);
         String legalStatus = payload.getString("legalStatus", null);
+        String reviewStatus = payload.getString("reviewStatus", null);
         // Registration date range (the "time" filter). created_at is DATETIME; string
         // bounds are implicitly converted, same as Payment#retrieveAll's date_from filter.
         String dateFrom = payload.getString("dateFrom", null);
@@ -483,21 +551,31 @@ public class Household extends AbstractVerticle {
         // Per-row "generated data" counts: how many vouchers this household has been
         // issued, and how many distinct payment cycles it appears in. Correlated
         // subqueries so a household with none still returns a 0 row (no join drops it).
+        // System admins (@p16=1) see every anchor's households; a plain anchor admin is
+        // joined against partners.anchor_id (@p17) so they can never see another
+        // anchor's data even if organisationCode is left blank or forged; org/supervisor
+        // sessions stay pinned to their own partner_code exactly as before.
         String sql = "SELECT h.*, "
                 + "(SELECT COUNT(*) FROM vouchers v WHERE v.household_number = h.household_number) AS voucher_count, "
-                + "(SELECT COUNT(DISTINCT p.cycle) FROM payments p WHERE p.household_number = h.household_number) AS payment_cycle_count "
-                + "FROM households h WHERE (@p1 IS NULL OR partner_code=@p1) "
-                + "AND (@p2 IS NULL OR household_name LIKE @p2 OR household_number LIKE @p2 OR id_number LIKE @p2) "
-                + "AND (@p3 IS NULL OR state_code=@p3) AND (@p4 IS NULL OR county_code=@p4) "
-                + "AND (@p5 IS NULL OR payam_code=@p5) AND (@p6 IS NULL OR boma_code=@p6) "
-                + "AND (@p7 IS NULL OR gender=@p7) AND (@p8 IS NULL OR status=@p8) "
-                + "AND (@p9 IS NULL OR vulnerability_status=@p9) AND (@p10 IS NULL OR legal_status=@p10) "
-                + "AND (@p11 IS NULL OR created_at >= @p11) AND (@p12 IS NULL OR created_at <= @p12) "
-                + "ORDER BY created_at DESC OFFSET @p13 ROWS FETCH NEXT @p14 ROWS ONLY";
+                + "(SELECT COUNT(DISTINCT pay.cycle) FROM payments pay WHERE pay.household_number = h.household_number) AS payment_cycle_count "
+                + "FROM households h JOIN partners p ON p.partner_id = h.partner_code "
+                + "WHERE (@p1 IS NULL OR h.partner_code=@p1) "
+                + "AND (@p2 IS NULL OR h.household_name LIKE @p2 OR h.household_number LIKE @p2 OR h.id_number LIKE @p2) "
+                + "AND (@p3 IS NULL OR h.state_code=@p3) AND (@p4 IS NULL OR h.county_code=@p4) "
+                + "AND (@p5 IS NULL OR h.payam_code=@p5) AND (@p6 IS NULL OR h.boma_code=@p6) "
+                + "AND (@p7 IS NULL OR h.gender=@p7) AND (@p8 IS NULL OR h.status=@p8) "
+                + "AND (@p9 IS NULL OR h.vulnerability_status=@p9) AND (@p10 IS NULL OR h.legal_status=@p10) "
+                + "AND (@p11 IS NULL OR h.created_at >= @p11) AND (@p12 IS NULL OR h.created_at <= @p12) "
+                + "AND (@p15 IS NULL OR h.review_status=@p15) "
+                + "AND (@p16 = 1 OR p.anchor_id=@p17) "
+                + "ORDER BY h.created_at DESC OFFSET @p13 ROWS FETCH NEXT @p14 ROWS ONLY";
+
+        Tuple params = Tuple.of(partnerCode, search, stateCode, countyCode, locationCode, villageCode,
+                gender, status, vulnerabilityStatus, legalStatus, dateFrom, dateTo, offset, pageSize)
+                .addString(reviewStatus).addBoolean(systemAdmin).addInteger(anchorId);
 
         pool.preparedQuery(sql)
-                .execute(Tuple.of(partnerCode, search, stateCode, countyCode, locationCode, villageCode,
-                        gender, status, vulnerabilityStatus, legalStatus, dateFrom, dateTo, offset, pageSize))
+                .execute(params)
                 .onFailure(err -> onDbError(message, err))
                 .onSuccess(rows -> {
                     JsonArray results = new JsonArray();
@@ -532,6 +610,8 @@ public class Household extends AbstractVerticle {
                 // read so listing still works if the migration hasn't been applied yet.
                 .put("vulnerabilityStatus", strSafe(r, "vulnerability_status"))
                 .put("legalStatus", strSafe(r, "legal_status"))
+                .put("reviewStatus", strSafe(r, "review_status"))
+                .put("rejectionReason", strSafe(r, "rejection_reason"))
                 .put("stateCode", Rows.str(r, "state_code"))
                 .put("countyCode", Rows.str(r, "county_code"))
                 .put("payamCode", Rows.str(r, "payam_code"))

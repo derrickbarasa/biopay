@@ -42,6 +42,7 @@ export type ProcessingCode =
   | 'GET_ROLES'
   | 'SAVE_ROLE'
   | 'GET_PERMISSIONS'
+  | 'CREATE_PERMISSION'
   // organizations
   | 'CREATE_ORGANIZATION'
   | 'UPDATE_ORGANIZATION'
@@ -66,6 +67,7 @@ export type ProcessingCode =
   | 'GET_HOUSEHOLD_VOUCHER'
   | 'CHECK_HOUSEHOLD_DUPLICATE'
   | 'BULK_UPLOAD_HOUSEHOLDS'
+  | 'SET_HOUSEHOLD_REVIEW_STATUS'
   | 'CREATE_ALTERNATE'
   | 'UPDATE_ALTERNATE'
   | 'DELETE_ALTERNATE'
@@ -76,6 +78,8 @@ export type ProcessingCode =
   // subscription
   | 'GET_SUBSCRIPTION'
   | 'RENEW_SUBSCRIPTION'
+  | 'GET_SUBSCRIPTION_INVOICES'
+  | 'GET_SUBSCRIPTION_INVOICE_RECEIPT'
   // geography (states / counties / locations / villages)
   | 'GET_STATES'
   | 'CREATE_STATE'

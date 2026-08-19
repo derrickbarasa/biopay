@@ -16,6 +16,17 @@ const metrics = ref<Record<string, any>>({})
 const paymentsSeries = ref<{ label: string; value: number }[]>([])
 const householdsSeries = ref<{ label: string; value: number }[]>([])
 
+type MetricArt = 'organizations' | 'households' | 'disbursed' | 'alternates' | 'officers' | 'pending' | 'generated' | 'fingerprints' | 'payroll'
+
+interface MetricCard {
+  label: string
+  value: string | number
+  detail: string
+  art: MetricArt
+  tone?: 'teal' | 'amber' | 'blue'
+  wide?: boolean
+}
+
 async function load() {
   loading.value = true
   loadError.value = ''
@@ -55,6 +66,44 @@ function displayDate(value: unknown) {
   const date = new Date(String(value))
   return Number.isNaN(date.getTime()) ? '—' : date.toLocaleDateString()
 }
+
+const anchorMetricCards = computed<MetricCard[]>(() => [
+  { label: 'Organizations', value: metrics.value.totalOrganizations ?? '—', detail: 'Active programmes under this anchor', art: 'organizations' },
+  { label: 'Households', value: metrics.value.totalHouseholds ?? '—', detail: 'Approved beneficiary records', art: 'households', tone: 'blue' },
+  {
+    label: 'Total Value Disbursed', value: currency(metrics.value.combinedAmount),
+    detail: `${currency(metrics.value.totalPaymentsAmount)} cash + ${currency(metrics.value.voucherRedeemedAmount)} vouchers`,
+    art: 'disbursed', tone: 'amber',
+  },
+  { label: 'Alternates Registered', value: metrics.value.totalAlternates ?? '—', detail: 'Approved alternate recipients', art: 'alternates' },
+  { label: 'Active Officers', value: metrics.value.activeOfficers ?? '—', detail: 'Field officers currently enabled', art: 'officers', tone: 'blue' },
+  { label: 'Pending Approvals', value: metrics.value.pendingPayrolls ?? '—', detail: 'Payment cycles awaiting a checker', art: 'pending', tone: 'amber' },
+  {
+    label: 'Total Generated', value: currency(metrics.value.totalGeneratedAmount),
+    detail: `${metrics.value.generatedCycles ?? 0} non-rejected payment cycle${metrics.value.generatedCycles === 1 ? '' : 's'}`,
+    art: 'generated', wide: true,
+  },
+])
+
+const organisationMetricCards = computed<MetricCard[]>(() => [
+  { label: 'My Households', value: metrics.value.totalHouseholds ?? '—', detail: 'Approved beneficiary records', art: 'households', tone: 'blue' },
+  { label: 'Alternates Registered', value: metrics.value.totalAlternates ?? '—', detail: 'Approved alternate recipients', art: 'alternates' },
+  { label: 'Registered Fingerprints', value: metrics.value.registeredFingerprints ?? '—', detail: 'Biometric templates ready to verify', art: 'fingerprints' },
+  {
+    label: 'Total Received', value: currency(metrics.value.combinedAmount),
+    detail: `${currency(metrics.value.totalPaymentsReceivedAmount)} cash + ${currency(metrics.value.voucherRedeemedAmount)} vouchers`,
+    art: 'disbursed', tone: 'amber',
+  },
+  {
+    label: 'Latest Payroll', value: metrics.value.latestPayroll?.status ?? 'No cycles yet',
+    detail: metrics.value.latestPayroll?.cycleCode ?? 'Generate a cycle to begin', art: 'payroll', tone: 'blue',
+  },
+  {
+    label: 'Total Generated', value: currency(metrics.value.totalGeneratedAmount),
+    detail: `${metrics.value.generatedCycles ?? 0} non-rejected payment cycle${metrics.value.generatedCycles === 1 ? '' : 's'}`,
+    art: 'generated', wide: true,
+  },
+])
 </script>
 
 <template>
@@ -103,79 +152,59 @@ function displayDate(value: unknown) {
       </div>
     </v-alert>
 
-    <!-- Anchor KPIs -->
-    <v-row v-if="!loadError && auth.isAnchor" class="metric-grid">
-      <v-col cols="12" sm="6" md="3">
-        <v-card class="pa-4" variant="flat" border>
-          <div class="text-caption text-medium-emphasis">Total Organizations</div>
-          <div class="text-h4 font-weight-bold">{{ metrics.totalOrganizations ?? '-' }}</div>
-        </v-card>
-      </v-col>
-      <v-col cols="12" sm="6" md="3">
-        <v-card class="pa-4" variant="flat" border>
-          <div class="text-caption text-medium-emphasis">Total Households</div>
-          <div class="text-h4 font-weight-bold">{{ metrics.totalHouseholds ?? '-' }}</div>
-        </v-card>
-      </v-col>
-      <v-col cols="12" sm="6" md="3">
-        <v-card class="pa-4" variant="flat" border>
-          <div class="text-caption text-medium-emphasis">Total Value Disbursed</div>
-          <div class="text-h4 font-weight-bold">{{ currency(metrics.combinedAmount) }}</div>
-          <div class="text-caption">{{ currency(metrics.totalPaymentsAmount) }} cash + {{ currency(metrics.voucherRedeemedAmount) }} vouchers</div>
-        </v-card>
-      </v-col>
-      <v-col cols="12" sm="6" md="3">
-        <v-card class="pa-4" variant="flat" border>
-          <div class="text-caption text-medium-emphasis">Alternates Registered</div>
-          <div class="text-h4 font-weight-bold">{{ metrics.totalAlternates ?? '-' }}</div>
-        </v-card>
-      </v-col>
-      <v-col cols="12" sm="6" md="3">
-        <v-card class="pa-4" variant="flat" border>
-          <div class="text-caption text-medium-emphasis">Active Officers</div>
-          <div class="text-h4 font-weight-bold">{{ metrics.activeOfficers ?? '-' }}</div>
-        </v-card>
-      </v-col>
-      <v-col cols="12" sm="6" md="3">
-        <v-card class="pa-4" variant="flat" border>
-          <div class="text-caption text-medium-emphasis">Pending Approvals</div>
-          <div class="text-h4 font-weight-bold">{{ metrics.pendingPayrolls ?? '-' }}</div>
-        </v-card>
-      </v-col>
-    </v-row>
+    <v-row v-if="!loadError && (auth.isAnchor || auth.isOrganisation)" class="metric-grid">
+      <v-col
+        v-for="card in (auth.isAnchor ? anchorMetricCards : organisationMetricCards)"
+        :key="card.label"
+        cols="12"
+        sm="6"
+        :md="card.wide ? 6 : 3"
+      >
+        <v-card class="metric-card" :class="[`tone-${card.tone ?? 'teal'}`, `art-${card.art}`, { 'metric-card-wide': card.wide }]" variant="flat" border>
+          <div class="metric-copy">
+            <div class="metric-label">{{ card.label }}</div>
+            <div class="metric-value">{{ card.value }}</div>
+            <div class="metric-detail">{{ card.detail }}</div>
+          </div>
 
-    <!-- Organisation KPIs -->
-    <v-row v-else-if="!loadError && auth.isOrganisation" class="metric-grid">
-      <v-col cols="12" sm="6" md="3">
-        <v-card class="pa-4" variant="flat" border>
-          <div class="text-caption text-medium-emphasis">My Households</div>
-          <div class="text-h4 font-weight-bold">{{ metrics.totalHouseholds ?? '-' }}</div>
-        </v-card>
-      </v-col>
-      <v-col cols="12" sm="6" md="3">
-        <v-card class="pa-4" variant="flat" border>
-          <div class="text-caption text-medium-emphasis">Alternates Registered</div>
-          <div class="text-h4 font-weight-bold">{{ metrics.totalAlternates ?? '-' }}</div>
-        </v-card>
-      </v-col>
-      <v-col cols="12" sm="6" md="3">
-        <v-card class="pa-4" variant="flat" border>
-          <div class="text-caption text-medium-emphasis">Registered Fingerprints</div>
-          <div class="text-h4 font-weight-bold">{{ metrics.registeredFingerprints ?? '-' }}</div>
-        </v-card>
-      </v-col>
-      <v-col cols="12" sm="6" md="3">
-        <v-card class="pa-4" variant="flat" border>
-          <div class="text-caption text-medium-emphasis">Total Received</div>
-          <div class="text-h4 font-weight-bold">{{ currency(metrics.combinedAmount) }}</div>
-          <div class="text-caption">{{ currency(metrics.totalPaymentsReceivedAmount) }} cash + {{ currency(metrics.voucherRedeemedAmount) }} vouchers</div>
-        </v-card>
-      </v-col>
-      <v-col cols="12" sm="6" md="3">
-        <v-card class="pa-4" variant="flat" border>
-          <div class="text-caption text-medium-emphasis">Latest Payroll</div>
-          <div class="text-h5 font-weight-bold">
-            {{ metrics.latestPayroll ? metrics.latestPayroll.status : 'No cycles yet' }}
+          <div class="metric-art" :class="`art-${card.art}`" aria-hidden="true">
+            <svg v-if="card.art === 'organizations'" viewBox="0 0 112 78">
+              <path d="M8 68h96M17 68V34h22v34M43 68V17h30v51M78 68V28h19v40" />
+              <path d="M24 42h8M24 51h8M51 28h7M63 28h3M51 39h7M63 39h3M51 50h7M63 50h3M85 39h6M85 49h6" />
+            </svg>
+            <svg v-else-if="card.art === 'households'" viewBox="0 0 112 78">
+              <path d="M9 45l21-18 21 18v23H15V45M61 42l17-14 18 14v26H61V42" />
+              <path d="M25 68V52h11v16M70 49h16M78 42v15" />
+            </svg>
+            <svg v-else-if="card.art === 'disbursed'" viewBox="0 0 112 78">
+              <rect x="8" y="16" width="96" height="51" rx="9" />
+              <circle cx="56" cy="42" r="14" />
+              <path d="M56 34v16M51 37h8.5a4 4 0 010 8H52M17 26h8M87 57h8" />
+            </svg>
+            <svg v-else-if="card.art === 'alternates'" viewBox="0 0 112 78">
+              <path d="M31 39l23-18 26 20M31 39l17 24M80 41L64 63M48 63h16" />
+              <circle cx="31" cy="39" r="10" /><circle cx="54" cy="21" r="10" /><circle cx="80" cy="41" r="10" /><circle cx="56" cy="63" r="10" />
+            </svg>
+            <svg v-else-if="card.art === 'officers'" viewBox="0 0 112 78">
+              <circle cx="39" cy="27" r="11" /><circle cx="74" cy="31" r="9" />
+              <path d="M16 68c1-18 10-28 23-28s22 10 23 28M58 68c1-15 7-24 17-24 11 0 18 9 20 24" />
+              <path d="M34 48l5 6 5-6M71 51l4 5 4-5" />
+            </svg>
+            <svg v-else-if="card.art === 'pending'" viewBox="0 0 112 78">
+              <circle cx="54" cy="40" r="27" /><path d="M54 24v18l13 8M44 8h20M54 8v5" />
+              <circle cx="88" cy="19" r="10" /><path d="M88 14v6M88 24v.5" />
+            </svg>
+            <svg v-else-if="card.art === 'fingerprints'" viewBox="0 0 112 78">
+              <path d="M56 10c-21 0-36 15-36 34 0 10-2 17-6 24M56 20c-15 0-26 10-26 25 0 11-2 19-6 25M56 30c-9 0-16 6-16 16 0 12-2 20-6 27M56 10c21 0 36 15 36 34 0 10 2 17 6 24M56 20c15 0 26 10 26 25 0 11 2 19 6 25M56 30c9 0 16 6 16 16 0 12 2 20 6 27M56 39v32" />
+            </svg>
+            <svg v-else-if="card.art === 'payroll'" viewBox="0 0 112 78">
+              <rect x="22" y="11" width="68" height="57" rx="7" /><path d="M37 28h38M37 39h25M37 50h19" />
+              <circle cx="80" cy="55" r="15" /><path d="M73 55l5 5 9-11" />
+            </svg>
+            <svg v-else viewBox="0 0 140 78">
+              <path d="M20 19h75v48H20zM28 11h75v48M36 3h75v48" />
+              <path d="M33 35h34M33 45h24M78 29l7 7 13-15" />
+            </svg>
           </div>
         </v-card>
       </v-col>
@@ -318,8 +347,66 @@ function displayDate(value: unknown) {
 .dashboard-heading p { margin: 5px 0 0; color: #64748b; }
 .dashboard-heading .updated-at { color: #0f766e; font-size: .78rem; font-weight: 600; margin-top: 10px; }
 .dashboard-actions { max-width: 38rem; }
-.metric-grid :deep(.v-card) { position: relative; overflow: hidden; min-height: 135px; padding: 22px !important; background: #fff !important; border-top: 3px solid #0d9488; }
-.metric-grid :deep(.text-h4), .metric-grid :deep(.text-h5) { color: #0f172a; margin-top: 9px; letter-spacing: -.035em; }
+.metric-card {
+  --metric-color: #0d9488;
+  --metric-soft: #ccfbf1;
+  position: relative;
+  min-height: 164px;
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 88px;
+  align-items: center;
+  gap: 10px;
+  padding: 22px !important;
+  background: #fff !important;
+  border-color: #e2e8f0 !important;
+}
+.metric-card.tone-amber { --metric-color: #d97706; --metric-soft: #fef3c7; }
+.metric-card.tone-blue { --metric-color: #2563eb; --metric-soft: #dbeafe; }
+.metric-card-wide { grid-template-columns: minmax(0, 1fr) minmax(150px, 220px); }
+.metric-card.art-disbursed:not(.metric-card-wide) {
+  grid-template-columns: minmax(0, 1fr);
+}
+.metric-card.art-disbursed:not(.metric-card-wide) .metric-value {
+  font-size: 1.35rem;
+  overflow-wrap: normal;
+}
+.metric-card.art-disbursed:not(.metric-card-wide) .metric-art {
+  position: absolute;
+  right: 12px;
+  bottom: 16px;
+  width: 82px;
+  opacity: .34;
+}
+.metric-copy { position: relative; z-index: 1; min-width: 0; }
+.metric-label { color: #64748b; font-size: .76rem; font-weight: 700; letter-spacing: .045em; text-transform: uppercase; }
+.metric-value { color: #0f172a; font-size: clamp(1.55rem, 1.2rem + .8vw, 2.1rem); font-weight: 750; letter-spacing: -.035em; line-height: 1.12; margin-top: 9px; overflow-wrap: anywhere; }
+.metric-detail { color: #64748b; font-size: .76rem; line-height: 1.35; margin-top: 8px; max-width: 28ch; }
+.metric-art {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1.35;
+  display: grid;
+  place-items: center;
+  color: var(--metric-color);
+}
+.metric-art::before {
+  content: "";
+  position: absolute;
+  width: 92%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: var(--metric-soft);
+  opacity: .72;
+}
+.metric-art svg { position: relative; width: 100%; max-height: 82px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.metric-card-wide .metric-art { max-width: 210px; justify-self: end; }
+.metric-card-wide .metric-art::before { width: 72%; }
+.metric-card-wide .metric-art svg { max-height: 92px; }
+@media (hover: hover) and (pointer: fine) {
+  .metric-card:hover .metric-art svg { transform: translateY(-2px); }
+}
+.metric-art svg { transition: transform 220ms cubic-bezier(.16, 1, .3, 1); }
 .analytics-grid :deep(.v-card) { padding: 22px !important; }
 .chart-empty { min-height: 220px; display: grid; place-content: center; justify-items: center; gap: 10px; color: #64748b; text-align: center; }
 .dashboard-empty { min-height: 112px; display: flex; align-items: center; justify-content: center; gap: 16px; color: #475569; border: 1px dashed #cbd5e1; border-radius: 14px; background: #fff; padding: 24px; }
@@ -333,5 +420,7 @@ function displayDate(value: unknown) {
   .dashboard-heading { flex-direction: column; }
   .dashboard-actions { width: 100%; justify-content: flex-start !important; }
   .dashboard-actions :deep(.v-btn) { flex: 1 1 auto; }
+  .metric-card, .metric-card-wide { grid-template-columns: minmax(0, 1fr) 92px; }
+  .metric-card-wide .metric-art { max-width: 110px; }
 }
 </style>

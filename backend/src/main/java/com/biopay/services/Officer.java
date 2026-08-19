@@ -66,6 +66,11 @@ public class Officer extends AbstractVerticle {
         return payload.getString("partnerCode", "");
     }
 
+    /** The one designated cross-anchor operator (admin@biopay.com). */
+    private static boolean isSystemAdmin(JsonObject payload) {
+        return payload.getBoolean("systemAdmin", false);
+    }
+
     // ---- CREATE_OFFICER (anchor or organisation admin) ---------------------------
 
     private void create(Message<Object> message) {
@@ -218,12 +223,21 @@ public class Officer extends AbstractVerticle {
     private void retrieveAll(Message<Object> message) {
         JsonObject payload = new JsonObject(message.body().toString());
         String activeFilter = payload.getString("active", null);
+        boolean systemAdmin = isSystemAdmin(payload);
+        Object anchorIdVal = payload.getValue("anchorId");
+        Integer anchorId = anchorIdVal == null ? null : Integer.parseInt(anchorIdVal.toString());
 
+        // supervisors already carries anchor_id directly, so a plain anchor admin is
+        // scoped to it with no join needed; the system admin (@p3=1) sees every anchor.
         String sql = isAnchor(payload)
-                ? "SELECT * FROM supervisors WHERE (@p1 IS NULL OR partner_code=@p1) AND (@p2 IS NULL OR active=@p2) ORDER BY created_at DESC"
+                ? "SELECT * FROM supervisors WHERE (@p1 IS NULL OR partner_code=@p1) AND (@p2 IS NULL OR active=@p2) "
+                        + "AND (@p3 = 1 OR anchor_id=@p4) ORDER BY created_at DESC"
                 : "SELECT * FROM supervisors WHERE partner_code=@p1 AND (@p2 IS NULL OR active=@p2) ORDER BY created_at DESC";
         String organisationFilter = payload.getString("organisationCode", null);
         Tuple params = Tuple.of(isAnchor(payload) ? organisationFilter : payload.getString("partnerCode", ""), activeFilter);
+        if (isAnchor(payload)) {
+            params = params.addBoolean(systemAdmin).addInteger(anchorId);
+        }
 
         pool.preparedQuery(sql)
                 .execute(params)

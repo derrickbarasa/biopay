@@ -51,6 +51,12 @@ public class Dashboard extends AbstractVerticle {
         return "ANCHOR".equalsIgnoreCase(payload.getString("actorRole", ""));
     }
 
+    /** The one designated cross-anchor operator (admin@biopay.com) -- sees every
+     *  anchor's totals instead of being scoped to just their own. */
+    private static boolean isSystemAdmin(JsonObject payload) {
+        return payload.getBoolean("systemAdmin", false);
+    }
+
     // ---- DASHBOARD_METRICS --------------------------------------------------------
 
     private void metrics(Message<Object> message) {
@@ -64,36 +70,43 @@ public class Dashboard extends AbstractVerticle {
 
     private void anchorMetrics(Message<Object> message, JsonObject payload) {
         Object anchorIdVal = payload.getValue("anchorId");
-        Integer anchorId = anchorIdVal == null ? null : Integer.parseInt(anchorIdVal.toString());
+        // A system admin's anchorId param becomes NULL, and every "anchor_id=@p1" below
+        // is written as "(@p1 IS NULL OR anchor_id=@p1)" so NULL means "every anchor".
+        Integer anchorId = isSystemAdmin(payload) || anchorIdVal == null ? null : Integer.parseInt(anchorIdVal.toString());
 
         Future<Integer> totalOrganizations = scalarInt(
-                "SELECT COUNT(*) AS v FROM partners WHERE anchor_id=@p1 AND status=1", Tuple.of(anchorId));
+                "SELECT COUNT(*) AS v FROM partners WHERE (@p1 IS NULL OR anchor_id=@p1) AND status=1", Tuple.of(anchorId));
         Future<Integer> totalHouseholds = scalarInt(
                 "SELECT COUNT(*) AS v FROM households h JOIN partners p ON p.partner_id=h.partner_code "
-                        + "WHERE p.anchor_id=@p1 AND h.status=1", Tuple.of(anchorId));
+                        + "WHERE (@p1 IS NULL OR p.anchor_id=@p1) AND h.status=1", Tuple.of(anchorId));
         Future<Integer> totalAlternates = scalarInt(
                 "SELECT COUNT(*) AS v FROM alternates a JOIN partners p ON p.partner_id=a.partner_code "
-                        + "WHERE p.anchor_id=@p1 AND a.status=1", Tuple.of(anchorId));
+                        + "WHERE (@p1 IS NULL OR p.anchor_id=@p1) AND a.status=1", Tuple.of(anchorId));
         Future<Row> paymentsAgg = pool.preparedQuery(
-                        "SELECT COUNT(*) AS cnt, ISNULL(SUM(amount),0) AS total FROM payments WHERE anchor_id=@p1")
+                        "SELECT COUNT(*) AS cnt, ISNULL(SUM(amount),0) AS total FROM payments WHERE (@p1 IS NULL OR anchor_id=@p1)")
                 .execute(Tuple.of(anchorId))
                 .map(rows -> rows.iterator().next());
         Future<Row> voucherAgg = pool.preparedQuery(
                         "SELECT SUM(CASE WHEN status='REDEEMED' THEN 1 ELSE 0 END) AS cnt, "
                                 + "ISNULL(SUM(CASE WHEN status='REDEEMED' THEN amount ELSE 0 END),0) AS total "
-                                + "FROM vouchers WHERE anchor_id=@p1")
+                                + "FROM vouchers WHERE (@p1 IS NULL OR anchor_id=@p1)")
                 .execute(Tuple.of(anchorId))
                 .map(rows -> rows.iterator().next());
         Future<Integer> activeOfficers = scalarInt(
-                "SELECT COUNT(*) AS v FROM supervisors WHERE anchor_id=@p1 AND active='1'", Tuple.of(anchorId));
+                "SELECT COUNT(*) AS v FROM supervisors WHERE (@p1 IS NULL OR anchor_id=@p1) AND active='1'", Tuple.of(anchorId));
         Future<Integer> pendingPayrolls = scalarInt(
-                "SELECT COUNT(*) AS v FROM payroll_cycles WHERE anchor_id=@p1 AND status='PENDING_APPROVAL'", Tuple.of(anchorId));
+                "SELECT COUNT(*) AS v FROM payroll_cycles WHERE (@p1 IS NULL OR anchor_id=@p1) AND status='PENDING_APPROVAL'", Tuple.of(anchorId));
+        Future<Row> generatedPayrolls = pool.preparedQuery(
+                        "SELECT COUNT(*) AS cnt, ISNULL(SUM(total_amount),0) AS total FROM payroll_cycles "
+                                + "WHERE (@p1 IS NULL OR anchor_id=@p1) AND status<>'REJECTED'")
+                .execute(Tuple.of(anchorId))
+                .map(rows -> rows.iterator().next());
         Future<JsonArray> recentTransactions = pool.preparedQuery(
                         "SELECT TOP 10 pay.*, h.household_name AS resolved_household_name, "
                                 + "p.name AS organisation_name FROM payments pay "
                                 + "LEFT JOIN households h ON h.household_number=pay.household_number "
                                 + "LEFT JOIN partners p ON p.partner_id=pay.partner_code "
-                                + "WHERE pay.anchor_id=@p1 ORDER BY pay.created_at DESC")
+                                + "WHERE (@p1 IS NULL OR pay.anchor_id=@p1) ORDER BY pay.created_at DESC")
                 .execute(Tuple.of(anchorId))
                 .map(rows -> {
                     JsonArray arr = new JsonArray();
@@ -113,11 +126,11 @@ public class Dashboard extends AbstractVerticle {
                         "SELECT p.partner_id AS code, p.name AS name, "
                                 + "ISNULL(pay.total,0) AS paymentsAmount, ISNULL(vch.total,0) AS voucherAmount "
                                 + "FROM partners p "
-                                + "LEFT JOIN (SELECT partner_code, SUM(amount) AS total FROM payments WHERE anchor_id=@p1 GROUP BY partner_code) pay "
+                                + "LEFT JOIN (SELECT partner_code, SUM(amount) AS total FROM payments WHERE (@p1 IS NULL OR anchor_id=@p1) GROUP BY partner_code) pay "
                                 + "  ON pay.partner_code = p.partner_id "
-                                + "LEFT JOIN (SELECT partner_code, SUM(amount) AS total FROM vouchers WHERE anchor_id=@p1 AND status='REDEEMED' GROUP BY partner_code) vch "
+                                + "LEFT JOIN (SELECT partner_code, SUM(amount) AS total FROM vouchers WHERE (@p1 IS NULL OR anchor_id=@p1) AND status='REDEEMED' GROUP BY partner_code) vch "
                                 + "  ON vch.partner_code = p.partner_id "
-                                + "WHERE p.anchor_id=@p1 AND p.status=1 ORDER BY p.name")
+                                + "WHERE (@p1 IS NULL OR p.anchor_id=@p1) AND p.status=1 ORDER BY p.name")
                 .execute(Tuple.of(anchorId))
                 .map(rows -> {
                     JsonArray arr = new JsonArray();
@@ -135,11 +148,12 @@ public class Dashboard extends AbstractVerticle {
                 });
 
         Future.all(java.util.List.of(totalOrganizations, totalHouseholds, totalAlternates, paymentsAgg, voucherAgg,
-                        activeOfficers, pendingPayrolls, recentTransactions, amountsByOrganisation))
+                        activeOfficers, pendingPayrolls, generatedPayrolls, recentTransactions, amountsByOrganisation))
                 .onFailure(err -> onDbError(message, err))
                 .onSuccess(cf -> {
                     Row payments = cf.resultAt(3);
                     Row vouchers = cf.resultAt(4);
+                    Row generated = cf.resultAt(7);
                     double paymentsAmount = Rows.dbl(payments, "total");
                     double voucherAmount = Rows.dbl(vouchers, "total");
                     reply(message, new JsonObject()
@@ -156,8 +170,10 @@ public class Dashboard extends AbstractVerticle {
                                     .put("combinedAmount", paymentsAmount + voucherAmount)
                                     .put("activeOfficers", (Integer) cf.resultAt(5))
                                     .put("pendingPayrolls", (Integer) cf.resultAt(6))
-                                    .put("recentTransactions", (JsonArray) cf.resultAt(7))
-                                    .put("amountsByOrganisation", (JsonArray) cf.resultAt(8))));
+                                    .put("generatedCycles", Rows.intVal(generated, "cnt"))
+                                    .put("totalGeneratedAmount", Rows.dbl(generated, "total"))
+                                    .put("recentTransactions", (JsonArray) cf.resultAt(8))
+                                    .put("amountsByOrganisation", (JsonArray) cf.resultAt(9))));
                 });
     }
 
@@ -184,13 +200,20 @@ public class Dashboard extends AbstractVerticle {
                         "SELECT TOP 1 * FROM payroll_cycles WHERE partner_code=@p1 ORDER BY created_at DESC")
                 .execute(Tuple.of(partnerCode))
                 .map(rows -> rows.size() == 0 ? null : rows.iterator().next());
+        Future<Row> generatedPayrolls = pool.preparedQuery(
+                        "SELECT COUNT(*) AS cnt, ISNULL(SUM(total_amount),0) AS total FROM payroll_cycles "
+                                + "WHERE partner_code=@p1 AND status<>'REJECTED'")
+                .execute(Tuple.of(partnerCode))
+                .map(rows -> rows.iterator().next());
 
-        Future.all(java.util.List.of(totalHouseholds, totalAlternates, registeredFingerprints, paymentsAgg, voucherAgg, pendingPayroll))
+        Future.all(java.util.List.of(totalHouseholds, totalAlternates, registeredFingerprints, paymentsAgg, voucherAgg,
+                        pendingPayroll, generatedPayrolls))
                 .onFailure(err -> onDbError(message, err))
                 .onSuccess(cf -> {
                     Row payments = cf.resultAt(3);
                     Row vouchers = cf.resultAt(4);
                     Row latestCycle = cf.resultAt(5);
+                    Row generated = cf.resultAt(6);
                     double paymentsAmount = Rows.dbl(payments, "total");
                     double voucherAmount = Rows.dbl(vouchers, "total");
                     JsonObject latestPayroll = latestCycle == null ? null : new JsonObject()
@@ -210,6 +233,8 @@ public class Dashboard extends AbstractVerticle {
                                     .put("voucherRedeemedCount", Rows.intVal(vouchers, "cnt"))
                                     .put("voucherRedeemedAmount", voucherAmount)
                                     .put("combinedAmount", paymentsAmount + voucherAmount)
+                                    .put("generatedCycles", Rows.intVal(generated, "cnt"))
+                                    .put("totalGeneratedAmount", Rows.dbl(generated, "total"))
                                     .put("latestPayroll", latestPayroll)));
                 });
     }
@@ -226,11 +251,11 @@ public class Dashboard extends AbstractVerticle {
         JsonObject payload = new JsonObject(message.body().toString());
         String partnerCode = isAnchor(payload) ? null : payload.getString("partnerCode", "");
         Object anchorIdVal = payload.getValue("anchorId");
-        Integer anchorId = anchorIdVal == null ? null : Integer.parseInt(anchorIdVal.toString());
+        Integer anchorId = isSystemAdmin(payload) || anchorIdVal == null ? null : Integer.parseInt(anchorIdVal.toString());
 
         String sql = isAnchor(payload)
                 ? "SELECT CONVERT(VARCHAR(7), created_at, 120) AS bucket, COUNT(*) AS cnt, ISNULL(SUM(amount),0) AS total "
-                        + "FROM payments WHERE anchor_id=@p1 GROUP BY CONVERT(VARCHAR(7), created_at, 120) ORDER BY bucket"
+                        + "FROM payments WHERE (@p1 IS NULL OR anchor_id=@p1) GROUP BY CONVERT(VARCHAR(7), created_at, 120) ORDER BY bucket"
                 : "SELECT CONVERT(VARCHAR(7), created_at, 120) AS bucket, COUNT(*) AS cnt, ISNULL(SUM(amount),0) AS total "
                         + "FROM payments WHERE partner_code=@p1 GROUP BY CONVERT(VARCHAR(7), created_at, 120) ORDER BY bucket";
 
@@ -257,11 +282,11 @@ public class Dashboard extends AbstractVerticle {
         String sql = isAnchor(payload)
                 ? "SELECT CONVERT(VARCHAR(7), h.created_at, 120) AS bucket, COUNT(*) AS cnt "
                         + "FROM households h JOIN partners p ON p.partner_id=h.partner_code "
-                        + "WHERE p.anchor_id=@p1 GROUP BY CONVERT(VARCHAR(7), h.created_at, 120) ORDER BY bucket"
+                        + "WHERE (@p1 IS NULL OR p.anchor_id=@p1) GROUP BY CONVERT(VARCHAR(7), h.created_at, 120) ORDER BY bucket"
                 : "SELECT CONVERT(VARCHAR(7), created_at, 120) AS bucket, COUNT(*) AS cnt "
                         + "FROM households WHERE partner_code=@p1 GROUP BY CONVERT(VARCHAR(7), created_at, 120) ORDER BY bucket";
         Object anchorIdVal = payload.getValue("anchorId");
-        Integer anchorId = anchorIdVal == null ? null : Integer.parseInt(anchorIdVal.toString());
+        Integer anchorId = isSystemAdmin(payload) || anchorIdVal == null ? null : Integer.parseInt(anchorIdVal.toString());
 
         pool.preparedQuery(sql)
                 .execute(isAnchor(payload) ? Tuple.of(anchorId) : Tuple.of(payload.getString("partnerCode", "")))

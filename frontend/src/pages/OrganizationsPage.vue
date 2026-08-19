@@ -3,7 +3,7 @@ import { onMounted, ref, watch } from 'vue'
 import { dispatch } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
-import { ORG_MODULES } from '@/types/user'
+import { ORG_MODULES, COUNTRIES } from '@/types/user'
 
 interface Organization {
   organisationCode: string
@@ -12,6 +12,8 @@ interface Organization {
   authorisedEmail?: string
   authorisedContact?: string
   address?: string
+  country?: string
+  verificationMethod?: string
   status: number
   createdAt?: string
 }
@@ -28,14 +30,25 @@ const editing = ref(false)
 const saving = ref(false)
 const form = ref({
   organisationCode: '', name: '', authorisedName: '', authorisedEmail: '', authorisedContact: '', address: '',
+  country: '', verificationMethod: 'BIOMETRIC',
   modules: [] as string[],
 })
+
+const VERIFICATION_METHODS = [
+  { title: 'Biometric (fingerprint)', value: 'BIOMETRIC' },
+  { title: 'Facial recognition', value: 'FACIAL' },
+]
+
+const required = (value: string) => !!value?.trim() || 'Required'
+const emailRule = (value: string) => !value || /.+@.+\..+/.test(value) || 'Enter a valid email'
 
 const headers = [
   { title: 'Code', key: 'organisationCode' },
   { title: 'Name', key: 'name' },
   { title: 'Contact', key: 'authorisedName' },
   { title: 'Email', key: 'authorisedEmail' },
+  { title: 'Country', key: 'country' },
+  { title: 'Verification', key: 'verificationMethod' },
   { title: 'Status', key: 'status' },
   { title: 'Actions', key: 'actions', sortable: false, align: 'end' as const },
 ]
@@ -58,7 +71,10 @@ onMounted(load)
 
 function openCreate() {
   editing.value = false
-  form.value = { organisationCode: '', name: '', authorisedName: '', authorisedEmail: '', authorisedContact: '', address: '', modules: [] }
+  form.value = {
+    organisationCode: '', name: '', authorisedName: '', authorisedEmail: '', authorisedContact: '', address: '',
+    country: '', verificationMethod: 'BIOMETRIC', modules: [],
+  }
   dialog.value = true
 }
 
@@ -68,6 +84,7 @@ async function openEdit(org: Organization) {
     organisationCode: org.organisationCode, name: org.name,
     authorisedName: org.authorisedName ?? '', authorisedEmail: org.authorisedEmail ?? '',
     authorisedContact: org.authorisedContact ?? '', address: org.address ?? '',
+    country: org.country ?? '', verificationMethod: org.verificationMethod ?? 'BIOMETRIC',
     modules: [],
   }
   dialog.value = true
@@ -79,7 +96,25 @@ async function openEdit(org: Organization) {
   }
 }
 
+async function remove(org: Organization) {
+  try {
+    await dispatch('DELETE_ORGANIZATION', { organisationCode: org.organisationCode })
+    toast.success('Organization deleted')
+    await load()
+  } catch (err) {
+    toast.error(err instanceof Error ? err.message : 'Delete failed')
+  }
+}
+
 async function save() {
+  if (!form.value.organisationCode.trim() || !form.value.name.trim() || !form.value.country || !form.value.verificationMethod) {
+    toast.error('Complete the organization code, name, country and verification method')
+    return
+  }
+  if (form.value.authorisedEmail && !/.+@.+\..+/.test(form.value.authorisedEmail)) {
+    toast.error('Enter a valid authorized contact email')
+    return
+  }
   if (!form.value.modules.length) {
     toast.error('Select at least one module')
     return
@@ -117,11 +152,72 @@ async function toggleStatus(org: Organization) {
 </script>
 
 <template>
-  <div>
-    <div class="d-flex align-center justify-space-between mb-4">
-      <h1 class="text-h5 font-weight-bold">Organizations</h1>
+  <div class="organizations-page">
+    <div class="page-heading d-flex align-center justify-space-between mb-5 ga-4">
+      <div>
+        <h1 class="text-h5 font-weight-bold">Organizations</h1>
+        <p>Configure delivery partners, verification policy and programme access.</p>
+      </div>
       <v-btn color="primary" prepend-icon="mdi-domain-plus" @click="openCreate">New Organization</v-btn>
     </div>
+
+    <v-expand-transition>
+      <v-card v-if="dialog" class="org-editor mb-5" variant="flat" border>
+        <div class="editor-heading">
+          <div>
+            <div class="editor-title">{{ editing ? 'Edit Organization' : 'New Organization' }}</div>
+            <p>{{ editing ? 'Update the organization profile and programme access.' : 'Create the delivery partner, then choose what its teams can operate.' }}</p>
+          </div>
+          <v-btn icon="mdi-close" variant="text" size="small" aria-label="Close organization form" @click="dialog = false" />
+        </div>
+
+        <v-form @submit.prevent="save">
+          <div class="identity-grid">
+            <section class="form-group" aria-labelledby="org-details-heading">
+              <div id="org-details-heading" class="form-group-title"><v-icon icon="mdi-domain" size="19" /> Organization details</div>
+              <v-text-field v-model="form.organisationCode" label="Organization code" :disabled="editing" :rules="[required]" density="compact" />
+              <v-text-field v-model="form.name" label="Organization name" :rules="[required]" density="compact" />
+              <v-select v-model="form.country" :items="COUNTRIES" label="Country" :rules="[required]" density="compact" />
+            </section>
+
+            <section class="form-group" aria-labelledby="contact-details-heading">
+              <div id="contact-details-heading" class="form-group-title"><v-icon icon="mdi-account-outline" size="19" /> Authorized contact</div>
+              <v-text-field v-model="form.authorisedName" label="Contact name" density="compact" />
+              <v-text-field v-model="form.authorisedEmail" label="Email" type="email" :rules="[emailRule]" density="compact" />
+              <v-text-field v-model="form.authorisedContact" label="Phone" density="compact" />
+            </section>
+          </div>
+
+          <div class="policy-row">
+            <v-text-field v-model="form.address" label="Address" prepend-inner-icon="mdi-map-marker-outline" density="compact" />
+            <v-select v-model="form.verificationMethod" :items="VERIFICATION_METHODS" label="Verification method" prepend-inner-icon="mdi-fingerprint" :rules="[required]" density="compact" />
+          </div>
+
+          <section class="module-section" aria-labelledby="module-heading">
+            <div class="module-heading-row">
+              <div>
+                <div id="module-heading" class="form-group-title"><v-icon icon="mdi-view-dashboard-outline" size="19" /> Enabled programmes</div>
+                <p>Teams only see and use the capabilities selected here.</p>
+              </div>
+              <span>{{ form.modules.length }} selected</span>
+            </div>
+            <div class="module-grid">
+              <label v-for="m in ORG_MODULES" :key="m.code" class="module-option" :class="{ selected: form.modules.includes(m.code) }">
+                <v-checkbox v-model="form.modules" :value="m.code" hide-details density="compact" />
+                <span>{{ m.label }}</span>
+              </label>
+            </div>
+          </section>
+
+          <div class="editor-actions">
+            <v-btn variant="text" @click="dialog = false">Cancel</v-btn>
+            <v-btn color="primary" type="submit" :loading="saving" prepend-icon="mdi-check">
+              {{ editing ? 'Save changes' : 'Create organization' }}
+            </v-btn>
+          </div>
+        </v-form>
+      </v-card>
+    </v-expand-transition>
 
     <v-card variant="flat" border>
       <v-card-text>
@@ -135,43 +231,52 @@ async function toggleStatus(org: Organization) {
       </v-card-text>
       <v-data-table :headers="headers" :items="organizations" :search="tableSearch" :loading="loading">
         <template #item.status="{ item }">
-          <v-chip size="small" :color="item.status === 1 ? 'success' : 'error'" variant="tonal">
-            {{ item.status === 1 ? 'Active' : 'Inactive' }}
+          <v-chip size="small" :color="item.status === 1 ? 'success' : 'error'" variant="tonal">{{ item.status === 1 ? 'Active' : 'Inactive' }}</v-chip>
+        </template>
+        <template #item.country="{ item }">{{ item.country || '—' }}</template>
+        <template #item.verificationMethod="{ item }">
+          <v-chip size="small" color="primary" variant="tonal">
+            <v-icon :icon="item.verificationMethod === 'FACIAL' ? 'mdi-account-outline' : 'mdi-fingerprint'" start />
+            {{ item.verificationMethod === 'FACIAL' ? 'Facial' : 'Fingerprint' }}
           </v-chip>
         </template>
         <template #item.actions="{ item }">
           <v-btn icon="mdi-pencil" variant="text" size="small" :aria-label="`Edit ${item.name}`" @click="openEdit(item)" />
-          <v-btn
-            :icon="item.status === 1 ? 'mdi-toggle-switch-off-outline' : 'mdi-toggle-switch'"
-            variant="text" size="small" @click="toggleStatus(item)"
-          />
+          <v-btn :icon="item.status === 1 ? 'mdi-toggle-switch-off-outline' : 'mdi-toggle-switch'" variant="text" size="small" :aria-label="`${item.status === 1 ? 'Deactivate' : 'Activate'} ${item.name}`" @click="toggleStatus(item)" />
+          <v-btn icon="mdi-delete" variant="text" size="small" color="error" :aria-label="`Delete ${item.name}`" @click="remove(item)" />
         </template>
       </v-data-table>
     </v-card>
-
-    <v-dialog v-model="dialog" max-width="520">
-      <v-card>
-        <v-card-title>{{ editing ? 'Edit Organization' : 'New Organization' }}</v-card-title>
-        <v-card-text>
-          <v-text-field v-model="form.organisationCode" label="Organization code" :disabled="editing" />
-          <v-text-field v-model="form.name" label="Organization name" />
-          <v-text-field v-model="form.authorisedName" label="Authorised contact name" />
-          <v-text-field v-model="form.authorisedEmail" label="Authorised email" type="email" />
-          <v-text-field v-model="form.authorisedContact" label="Authorised phone" />
-          <v-text-field v-model="form.address" label="Address" />
-          <div class="text-caption text-medium-emphasis mt-2 mb-1">Modules enabled for this organisation</div>
-          <v-checkbox
-            v-for="m in ORG_MODULES" :key="m.code"
-            v-model="form.modules" :value="m.code" :label="m.label"
-            density="compact" hide-details class="mb-1"
-          />
-        </v-card-text>
-        <v-card-actions>
-          <v-spacer />
-          <v-btn variant="text" @click="dialog = false">Cancel</v-btn>
-          <v-btn color="primary" :loading="saving" @click="save">Save</v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
   </div>
 </template>
+
+<style scoped>
+.page-heading h1 { color: #0f172a; letter-spacing: -.025em; }
+.page-heading p { color: #64748b; font-size: .9rem; margin: 5px 0 0; }
+.org-editor { padding: clamp(20px, 3vw, 30px); border-color: #cbd5e1 !important; background: #fff !important; }
+.editor-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; margin-bottom: 24px; }
+.editor-title { color: #0f172a; font-size: 1.2rem; font-weight: 750; letter-spacing: -.02em; }
+.editor-heading p, .module-heading-row p { color: #64748b; font-size: .84rem; margin: 4px 0 0; }
+.identity-grid { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(20px, 4vw, 44px); }
+.form-group { min-width: 0; }
+.form-group-title { display: flex; align-items: center; gap: 8px; color: #0f766e; font-size: .82rem; font-weight: 750; margin-bottom: 14px; }
+.policy-row { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 2px; }
+.module-section { border-top: 1px solid #e2e8f0; margin-top: 4px; padding-top: 22px; }
+.module-heading-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
+.module-heading-row > span { flex-shrink: 0; color: #0f766e; background: #ccfbf1; border-radius: 999px; padding: 5px 10px; font-size: .72rem; font-weight: 750; }
+.module-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
+.module-option { min-width: 0; min-height: 58px; display: flex; align-items: center; gap: 2px; padding: 5px 8px; border: 1px solid #e2e8f0; border-radius: 12px; color: #475569; cursor: pointer; transition: border-color 180ms ease, background 180ms ease, color 180ms ease; }
+.module-option:hover { border-color: #94a3b8; }
+.module-option.selected { border-color: #0d9488; background: #f0fdfa; color: #0f766e; }
+.module-option span { min-width: 0; font-size: .78rem; font-weight: 650; line-height: 1.2; }
+.module-option :deep(.v-selection-control) { min-height: 42px; }
+.editor-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 24px; }
+@media (max-width: 900px) { .module-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 680px) {
+  .page-heading { align-items: flex-start !important; flex-direction: column; }
+  .page-heading :deep(.v-btn) { width: 100%; }
+  .identity-grid, .policy-row { grid-template-columns: 1fr; gap: 0; }
+  .module-grid { grid-template-columns: 1fr; }
+  .editor-actions :deep(.v-btn) { flex: 1; }
+}
+</style>

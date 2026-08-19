@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { dispatch } from '@/api/client'
+import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
 import { downloadCsv, parseCsv, toCsv } from '@/utils/csv'
 
@@ -16,6 +17,7 @@ interface VoucherRow {
   createdAt: string
 }
 
+const auth = useAuthStore()
 const toast = useToast()
 const loading = ref(true)
 const householdFilter = ref('')
@@ -23,6 +25,9 @@ const statusFilter = ref<string | null>(null)
 const vouchers = ref<VoucherRow[]>([])
 const summary = ref<Record<string, any>>({})
 const tableSearch = ref('')
+const organizations = ref<{ organisationCode: string; name: string }[]>([])
+const orgNameByCode = computed(() => new Map(organizations.value.map((o) => [o.organisationCode, o.name])))
+function orgName(code?: string) { return (code && orgNameByCode.value.get(code)) || code || '—' }
 let householdDebounce: ReturnType<typeof setTimeout> | null = null
 
 function onHouseholdFilterInput() {
@@ -48,6 +53,7 @@ const bulkErrors = ref<{ row: number; message: string }[]>([])
 const headers = [
   { title: 'Voucher Code', key: 'voucherCode' },
   { title: 'Household', key: 'householdNumber' },
+  { title: 'Organization', key: 'organisationCode' },
   { title: 'Amount', key: 'amount' },
   { title: 'Status', key: 'status' },
   { title: 'Expires', key: 'expiresAt' },
@@ -76,7 +82,17 @@ async function load() {
   }
 }
 
-onMounted(load)
+onMounted(async () => {
+  load()
+  if (auth.isAnchor) {
+    try {
+      const res = await dispatch<{ results: typeof organizations.value }>('GET_ORGANIZATIONS')
+      organizations.value = res.results
+    } catch {
+      // Table just falls back to showing the raw code; the list itself still loaded above.
+    }
+  }
+})
 
 function openIssue() {
   form.value = { householdNumber: '', amount: null, purpose: '', expiresAt: '' }
@@ -229,6 +245,7 @@ function statusColor(status: string) {
         <v-text-field v-model="tableSearch" prepend-inner-icon="mdi-magnify" label="Search" clearable hide-details density="compact" style="max-width: 220px" />
       </v-card-text>
       <v-data-table :headers="headers" :items="vouchers" :search="tableSearch" :loading="loading">
+        <template #item.organisationCode="{ item }">{{ orgName(item.organisationCode) }}</template>
         <template #item.amount="{ item }">{{ currency(item.amount) }}</template>
         <template #item.status="{ item }">
           <v-chip size="small" :color="statusColor(item.status)" variant="tonal">{{ item.status }}</v-chip>

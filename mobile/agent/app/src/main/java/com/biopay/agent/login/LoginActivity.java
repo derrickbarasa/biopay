@@ -15,6 +15,8 @@ import com.biopay.agent.home.HomeActivity;
 import com.biopay.agent.network.ApiCallback;
 import com.biopay.agent.network.ApiClient;
 import com.biopay.agent.session.SessionManager;
+import com.biopay.agent.session.SubscriptionGate;
+import com.biopay.agent.session.SubscriptionLockedActivity;
 import com.biopay.agent.ui.BaseActivity;
 
 import org.json.JSONObject;
@@ -81,7 +83,6 @@ public class LoginActivity extends BaseActivity {
         ApiClient.get(this).dispatch("LOGIN_SUPERVISOR", params, new ApiCallback() {
             @Override
             public void onSuccess(JSONObject response) {
-                setLoading(false);
                 JSONObject user = response.optJSONObject("user");
                 Integer anchorId = user != null && !user.isNull("anchorId") ? user.optInt("anchorId") : null;
                 sessionManager.saveSession(
@@ -94,8 +95,23 @@ public class LoginActivity extends BaseActivity {
                         anchorId,
                         user != null ? user.optString("partnerCode", null) : null);
 
-                startActivity(new Intent(LoginActivity.this, HomeActivity.class));
-                finish();
+                // Mirrors the web dashboard's archived-subscription gate -- see
+                // SubscriptionGate's javadoc for why this only needs checking here.
+                SubscriptionGate.check(LoginActivity.this, anchorId, new SubscriptionGate.Callback() {
+                    @Override
+                    public void onAllowed() {
+                        setLoading(false);
+                        startActivity(new Intent(LoginActivity.this, HomeActivity.class));
+                        finish();
+                    }
+
+                    @Override
+                    public void onLocked() {
+                        setLoading(false);
+                        startActivity(new Intent(LoginActivity.this, SubscriptionLockedActivity.class));
+                        finish();
+                    }
+                });
             }
 
             @Override

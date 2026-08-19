@@ -76,6 +76,11 @@ public class Voucher extends AbstractVerticle {
         return v == null ? null : Integer.parseInt(v.toString());
     }
 
+    /** The one designated cross-anchor operator (admin@biopay.com). */
+    private static boolean isSystemAdmin(JsonObject payload) {
+        return payload.getBoolean("systemAdmin", false);
+    }
+
     // ---- CREATE_VOUCHER (issue a single voucher) -----------------------------------
 
     private void create(Message<Object> message) {
@@ -197,19 +202,24 @@ public class Voucher extends AbstractVerticle {
 
     private void retrieveAll(Message<Object> message) {
         JsonObject payload = new JsonObject(message.body().toString());
+        boolean systemAdmin = isSystemAdmin(payload);
         String partnerCode = scopedPartnerCode(payload);
+        Integer anchorId = anchorIdOf(payload);
         String status = payload.getString("status", null);
         String householdNumber = payload.getString("householdNumber", null);
         int page = Math.max(payload.getInteger("page", 1), 1);
         int pageSize = Math.min(Math.max(payload.getInteger("pageSize", 25), 1), 200);
         int offset = (page - 1) * pageSize;
 
-        String sql = "SELECT * FROM vouchers WHERE (@p1 IS NULL OR partner_code=@p1) "
-                + "AND (@p2 IS NULL OR status=@p2) AND (@p3 IS NULL OR household_number=@p3) "
-                + "ORDER BY created_at DESC OFFSET @p4 ROWS FETCH NEXT @p5 ROWS ONLY";
+        String sql = "SELECT v.* FROM vouchers v JOIN partners p ON p.partner_id = v.partner_code "
+                + "WHERE (@p1 IS NULL OR v.partner_code=@p1) "
+                + "AND (@p2 IS NULL OR v.status=@p2) AND (@p3 IS NULL OR v.household_number=@p3) "
+                + "AND (@p6 = 1 OR p.anchor_id=@p7) "
+                + "ORDER BY v.created_at DESC OFFSET @p4 ROWS FETCH NEXT @p5 ROWS ONLY";
 
         pool.preparedQuery(sql)
-                .execute(Tuple.of(partnerCode, status, householdNumber, offset, pageSize))
+                .execute(Tuple.of(partnerCode, status, householdNumber, offset, pageSize)
+                        .addBoolean(systemAdmin).addInteger(anchorId))
                 .onFailure(err -> onDbError(message, err))
                 .onSuccess(rows -> {
                     JsonArray results = new JsonArray();
@@ -334,18 +344,21 @@ public class Voucher extends AbstractVerticle {
 
     private void summary(Message<Object> message) {
         JsonObject payload = new JsonObject(message.body().toString());
+        boolean systemAdmin = isSystemAdmin(payload);
         String partnerCode = scopedPartnerCode(payload);
+        Integer anchorId = anchorIdOf(payload);
 
-        String sql = "SELECT COUNT(*) AS cnt, ISNULL(SUM(amount), 0) AS total, "
-                + "SUM(CASE WHEN status='ISSUED' THEN 1 ELSE 0 END) AS issuedCount, "
-                + "ISNULL(SUM(CASE WHEN status='ISSUED' THEN amount ELSE 0 END), 0) AS issuedAmount, "
-                + "SUM(CASE WHEN status='REDEEMED' THEN 1 ELSE 0 END) AS redeemedCount, "
-                + "ISNULL(SUM(CASE WHEN status='REDEEMED' THEN amount ELSE 0 END), 0) AS redeemedAmount, "
-                + "SUM(CASE WHEN status='VOID' THEN 1 ELSE 0 END) AS voidCount "
-                + "FROM vouchers WHERE (@p1 IS NULL OR partner_code=@p1)";
+        String sql = "SELECT COUNT(*) AS cnt, ISNULL(SUM(v.amount), 0) AS total, "
+                + "SUM(CASE WHEN v.status='ISSUED' THEN 1 ELSE 0 END) AS issuedCount, "
+                + "ISNULL(SUM(CASE WHEN v.status='ISSUED' THEN v.amount ELSE 0 END), 0) AS issuedAmount, "
+                + "SUM(CASE WHEN v.status='REDEEMED' THEN 1 ELSE 0 END) AS redeemedCount, "
+                + "ISNULL(SUM(CASE WHEN v.status='REDEEMED' THEN v.amount ELSE 0 END), 0) AS redeemedAmount, "
+                + "SUM(CASE WHEN v.status='VOID' THEN 1 ELSE 0 END) AS voidCount "
+                + "FROM vouchers v JOIN partners p ON p.partner_id = v.partner_code "
+                + "WHERE (@p1 IS NULL OR v.partner_code=@p1) AND (@p2 = 1 OR p.anchor_id=@p3)";
 
         pool.preparedQuery(sql)
-                .execute(Tuple.of(partnerCode))
+                .execute(Tuple.of(partnerCode).addBoolean(systemAdmin).addInteger(anchorId))
                 .onFailure(err -> onDbError(message, err))
                 .onSuccess(rows -> {
                     Row r = rows.iterator().next();

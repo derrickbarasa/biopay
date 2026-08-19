@@ -19,8 +19,9 @@ public final class OrgModules {
     public static final String ALTERNATES = "ALTERNATES";
     public static final String CASH_TRANSFERS = "CASH_TRANSFERS";
     public static final String VOUCHERS = "VOUCHERS";
+    public static final String FOOD_DISTRIBUTION = "FOOD_DISTRIBUTION";
 
-    public static final Set<String> ALL = Set.of(HOUSEHOLDS, ALTERNATES, CASH_TRANSFERS, VOUCHERS);
+    public static final Set<String> ALL = Set.of(HOUSEHOLDS, ALTERNATES, CASH_TRANSFERS, VOUCHERS, FOOD_DISTRIBUTION);
 
     private OrgModules() {
     }

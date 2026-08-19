@@ -6,6 +6,8 @@ import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
 import { downloadCsv, parseCsv, toCsv } from '@/utils/csv'
 import BarChart from '@/components/BarChart.vue'
+import LineChart from '@/components/LineChart.vue'
+import PieChart from '@/components/PieChart.vue'
 
 interface HouseholdRow {
   householdNumber: string
@@ -18,10 +20,15 @@ interface HouseholdRow {
   bomaCode?: string
   vulnerabilityStatus?: string
   legalStatus?: string
+  reviewStatus?: string
+  rejectionReason?: string
   voucherCount?: number
   paymentCycleCount?: number
   status: number
 }
+
+const REVIEW_STATUSES: string[] = ['PENDING', 'CHECKED', 'APPROVED', 'REJECTED']
+const reviewStatusColor: Record<string, string> = { PENDING: 'default', CHECKED: 'info', APPROVED: 'success', REJECTED: 'error' }
 
 interface GeoNode {
   code: string
@@ -38,7 +45,6 @@ const loading = ref(true)
 const households = ref<HouseholdRow[]>([])
 const dialog = ref(false)
 const saving = ref(false)
-const showBreakdown = ref(false)
 
 const states = ref<GeoNode[]>([])
 const counties = ref<GeoNode[]>([])
@@ -57,6 +63,7 @@ const filters = ref({
   status: null as number | null,
   vulnerabilityStatus: '',
   legalStatus: '',
+  reviewStatus: null as string | null,
   dateFrom: null as string | null,
   dateTo: null as string | null,
   search: '',
@@ -82,8 +89,16 @@ const headers = [
   { title: 'Vouchers', key: 'voucherCount' },
   { title: 'Cycles', key: 'paymentCycleCount' },
   { title: 'Status', key: 'status' },
+  { title: 'Review', key: 'reviewStatus' },
   { title: 'Actions', key: 'actions', sortable: false, align: 'end' as const },
 ]
+
+// ---- Name-not-code lookups -- the table shows organisation/village names, not their
+// internal codes, using the same organizations/villages lists already fetched for filters.
+const orgNameByCode = computed(() => new Map(organizations.value.map((o) => [o.organisationCode, o.name])))
+const villageNameByCode = computed(() => new Map(villages.value.map((v) => [v.code, v.name])))
+function orgName(code?: string) { return (code && orgNameByCode.value.get(code)) || code || '—' }
+function villageName(code?: string) { return (code && villageNameByCode.value.get(code)) || code || '—' }
 
 // ---- Client-side breakdown graphs over the currently loaded (filtered) rows ----
 const genderBreakdown = computed(() => {
@@ -117,10 +132,12 @@ const ageBreakdown = computed(() => {
   return buckets
 })
 
-const statusBreakdown = computed(() => [
-  { label: 'Active', value: households.value.filter((h) => h.status === 1).length },
-  { label: 'Inactive', value: households.value.filter((h) => h.status !== 1).length },
-])
+// "By status" now reflects the review workflow (pending/checked/approved/rejected)
+// rather than the active/inactive account flag, per the current product ask.
+const statusBreakdown = computed(() => REVIEW_STATUSES.map((s) => ({
+  label: s.charAt(0) + s.slice(1).toLowerCase(),
+  value: households.value.filter((h) => (h.reviewStatus ?? 'PENDING') === s).length,
+})))
 
 // Groups the loaded rows by a free-text attribute (vulnerability / legal status),
 // counting blanks as "Unspecified". Used for the two attribute breakdown charts.
@@ -174,6 +191,7 @@ async function load() {
       status: filters.value.status ?? undefined,
       vulnerabilityStatus: filters.value.vulnerabilityStatus || undefined,
       legalStatus: filters.value.legalStatus || undefined,
+      reviewStatus: filters.value.reviewStatus ?? undefined,
       dateFrom: filters.value.dateFrom || undefined,
       dateTo: filters.value.dateTo || undefined,
       search: filters.value.search || undefined,
@@ -196,11 +214,12 @@ watch(() => filters.value.villageCode, load)
 watch(() => filters.value.organisationCode, load)
 watch(() => filters.value.gender, load)
 watch(() => filters.value.status, load)
+watch(() => filters.value.reviewStatus, load)
 watch(() => filters.value.dateFrom, load)
 watch(() => filters.value.dateTo, load)
 
 function clearFilters() {
-  filters.value = { organisationCode: null, stateCode: null, countyCode: null, locationCode: null, villageCode: null, gender: null, status: null, vulnerabilityStatus: '', legalStatus: '', dateFrom: null, dateTo: null, search: '' }
+  filters.value = { organisationCode: null, stateCode: null, countyCode: null, locationCode: null, villageCode: null, gender: null, status: null, vulnerabilityStatus: '', legalStatus: '', reviewStatus: null, dateFrom: null, dateTo: null, search: '' }
   load()
 }
 
@@ -211,11 +230,11 @@ function exportCsv() {
     return
   }
   const csv = toCsv(
-    ['Household #', 'Head of Household', 'Organization', 'Age', 'Gender', 'Phone', 'Size', 'Village', 'Vouchers', 'Payment Cycles', 'Status'],
+    ['Household #', 'Head of Household', 'Organization', 'Age', 'Gender', 'Phone', 'Size', 'Village', 'Vouchers', 'Payment Cycles', 'Status', 'Review Status'],
     households.value.map((h) => [
-      h.householdNumber, h.householdName, h.organisationCode, h.age ?? '', h.gender ?? '',
-      h.phoneNumber ?? '', h.householdSize ?? '', h.bomaCode ?? '', h.voucherCount ?? 0, h.paymentCycleCount ?? 0,
-      h.status === 1 ? 'Active' : 'Inactive',
+      h.householdNumber, h.householdName, orgName(h.organisationCode), h.age ?? '', h.gender ?? '',
+      h.phoneNumber ?? '', h.householdSize ?? '', villageName(h.bomaCode), h.voucherCount ?? 0, h.paymentCycleCount ?? 0,
+      h.status === 1 ? 'Active' : 'Inactive', h.reviewStatus ?? 'PENDING',
     ]),
   )
   downloadCsv(`households-${new Date().toISOString().slice(0, 10)}.csv`, csv)
@@ -301,7 +320,44 @@ async function remove(row: HouseholdRow) {
   }
 }
 
-// ---- Bulk upload (one CSV template upload = one village's batch) ---------------
+// ---- Review status (PENDING -> CHECKED -> APPROVED/REJECTED) -------------------
+const reviewDialog = ref(false)
+const reviewTarget = ref<HouseholdRow | null>(null)
+const reviewForm = ref({ reviewStatus: 'CHECKED', rejectionReason: '' })
+const reviewSaving = ref(false)
+
+function openReview(row: HouseholdRow) {
+  reviewTarget.value = row
+  reviewForm.value = { reviewStatus: row.reviewStatus ?? 'PENDING', rejectionReason: row.rejectionReason ?? '' }
+  reviewDialog.value = true
+}
+
+async function saveReview() {
+  if (!reviewTarget.value) return
+  if (reviewForm.value.reviewStatus === 'REJECTED' && !reviewForm.value.rejectionReason.trim()) {
+    toast.error('A reason is required when rejecting a household')
+    return
+  }
+  reviewSaving.value = true
+  try {
+    await dispatch('SET_HOUSEHOLD_REVIEW_STATUS', {
+      householdNumber: reviewTarget.value.householdNumber,
+      reviewStatus: reviewForm.value.reviewStatus,
+      rejectionReason: reviewForm.value.reviewStatus === 'REJECTED' ? reviewForm.value.rejectionReason : undefined,
+    })
+    toast.success('Review status updated')
+    reviewDialog.value = false
+    await load()
+  } catch (err) {
+    toast.error(err instanceof Error ? err.message : 'Update failed')
+  } finally {
+    reviewSaving.value = false
+  }
+}
+
+// ---- Import CSV (one template upload = one village's batch) --------------------
+// Renamed from "Bulk Upload" -- same underlying flow, still CSV-based. The template
+// now only includes the fields the user actually selects, rather than always every field.
 
 const bulkDialog = ref(false)
 const bulkStateCode = ref('')
@@ -312,18 +368,33 @@ const bulkFileName = ref('')
 const bulkRows = ref<Record<string, string>[]>([])
 const bulkResult = ref<{ successCount: number; failureCount: number; errors: { row: number; message: string }[] } | null>(null)
 
-const TEMPLATE_HEADERS = ['householdName', 'age', 'gender', 'maritalStatus', 'spouseName', 'idNumber', 'phoneNumber', 'householdSize', 'femaleDependants', 'maleDependants']
+const OPTIONAL_TEMPLATE_FIELDS: { key: string; label: string; sample: string }[] = [
+  { key: 'age', label: 'Age', sample: '34' },
+  { key: 'gender', label: 'Gender', sample: 'F' },
+  { key: 'maritalStatus', label: 'Marital status', sample: 'Married' },
+  { key: 'spouseName', label: 'Spouse name', sample: 'John Doe' },
+  { key: 'idNumber', label: 'ID number', sample: 'ID123456' },
+  { key: 'phoneNumber', label: 'Phone number', sample: '+211900000000' },
+  { key: 'householdSize', label: 'Household size', sample: '5' },
+  { key: 'femaleDependants', label: 'Female dependants', sample: '2' },
+  { key: 'maleDependants', label: 'Male dependants', sample: '1' },
+]
+const templateFields = ref<string[]>(OPTIONAL_TEMPLATE_FIELDS.map((f) => f.key))
+const templateDownloaded = ref(false)
 
 function openBulk() {
   bulkStateCode.value = ''; bulkCountyCode.value = ''; bulkLocationCode.value = ''; bulkVillageCode.value = ''
   bulkFileName.value = ''; bulkRows.value = []; bulkResult.value = null
+  templateFields.value = OPTIONAL_TEMPLATE_FIELDS.map((f) => f.key)
+  templateDownloaded.value = false
   bulkDialog.value = true
 }
 
 function downloadTemplate() {
-  downloadCsv('household-upload-template.csv', toCsv(TEMPLATE_HEADERS, [
-    ['Jane Doe', '34', 'F', 'Married', 'John Doe', 'ID123456', '+211900000000', '5', '2', '1'],
-  ]))
+  const headers = ['householdName', ...OPTIONAL_TEMPLATE_FIELDS.filter((f) => templateFields.value.includes(f.key)).map((f) => f.key)]
+  const sampleRow = ['Jane Doe', ...OPTIONAL_TEMPLATE_FIELDS.filter((f) => templateFields.value.includes(f.key)).map((f) => f.sample)]
+  downloadCsv('household-upload-template.csv', toCsv(headers, [sampleRow]))
+  templateDownloaded.value = true
 }
 
 function onBulkFile(event: Event) {
@@ -375,53 +446,45 @@ async function submitBulk() {
     <div class="d-flex align-center justify-space-between mb-4">
       <h1 class="text-h5 font-weight-bold">Households</h1>
       <div class="d-flex ga-2">
-        <v-btn
-          variant="outlined"
-          :prepend-icon="showBreakdown ? 'mdi-chart-box-outline' : 'mdi-chart-bar'"
-          @click="showBreakdown = !showBreakdown"
-        >
-          {{ showBreakdown ? 'Hide' : 'Show' }} Breakdown
-        </v-btn>
         <v-btn variant="outlined" prepend-icon="mdi-download" @click="exportCsv">Export CSV</v-btn>
-        <v-btn variant="outlined" prepend-icon="mdi-file-upload" @click="openBulk">Bulk Upload</v-btn>
+        <v-btn variant="outlined" prepend-icon="mdi-file-upload" @click="openBulk">Import CSV</v-btn>
         <v-btn color="primary" prepend-icon="mdi-home-plus" @click="openCreate">Add Household</v-btn>
       </div>
     </div>
 
-    <v-expand-transition>
-      <v-row v-if="showBreakdown" dense class="mb-2">
-        <v-col cols="12" md="4">
-          <v-card variant="flat" border>
-            <v-card-title class="text-subtitle-2">By gender</v-card-title>
-            <v-card-text><BarChart :data="genderBreakdown" color="#0D9488" /></v-card-text>
-          </v-card>
-        </v-col>
-        <v-col cols="12" md="4">
-          <v-card variant="flat" border>
-            <v-card-title class="text-subtitle-2">By age group</v-card-title>
-            <v-card-text><BarChart :data="ageBreakdown" color="#0F766E" /></v-card-text>
-          </v-card>
-        </v-col>
-        <v-col cols="12" md="4">
-          <v-card variant="flat" border>
-            <v-card-title class="text-subtitle-2">By status</v-card-title>
-            <v-card-text><BarChart :data="statusBreakdown" color="#F59E0B" /></v-card-text>
-          </v-card>
-        </v-col>
-        <v-col cols="12" md="6">
-          <v-card variant="flat" border>
-            <v-card-title class="text-subtitle-2">By vulnerability status</v-card-title>
-            <v-card-text><BarChart :data="vulnerabilityBreakdown" color="#2196F3" /></v-card-text>
-          </v-card>
-        </v-col>
-        <v-col cols="12" md="6">
-          <v-card variant="flat" border>
-            <v-card-title class="text-subtitle-2">By legal status</v-card-title>
-            <v-card-text><BarChart :data="legalBreakdown" color="#0F766E" /></v-card-text>
-          </v-card>
-        </v-col>
-      </v-row>
-    </v-expand-transition>
+    <h2 class="text-subtitle-1 font-weight-bold mb-2">Household breakdown</h2>
+    <v-row dense class="mb-4">
+      <v-col cols="12" md="4">
+        <v-card variant="flat" border>
+          <v-card-title class="text-subtitle-2">By gender</v-card-title>
+          <v-card-text><PieChart :data="genderBreakdown" /></v-card-text>
+        </v-card>
+      </v-col>
+      <v-col cols="12" md="4">
+        <v-card variant="flat" border>
+          <v-card-title class="text-subtitle-2">By age group</v-card-title>
+          <v-card-text><LineChart :data="ageBreakdown" color="#0F766E" /></v-card-text>
+        </v-card>
+      </v-col>
+      <v-col cols="12" md="4">
+        <v-card variant="flat" border>
+          <v-card-title class="text-subtitle-2">By status</v-card-title>
+          <v-card-text><BarChart :data="statusBreakdown" color="#F59E0B" /></v-card-text>
+        </v-card>
+      </v-col>
+      <v-col cols="12" md="6">
+        <v-card variant="flat" border>
+          <v-card-title class="text-subtitle-2">By vulnerability status</v-card-title>
+          <v-card-text><BarChart :data="vulnerabilityBreakdown" color="#2196F3" /></v-card-text>
+        </v-card>
+      </v-col>
+      <v-col cols="12" md="6">
+        <v-card variant="flat" border>
+          <v-card-title class="text-subtitle-2">By legal status</v-card-title>
+          <v-card-text><BarChart :data="legalBreakdown" color="#0F766E" /></v-card-text>
+        </v-card>
+      </v-col>
+    </v-row>
 
     <v-card variant="flat" border>
       <v-card-text>
@@ -446,6 +509,9 @@ async function submitBulk() {
           </v-col>
           <v-col cols="6" sm="3" md="2">
             <v-select v-model="filters.status" :items="[{ title: 'Active', value: 1 }, { title: 'Inactive', value: 0 }]" label="Status" clearable hide-details density="compact" />
+          </v-col>
+          <v-col cols="6" sm="3" md="2">
+            <v-select v-model="filters.reviewStatus" :items="REVIEW_STATUSES" label="Review status" clearable hide-details density="compact" />
           </v-col>
           <v-col cols="6" sm="3" md="2">
             <v-text-field
@@ -492,12 +558,46 @@ async function submitBulk() {
             {{ item.status === 1 ? 'Active' : 'Inactive' }}
           </v-chip>
         </template>
+        <template #item.organisationCode="{ item }">{{ orgName(item.organisationCode) }}</template>
+        <template #item.bomaCode="{ item }">{{ villageName(item.bomaCode) }}</template>
+        <template #item.reviewStatus="{ item }">
+          <v-tooltip v-if="item.reviewStatus === 'REJECTED' && item.rejectionReason" :text="item.rejectionReason" location="top">
+            <template #activator="{ props: tip }">
+              <v-chip v-bind="tip" size="small" :color="reviewStatusColor[item.reviewStatus ?? 'PENDING']" variant="tonal">
+                {{ item.reviewStatus ?? 'PENDING' }}
+              </v-chip>
+            </template>
+          </v-tooltip>
+          <v-chip v-else size="small" :color="reviewStatusColor[item.reviewStatus ?? 'PENDING']" variant="tonal">
+            {{ item.reviewStatus ?? 'PENDING' }}
+          </v-chip>
+        </template>
         <template #item.actions="{ item }">
           <v-btn icon="mdi-eye" variant="text" size="small" :aria-label="`View household ${item.householdName}`" @click="viewDetail(item)" />
+          <v-btn icon="mdi-clipboard-check-outline" variant="text" size="small" :aria-label="`Review household ${item.householdName}`" @click="openReview(item)" />
           <v-btn icon="mdi-delete" variant="text" size="small" color="error" :aria-label="`Delete household ${item.householdName}`" @click="remove(item)" />
         </template>
       </v-data-table>
     </v-card>
+
+    <v-dialog v-model="reviewDialog" max-width="440">
+      <v-card v-if="reviewTarget">
+        <v-card-title>Review {{ reviewTarget.householdName }}</v-card-title>
+        <v-card-text>
+          <v-select v-model="reviewForm.reviewStatus" :items="REVIEW_STATUSES" label="Review status" />
+          <v-textarea
+            v-if="reviewForm.reviewStatus === 'REJECTED'"
+            v-model="reviewForm.rejectionReason" label="Reason for rejection" rows="3" required
+            hint="Required when rejecting a household" persistent-hint
+          />
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" @click="reviewDialog = false">Cancel</v-btn>
+          <v-btn color="primary" :loading="reviewSaving" @click="saveReview">Save</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
 
     <v-dialog v-model="dialog" max-width="560">
       <v-card>
@@ -548,12 +648,12 @@ async function submitBulk() {
       </v-card>
     </v-dialog>
 
-    <v-dialog v-model="bulkDialog" max-width="620">
+    <v-dialog v-model="bulkDialog" max-width="640">
       <v-card>
-        <v-card-title>Bulk Upload Households</v-card-title>
+        <v-card-title>Import Households from CSV</v-card-title>
         <v-card-text>
           <v-alert type="info" variant="tonal" density="compact" class="mb-3">
-            Pick the village this batch belongs to, download the template, fill in one row per household, then upload it here.
+            Pick the village this batch belongs to, choose which fields to include, download the template, fill in one row per household, then upload it here.
           </v-alert>
           <v-row dense>
             <v-col cols="4"><v-select v-model="bulkStateCode" :items="states" item-title="name" item-value="code" label="State" density="compact" /></v-col>
@@ -562,10 +662,21 @@ async function submitBulk() {
           </v-row>
           <v-select v-model="bulkVillageCode" :items="villagesForLocation(bulkLocationCode)" item-title="name" item-value="code" label="Village" density="compact" />
 
+          <div class="text-caption text-medium-emphasis mt-3 mb-1">Fields to include (household name is always included)</div>
+          <v-row dense>
+            <v-col v-for="f in OPTIONAL_TEMPLATE_FIELDS" :key="f.key" cols="6" sm="4">
+              <v-checkbox v-model="templateFields" :value="f.key" :label="f.label" density="compact" hide-details />
+            </v-col>
+          </v-row>
+
           <v-btn variant="outlined" size="small" prepend-icon="mdi-download" class="my-3" @click="downloadTemplate">
             Download Template
           </v-btn>
-          <v-file-input label="Upload filled CSV" accept=".csv" prepend-icon="mdi-file-upload" :disabled="!bulkVillageCode" @change="onBulkFile" />
+          <v-file-input
+            label="Upload filled CSV" accept=".csv" prepend-icon="mdi-file-upload"
+            :disabled="!bulkVillageCode || !templateDownloaded" @change="onBulkFile"
+          />
+          <div v-if="!templateDownloaded" class="text-caption text-medium-emphasis mb-2">Download the template above before uploading a filled CSV.</div>
           <div v-if="bulkRows.length" class="text-caption mb-2">{{ bulkRows.length }} row(s) ready to upload from {{ bulkFileName }}</div>
 
           <v-alert v-if="bulkResult" :type="bulkResult.failureCount ? 'warning' : 'success'" variant="tonal" density="compact" class="mt-2">

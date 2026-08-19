@@ -12,6 +12,9 @@ interface AttendanceRow {
   time: string
   attendanceDate: string
   workCode?: string
+  organisationCode?: string
+  latitude?: string
+  longitude?: string
 }
 
 const auth = useAuthStore()
@@ -27,14 +30,20 @@ const organisationFilter = ref<string | null>(null)
 const headers = [
   { title: 'Household', key: 'householdNumber' },
   { title: 'Beneficiary', key: 'beneficiaryId' },
+  { title: 'Organization', key: 'organisationCode' },
   { title: 'Type', key: 'beneficiaryType' },
   { title: 'Clock', key: 'clock' },
   { title: 'Time', key: 'time' },
+  { title: 'Location', key: 'location', sortable: false },
   { title: 'Work Code', key: 'workCode' },
 ]
 
 const checkInCount = computed(() => records.value.filter((r) => r.clock === 'I').length)
 const checkOutCount = computed(() => records.value.filter((r) => r.clock === 'O').length)
+
+// Name-not-code lookup, matching the pattern used on Households/Officers.
+const orgNameByCode = computed(() => new Map(organizations.value.map((o) => [o.organisationCode, o.name])))
+function orgName(code?: string) { return (code && orgNameByCode.value.get(code)) || code || '—' }
 
 async function load() {
   loading.value = true
@@ -74,9 +83,9 @@ onMounted(async () => {
 
 function exportCsv() {
   const rows = [
-    ['Household', 'Beneficiary', 'Type', 'Clock', 'Time', 'Date', 'Work Code'],
+    ['Household', 'Beneficiary', 'Organization', 'Type', 'Clock', 'Time', 'Date', 'Work Code'],
     ...records.value.map((r) => [
-      r.householdNumber, r.beneficiaryId, r.beneficiaryType === 1 ? 'Head' : 'Alternate',
+      r.householdNumber, r.beneficiaryId, orgName(r.organisationCode), r.beneficiaryType === 1 ? 'Head' : 'Alternate',
       r.clock === 'I' ? 'In' : 'Out', r.time, r.attendanceDate, r.workCode ?? '',
     ]),
   ]
@@ -143,6 +152,7 @@ function exportCsv() {
         </v-row>
       </v-card-text>
       <v-data-table :headers="headers" :items="records" :search="tableSearch" :loading="loading">
+        <template #item.organisationCode="{ item }">{{ orgName(item.organisationCode) }}</template>
         <template #item.beneficiaryType="{ item }">{{ item.beneficiaryType === 1 ? 'Head' : 'Alternate' }}</template>
         <template #item.clock="{ item }">
           <v-chip size="small" :color="item.clock === 'I' ? 'success' : 'warning'" variant="tonal">
@@ -150,6 +160,17 @@ function exportCsv() {
           </v-chip>
         </template>
         <template #item.time="{ item }">{{ item.time ? new Date(item.time).toLocaleString() : '-' }}</template>
+        <template #item.location="{ item }">
+          <a
+            v-if="item.latitude && item.longitude"
+            :href="`https://www.google.com/maps?q=${item.latitude},${item.longitude}`"
+            target="_blank" rel="noopener" class="text-decoration-none d-inline-flex align-center ga-1"
+          >
+            <v-icon icon="mdi-map-marker-outline" size="16" />
+            <span class="text-caption">Map</span>
+          </a>
+          <span v-else class="text-caption text-medium-emphasis">—</span>
+        </template>
       </v-data-table>
     </v-card>
   </div>

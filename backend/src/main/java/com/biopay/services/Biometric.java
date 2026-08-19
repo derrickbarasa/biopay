@@ -76,6 +76,11 @@ public class Biometric extends AbstractVerticle {
         return payload.getString("partnerCode", "");
     }
 
+    /** The one designated cross-anchor operator (admin@biopay.com). */
+    private static boolean isSystemAdmin(JsonObject payload) {
+        return payload.getBoolean("systemAdmin", false);
+    }
+
     // ---- UPLOAD_HOUSEHOLD_BIO (field capture, with duplicate-check fields) --------
 
     private void uploadHouseholdBio(Message<Object> message) {
@@ -531,10 +536,11 @@ public class Biometric extends AbstractVerticle {
         if (isAnchor) {
             // Anchor sessions carry no partner_code (see Auth#loginUser) -- scope by anchor_id
             // instead, same pattern as Payment/Dashboard, with organisationCode narrowing further.
+            // The system admin (@p1 IS NULL) sees every anchor's attendance.
             Object anchorIdVal = payload.getValue("anchorId");
-            Integer anchorId = anchorIdVal == null ? null : Integer.parseInt(anchorIdVal.toString());
+            Integer anchorId = isSystemAdmin(payload) || anchorIdVal == null ? null : Integer.parseInt(anchorIdVal.toString());
             String organisationFilter = payload.getString("organisationCode", null);
-            sql = "SELECT * FROM attendances WHERE anchor_id=@p1 AND (@p2 IS NULL OR partner_code=@p2) "
+            sql = "SELECT * FROM attendances WHERE (@p1 IS NULL OR anchor_id=@p1) AND (@p2 IS NULL OR partner_code=@p2) "
                     + "AND (@p3 IS NULL OR attendance_date=@p3) AND (@p4 IS NULL OR clock=@p4) ORDER BY time DESC";
             params = Tuple.of(anchorId, organisationFilter, date, clock);
         } else {
@@ -557,7 +563,10 @@ public class Biometric extends AbstractVerticle {
                                 .put("clock", Rows.str(r, "clock"))
                                 .put("time", Rows.str(r, "time"))
                                 .put("attendanceDate", Rows.str(r, "attendance_date"))
-                                .put("workCode", Rows.str(r, "work_code")));
+                                .put("workCode", Rows.str(r, "work_code"))
+                                .put("organisationCode", Rows.str(r, "partner_code"))
+                                .put("latitude", Rows.str(r, "latitude"))
+                                .put("longitude", Rows.str(r, "longitude")));
                     }
                     reply(message, new JsonObject().put("responseCode", "000").put("responseMessage", "OK").put("results", results));
                 });
