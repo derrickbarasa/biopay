@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { routeNavigating } from '@/composables/useRouteProgress'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -111,6 +112,18 @@ const router = createRouter({
   ],
 })
 
+// Fires before the target route's lazy chunk is even requested, so the
+// top progress bar appears the instant a click registers rather than only
+// once the (potentially slow) chunk fetch + data load finish.
+router.beforeEach(() => {
+  routeNavigating.value = true
+  return true
+})
+
+router.afterEach(() => {
+  routeNavigating.value = false
+})
+
 router.beforeEach((to) => {
   const auth = useAuthStore()
 
@@ -137,6 +150,7 @@ router.beforeEach((to) => {
 // route once so the browser receives the current HTML and asset manifest.
 let recoveringLazyRoute = false
 router.onError((error, to) => {
+  routeNavigating.value = false
   const message = error instanceof Error ? error.message : String(error)
   const isLazyRouteFailure = /Failed to fetch dynamically imported module|Importing a module script failed|Loading chunk [\d]+ failed|ChunkLoadError/i.test(message)
 

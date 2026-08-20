@@ -102,6 +102,8 @@ public class HouseholdDao {
         public String gender;
         public Integer age;
         public String stateCode;
+        public String countyCode;
+        public String payamCode;
         public String bomaCode;
         public Integer householdSize;
         public Integer maleDependants;
@@ -123,6 +125,8 @@ public class HouseholdDao {
             int ageIdx = c.getColumnIndexOrThrow("age");
             h.age = c.isNull(ageIdx) ? null : c.getInt(ageIdx);
             h.stateCode = c.getString(c.getColumnIndexOrThrow("state_code"));
+            h.countyCode = c.getString(c.getColumnIndexOrThrow("county_code"));
+            h.payamCode = c.getString(c.getColumnIndexOrThrow("payam_code"));
             h.bomaCode = c.getString(c.getColumnIndexOrThrow("boma_code"));
             int sizeIdx = c.getColumnIndexOrThrow("household_size");
             h.householdSize = c.isNull(sizeIdx) ? null : c.getInt(sizeIdx);

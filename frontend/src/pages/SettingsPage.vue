@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { onMounted, ref } from 'vue'
 import { dispatch } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
@@ -14,6 +14,18 @@ const saving = ref(false)
 const savingProfile = ref(false)
 const profileFirstName = ref(auth.user?.firstName ?? '')
 const profileLastName = ref(auth.user?.lastName ?? auth.user?.otherNames ?? '')
+const organizationName = ref('')
+
+onMounted(async () => {
+  if (auth.user?.partnerCode) {
+    try {
+      const res = await dispatch<{ results: { name: string }[] }>('GET_ORGANIZATION', { organisationCode: auth.user.partnerCode })
+      organizationName.value = res.results?.[0]?.name ?? auth.user.partnerCode
+    } catch {
+      organizationName.value = auth.user.partnerCode
+    }
+  }
+})
 
 async function saveProfile() {
   if (!profileFirstName.value.trim()) {
@@ -135,7 +147,7 @@ async function confirmDisable() {
             </div>
             <v-chip color="secondary" variant="tonal">{{ auth.roleLabel }}</v-chip>
             <div v-if="auth.user?.partnerCode" class="mt-2 text-body-2">
-              Organization: {{ auth.user.partnerCode }}
+              Organization: {{ organizationName || auth.user.partnerCode }}
             </div>
             <v-divider class="my-4" />
             <v-text-field v-model="profileFirstName" label="First name" autocomplete="given-name" />

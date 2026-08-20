@@ -19,20 +19,26 @@ import com.biopay.agent.biometric.BiometricDevice;
 import com.biopay.agent.biometric.BiometricDeviceFactory;
 import com.biopay.agent.data.DatabaseHelper;
 import com.biopay.agent.data.HouseholdDao;
+import com.biopay.agent.face.FaceCaptureActivity;
+import com.biopay.agent.face.FaceRecognitionException;
+import com.biopay.agent.face.MlKitFaceRecognitionEngine;
 import com.biopay.agent.login.LoginActivity;
 import com.biopay.agent.network.ApiCallback;
 import com.biopay.agent.network.ApiClient;
+import com.biopay.agent.profile.ProfileActivity;
 import com.biopay.agent.session.SessionManager;
 import com.biopay.agent.sync.SyncAlertsManager;
 import com.biopay.agent.sync.SyncScheduler;
 import com.biopay.agent.ui.BaseActivity;
-import com.google.android.material.bottomnavigation.BottomNavigationView;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.materialswitch.MaterialSwitch;
 import com.google.android.material.snackbar.Snackbar;
 
 import org.json.JSONObject;
 
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -55,6 +61,13 @@ public class SettingsActivity extends BaseActivity {
                     swSyncAlerts.setChecked(false);
                     Snackbar.make(swSyncAlerts, R.string.settings_sync_alerts_denied, Snackbar.LENGTH_LONG).show();
                 }
+            });
+
+    private final ActivityResultLauncher<Intent> faceCaptureLauncher =
+            registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {
+                if (result.getResultCode() != RESULT_OK || result.getData() == null) return;
+                String path = result.getData().getStringExtra(FaceCaptureActivity.EXTRA_RESULT_IMAGE_PATH);
+                if (path != null) runFaceDetectionTest(path);
             });
 
     @Override
@@ -103,7 +116,7 @@ public class SettingsActivity extends BaseActivity {
         ((TextView) findViewById(R.id.tvAccountSubtitle)).setText(
                 partnerCode == null || partnerCode.isEmpty() ? sessionManager.getEmail() : partnerCode);
         findViewById(R.id.rowAccount).setOnClickListener(v ->
-                ((BottomNavigationView) findViewById(R.id.bottomNavigation)).setSelectedItemId(R.id.navProfile));
+                startActivity(new Intent(this, ProfileActivity.class)));
     }
 
     private void setupNotifications() {
@@ -128,6 +141,53 @@ public class SettingsActivity extends BaseActivity {
         BiometricDevice device = BiometricDeviceFactory.create();
         ((TextView) findViewById(R.id.tvScannerName)).setText(device.getDisplayName());
         findViewById(R.id.btnTestScanner).setOnClickListener(v -> refreshScannerStatus());
+        findViewById(R.id.btnTestFace).setOnClickListener(v ->
+                faceCaptureLauncher.launch(new Intent(this, FaceCaptureActivity.class)));
+    }
+
+    /** Runs the real capture-validation pipeline end to end and reports the honest outcome --
+     *  nothing here is saved or synced, this only exercises detection; see
+     *  {@link MlKitFaceRecognitionEngine} for why matching always reports unavailable. */
+    private void runFaceDetectionTest(String imagePath) {
+        TextView tvFaceBody = findViewById(R.id.tvFaceBody);
+        tvFaceBody.setText(R.string.face_test_running);
+        new Thread(() -> {
+            String outcome;
+            try {
+                byte[] bytes = readFile(imagePath);
+                new MlKitFaceRecognitionEngine().createEmbedding(bytes);
+                // createEmbedding always throws today (see its javadoc) -- reaching here would
+                // mean a real model got wired in without updating this message.
+                outcome = getString(R.string.face_test_no_match_model);
+            } catch (FaceRecognitionException ex) {
+                outcome = isEmbeddingUnavailableMessage(ex)
+                        ? getString(R.string.face_test_no_match_model)
+                        : getString(R.string.face_test_capture_failed, ex.getMessage());
+            } catch (IOException ex) {
+                outcome = getString(R.string.face_test_capture_failed, ex.getMessage());
+            } finally {
+                new File(imagePath).delete();
+            }
+            String finalOutcome = outcome;
+            runOnUiThread(() -> tvFaceBody.setText(finalOutcome));
+        }).start();
+    }
+
+    private static boolean isEmbeddingUnavailableMessage(FaceRecognitionException ex) {
+        return ex.getMessage() != null && ex.getMessage().contains("no approved face-matching model");
+    }
+
+    private static byte[] readFile(String path) throws IOException {
+        File file = new File(path);
+        byte[] bytes = new byte[(int) file.length()];
+        try (FileInputStream in = new FileInputStream(file)) {
+            int offset = 0;
+            int read;
+            while (offset < bytes.length && (read = in.read(bytes, offset, bytes.length - offset)) >= 0) {
+                offset += read;
+            }
+        }
+        return bytes;
     }
 
     private void refreshScannerStatus() {

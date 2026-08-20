@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useDisplay } from 'vuetify'
 import { useAuthStore } from '@/stores/auth'
@@ -14,6 +14,12 @@ const toast = useToast()
 const { mdAndUp } = useDisplay()
 const drawer = ref(mdAndUp.value)
 const { showPrompt: showIdlePrompt, confirmStillHere, logoutNow } = useIdleLogout()
+
+// Shrinks the whole authenticated shell (see .app-shell-scale in style.css) so
+// the dashboard, sidebar, and tables fit an ordinary laptop viewport at 100%
+// zoom without scrolling. Scoped to this layout's lifetime only.
+onMounted(() => document.documentElement.classList.add('app-shell-scale'))
+onUnmounted(() => document.documentElement.classList.remove('app-shell-scale'))
 
 watch(mdAndUp, (isDesktop) => {
   drawer.value = isDesktop
@@ -132,9 +138,9 @@ async function handleLogout() {
 </script>
 
 <template>
-  <v-navigation-drawer v-model="drawer" color="primary-darken-1" theme="dark" class="app-drawer">
+  <v-navigation-drawer v-model="drawer" width="216" color="primary-darken-1" theme="dark" class="app-drawer">
     <div class="drawer-brand d-flex align-center">
-      <img src="/biopay_logo_horizontal.svg" alt="BioPay — Biometric Payment Solutions" class="drawer-logo" />
+      <img src="/biopay_logo_horizontal_light.svg" alt="BioPay — Biometric Payment Solutions" class="drawer-logo" />
     </div>
     <v-divider />
 
@@ -167,15 +173,15 @@ async function handleLogout() {
     </template>
   </v-navigation-drawer>
 
-  <v-app-bar color="surface" elevation="0" border class="app-bar">
-    <v-app-bar-nav-icon @click="drawer = !drawer" />
-    <v-breadcrumbs :items="[{ title: $route.name?.toString() ?? '' }]" class="text-capitalize" />
+  <v-app-bar color="surface" elevation="0" border density="compact" class="app-bar">
+    <v-app-bar-nav-icon density="compact" @click="drawer = !drawer" />
+    <v-breadcrumbs :items="[{ title: $route.name?.toString() ?? '' }]" class="text-capitalize" density="compact" />
     <v-spacer />
     <v-chip class="role-chip mr-3 font-weight-bold" color="secondary" variant="tonal" size="small">{{ auth.roleLabel }}</v-chip>
     <v-menu>
       <template #activator="{ props }">
-        <v-btn v-bind="props" variant="text" class="text-none">
-          <v-avatar color="primary" size="32" class="mr-2">
+        <v-btn v-bind="props" variant="text" size="small" class="text-none">
+          <v-avatar color="primary" size="28" class="mr-2">
             <span class="text-caption">{{ auth.initials }}</span>
           </v-avatar>
           <span class="user-name">{{ auth.fullName }}</span>
@@ -191,7 +197,7 @@ async function handleLogout() {
   </v-app-bar>
 
   <v-main class="dashboard-main">
-    <v-container fluid class="pa-4 pa-md-7">
+    <v-container fluid class="pa-3 pa-md-5">
       <v-dialog v-model="showIdlePrompt" max-width="420" persistent>
         <v-card>
           <v-card-title>Still there?</v-card-title>
@@ -253,17 +259,19 @@ async function handleLogout() {
 </template>
 
 <style scoped>
-.drawer-brand { min-height: 78px; margin: 12px; padding: 12px 14px; border-radius: 14px; background: #fff; }
-.drawer-logo { display: block; width: min(100%, 190px); height: auto; }
-.app-drawer { border-right: 1px solid rgba(15, 118, 110, .65); background: #0f766e !important; }
-.app-drawer :deep(.v-list) { display: flex; flex-direction: column; }
-.app-drawer :deep(.v-list-item) { margin: 3px 12px; min-height: 44px; color: rgba(255, 255, 255, .86); }
-.app-drawer :deep(.v-list-item-title) { font-weight: 500; }
+.drawer-brand { min-height: 56px; margin: 8px; padding: 8px 10px; }
+.drawer-logo { display: block; width: min(100%, 148px); height: auto; }
+.app-drawer { border-right: 1px solid rgba(15, 118, 110, .65); background: #0f766e !important; font-size: .86rem; }
+.app-drawer :deep(.v-list) { display: flex; flex-direction: column; padding-block: 4px; }
+.app-drawer :deep(.v-list-item) { margin: 1px 8px; min-height: 36px; padding-inline: 10px; color: rgba(255, 255, 255, .86); }
+.app-drawer :deep(.v-list-item-title) { font-weight: 500; font-size: .84rem; }
+.app-drawer :deep(.v-list-item__prepend .v-icon) { font-size: 1.1rem; }
 .app-drawer :deep(.v-list-item--active) { background: rgba(255, 255, 255, .16); color: #fff; }
 .app-drawer :deep(.v-list-item--active .v-list-item-title) { font-weight: 600; }
-.drawer-subheader { color: rgba(255, 255, 255, .68) !important; font-size: .68rem; letter-spacing: .08em; text-transform: uppercase; padding-inline-start: 20px !important; }
+.drawer-subheader { color: rgba(255, 255, 255, .68) !important; font-size: .64rem; letter-spacing: .08em; text-transform: uppercase; padding-inline-start: 18px !important; min-height: 28px !important; }
 .app-drawer :deep(.v-divider) { border-color: rgba(255, 255, 255, .18); }
 .app-bar { background: rgba(255, 255, 255, .94) !important; backdrop-filter: blur(12px); }
+.app-bar :deep(.v-breadcrumbs) { font-size: .82rem; padding-inline: 4px; }
 .dashboard-main { background: #f8fafc; min-height: 100vh; }
 .archived-gate { display: flex; justify-content: center; padding-top: 8vh; }
 @media (max-width: 600px) {

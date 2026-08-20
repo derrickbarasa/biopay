@@ -205,35 +205,30 @@ function statusColor(status: string) {
 <template>
   <div>
     <div class="d-flex align-center justify-space-between mb-4">
-      <h1 class="text-h5 font-weight-bold">Vouchers</h1>
+      <h1 class="page-title">Vouchers</h1>
       <div class="d-flex ga-2">
         <v-btn variant="outlined" prepend-icon="mdi-file-upload" @click="openBulk">Bulk Issue</v-btn>
         <v-btn color="primary" prepend-icon="mdi-ticket-confirmation-outline" @click="openIssue">Issue Voucher</v-btn>
       </div>
     </div>
 
-    <v-row class="mb-2">
-      <v-col cols="12" sm="4">
-        <v-card class="pa-4" variant="flat" border>
-          <div class="text-caption text-medium-emphasis">Issued (awaiting redemption)</div>
-          <div class="text-h5 font-weight-bold">{{ currency(summary.issuedAmount) }}</div>
-          <div class="text-caption">{{ summary.issuedCount ?? 0 }} vouchers</div>
-        </v-card>
-      </v-col>
-      <v-col cols="12" sm="4">
-        <v-card class="pa-4" variant="flat" border>
-          <div class="text-caption text-medium-emphasis">Redeemed</div>
-          <div class="text-h5 font-weight-bold">{{ currency(summary.redeemedAmount) }}</div>
-          <div class="text-caption">{{ summary.redeemedCount ?? 0 }} vouchers</div>
-        </v-card>
-      </v-col>
-      <v-col cols="12" sm="4">
-        <v-card class="pa-4" variant="flat" border>
-          <div class="text-caption text-medium-emphasis">Voided</div>
-          <div class="text-h5 font-weight-bold">{{ summary.voidCount ?? 0 }}</div>
-        </v-card>
-      </v-col>
-    </v-row>
+    <div class="voucher-summary-grid mb-4">
+      <v-card class="summary-card" variant="flat" border>
+        <div class="summary-label">Issued (awaiting redemption)</div>
+        <div class="summary-value">{{ currency(summary.issuedAmount) }}</div>
+        <div class="summary-detail">{{ summary.issuedCount ?? 0 }} vouchers</div>
+      </v-card>
+      <v-card class="summary-card" variant="flat" border>
+        <div class="summary-label">Redeemed</div>
+        <div class="summary-value">{{ currency(summary.redeemedAmount) }}</div>
+        <div class="summary-detail">{{ summary.redeemedCount ?? 0 }} vouchers</div>
+      </v-card>
+      <v-card class="summary-card" variant="flat" border>
+        <div class="summary-label">Voided</div>
+        <div class="summary-value">{{ summary.voidCount ?? 0 }}</div>
+        <div class="summary-detail">&nbsp;</div>
+      </v-card>
+    </div>
 
     <v-card variant="flat" border>
       <v-card-text class="d-flex ga-3">
@@ -258,20 +253,27 @@ function statusColor(status: string) {
       </v-data-table>
     </v-card>
 
-    <v-dialog v-model="issueDialog" max-width="480">
-      <v-card>
-        <v-card-title>Issue Voucher</v-card-title>
-        <v-card-text>
-          <v-text-field v-model="form.householdNumber" label="Household number" />
-          <v-text-field v-model.number="form.amount" label="Amount" type="number" />
-          <v-text-field v-model="form.purpose" label="Purpose (optional)" />
-          <v-text-field v-model="form.expiresAt" label="Expires on (optional)" type="date" />
-        </v-card-text>
-        <v-card-actions>
-          <v-spacer />
-          <v-btn variant="text" @click="issueDialog = false">Cancel</v-btn>
-          <v-btn color="primary" :loading="saving" @click="issue">Issue</v-btn>
-        </v-card-actions>
+    <v-dialog v-model="issueDialog" max-width="560">
+      <v-card class="voucher-editor">
+        <div class="editor-heading">
+          <div>
+            <div class="editor-title"><v-icon icon="mdi-ticket-confirmation-outline" size="20" /> Issue Voucher</div>
+            <p>Issue a single voucher to a household, redeemable on presentation.</p>
+          </div>
+          <v-btn icon="mdi-close" variant="text" size="small" aria-label="Close voucher form" @click="issueDialog = false" />
+        </div>
+        <v-form @submit.prevent="issue">
+          <div class="field-grid">
+            <v-text-field v-model="form.householdNumber" label="Household number" prepend-inner-icon="mdi-home-outline" density="compact" />
+            <v-text-field v-model.number="form.amount" label="Amount" type="number" prepend-inner-icon="mdi-cash" density="compact" />
+            <v-text-field v-model="form.purpose" label="Purpose (optional)" prepend-inner-icon="mdi-clipboard-check-outline" density="compact" />
+            <v-text-field v-model="form.expiresAt" label="Expires on (optional)" type="date" density="compact" />
+          </div>
+          <div class="editor-actions">
+            <v-btn variant="text" @click="issueDialog = false">Cancel</v-btn>
+            <v-btn color="primary" type="submit" :loading="saving" prepend-icon="mdi-ticket-confirmation-outline">Issue voucher</v-btn>
+          </div>
+        </v-form>
       </v-card>
     </v-dialog>
 
@@ -321,3 +323,23 @@ function statusColor(status: string) {
     </v-dialog>
   </div>
 </template>
+
+<style scoped>
+.voucher-summary-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.summary-card { padding: 16px 18px !important; }
+.summary-label { color: #64748b; font-size: .72rem; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; }
+.summary-value { color: #0f172a; font-size: 1.25rem; font-weight: 750; letter-spacing: -.02em; margin-top: 6px; }
+.summary-detail { color: #64748b; font-size: .74rem; margin-top: 4px; }
+@media (max-width: 620px) { .voucher-summary-grid { grid-template-columns: 1fr; } }
+
+.voucher-editor { padding: 22px 24px; }
+.editor-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 18px; }
+.editor-title { display: flex; align-items: center; gap: 8px; color: #0f172a; font-size: 1.05rem; font-weight: 750; letter-spacing: -.02em; }
+.editor-heading p { color: #64748b; font-size: .8rem; margin: 4px 0 0; }
+.field-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 16px; }
+.editor-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
+@media (max-width: 520px) {
+  .field-grid { grid-template-columns: 1fr; }
+  .editor-actions :deep(.v-btn) { flex: 1; }
+}
+</style>

@@ -8,11 +8,13 @@ import com.biopay.agent.data.AlternateDao;
 import com.biopay.agent.data.AttendanceDao;
 import com.biopay.agent.data.FingerprintDao;
 import com.biopay.agent.data.FaceDao;
+import com.biopay.agent.data.GeoDao;
 import com.biopay.agent.data.HouseholdDao;
 import com.biopay.agent.data.ImageDao;
 import com.biopay.agent.data.PaymentDao;
 import com.biopay.agent.data.VoucherDao;
 import com.biopay.agent.network.ApiClient;
+import com.biopay.agent.session.SessionManager;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -42,6 +44,7 @@ public class SyncManager {
     private final AttendanceDao attendanceDao;
     private final PaymentDao paymentDao;
     private final VoucherDao voucherDao;
+    private final GeoDao geoDao;
 
     public SyncManager(Context context) {
         this.context = context.getApplicationContext();
@@ -53,11 +56,13 @@ public class SyncManager {
         attendanceDao = new AttendanceDao(this.context);
         paymentDao = new PaymentDao(this.context);
         voucherDao = new VoucherDao(this.context);
+        geoDao = new GeoDao(this.context);
     }
 
     /** @return true if every pending row across every table synced successfully this pass. */
     public boolean syncAll() {
         boolean allSucceeded = true;
+        allSucceeded &= syncGeography();
         allSucceeded &= syncHouseholds();
         allSucceeded &= syncAlternates();
         allSucceeded &= syncFingerprints();
@@ -82,6 +87,62 @@ public class SyncManager {
         boolean ok=true;for(VoucherDao.Voucher v:voucherDao.listPendingRedemptions())try{Map<String,Object> p=new HashMap<>();p.put("voucherCode",v.code);p.put("matchedFingerprint",v.matchedFingerprintUuid);p.put("latitude",v.latitude);p.put("longitude",v.longitude);ApiClient.get(context).dispatchSync("REDEEM_VOUCHER",p);voucherDao.markRedemptionSynced(v.code);}catch(Exception ex){Log.w(TAG,"Voucher redemption sync failed for "+v.code+": "+ex.getMessage());ok=false;}return ok;
     }
 
+    /**
+     * Read-only pull of the anchor's configured state/county/location(payam)/village(boma)
+     * hierarchy so the household form can offer name-based pickers offline (see GeoDao). Fails
+     * open like the other catalogue pulls -- an anchor that hasn't configured a hierarchy yet
+     * (or a device that's simply offline) must never block household registration, it just falls
+     * back to the form's manual-code entry.
+     */
+    private boolean syncGeography() {
+        Integer anchorId = new SessionManager(context).getAnchorId();
+        if (anchorId == null) {
+            return true;
+        }
+        try {
+            Map<String, Object> anchorParam = new HashMap<>();
+            anchorParam.put("anchorId", anchorId);
+
+            org.json.JSONArray states = ApiClient.get(context).dispatchSync("GET_STATES", anchorParam).optJSONArray("results");
+            if (states != null) {
+                for (int i = 0; i < states.length(); i++) {
+                    org.json.JSONObject r = states.getJSONObject(i);
+                    geoDao.upsertState(r.optString("code"), r.optString("name"));
+                }
+            }
+
+            org.json.JSONArray counties = ApiClient.get(context).dispatchSync("GET_COUNTIES", anchorParam).optJSONArray("results");
+            if (counties != null) {
+                for (int i = 0; i < counties.length(); i++) {
+                    org.json.JSONObject r = counties.getJSONObject(i);
+                    geoDao.upsertCounty(r.optString("code"), r.optString("stateCode"), r.optString("name"));
+                }
+            }
+
+            // geo_locations = the household's "payam" column; countyCode is its immediate parent.
+            org.json.JSONArray locations = ApiClient.get(context).dispatchSync("GET_LOCATIONS", anchorParam).optJSONArray("results");
+            if (locations != null) {
+                for (int i = 0; i < locations.length(); i++) {
+                    org.json.JSONObject r = locations.getJSONObject(i);
+                    geoDao.upsertPayam(r.optString("code"), r.optString("countyCode"), r.optString("name"));
+                }
+            }
+
+            // geo_villages = the household's "boma" column; locationCode (payam) is its immediate parent.
+            org.json.JSONArray villages = ApiClient.get(context).dispatchSync("GET_VILLAGES", anchorParam).optJSONArray("results");
+            if (villages != null) {
+                for (int i = 0; i < villages.length(); i++) {
+                    org.json.JSONObject r = villages.getJSONObject(i);
+                    geoDao.upsertBoma(r.optString("code"), r.optString("locationCode"), r.optString("name"));
+                }
+            }
+            return true;
+        } catch (Exception ex) {
+            Log.w(TAG, "Geography sync failed: " + ex.getMessage());
+            return false;
+        }
+    }
+
     private boolean syncHouseholds() {
         boolean allOk = true;
         for (HouseholdDao.Household h : householdDao.listPending()) {
@@ -93,6 +154,9 @@ public class SyncManager {
                 params.put("gender", h.gender);
                 params.put("phoneNumber", h.phoneNumber);
                 params.put("householdSize", h.householdSize);
+                params.put("stateCode", h.stateCode);
+                params.put("countyCode", h.countyCode);
+                params.put("payamCode", h.payamCode);
                 params.put("bomaCode", h.bomaCode);
                 params.put("duplicate", 0);
                 params.put("registrationMethod", h.registrationMethod);

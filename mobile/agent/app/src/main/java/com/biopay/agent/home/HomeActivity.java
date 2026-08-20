@@ -20,10 +20,13 @@ import com.biopay.agent.location.LocationHelper;
 import com.biopay.agent.payments.PaymentsActivity;
 import com.biopay.agent.reports.ReportsActivity;
 import com.biopay.agent.session.SessionManager;
+import com.biopay.agent.settings.SettingsActivity;
 import com.biopay.agent.sync.SyncScheduler;
 import com.biopay.agent.ui.BaseActivity;
 import com.biopay.agent.vouchers.VoucherRedemptionActivity;
 import com.google.android.material.snackbar.Snackbar;
+
+import android.location.Location;
 
 import java.util.Arrays;
 
@@ -78,6 +81,28 @@ public class HomeActivity extends BaseActivity {
             SyncScheduler.triggerNow(this);
             Snackbar.make(findViewById(R.id.btnQuickSync), R.string.settings_sync_queued, Snackbar.LENGTH_SHORT).show();
         });
+
+        // Quick-actions row + hero bell: each routes to a real, already-built destination --
+        // no new screens invented here (see the mobile.png revamp session notes).
+        findViewById(R.id.btnNotifications).setOnClickListener(v ->
+                startActivity(new Intent(this, SettingsActivity.class)));
+        findViewById(R.id.btnSummaryViewAll).setOnClickListener(v ->
+                startActivity(new Intent(this, ReportsActivity.class)));
+        findViewById(R.id.btnQuickScanQr).setOnClickListener(v ->
+                startActivity(new Intent(this, VoucherRedemptionActivity.class)));
+        findViewById(R.id.btnQuickVerifyIdentity).setOnClickListener(v ->
+                startActivity(new Intent(this, SettingsActivity.class)));
+        findViewById(R.id.btnQuickMyLocation).setOnClickListener(v -> showCurrentLocation());
+        findViewById(R.id.btnQuickSyncHistory).setOnClickListener(v ->
+                startActivity(new Intent(this, ReportsActivity.class)));
+    }
+
+    private void showCurrentLocation() {
+        Location location = LocationHelper.getLastKnownLocation(this);
+        String message = location == null
+                ? getString(R.string.home_location_unavailable)
+                : getString(R.string.home_location_current, location.getLatitude(), location.getLongitude());
+        Snackbar.make(findViewById(R.id.btnQuickMyLocation), message, Snackbar.LENGTH_LONG).show();
     }
 
     @Override

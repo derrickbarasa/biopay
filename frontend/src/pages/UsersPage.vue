@@ -10,7 +10,11 @@ const auth=useAuthStore(),toast=useToast(),loading=ref(false),saving=ref(false),
 const form=reactive({email:'',username:'',password:'',firstName:'',otherNames:'',userScope:'ORGANISATION',organisationCode:'',roleId:null as number|null})
 const headers=[{title:'User',key:'email'},{title:'Scope',key:'userScope'},{title:'Role',key:'roleName'},{title:'Status',key:'status'},{title:'',key:'actions',sortable:false}]
 const availableRoles=computed(()=>roles.value.filter(r=>r.scope===form.userScope));
-async function load(){loading.value=true;try{const orgCall=auth.isAnchor?dispatch<{results:Org[]}>('GET_ORGANIZATIONS'):Promise.resolve({results:[] as Org[]});const [u,r,o]=await Promise.all([dispatch<{results:UserRow[]}>('GET_USERS'),dispatch<{results:Role[]}>('GET_ROLES'),orgCall]);users.value=u.results??[];roles.value=r.results??[];orgs.value=o.results??[]}catch(e){toast.error(e instanceof Error?e.message:'Unable to load users')}finally{loading.value=false}}
+// GET_ORGANIZATIONS is safe for org-scoped callers too -- it just returns their own org --
+// so this always fetches, letting the Scope column show a name instead of a raw partner code.
+const orgNameByCode=computed(()=>new Map(orgs.value.map(o=>[o.organisationCode,o.name])));
+function orgName(code?:string){return (code&&orgNameByCode.value.get(code))||code||'—'}
+async function load(){loading.value=true;try{const [u,r,o]=await Promise.all([dispatch<{results:UserRow[]}>('GET_USERS'),dispatch<{results:Role[]}>('GET_ROLES'),dispatch<{results:Org[]}>('GET_ORGANIZATIONS')]);users.value=u.results??[];roles.value=r.results??[];orgs.value=o.results??[]}catch(e){toast.error(e instanceof Error?e.message:'Unable to load users')}finally{loading.value=false}}
 function openCreate(){Object.assign(form,{email:'',username:'',password:'',firstName:'',otherNames:'',userScope:'ORGANISATION',organisationCode:auth.user?.partnerCode??'',roleId:null});dialog.value=true}
 async function create(){saving.value=true;try{await dispatch('CREATE_USER',{...form});toast.success('User created');dialog.value=false;await load()}catch(e){toast.error(e instanceof Error?e.message:'Create failed')}finally{saving.value=false}}
 async function toggle(u:UserRow){try{await dispatch('TOGGLE_USER_STATUS',{userId:u.id,status:u.status===1?0:1});toast.success(u.status===1?'User deactivated':'User activated');await load()}catch(e){toast.error(e instanceof Error?e.message:'Status update failed')}}
@@ -22,7 +26,7 @@ onMounted(load)
   <v-card border flat class="admin-card"><div class="table-tools"><v-text-field v-model="search" prepend-inner-icon="mdi-magnify" label="Search users" hide-details density="compact" variant="outlined"/><span>{{ users.length }} accounts</span></div>
    <v-data-table :headers="headers" :items="users" :search="search" :loading="loading">
     <template #item.email="{item}"><div class="py-2"><strong>{{ item.firstName }} {{ item.otherNames }}</strong><div class="text-caption text-medium-emphasis">{{ item.email }}</div></div></template>
-    <template #item.userScope="{item}"><v-chip size="small" variant="tonal" :color="item.userScope==='ANCHOR'?'primary':'secondary'">{{ item.userScope==='ANCHOR'?'Anchor-wide':item.partnerCode }}</v-chip></template>
+    <template #item.userScope="{item}"><v-chip size="small" variant="tonal" :color="item.userScope==='ANCHOR'?'primary':'secondary'">{{ item.userScope==='ANCHOR'?'Anchor-wide':orgName(item.partnerCode) }}</v-chip></template>
     <template #item.status="{item}"><v-chip size="small" :color="item.status===1?'success':'error'" variant="tonal">{{ item.status===1?'Active':'Inactive' }}</v-chip></template>
     <template #item.actions="{item}"><v-btn size="small" variant="text" :color="item.status===1?'error':'success'" @click="toggle(item)">{{ item.status===1?'Deactivate':'Activate' }}</v-btn></template>
    </v-data-table>

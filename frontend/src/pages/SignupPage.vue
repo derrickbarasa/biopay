@@ -73,7 +73,6 @@ async function handleSubmit() {
             <v-icon icon="mdi-arrow-left" size="18" class="mr-1" /> Back to website
           </router-link>
           <div class="brand-inner">
-            <img src="/biopay_logo_main.svg" alt="BioPay" class="brand-logo" />
             <h1 class="brand-headline">Set up your anchor.</h1>
             <p class="brand-sub">
               Create the account an anchor uses to bring organisations, field officers and
@@ -144,43 +143,50 @@ async function handleSubmit() {
 
 <style scoped>
 .split {
-  min-height: 100vh;
+  height: 100vh;
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
   display: grid;
   grid-template-columns: 1fr 1fr;
 }
-@media (max-width: 900px) { .split { grid-template-columns: 1fr; } }
+.split > * { min-width: 0; }
+@media (max-width: 900px) { .split { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); } }
 
 /* ---- Brand side (teal) ---- */
 .brand-side {
   position: relative;
-  background: radial-gradient(circle at 100% 0, rgba(45, 212, 191, .35), transparent 30rem), linear-gradient(150deg, #0f766e 0%, #134e4a 100%);
+  background-image: linear-gradient(100deg, rgba(8, 51, 47, .93) 0%, rgba(12, 74, 69, .82) 34%, rgba(15, 118, 110, .55) 62%, rgba(15, 118, 110, .38) 100%), url('/login-bg.png');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
   color: #fff;
-  padding: 2.5rem 3rem;
+  padding: clamp(1.35rem, 3.2vh, 2.25rem) clamp(1.75rem, 3.2vw, 3rem);
   display: flex;
   flex-direction: column;
   justify-content: space-between;
 }
-@media (max-width: 900px) { .brand-side { padding: 1.75rem; min-height: 42vh; } }
+@media (max-width: 900px) { .brand-side { padding: 1rem 1.25rem 1.15rem; min-height: 0; } }
 .brand-back {
   display: inline-flex; align-items: center; color: rgba(255,255,255,.85);
   text-decoration: none; font-size: .875rem; font-weight: 500;
 }
 .brand-back:hover { color: #fff; }
 .brand-inner { max-width: 30rem; }
-.brand-logo { width: 190px; height: auto; margin-bottom: 2rem; }
 .brand-headline { font-size: clamp(1.6rem, 1.2rem + 1.5vw, 2.4rem); font-weight: 700; line-height: 1.15; letter-spacing: -.02em; margin: 0 0 1rem; }
-.brand-sub { color: rgba(255,255,255,.82); font-size: 1.02rem; line-height: 1.55; margin: 0 0 2rem; }
-.brand-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 1.1rem; }
+.brand-sub { color: rgba(255,255,255,.82); font-size: .96rem; line-height: 1.48; margin: 0 0 clamp(1rem, 2.5vh, 1.7rem); }
+.brand-list { list-style: none; margin: 0; padding: 0; display: grid; gap: clamp(.65rem, 1.6vh, 1rem); }
 .brand-list li { display: flex; gap: .85rem; align-items: flex-start; }
 .brand-list-icon { color: #99f6e4; margin-top: 2px; flex-shrink: 0; }
 .brand-list-title { font-weight: 600; font-size: .98rem; }
-.brand-list-text { color: rgba(255,255,255,.72); font-size: .88rem; line-height: 1.45; }
+.brand-list-text { color: rgba(255,255,255,.72); font-size: .84rem; line-height: 1.38; }
 .brand-foot { color: rgba(255,255,255,.6); font-size: .78rem; letter-spacing: .04em; }
 @media (max-width: 900px) { .brand-foot { display: none; } }
 
 /* ---- Form side (white) ---- */
-.form-side { background: #fff; display: flex; align-items: center; justify-content: center; padding: 2.5rem 1.5rem; overflow-y: auto; }
-.form-wrap { width: 100%; max-width: 420px; }
+.form-side { width: 100%; min-height: 0; overflow-y: auto; overflow-x: hidden; background: #fff; display: flex; align-items: center; justify-content: center; padding: clamp(1.25rem, 4vh, 2.5rem) 1.5rem; }
+.form-wrap { width: 100%; min-width: 0; max-width: 420px; }
+.form-wrap :deep(.v-input) { max-width: 100%; }
 .form-head { margin-bottom: 1.75rem; }
 .form-title { font-size: 1.6rem; font-weight: 700; color: #0f172a; margin: 0 0 .3rem; letter-spacing: -.01em; }
 .form-subtitle { color: #64748b; font-size: .95rem; margin: 0; }
@@ -191,4 +197,29 @@ async function handleSubmit() {
 .btn-accent { color: #1a1200 !important; }
 .btn-accent { background-color: #f59e0b !important; }
 .btn-accent:hover { background-color: #ea580c !important; }
+
+@media (min-width: 901px) and (max-height: 760px) {
+  .brand-side { padding-top: 1.1rem; padding-bottom: 1.1rem; }
+  .brand-headline { font-size: 1.55rem; margin-bottom: .65rem; }
+  .brand-sub { font-size: .88rem; margin-bottom: .75rem; }
+  .brand-list { gap: .45rem; }
+  .brand-list-text { font-size: .78rem; line-height: 1.3; }
+  .brand-list-icon { font-size: 19px !important; }
+}
+
+@media (max-width: 900px) {
+  .brand-side { flex-direction: row; align-items: center; justify-content: flex-start; gap: .65rem; }
+  .brand-back { font-size: .78rem; }
+  .brand-inner { max-width: none; }
+  .brand-headline { max-width: 18ch; font-size: clamp(1.05rem, 4vw, 1.35rem); margin: 0; }
+  .brand-sub, .brand-list, .brand-foot { display: none; }
+  .form-side { padding: 1rem 1.25rem; }
+  .form-head { margin-bottom: 1.1rem; }
+  .form-title { font-size: 1.45rem; }
+}
+
+@media (max-width: 430px) {
+  .brand-headline { font-size: 1rem; }
+  .form-wrap { max-width: 360px; }
+}
 </style>

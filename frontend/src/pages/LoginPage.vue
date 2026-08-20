@@ -62,7 +62,6 @@ async function handleSubmit() {
             <v-icon icon="mdi-arrow-left" size="18" class="mr-1" /> Back to website
           </router-link>
           <div class="brand-inner">
-            <img src="/biopay_logo_main.svg" alt="BioPay" class="brand-logo" />
             <h1 class="brand-headline">Biometric payments you can account for.</h1>
             <p class="brand-sub">
               The registration and disbursement platform for anchors and organisations running
@@ -145,7 +144,10 @@ async function handleSubmit() {
 /* ---- Brand side (teal) ---- */
 .brand-side {
   position: relative;
-  background: radial-gradient(circle at 100% 0, rgba(45, 212, 191, .35), transparent 30rem), linear-gradient(150deg, #0f766e 0%, #134e4a 100%);
+  background-image: linear-gradient(100deg, rgba(8, 51, 47, .93) 0%, rgba(12, 74, 69, .82) 34%, rgba(15, 118, 110, .55) 62%, rgba(15, 118, 110, .38) 100%), url('/login-bg.png');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
   color: #fff;
   padding: clamp(1.35rem, 3.2vh, 2.25rem) clamp(1.75rem, 3.2vw, 3rem);
   display: flex;
@@ -159,7 +161,6 @@ async function handleSubmit() {
 }
 .brand-back:hover { color: #fff; }
 .brand-inner { max-width: 30rem; }
-.brand-logo { width: 170px; height: auto; margin-bottom: clamp(1rem, 2.5vh, 1.75rem); }
 .brand-headline { font-size: clamp(1.6rem, 1.2rem + 1.5vw, 2.4rem); font-weight: 700; line-height: 1.15; letter-spacing: -.02em; margin: 0 0 1rem; }
 .brand-sub { color: rgba(255,255,255,.82); font-size: .96rem; line-height: 1.48; margin: 0 0 clamp(1rem, 2.5vh, 1.7rem); }
 .brand-list { list-style: none; margin: 0; padding: 0; display: grid; gap: clamp(.65rem, 1.6vh, 1rem); }
@@ -187,7 +188,6 @@ async function handleSubmit() {
 
 @media (min-width: 901px) and (max-height: 720px) {
   .brand-side { padding-top: 1.1rem; padding-bottom: 1.1rem; }
-  .brand-logo { width: 145px; margin-bottom: .7rem; }
   .brand-headline { font-size: 1.55rem; margin-bottom: .65rem; }
   .brand-sub { font-size: .88rem; margin-bottom: .75rem; }
   .brand-list { gap: .45rem; }
@@ -196,10 +196,9 @@ async function handleSubmit() {
 }
 
 @media (max-width: 900px) {
-  .brand-side { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: .65rem 1rem; }
-  .brand-back { grid-column: 1 / -1; font-size: .78rem; }
-  .brand-inner { display: flex; align-items: center; gap: .9rem; max-width: none; }
-  .brand-logo { width: 126px; margin: 0; flex-shrink: 0; }
+  .brand-side { flex-direction: row; align-items: center; justify-content: flex-start; gap: .65rem; }
+  .brand-back { font-size: .78rem; }
+  .brand-inner { max-width: none; }
   .brand-headline { max-width: 18ch; font-size: clamp(1.05rem, 4vw, 1.35rem); margin: 0; }
   .brand-sub, .brand-list, .brand-foot { display: none; }
   .form-side { padding: 1rem 1.25rem; }
@@ -208,7 +207,6 @@ async function handleSubmit() {
 }
 
 @media (max-width: 430px) {
-  .brand-logo { width: 108px; }
   .brand-headline { font-size: 1rem; }
   .form-wrap { max-width: 360px; }
 }

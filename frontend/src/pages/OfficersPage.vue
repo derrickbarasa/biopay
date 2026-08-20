@@ -39,6 +39,7 @@ const states = ref<GeoNode[]>([])
 const counties = ref<GeoNode[]>([])
 const locations = ref<GeoNode[]>([])
 const villages = ref<GeoNode[]>([])
+const geoLoading = ref(true)
 
 const filters = ref({ organisationCode: null as string | null, active: null as string | null })
 
@@ -84,6 +85,7 @@ function clearFilters() {
 }
 
 async function loadGeo() {
+  geoLoading.value = true
   try {
     const [s, c, l, v] = await Promise.all([
       dispatch<{ results: GeoNode[] }>('GET_STATES'),
@@ -97,6 +99,8 @@ async function loadGeo() {
     villages.value = v.results
   } catch {
     // Assign-location dialog just shows empty pickers; the rest of the page still works.
+  } finally {
+    geoLoading.value = false
   }
 }
 
@@ -210,7 +214,7 @@ async function assignLocation() {
 <template>
   <div>
     <div class="d-flex align-center justify-space-between mb-4">
-      <h1 class="text-h5 font-weight-bold">Field Officers</h1>
+      <h1 class="page-title">Field Officers</h1>
       <v-btn color="primary" prepend-icon="mdi-account-plus" @click="openCreate">Register Officer</v-btn>
     </div>
 
@@ -247,27 +251,34 @@ async function assignLocation() {
       </v-data-table>
     </v-card>
 
-    <v-dialog v-model="dialog" max-width="480">
-      <v-card>
-        <v-card-title>{{ editing ? 'Edit Officer' : 'Register Field Officer' }}</v-card-title>
-        <v-card-text>
-          <v-text-field v-model="form.firstName" label="First name" />
-          <v-text-field v-model="form.lastName" label="Last name" />
-          <v-text-field v-model="form.email" label="Email" type="email" :disabled="editing" />
-          <v-select
-            v-if="auth.isAnchor && !editing"
-            v-model="form.organisationCode" :items="organizations" item-title="name" item-value="organisationCode"
-            label="Organisation"
-          />
-          <v-alert v-if="!editing" type="info" variant="tonal" density="compact">
+    <v-dialog v-model="dialog" max-width="560">
+      <v-card class="officer-editor">
+        <div class="editor-heading">
+          <div>
+            <div class="editor-title"><v-icon icon="mdi-account-tie" size="20" /> {{ editing ? 'Edit Officer' : 'Register Field Officer' }}</div>
+            <p>{{ editing ? 'Update this officer\'s profile.' : 'Create a field officer account and assign their organisation.' }}</p>
+          </div>
+          <v-btn icon="mdi-close" variant="text" size="small" aria-label="Close officer form" @click="dialog = false" />
+        </div>
+        <v-form @submit.prevent="save">
+          <div class="field-grid">
+            <v-text-field v-model="form.firstName" label="First name" density="compact" />
+            <v-text-field v-model="form.lastName" label="Last name" density="compact" />
+            <v-text-field v-model="form.email" label="Email" type="email" :disabled="editing" density="compact" />
+            <v-select
+              v-if="auth.isAnchor && !editing"
+              v-model="form.organisationCode" :items="organizations" item-title="name" item-value="organisationCode"
+              label="Organisation" density="compact"
+            />
+          </div>
+          <v-alert v-if="!editing" type="info" variant="tonal" density="compact" class="mt-1">
             A temporary password will be generated and emailed to this officer.
           </v-alert>
-        </v-card-text>
-        <v-card-actions>
-          <v-spacer />
-          <v-btn variant="text" @click="dialog = false">Cancel</v-btn>
-          <v-btn color="primary" :loading="saving" @click="save">Save</v-btn>
-        </v-card-actions>
+          <div class="editor-actions">
+            <v-btn variant="text" @click="dialog = false">Cancel</v-btn>
+            <v-btn color="primary" type="submit" :loading="saving" prepend-icon="mdi-check">Save</v-btn>
+          </div>
+        </v-form>
       </v-card>
     </v-dialog>
 
@@ -279,11 +290,14 @@ async function assignLocation() {
             Map this officer to the villages they cover, so attendance and household activity can be geotagged to a real coverage area.
           </p>
           <v-row dense>
-            <v-col cols="6"><v-select v-model="locationForm.stateCode" :items="states" item-title="name" item-value="code" label="State" density="compact" /></v-col>
-            <v-col cols="6"><v-select v-model="locationForm.countyCode" :items="countiesForState(locationForm.stateCode)" item-title="name" item-value="code" label="County" density="compact" /></v-col>
-            <v-col cols="6"><v-select v-model="locationForm.locationCode" :items="locationsForCounty(locationForm.countyCode)" item-title="name" item-value="code" label="Location" density="compact" /></v-col>
-            <v-col cols="6"><v-select v-model="locationForm.villageCode" :items="villagesForLocation(locationForm.locationCode)" item-title="name" item-value="code" label="Village" density="compact" /></v-col>
+            <v-col cols="6"><v-select v-model="locationForm.stateCode" :items="states" item-title="name" item-value="code" label="State" density="compact" :loading="geoLoading" :disabled="geoLoading" /></v-col>
+            <v-col cols="6"><v-select v-model="locationForm.countyCode" :items="countiesForState(locationForm.stateCode)" item-title="name" item-value="code" label="County" density="compact" :loading="geoLoading" :disabled="geoLoading" /></v-col>
+            <v-col cols="6"><v-select v-model="locationForm.locationCode" :items="locationsForCounty(locationForm.countyCode)" item-title="name" item-value="code" label="Location" density="compact" :loading="geoLoading" :disabled="geoLoading" /></v-col>
+            <v-col cols="6"><v-select v-model="locationForm.villageCode" :items="villagesForLocation(locationForm.locationCode)" item-title="name" item-value="code" label="Village" density="compact" :loading="geoLoading" :disabled="geoLoading" /></v-col>
           </v-row>
+          <p v-if="!geoLoading && !states.length" class="text-caption text-medium-emphasis mb-2">
+            No location hierarchy configured yet — add states, counties, locations and villages on the Locations page first.
+          </p>
           <v-btn variant="outlined" size="small" prepend-icon="mdi-plus" :loading="assigningLocation" :disabled="!locationForm.villageCode" @click="assignLocation">
             Add coverage area
           </v-btn>
@@ -305,3 +319,16 @@ async function assignLocation() {
     </v-dialog>
   </div>
 </template>
+
+<style scoped>
+.officer-editor { padding: 22px 24px; }
+.editor-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 18px; }
+.editor-title { display: flex; align-items: center; gap: 8px; color: #0f172a; font-size: 1.05rem; font-weight: 750; letter-spacing: -.02em; }
+.editor-heading p { color: #64748b; font-size: .8rem; margin: 4px 0 0; }
+.field-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 16px; }
+.editor-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
+@media (max-width: 520px) {
+  .field-grid { grid-template-columns: 1fr; }
+  .editor-actions :deep(.v-btn) { flex: 1; }
+}
+</style>

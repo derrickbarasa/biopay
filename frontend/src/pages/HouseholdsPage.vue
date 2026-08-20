@@ -444,7 +444,7 @@ async function submitBulk() {
 <template>
   <div>
     <div class="d-flex align-center justify-space-between mb-4">
-      <h1 class="text-h5 font-weight-bold">Households</h1>
+      <h1 class="page-title">Households</h1>
       <div class="d-flex ga-2">
         <v-btn variant="outlined" prepend-icon="mdi-download" @click="exportCsv">Export CSV</v-btn>
         <v-btn variant="outlined" prepend-icon="mdi-file-upload" @click="openBulk">Import CSV</v-btn>
@@ -452,39 +452,29 @@ async function submitBulk() {
       </div>
     </div>
 
-    <h2 class="text-subtitle-1 font-weight-bold mb-2">Household breakdown</h2>
-    <v-row dense class="mb-4">
-      <v-col cols="12" md="4">
-        <v-card variant="flat" border>
-          <v-card-title class="text-subtitle-2">By gender</v-card-title>
-          <v-card-text><PieChart :data="genderBreakdown" /></v-card-text>
-        </v-card>
-      </v-col>
-      <v-col cols="12" md="4">
-        <v-card variant="flat" border>
-          <v-card-title class="text-subtitle-2">By age group</v-card-title>
-          <v-card-text><LineChart :data="ageBreakdown" color="#0F766E" /></v-card-text>
-        </v-card>
-      </v-col>
-      <v-col cols="12" md="4">
-        <v-card variant="flat" border>
-          <v-card-title class="text-subtitle-2">By status</v-card-title>
-          <v-card-text><BarChart :data="statusBreakdown" color="#F59E0B" /></v-card-text>
-        </v-card>
-      </v-col>
-      <v-col cols="12" md="6">
-        <v-card variant="flat" border>
-          <v-card-title class="text-subtitle-2">By vulnerability status</v-card-title>
-          <v-card-text><BarChart :data="vulnerabilityBreakdown" color="#2196F3" /></v-card-text>
-        </v-card>
-      </v-col>
-      <v-col cols="12" md="6">
-        <v-card variant="flat" border>
-          <v-card-title class="text-subtitle-2">By legal status</v-card-title>
-          <v-card-text><BarChart :data="legalBreakdown" color="#0F766E" /></v-card-text>
-        </v-card>
-      </v-col>
-    </v-row>
+    <h2 class="section-heading mb-2">Household breakdown</h2>
+    <div class="breakdown-grid mb-4">
+      <v-card class="breakdown-card" variant="flat" border>
+        <v-card-title class="breakdown-title">By gender</v-card-title>
+        <v-card-text class="breakdown-body"><PieChart :data="genderBreakdown" /></v-card-text>
+      </v-card>
+      <v-card class="breakdown-card" variant="flat" border>
+        <v-card-title class="breakdown-title">By age group</v-card-title>
+        <v-card-text class="breakdown-body"><LineChart :data="ageBreakdown" color="#0F766E" /></v-card-text>
+      </v-card>
+      <v-card class="breakdown-card" variant="flat" border>
+        <v-card-title class="breakdown-title">By status</v-card-title>
+        <v-card-text class="breakdown-body"><BarChart :data="statusBreakdown" color="#F59E0B" /></v-card-text>
+      </v-card>
+      <v-card class="breakdown-card" variant="flat" border>
+        <v-card-title class="breakdown-title">By vulnerability status</v-card-title>
+        <v-card-text class="breakdown-body"><BarChart :data="vulnerabilityBreakdown" color="#2563EB" /></v-card-text>
+      </v-card>
+      <v-card class="breakdown-card" variant="flat" border>
+        <v-card-title class="breakdown-title">By legal status</v-card-title>
+        <v-card-text class="breakdown-body"><BarChart :data="legalBreakdown" color="#0F766E" /></v-card-text>
+      </v-card>
+    </div>
 
     <v-card variant="flat" border>
       <v-card-text>
@@ -694,3 +684,45 @@ async function submitBulk() {
 
   </div>
 </template>
+
+<style scoped>
+.section-heading { font-size: .95rem; font-weight: 700; color: #0f172a; }
+.breakdown-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  align-items: stretch;
+}
+.breakdown-card {
+  display: flex;
+  flex-direction: column;
+  height: 264px;
+  overflow: hidden;
+}
+.breakdown-title {
+  flex: none;
+  font-size: .82rem !important;
+  font-weight: 700;
+  color: #0f172a;
+  padding: 14px 16px 4px !important;
+  min-height: auto !important;
+}
+.breakdown-body {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  padding: 4px 16px 14px !important;
+  overflow: hidden;
+}
+.breakdown-body > :deep(.chart-wrap),
+.breakdown-body > :deep(.pie-wrap) {
+  width: 100%;
+}
+@media (max-width: 900px) {
+  .breakdown-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 600px) {
+  .breakdown-grid { grid-template-columns: 1fr; }
+  .breakdown-card { height: auto; }
+}
+</style>

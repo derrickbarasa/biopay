@@ -28,7 +28,7 @@ public class ProfileActivity extends BaseActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_profile);
-        setupMainNavigation(R.id.bottomNavigation, R.id.navProfile);
+        setupMainNavigation(R.id.bottomNavigation, R.id.navSettings);
 
         session = new SessionManager(this);
         firstName = findViewById(R.id.etFirstName);

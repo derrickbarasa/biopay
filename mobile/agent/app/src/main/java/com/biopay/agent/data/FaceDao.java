@@ -5,12 +5,20 @@ import android.content.Context;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 
+import com.biopay.agent.face.FaceEmbeddingCipher;
+
 import org.json.JSONArray;
 
 import java.util.ArrayList;
 import java.util.List;
 
-/** Offline store for model-versioned face embeddings. Raw photographs are not stored here. */
+/**
+ * Offline store for model-versioned face embeddings. Raw photographs are not stored here. The
+ * {@code embedding} column is encrypted at rest via {@link FaceEmbeddingCipher} (Android
+ * Keystore-backed AES-GCM) wherever the device supports it (API 23+); {@code embedding_encrypted}
+ * records which rows are and aren't, so a device that can't encrypt still stores usable (if
+ * unencrypted) data instead of losing the row.
+ */
 public class FaceDao {
     private final DatabaseHelper dbHelper;
 
@@ -42,11 +50,15 @@ public class FaceDao {
 
     private static ContentValues values(int beneficiaryType, String beneficiaryId, String uuid,
             JSONArray embedding, String modelVersion, double qualityScore) {
+        String plaintext = embedding.toString();
+        String encrypted = FaceEmbeddingCipher.encrypt(plaintext);
+
         ContentValues values = new ContentValues();
         values.put("beneficiary_type", beneficiaryType);
         values.put("beneficiary_id", beneficiaryId);
         values.put("uuid", uuid);
-        values.put("embedding", embedding.toString());
+        values.put("embedding", encrypted != null ? encrypted : plaintext);
+        values.put("embedding_encrypted", encrypted != null ? 1 : 0);
         values.put("embedding_dimensions", embedding.length());
         values.put("model_version", modelVersion);
         values.put("quality_score", qualityScore);
@@ -78,7 +90,9 @@ public class FaceDao {
         record.uuid = cursor.getString(cursor.getColumnIndexOrThrow("uuid"));
         record.beneficiaryId = cursor.getString(cursor.getColumnIndexOrThrow("beneficiary_id"));
         record.beneficiaryType = cursor.getInt(cursor.getColumnIndexOrThrow("beneficiary_type"));
-        record.embedding = cursor.getString(cursor.getColumnIndexOrThrow("embedding"));
+        String stored = cursor.getString(cursor.getColumnIndexOrThrow("embedding"));
+        boolean encrypted = cursor.getInt(cursor.getColumnIndexOrThrow("embedding_encrypted")) != 0;
+        record.embedding = encrypted ? FaceEmbeddingCipher.decrypt(stored) : stored;
         record.dimensions = cursor.getInt(cursor.getColumnIndexOrThrow("embedding_dimensions"));
         record.modelVersion = cursor.getString(cursor.getColumnIndexOrThrow("model_version"));
         record.qualityScore = cursor.getDouble(cursor.getColumnIndexOrThrow("quality_score"));

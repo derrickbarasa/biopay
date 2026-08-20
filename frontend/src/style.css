@@ -1,7 +1,24 @@
-@import url('https://fonts.googleapis.com/css2?family=Ubuntu:ital,wght@0,300;0,400;0,500;0,700;1,400&display=swap');
-
 html, body, #app {
   height: 100%;
+}
+
+/* Scrollbars stay functional everywhere but are never drawn -- the default
+   OS/browser scrollbar reads as visual clutter against this UI. */
+* {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+*::-webkit-scrollbar {
+  display: none;
+}
+
+/* Vuetify's own components size themselves in rem against the document root.
+   DefaultLayout toggles this class on <html> only while the authenticated app
+   shell is mounted, so the dashboard/sidebar/tables shrink proportionally to
+   fit an ordinary laptop viewport at 100% zoom without touching the separately
+   (and already) zoom-tuned public landing/login pages, which never add it. */
+html.app-shell-scale {
+  font-size: 15px;
 }
 
 body {
@@ -13,9 +30,33 @@ body {
 
 .v-application { font-family: 'Ubuntu', sans-serif !important; }
 .v-card { border-color: #e2e8f0 !important; box-shadow: 0 10px 28px -20px rgba(15, 118, 110, .35); }
-.v-data-table, .v-table { border-radius: 16px; overflow: hidden; }
+.v-data-table, .v-table { border-radius: 16px; overflow: hidden; font-size: .84rem; }
+.v-data-table th, .v-table th { font-size: .72rem !important; }
 .v-btn { font-weight: 700; letter-spacing: 0; text-transform: none; }
 .v-field--variant-outlined .v-field__outline { --v-field-border-opacity: .22; }
+
+/* Shared page-header title, tightened for a comfortable fit at 100% browser zoom. */
+.page-title {
+  font-size: clamp(1.2rem, 1.02rem + .5vw, 1.45rem);
+  font-weight: 700;
+  color: #0f172a;
+  letter-spacing: -.02em;
+  margin: 0;
+  line-height: 1.25;
+}
+
+/* Vuetify centers dialogs on the whole browser window, but the authenticated
+   shell's 216px navigation drawer eats into that window on desktop, so a
+   viewport-centered dialog reads as shifted toward (and overlapping) the
+   drawer. Reserve the drawer's width on the left of the dialog's centering
+   box so it centers on the visible page area instead -- the role="dialog"
+   attribute lands on Vuetify's fixed, full-viewport ".v-overlay" wrapper
+   (not ".v-overlay__content"), so that's what needs the offset. */
+@media (min-width: 960px) {
+  .v-overlay[role='dialog'] {
+    padding-left: 216px;
+  }
+}
 
 html {
   scroll-behavior: smooth;

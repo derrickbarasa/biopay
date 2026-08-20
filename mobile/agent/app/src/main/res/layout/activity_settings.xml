@@ -175,9 +175,19 @@
                         </FrameLayout>
                         <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="14dp" android:layout_weight="1" android:orientation="vertical">
                             <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/settings_face_title" android:textColor="@color/bp_text_primary" android:textSize="15sp" android:textStyle="bold" />
-                            <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="2dp" android:text="@string/settings_face_body" android:textColor="@color/bp_text_secondary" android:textSize="13sp" />
+                            <TextView android:id="@+id/tvFaceBody" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="2dp" android:text="@string/settings_face_body" android:textColor="@color/bp_text_secondary" android:textSize="13sp" />
                         </LinearLayout>
                     </LinearLayout>
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnTestFace"
+                        style="@style/Widget.Material3.Button.TextButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="58dp"
+                        android:layout_marginBottom="10dp"
+                        android:text="@string/settings_test_face"
+                        android:textAllCaps="false"
+                        app:icon="@drawable/ic_face" />
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 

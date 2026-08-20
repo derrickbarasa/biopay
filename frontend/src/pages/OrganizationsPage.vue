@@ -155,14 +155,14 @@ async function toggleStatus(org: Organization) {
   <div class="organizations-page">
     <div class="page-heading d-flex align-center justify-space-between mb-5 ga-4">
       <div>
-        <h1 class="text-h5 font-weight-bold">Organizations</h1>
+        <h1 class="page-title">Organizations</h1>
         <p>Configure delivery partners, verification policy and programme access.</p>
       </div>
       <v-btn color="primary" prepend-icon="mdi-domain-plus" @click="openCreate">New Organization</v-btn>
     </div>
 
-    <v-expand-transition>
-      <v-card v-if="dialog" class="org-editor mb-5" variant="flat" border>
+    <v-dialog v-model="dialog" max-width="880">
+      <v-card class="org-editor" variant="flat" border>
         <div class="editor-heading">
           <div>
             <div class="editor-title">{{ editing ? 'Edit Organization' : 'New Organization' }}</div>
@@ -175,22 +175,22 @@ async function toggleStatus(org: Organization) {
           <div class="identity-grid">
             <section class="form-group" aria-labelledby="org-details-heading">
               <div id="org-details-heading" class="form-group-title"><v-icon icon="mdi-domain" size="19" /> Organization details</div>
-              <v-text-field v-model="form.organisationCode" label="Organization code" :disabled="editing" :rules="[required]" density="compact" />
-              <v-text-field v-model="form.name" label="Organization name" :rules="[required]" density="compact" />
-              <v-select v-model="form.country" :items="COUNTRIES" label="Country" :rules="[required]" density="compact" />
+              <v-text-field v-model="form.organisationCode" label="Organization code" :disabled="editing" :rules="[required]" density="compact" hide-details="auto" />
+              <v-text-field v-model="form.name" label="Organization name" :rules="[required]" density="compact" hide-details="auto" />
+              <v-select v-model="form.country" :items="COUNTRIES" label="Country" :rules="[required]" density="compact" hide-details="auto" />
             </section>
 
             <section class="form-group" aria-labelledby="contact-details-heading">
               <div id="contact-details-heading" class="form-group-title"><v-icon icon="mdi-account-outline" size="19" /> Authorized contact</div>
-              <v-text-field v-model="form.authorisedName" label="Contact name" density="compact" />
-              <v-text-field v-model="form.authorisedEmail" label="Email" type="email" :rules="[emailRule]" density="compact" />
-              <v-text-field v-model="form.authorisedContact" label="Phone" density="compact" />
+              <v-text-field v-model="form.authorisedName" label="Contact name" density="compact" hide-details="auto" />
+              <v-text-field v-model="form.authorisedEmail" label="Email" type="email" :rules="[emailRule]" density="compact" hide-details="auto" />
+              <v-text-field v-model="form.authorisedContact" label="Phone" density="compact" hide-details="auto" />
             </section>
           </div>
 
           <div class="policy-row">
-            <v-text-field v-model="form.address" label="Address" prepend-inner-icon="mdi-map-marker-outline" density="compact" />
-            <v-select v-model="form.verificationMethod" :items="VERIFICATION_METHODS" label="Verification method" prepend-inner-icon="mdi-fingerprint" :rules="[required]" density="compact" />
+            <v-text-field v-model="form.address" label="Address" prepend-inner-icon="mdi-map-marker-outline" density="compact" hide-details="auto" />
+            <v-select v-model="form.verificationMethod" :items="VERIFICATION_METHODS" label="Verification method" :prepend-inner-icon="form.verificationMethod === 'FACIAL' ? 'mdi-account-outline' : 'mdi-fingerprint'" :rules="[required]" density="compact" hide-details="auto" />
           </div>
 
           <section class="module-section" aria-labelledby="module-heading">
@@ -217,7 +217,7 @@ async function toggleStatus(org: Organization) {
           </div>
         </v-form>
       </v-card>
-    </v-expand-transition>
+    </v-dialog>
 
     <v-card variant="flat" border>
       <v-card-text>
@@ -253,24 +253,24 @@ async function toggleStatus(org: Organization) {
 <style scoped>
 .page-heading h1 { color: #0f172a; letter-spacing: -.025em; }
 .page-heading p { color: #64748b; font-size: .9rem; margin: 5px 0 0; }
-.org-editor { padding: clamp(20px, 3vw, 30px); border-color: #cbd5e1 !important; background: #fff !important; }
-.editor-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; margin-bottom: 24px; }
-.editor-title { color: #0f172a; font-size: 1.2rem; font-weight: 750; letter-spacing: -.02em; }
-.editor-heading p, .module-heading-row p { color: #64748b; font-size: .84rem; margin: 4px 0 0; }
-.identity-grid { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(20px, 4vw, 44px); }
-.form-group { min-width: 0; }
-.form-group-title { display: flex; align-items: center; gap: 8px; color: #0f766e; font-size: .82rem; font-weight: 750; margin-bottom: 14px; }
-.policy-row { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 2px; }
-.module-section { border-top: 1px solid #e2e8f0; margin-top: 4px; padding-top: 22px; }
-.module-heading-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
+.org-editor { padding: clamp(18px, 2.4vw, 26px); border-color: #cbd5e1 !important; background: #fff !important; }
+.editor-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; margin-bottom: 16px; }
+.editor-title { color: #0f172a; font-size: 1.15rem; font-weight: 750; letter-spacing: -.02em; }
+.editor-heading p, .module-heading-row p { color: #64748b; font-size: .82rem; margin: 3px 0 0; }
+.identity-grid { display: grid; grid-template-columns: 1fr 1fr; column-gap: clamp(20px, 4vw, 44px); row-gap: 10px; }
+.form-group { min-width: 0; display: grid; gap: 10px; align-content: start; }
+.form-group-title { display: flex; align-items: center; gap: 8px; color: #0f766e; font-size: .8rem; font-weight: 750; margin-bottom: 2px; }
+.policy-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 12px; }
+.module-section { border-top: 1px solid #e2e8f0; margin-top: 14px; padding-top: 14px; }
+.module-heading-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 10px; }
 .module-heading-row > span { flex-shrink: 0; color: #0f766e; background: #ccfbf1; border-radius: 999px; padding: 5px 10px; font-size: .72rem; font-weight: 750; }
 .module-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
-.module-option { min-width: 0; min-height: 58px; display: flex; align-items: center; gap: 2px; padding: 5px 8px; border: 1px solid #e2e8f0; border-radius: 12px; color: #475569; cursor: pointer; transition: border-color 180ms ease, background 180ms ease, color 180ms ease; }
+.module-option { min-width: 0; min-height: 50px; display: flex; align-items: center; gap: 2px; padding: 5px 8px; border: 1px solid #e2e8f0; border-radius: 12px; color: #475569; cursor: pointer; transition: border-color 180ms ease, background 180ms ease, color 180ms ease; }
 .module-option:hover { border-color: #94a3b8; }
 .module-option.selected { border-color: #0d9488; background: #f0fdfa; color: #0f766e; }
 .module-option span { min-width: 0; font-size: .78rem; font-weight: 650; line-height: 1.2; }
-.module-option :deep(.v-selection-control) { min-height: 42px; }
-.editor-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 24px; }
+.module-option :deep(.v-selection-control) { min-height: 36px; }
+.editor-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
 @media (max-width: 900px) { .module-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 680px) {
   .page-heading { align-items: flex-start !important; flex-direction: column; }

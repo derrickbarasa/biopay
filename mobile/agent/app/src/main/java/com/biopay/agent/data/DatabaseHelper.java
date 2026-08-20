@@ -18,7 +18,7 @@ import android.database.sqlite.SQLiteOpenHelper;
 public class DatabaseHelper extends SQLiteOpenHelper {
 
     private static final String DB_NAME = "biopay_agent.db";
-    private static final int DB_VERSION = 3;
+    private static final int DB_VERSION = 5;
 
     /** Every offline-captured row starts PENDING and flips to SYNCED once the server accepts it. */
     public static final int SYNC_PENDING = 0;
@@ -197,11 +197,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
 
         createVoucherTable(db);
 
-        // Geo reference data, synced read-only from the server at login for offline dropdowns.
-        db.execSQL("CREATE TABLE states (state_code VARCHAR PRIMARY KEY, state_name VARCHAR);");
-        db.execSQL("CREATE TABLE counties (county_code VARCHAR PRIMARY KEY, state_code VARCHAR, county_name VARCHAR);");
-        db.execSQL("CREATE TABLE payams (payam_code VARCHAR PRIMARY KEY, county_code VARCHAR, payam_name VARCHAR);");
-        db.execSQL("CREATE TABLE bomas (boma_code VARCHAR PRIMARY KEY, payam_code VARCHAR, boma_name VARCHAR);");
+        createGeoTables(db);
 
         db.execSQL("CREATE INDEX idx_alternates_household ON alternates(household_number)");
         db.execSQL("CREATE INDEX idx_fingerprints_beneficiary ON fingerprints(beneficiary_id)");
@@ -218,6 +214,31 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             db.execSQL("ALTER TABLE households ADD COLUMN registration_method VARCHAR DEFAULT 'FINGERPRINT'");
             db.execSQL("ALTER TABLE alternates ADD COLUMN registration_method VARCHAR DEFAULT 'FINGERPRINT'");
         }
+        // Guarded with IF NOT EXISTS: devices that upgraded through version 3 before this table
+        // was added to onCreate never got it, so this also backfills those installs, not just <4.
+        if (oldVersion < 4) createGeoTables(db);
+        if (oldVersion < 5) {
+            // Any face row created before this migration (there should be none in practice --
+            // embedding capture has never produced a real row, see FaceRecognitionEngine) was
+            // necessarily plaintext; default 0 keeps FaceDao reading those correctly instead of
+            // trying to decrypt data that was never encrypted.
+            db.execSQL("ALTER TABLE faces ADD COLUMN embedding_encrypted INTEGER NOT NULL DEFAULT 0");
+        }
+    }
+
+    /**
+     * Geo reference data (state/county/location(payam)/village(boma) names), synced read-only
+     * from GET_STATES/GET_COUNTIES/GET_LOCATIONS/GET_VILLAGES so the household form can offer
+     * name-based pickers offline instead of raw codes. See GeoDao.
+     */
+    private static void createGeoTables(SQLiteDatabase db) {
+        db.execSQL("CREATE TABLE IF NOT EXISTS states (state_code VARCHAR PRIMARY KEY, state_name VARCHAR);");
+        db.execSQL("CREATE TABLE IF NOT EXISTS counties (county_code VARCHAR PRIMARY KEY, state_code VARCHAR, county_name VARCHAR);");
+        db.execSQL("CREATE TABLE IF NOT EXISTS payams (payam_code VARCHAR PRIMARY KEY, county_code VARCHAR, payam_name VARCHAR);");
+        db.execSQL("CREATE TABLE IF NOT EXISTS bomas (boma_code VARCHAR PRIMARY KEY, payam_code VARCHAR, boma_name VARCHAR);");
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_counties_state ON counties(state_code)");
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_payams_county ON payams(county_code)");
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_bomas_payam ON bomas(payam_code)");
     }
 
     private static void createVoucherTable(SQLiteDatabase db) {
@@ -248,6 +269,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
                 "embedding_dimensions INTEGER NOT NULL," +
                 "model_version VARCHAR NOT NULL," +
                 "quality_score NUMERIC," +
+                "embedding_encrypted INTEGER NOT NULL DEFAULT 0," +
                 "sync_status INTEGER DEFAULT 0," +
                 "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);");
         db.execSQL("CREATE INDEX IF NOT EXISTS idx_faces_beneficiary ON faces(beneficiary_id,model_version)");

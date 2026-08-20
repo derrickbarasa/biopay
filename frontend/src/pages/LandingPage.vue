@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onBeforeUnmount, ref } from 'vue'
+import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
 
 const mobileNavOpen = ref(false)
 const revealRoot = ref<HTMLElement | null>(null)
@@ -50,31 +50,31 @@ const heroSlides = [
     icon: 'cash', tone: 'primary', eyebrow: 'Cash transfers',
     title: 'Cash assistance, delivered with certainty.',
     copy: 'Generate a payment cycle, verify each recipient by fingerprint or face, and disburse — with a maker-checker approval trail from anchor to organisation.',
-    image: '/hero/cash-transfer.png',
+    image: '/hero/cash-transfer.webp',
   },
   {
     icon: 'voucher', tone: 'accent', eyebrow: 'Voucher redemption',
     title: 'Real choice at the market, full accountability.',
     copy: 'Issue biometric-verified vouchers households can redeem with confidence, while every issue, redemption and void stays on a traceable ledger.',
-    image: '/hero/voucher-redemption.png',
+    image: '/hero/voucher-redemption.webp',
   },
   {
     icon: 'fingerprint', tone: 'primary', eyebrow: 'Biometric verification',
     title: 'The right person gets paid — every single time.',
     copy: 'A live fingerprint or face scan checked against the enrolled template at the moment of payment, even with no signal to check it against a server.',
-    image: '/hero/biometric-verification.png',
+    image: '/hero/biometric-verification.webp',
   },
   {
     icon: 'dedup', tone: 'accent', eyebrow: 'Deduplication',
     title: 'One household, one record — no fraud.',
     copy: 'Every new registration is screened against existing records for the same name, phone number and location before it is ever accepted.',
-    image: '/hero/deduplication.png',
+    image: '/hero/deduplication.webp',
   },
   {
     icon: 'ai', tone: 'primary', eyebrow: 'An AI',
     title: 'Agent that never stops watching.',
     copy: 'Registrations and disbursements are reviewed as they land, flagging the patterns a person reviewing thousands of rows would miss.',
-    image: '/hero/ai-agent.png',
+    image: '/hero/ai-agent.webp',
   },
 ]
 const HERO_INTERVAL_MS = 9000
@@ -82,6 +82,13 @@ const activeHero = ref(0)
 const heroProgressTick = ref(0)
 let heroTimer: ReturnType<typeof setInterval> | null = null
 let heroTimerReduceMotion = false
+
+// Each hero photo is a multi-MB PNG -- eagerly setting all five as CSS
+// background-images (as before) meant the browser fetched every slide on
+// first paint even though only one is ever visible. Only the slide that has
+// actually been shown gets its background-image bound; the upcoming one is
+// pre-added a beat ahead so the 9s auto-advance never shows a blank flash.
+const loadedHero = ref<Set<number>>(new Set([0, 1]))
 
 function restartHeroTimer() {
   if (heroTimer) clearInterval(heroTimer)
@@ -93,6 +100,8 @@ function restartHeroTimer() {
 function setHero(index: number) {
   activeHero.value = index
   heroProgressTick.value++
+  loadedHero.value.add(index)
+  loadedHero.value.add((index + 1) % heroSlides.length)
 }
 
 function goToHero(index: number) {
@@ -112,42 +121,81 @@ function closeMobileNav() {
   mobileNavOpen.value = false
 }
 
-// "How it works" -- rotating step cards, same auto-advance + manual-dot
-// pattern as the hero carousel, driven independently.
+// "How it works" -- a flat horizontal carousel that drifts sideways in a
+// continuous, seamless loop (no perspective/3D), pausable, nudgeable with
+// prev/next by exactly one card width at a time.
 const howSteps = [
   {
-    title: 'Register in the field', image: '/how-it-works/register-in-the-field.png',
+    title: 'Register in the field', image: '/how-it-works/register-in-the-field.webp',
     copy: 'A field officer captures the household offline: demographics, fingerprints, a photo, and the exact GPS location — down to village level.',
   },
   {
-    title: 'Sync when signal returns', image: '/how-it-works/sync-when-signal-returns.png',
+    title: 'Sync when signal returns', image: '/how-it-works/sync-when-signal-returns.webp',
     copy: "Every record sits queued on the device until a connection appears, then uploads on its own — no officer has to remember to press sync.",
   },
   {
-    title: 'Verify at disbursement', image: '/how-it-works/verify-at-disbursement.png',
+    title: 'Verify at disbursement', image: '/how-it-works/verify-at-disbursement.webp',
     copy: "Fingerprint or face match confirms it's the registered person, not whoever's holding their ID card that day.",
   },
   {
-    title: 'Reconcile on the dashboard', image: '/how-it-works/reconcile-on-the-dashboard.png',
+    title: 'Reconcile on the dashboard', image: '/how-it-works/reconcile-on-the-dashboard.webp',
     copy: 'Anchors and organisations see every payment, time- and location-stamped, ready for donor reporting.',
   },
 ]
-const HOW_INTERVAL_MS = 6500
-const activeHow = ref(0)
-let howTimer: ReturnType<typeof setInterval> | null = null
-let howTimerReduceMotion = false
 
-function restartHowTimer() {
-  if (howTimer) clearInterval(howTimer)
-  if (!howTimerReduceMotion) {
-    howTimer = setInterval(() => { activeHow.value = (activeHow.value + 1) % howSteps.length }, HOW_INTERVAL_MS)
+const howViewportWidth = ref(typeof window !== 'undefined' ? window.innerWidth : 1280)
+const howCardWidth = computed(() => {
+  if (howViewportWidth.value < 390) return 240
+  if (howViewportWidth.value < 820) return 280
+  return 340
+})
+const howCardGap = 24
+const howSlot = computed(() => howCardWidth.value + howCardGap)
+const howSetWidth = computed(() => howSlot.value * howSteps.length)
+// Three copies keep the belt visually full through a run of manual
+// prev/next clicks, not just the passive auto-drift.
+const howTrackItems = computed(() => [...howSteps, ...howSteps, ...howSteps])
+
+const howPaused = ref(false)
+const howSnapping = ref(false)
+const howOffset = ref(howSetWidth.value)
+
+function onHowResize() {
+  howViewportWidth.value = window.innerWidth
+}
+
+let howRafId: number | undefined
+let howLastTime: number | undefined
+const howPxPerMs = 0.035
+
+function howTick(time: number) {
+  if (howLastTime === undefined) howLastTime = time
+  const delta = time - howLastTime
+  howLastTime = time
+  if (!howPaused.value) {
+    howOffset.value += delta * howPxPerMs
   }
+  // Wrap the offset back by exactly one set-width once it drifts past the
+  // middle copy -- only while nothing is mid-transition, so the reset is an
+  // untransitioned (and therefore invisible) jump between identical frames.
+  if (!howSnapping.value) {
+    if (howOffset.value >= howSetWidth.value * 2) howOffset.value -= howSetWidth.value
+    if (howOffset.value <= 0) howOffset.value += howSetWidth.value
+  }
+  howRafId = requestAnimationFrame(howTick)
 }
 
-function goToHow(index: number) {
-  activeHow.value = index
-  restartHowTimer()
+function howStep(direction: number) {
+  howPaused.value = true
+  howSnapping.value = true
+  howOffset.value += direction * howSlot.value
+  window.setTimeout(() => { howSnapping.value = false }, 550)
 }
+
+const howTrackStyle = computed(() => ({
+  transform: `translateX(${-howOffset.value}px)`,
+  transition: howSnapping.value ? 'transform 0.55s cubic-bezier(0.16, 1, 0.3, 1)' : 'none',
+}))
 
 // Contact email is configurable via VITE_CONTACT_EMAIL so it can be swapped
 // for a real inbox without a code change.
@@ -207,8 +255,9 @@ onMounted(() => {
   heroTimerReduceMotion = reduceMotion
   restartHeroTimer()
 
-  howTimerReduceMotion = reduceMotion
-  restartHowTimer()
+  howPaused.value = reduceMotion
+  howRafId = requestAnimationFrame(howTick)
+  window.addEventListener('resize', onHowResize, { passive: true })
 })
 
 onBeforeUnmount(() => {
@@ -216,9 +265,10 @@ onBeforeUnmount(() => {
   featureObserver?.disconnect()
   window.removeEventListener('scroll', trackScrollDir)
   window.removeEventListener('scroll', handleNavScroll)
+  window.removeEventListener('resize', onHowResize)
   if (navHideTimer) clearTimeout(navHideTimer)
   if (heroTimer) clearInterval(heroTimer)
-  if (howTimer) clearInterval(howTimer)
+  if (howRafId) cancelAnimationFrame(howRafId)
 })
 </script>
 
@@ -257,7 +307,7 @@ onBeforeUnmount(() => {
         <div
           v-for="(slide, index) in heroSlides" :key="slide.eyebrow"
           class="hero-image" :class="{ active: index === activeHero }"
-          :style="{ backgroundImage: `url(${slide.image})` }"
+          :style="loadedHero.has(index) ? { backgroundImage: `url(${slide.image})` } : {}"
         />
         <div class="hero-scrim"></div>
 
@@ -363,50 +413,36 @@ onBeforeUnmount(() => {
           <span class="eyebrow">The cycle</span>
           <h2 style="margin-top: 0.6rem">From registration to reconciled payment</h2>
 
-          <div class="how-cycle reveal">
-            <div class="cycle-visual">
-              <div class="globe" aria-hidden="true">
-                <svg class="globe-grid" viewBox="0 0 200 200" fill="none">
-                  <circle cx="100" cy="100" r="76" />
-                  <ellipse cx="100" cy="100" rx="34" ry="76" />
-                  <ellipse cx="100" cy="100" rx="60" ry="76" />
-                  <path d="M29 74h142M24 100h152M29 126h142" />
-                </svg>
-                <span>Field to finance</span>
-              </div>
-              <div class="cycle-orbit" :style="{ transform: `rotate(${-activeHow * 90}deg)` }" aria-label="BioPay process steps">
-                <button
-                  v-for="(step, index) in howSteps" :key="step.title"
-                  class="cycle-node"
-                  :class="{ active: index === activeHow }"
-                  :style="{
-                    '--step-angle': `${index * 90}deg`,
-                    '--node-upright': `${(activeHow - index) * 90}deg`,
-                  }"
-                  :aria-label="`Show step ${index + 1}: ${step.title}`"
-                  :aria-current="index === activeHow ? 'step' : undefined"
-                  @click="goToHow(index)"
-                >
-                  <img :src="step.image" alt="" />
-                  <span class="num">{{ index + 1 }}</span>
-                </button>
+          <div class="how-carousel reveal">
+            <div class="how-carousel-viewport">
+              <div class="how-carousel-track" :style="howTrackStyle">
+                <div v-for="(step, index) in howTrackItems" :key="`${step.title}-${index}`" class="how-card">
+                  <img class="how-card-image" :src="step.image" :alt="step.title" loading="lazy" decoding="async" />
+                  <div class="how-card-scrim"></div>
+                  <div class="how-card-copy">
+                    <span class="how-card-num">{{ String((index % howSteps.length) + 1).padStart(2, '0') }}</span>
+                    <h3>{{ step.title }}</h3>
+                    <p>{{ step.copy }}</p>
+                  </div>
+                </div>
               </div>
             </div>
 
-            <div class="cycle-copy" aria-live="polite">
-              <Transition name="hero-fade" mode="out-in">
-                <div :key="activeHow">
-                  <div class="step-num num">{{ String(activeHow + 1).padStart(2, '0') }}</div>
-                  <h3>{{ howSteps[activeHow].title }}</h3>
-                  <p>{{ howSteps[activeHow].copy }}</p>
-                  <div class="cycle-progress" aria-hidden="true">
-                    <span
-                      v-for="(_, index) in howSteps" :key="index"
-                      :class="{ active: index === activeHow }"
-                    />
-                  </div>
-                </div>
-              </Transition>
+            <div class="how-carousel-controls">
+              <button type="button" class="how-carousel-btn" aria-label="Previous step" @click="howStep(-1)">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
+              </button>
+              <button
+                type="button" class="how-carousel-btn"
+                :aria-label="howPaused ? 'Resume rotation' : 'Pause rotation'"
+                @click="howPaused = !howPaused"
+              >
+                <svg v-if="howPaused" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
+                <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h4v14H6zM14 5h4v14h-4z" /></svg>
+              </button>
+              <button type="button" class="how-carousel-btn" aria-label="Next step" @click="howStep(1)">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6" /></svg>
+              </button>
             </div>
           </div>
         </div>
@@ -574,36 +610,54 @@ onBeforeUnmount(() => {
           <div class="showcase-grid">
             <div>
               <div class="dash reveal">
-                <div class="dash-top"><span class="dash-dot"></span><span class="dash-dot"></span><span class="dash-dot"></span>&nbsp;dashboard.biopay.app/attendance</div>
+                <div class="dash-top"><span class="dash-dot"></span><span class="dash-dot"></span><span class="dash-dot"></span>&nbsp;dashboard.biopay.app/dashboard</div>
                 <div class="dash-body">
                   <div class="dash-nav">
-                    <div class="item">Dashboard</div>
+                    <div class="item active">Dashboard</div>
                     <div class="item">Organizations</div>
                     <div class="item">Households</div>
                     <div class="item">Officers</div>
                     <div class="item">Payments</div>
                     <div class="item">Payroll</div>
-                    <div class="item active">Attendance</div>
+                    <div class="item">Vouchers</div>
                     <div class="item">Settings</div>
                   </div>
                   <div class="dash-main">
-                    <div class="dash-kpis">
-                      <div class="kpi"><span class="lbl">Total records</span><span class="num">1,284</span></div>
-                      <div class="kpi"><span class="lbl">Clocked in</span><span class="num">742</span></div>
-                      <div class="kpi"><span class="lbl">Clocked out</span><span class="num">611</span></div>
+                    <div class="dash-metric-grid">
+                      <div class="dmetric">
+                        <div class="dmetric-copy"><span class="lbl">Organizations</span><span class="num">2</span><span class="sub">Active programmes</span></div>
+                        <div class="dmetric-icon teal">
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21V9l8-5 8 5v12" /><path d="M9 21v-6h6v6" /><path d="M4 21h16" /></svg>
+                        </div>
+                      </div>
+                      <div class="dmetric">
+                        <div class="dmetric-copy"><span class="lbl">Households</span><span class="num">5</span><span class="sub">Approved records</span></div>
+                        <div class="dmetric-icon blue">
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-7 9 7" /><path d="M5 10v10h14V10" /><path d="M9 20v-6h6v6" /></svg>
+                        </div>
+                      </div>
+                      <div class="dmetric">
+                        <div class="dmetric-copy"><span class="lbl">Value disbursed</span><span class="num">SSP 2.4M</span><span class="sub">Cash + vouchers</span></div>
+                        <div class="dmetric-icon amber">
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="13" rx="2" /><path d="M3 10h18" /><circle cx="16" cy="14.5" r="1.4" /></svg>
+                        </div>
+                      </div>
+                      <div class="dmetric">
+                        <div class="dmetric-copy"><span class="lbl">Active officers</span><span class="num">2</span><span class="sub">Field officers enabled</span></div>
+                        <div class="dmetric-icon blue">
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v6c0 5-3 7.5-7 9-4-1.5-7-4-7-9V6z" /><path d="M9 12l2 2 4-4.5" /></svg>
+                        </div>
+                      </div>
                     </div>
-                    <div class="dash-chart">
-                      <div class="bar" style="--h: 38%"><span class="v">318</span></div>
-                      <div class="bar" style="--h: 58%"><span class="v">482</span></div>
-                      <div class="bar" style="--h: 74%"><span class="v">611</span></div>
-                      <div class="bar" style="--h: 91%"><span class="v">742</span></div>
-                      <div class="bar" style="--h: 100%"><span class="v">812</span></div>
-                    </div>
-                    <div class="dash-table">
-                      <div class="row head"><span>Beneficiary</span><span>Household</span><span>Clock</span></div>
-                      <div class="row"><span>John Doe</span><span class="num">HH8K3M2Q</span><span><span class="status-pill paid">In</span></span></div>
-                      <div class="row"><span>Jane Doe</span><span class="num">HH7F19XR</span><span><span class="status-pill paid">In</span></span></div>
-                      <div class="row"><span>Grace Achieng</span><span class="num">HH2P8H6T</span><span><span class="status-pill pending">Out</span></span></div>
+                    <div class="dash-chart-card">
+                      <span class="chart-title">Household registration trend</span>
+                      <div class="dash-chart">
+                        <div class="bar" style="--h: 38%"><span class="v">2</span></div>
+                        <div class="bar" style="--h: 58%"><span class="v">3</span></div>
+                        <div class="bar" style="--h: 74%"><span class="v">4</span></div>
+                        <div class="bar" style="--h: 91%"><span class="v">5</span></div>
+                        <div class="bar" style="--h: 100%"><span class="v">6</span></div>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -616,7 +670,7 @@ onBeforeUnmount(() => {
                 <div class="phone-screen">
                   <div class="phone-head">
                     <div class="welcome">Welcome, John Doe</div>
-                    <div class="org">PARTNER · 1002</div>
+                    <div class="org">PARTNER · 1002 <span class="sync-pill">Synced</span></div>
                   </div>
                   <div class="phone-kpis">
                     <div class="phone-kpi">Households<b class="num">318</b></div>
@@ -625,9 +679,11 @@ onBeforeUnmount(() => {
                     <div class="phone-kpi">Pending pay<b class="num">12</b></div>
                   </div>
                   <div class="phone-menu">
-                    <div class="phone-btn">Households</div>
-                    <div class="phone-btn alt">Attendance</div>
+                    <div class="phone-btn">Register household</div>
+                    <div class="phone-btn alt">Sync now</div>
+                    <div class="phone-btn outline">Attendance</div>
                     <div class="phone-btn outline">Payments</div>
+                    <div class="phone-btn outline">Vouchers</div>
                     <div class="phone-btn outline">Reports</div>
                   </div>
                 </div>
@@ -1052,138 +1108,88 @@ onBeforeUnmount(() => {
 .landing-root .mission-body p + p { margin-top: var(--space-3); }
 .landing-root .mission-body strong { color: var(--color-text); font-weight: 600; }
 
-/* How it works -- a real cycle: four photographic stages orbit the field-to-finance globe. */
-.landing-root .how-cycle {
-  --orbit-size: 360px;
-  --node-size: 74px;
-  display: grid;
-  grid-template-columns: minmax(390px, 0.95fr) minmax(280px, 0.8fr);
-  align-items: center;
-  gap: clamp(2rem, 7vw, 6rem);
-  margin-top: var(--space-4);
-  min-height: 430px;
-}
-.landing-root .cycle-visual {
-  position: relative;
-  width: var(--orbit-size);
-  height: var(--orbit-size);
-  margin-inline: auto;
-}
-.landing-root .globe {
-  position: absolute;
-  inset: 82px;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
+/* How it works -- a flat belt of cards drifting sideways in a continuous,
+   seamless loop (no perspective, no tilt) -- a conveyor, not a globe. */
+.landing-root .how-carousel { margin-top: var(--space-4); }
+.landing-root .how-carousel-viewport {
   overflow: hidden;
-  color: #fff;
-  background: var(--color-primary-deep);
-  box-shadow: 0 24px 55px -22px rgba(8, 66, 61, 0.55);
+  margin-inline: auto;
+  max-width: 100%;
+  padding-block: 8px;
 }
-.landing-root .globe::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(circle at 32% 24%, rgba(255,255,255,.28), transparent 38%);
+.landing-root .how-carousel-track {
+  display: flex;
+  gap: 24px;
+  width: max-content;
+  will-change: transform;
 }
-.landing-root .globe-grid {
-  position: absolute;
-  inset: 9%;
-  width: 82%;
-  height: 82%;
-  stroke: rgba(204, 251, 241, .42);
-  stroke-width: 1.4;
-  animation: globe-turn 16s linear infinite;
-}
-.landing-root .globe > span {
+.landing-root .how-card {
   position: relative;
-  z-index: 1;
-  max-width: 7ch;
-  color: #fff;
-  font-size: 0.78rem;
-  font-weight: 700;
-  line-height: 1.15;
-  text-align: center;
+  flex: 0 0 auto;
+  width: 340px;
+  height: 260px;
+  overflow: hidden;
+  border-radius: var(--radius-card);
+  background: var(--color-primary-deep);
+  box-shadow: 0 24px 46px -20px var(--shadow-color);
 }
-.landing-root .cycle-orbit {
+.landing-root .how-card-image {
   position: absolute;
   inset: 0;
-  border: 1px solid color-mix(in srgb, var(--color-primary) 34%, transparent);
-  border-radius: 50%;
-  transition: transform 850ms cubic-bezier(0.16, 1, 0.3, 1);
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  transform: scale(1.02);
 }
-.landing-root .cycle-orbit::before,
-.landing-root .cycle-orbit::after {
-  content: "";
+.landing-root .how-card-scrim {
   position: absolute;
-  inset: 22px;
-  border: 1px dashed color-mix(in srgb, var(--color-primary) 18%, transparent);
-  border-radius: 50%;
+  inset: 0;
+  background:
+    linear-gradient(180deg, rgba(4, 12, 11, 0) 32%, rgba(4, 12, 11, .74) 74%, rgba(3, 9, 8, .92) 100%);
 }
-.landing-root .cycle-orbit::after { inset: 50%; width: 7px; height: 7px; border: 0; background: var(--color-accent); }
-.landing-root .cycle-node {
+.landing-root .how-card-copy {
   position: absolute;
-  top: 50%;
-  left: 50%;
-  width: var(--node-size);
-  height: var(--node-size);
-  padding: 0;
-  border: 3px solid #fff;
-  border-radius: 50%;
-  background: var(--color-surface-2);
-  box-shadow: 0 14px 30px -16px var(--shadow-color);
-  cursor: pointer;
-  overflow: visible;
-  transform: translate(-50%, -50%) rotate(var(--step-angle)) translateY(calc(var(--orbit-size) / -2)) rotate(var(--node-upright));
-  transition: transform 850ms cubic-bezier(0.16, 1, 0.3, 1), border-color 220ms ease, box-shadow 220ms ease;
-}
-.landing-root .cycle-node img { width: 100%; height: 100%; display: block; border-radius: inherit; object-fit: cover; }
-.landing-root .cycle-node .num {
-  position: absolute;
-  right: -5px;
-  bottom: -5px;
-  width: 25px;
-  height: 25px;
-  display: grid;
-  place-items: center;
-  border-radius: 50%;
-  background: var(--color-primary-deep);
+  inset: auto 0 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 1.1rem 1.2rem;
   color: #fff;
-  font-size: 0.68rem;
-  font-weight: 700;
 }
-.landing-root .cycle-node.active { border-color: var(--color-accent); box-shadow: 0 18px 36px -14px rgba(234, 88, 12, .42); }
-.landing-root .cycle-node.active .num { background: var(--color-accent); color: #1a1200; }
-.landing-root .cycle-node:focus-visible { outline: 3px solid var(--color-primary); outline-offset: 4px; }
-.landing-root .cycle-copy { max-width: 31rem; }
-.landing-root .step-num {
-  font-family: var(--font-mono);
+.landing-root .how-card-num { font-family: var(--font-mono); font-size: 0.7rem; font-weight: 700; color: #fde68a; }
+.landing-root .how-card-copy h3 { font-size: 1.02rem; line-height: 1.22; margin: 0; color: #fff; }
+.landing-root .how-card-copy p {
+  margin: 0;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
   font-size: 0.78rem;
-  color: var(--color-primary);
+  line-height: 1.4;
+  color: rgba(255, 255, 255, .82);
+}
+.landing-root .how-carousel-controls { display: flex; align-items: center; justify-content: center; gap: 0.75rem; margin-top: var(--space-4); }
+.landing-root .how-carousel-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
   border: 1px solid var(--color-line);
   border-radius: 999px;
-  width: 28px;
-  height: 28px;
-  display: grid;
-  place-items: center;
-  margin-bottom: var(--space-2);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: border-color 180ms ease, color 180ms ease;
 }
-.landing-root .cycle-copy h3 { font-size: clamp(1.55rem, 1.25rem + 1vw, 2rem); margin-bottom: 0.55rem; }
-.landing-root .cycle-copy p { color: var(--color-text-muted); font-size: var(--step-body-lg); max-width: 42ch; }
-.landing-root .cycle-progress { display: flex; gap: 7px; margin-top: var(--space-3); }
-.landing-root .cycle-progress span { width: 46px; height: 3px; background: var(--color-line); transform: scaleX(.56); transform-origin: left; transition: transform 220ms ease, background 220ms ease; }
-.landing-root .cycle-progress span.active { background: var(--color-primary); transform: scaleX(1); }
-@keyframes globe-turn { to { transform: rotate(360deg); } }
+.landing-root .how-carousel-btn:hover { border-color: var(--color-primary); color: var(--color-primary); }
+.landing-root .how-carousel-btn:focus-visible { outline: 3px solid var(--color-primary); outline-offset: 2px; }
 @media (max-width: 820px) {
-  .landing-root .how-cycle { --orbit-size: 300px; --node-size: 64px; grid-template-columns: 1fr; gap: var(--space-4); min-height: 0; }
-  .landing-root .globe { inset: 70px; }
-  .landing-root .cycle-copy { max-width: 34rem; text-align: center; margin-inline: auto; }
-  .landing-root .cycle-copy p { margin-inline: auto; }
-  .landing-root .cycle-progress { justify-content: center; }
+  .landing-root .how-card { width: 280px; height: 280px; }
 }
 @media (max-width: 390px) {
-  .landing-root .how-cycle { --orbit-size: 260px; --node-size: 56px; }
-  .landing-root .globe { inset: 62px; }
+  .landing-root .how-card { width: 240px; }
 }
 
 /* Feature grid */
@@ -1222,15 +1228,14 @@ onBeforeUnmount(() => {
 @media (hover: hover) and (pointer: fine) {
   .landing-root .feature:hover {
     z-index: 2;
-    transform: translateY(-6px);
-    background: color-mix(in srgb, var(--color-surface) 94%, var(--color-primary-soft));
-    box-shadow: 0 18px 36px -24px var(--shadow-color);
+    transform: translateY(-4px);
+    background: var(--color-surface);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.06);
   }
   .landing-root .feature:hover .feature-icon {
-    transform: translateY(-2px) rotate(-2deg);
-    box-shadow: 0 10px 20px -14px var(--shadow-color);
+    transform: translateY(-2px);
   }
-  .landing-root .feature:active { transform: translateY(-2px) scale(0.992); }
+  .landing-root .feature:active { transform: translateY(-2px); }
 }
 
 .landing-root .feature-icon {
@@ -1246,7 +1251,7 @@ onBeforeUnmount(() => {
 
 @media (hover: hover) and (pointer: fine) {
   .landing-root .mini-widget:hover,
-  .landing-root .kpi:hover,
+  .landing-root .dmetric:hover,
   .landing-root .phone-kpi:hover {
     transform: translateY(-3px);
     box-shadow: 0 12px 24px -20px var(--shadow-color);
@@ -1268,27 +1273,32 @@ onBeforeUnmount(() => {
 .landing-root .dash-nav .item { padding: 0.45rem 0.6rem; border-radius: 7px; }
 .landing-root .dash-nav .item.active { background: rgba(255, 255, 255, 0.14); color: #fff; font-weight: 600; }
 .landing-root .dash-main { padding: 1rem 1.1rem; }
-.landing-root .dash-kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.6rem; }
-@media (max-width: 480px) { .landing-root .dash-kpis { grid-template-columns: 1fr; } }
-.landing-root .kpi { border: 1px solid var(--color-line); border-radius: 10px; padding: 0.7rem 0.8rem; transition: transform 180ms ease, box-shadow 180ms ease; }
-.landing-root .kpi .lbl { font-size: 0.68rem; color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.06em; }
-.landing-root .kpi .num { font-size: 1.25rem; font-weight: 700; display: block; margin-top: 0.15rem; }
-.landing-root .dash-chart { display: flex; align-items: flex-end; gap: 0.5rem; height: 72px; margin-top: 0.9rem; padding: 0 0.2rem; }
+.landing-root .dash-metric-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.6rem; }
+.landing-root .dmetric {
+  border: 1px solid var(--color-line); border-radius: 10px; padding: 0.65rem 0.75rem;
+  display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;
+  transition: transform 180ms ease, box-shadow 180ms ease;
+}
+.landing-root .dmetric-copy { display: flex; flex-direction: column; min-width: 0; }
+.landing-root .dmetric-copy .lbl { font-size: 0.62rem; color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.05em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.landing-root .dmetric-copy .num { font-size: 1.05rem; font-weight: 700; margin-top: 0.1rem; }
+.landing-root .dmetric-copy .sub { font-size: 0.62rem; color: var(--color-text-muted); margin-top: 0.1rem; }
+.landing-root .dmetric-icon { flex-shrink: 0; width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; }
+.landing-root .dmetric-icon.teal { background: var(--color-primary-soft); color: var(--color-primary-deep); }
+.landing-root .dmetric-icon.blue { background: #dbeafe; color: #2563eb; }
+.landing-root .dmetric-icon.amber { background: var(--color-accent-soft); color: var(--color-accent-deep); }
+.landing-root .dash-chart-card { border: 1px solid var(--color-line); border-radius: 10px; padding: 0.7rem 0.8rem 0.5rem; margin-top: 0.6rem; }
+.landing-root .chart-title { font-size: 0.72rem; font-weight: 600; color: var(--color-text); }
+.landing-root .dash-chart { display: flex; align-items: flex-end; gap: 0.5rem; height: 64px; margin-top: 0.7rem; padding: 0 0.2rem; }
 .landing-root .dash-chart .bar { flex: 1; height: var(--h); min-height: 8px; border-radius: 5px 5px 2px 2px; background: linear-gradient(180deg, var(--color-primary) 0%, var(--color-primary-deep) 100%); position: relative; }
 .landing-root .dash-chart .v { position: absolute; top: -1.15rem; left: 50%; transform: translateX(-50%); font-family: var(--font-mono); font-size: 0.62rem; color: var(--color-text-muted); }
-.landing-root .dash-table { margin-top: 0.9rem; border: 1px solid var(--color-line); border-radius: 10px; overflow: hidden; font-size: 0.78rem; }
-.landing-root .dash-table .row { display: grid; grid-template-columns: 1.2fr 1fr 0.7fr; padding: 0.5rem 0.7rem; }
-.landing-root .dash-table .row + .row { border-top: 1px solid var(--color-line); }
-.landing-root .dash-table .head { background: var(--color-surface-2); color: var(--color-text-muted); font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.05em; }
-.landing-root .status-pill { font-family: var(--font-mono); font-size: 0.68rem; padding: 0.12em 0.55em; border-radius: 999px; display: inline-block; }
-.landing-root .status-pill.paid { background: color-mix(in srgb, var(--color-success) 16%, transparent); color: var(--color-success); }
-.landing-root .status-pill.pending { background: color-mix(in srgb, var(--color-accent) 18%, transparent); color: var(--color-accent-deep); }
 
 .landing-root .phone { width: 240px; margin-inline: auto; border: 10px solid var(--color-text); border-radius: 34px; overflow: hidden; box-shadow: 0 30px 60px -30px var(--shadow-color); transition: transform 260ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 260ms ease; }
 .landing-root .phone-screen { background: var(--color-surface); min-height: 430px; }
 .landing-root .phone-head { background: var(--color-primary); color: #fff; padding: 1rem 0.9rem 1.4rem; }
 .landing-root .phone-head .welcome { font-size: 0.85rem; font-weight: 700; }
-.landing-root .phone-head .org { font-size: 0.68rem; opacity: 0.85; margin-top: 2px; font-family: var(--font-mono); }
+.landing-root .phone-head .org { display: flex; align-items: center; gap: 0.4rem; font-size: 0.68rem; opacity: 0.85; margin-top: 2px; font-family: var(--font-mono); }
+.landing-root .sync-pill { font-family: var(--font-sans, inherit); background: rgba(255, 255, 255, 0.18); color: #fff; border-radius: 999px; padding: 0.1em 0.55em; font-size: 0.6rem; letter-spacing: 0.03em; }
 .landing-root .phone-kpis { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; padding: 0.8rem; margin-top: -1rem; }
 .landing-root .phone-kpi { background: var(--color-surface); border: 1px solid var(--color-line); border-radius: 9px; padding: 0.5rem 0.6rem; font-size: 0.68rem; box-shadow: 0 8px 16px -10px var(--shadow-color); transition: transform 180ms ease, box-shadow 180ms ease; }
 .landing-root .phone-kpi b { display: block; font-size: 0.95rem; font-family: var(--font-mono); }
@@ -1382,9 +1392,7 @@ onBeforeUnmount(() => {
   .landing-root .phone-kpi,
   .landing-root .demo-card,
   .landing-root .foot-col a { transition: none; }
-  .landing-root .globe-grid { animation: none; }
-  .landing-root .cycle-orbit,
-  .landing-root .cycle-node { transition: none; }
+  .landing-root .how-carousel-track { transition: none; }
 }
 
 /* Compact desktop rhythm for ordinary laptop/desktop heights at 100% zoom. */

@@ -50,6 +50,21 @@
     <string name="menu_vouchers">Redeem voucher</string>
     <string name="menu_reports">Field reports</string>
     <string name="menu_logout">Log out</string>
+
+    <string name="home_view_all">View all</string>
+    <string name="home_task_households_sub">View and manage registered households</string>
+    <string name="home_task_attendance_sub">Capture event and activity attendance</string>
+    <string name="home_task_vouchers_sub">Scan and redeem beneficiary vouchers</string>
+    <string name="home_task_alternates_sub">Manage backup beneficiary contacts</string>
+    <string name="home_task_payments_sub">Review paid and pending disbursements</string>
+    <string name="home_task_reports_sub">Offline totals and sync readiness</string>
+    <string name="home_quick_scan_qr">Scan QR</string>
+    <string name="home_quick_verify_identity">Verify identity</string>
+    <string name="home_quick_my_location">My location</string>
+    <string name="home_quick_sync_history">Sync history</string>
+    <string name="home_notifications_description">Notifications</string>
+    <string name="home_location_unavailable">Location unavailable. Grant location permission and try again outdoors.</string>
+    <string name="home_location_current">Current location: %1$.5f, %2$.5f</string>
     <string name="nav_home">Home</string>
     <string name="nav_profile">Profile</string>
     <string name="nav_settings">Settings</string>
@@ -84,8 +99,17 @@
     <string name="field_age">Age</string>
     <string name="field_gender">Gender</string>
     <string name="field_registration_method">Biometric method</string>
+    <string name="field_state">State</string>
+    <string name="field_county">County</string>
+    <string name="field_location">Location</string>
+    <string name="field_village">Village</string>
     <string name="field_state_code">State code</string>
-    <string name="field_boma_code">Boma code</string>
+    <string name="field_county_code">County code</string>
+    <string name="field_location_code">Location code</string>
+    <string name="field_village_code">Village code</string>
+    <string name="location_enter_manually">Can\'t find your area? Enter codes manually</string>
+    <string name="location_use_picker">Use the location picker instead</string>
+    <string name="location_picker_note">Choose from the state, county, location, and village configured for your organisation.</string>
     <string name="field_household_size">Household size</string>
     <string name="field_male_dependants">Male dependants</string>
     <string name="field_female_dependants">Female dependants</string>
@@ -195,7 +219,22 @@
     <string name="settings_scanner_connected">Connected</string>
     <string name="settings_scanner_disconnected">Not connected</string>
     <string name="settings_face_title">Face recognition</string>
-    <string name="settings_face_body">Not available in this build yet. Verification uses fingerprint only until it ships.</string>
+    <string name="settings_face_body">Face detection works and can be tested below. Identity matching isn\'t available yet, so verification still uses fingerprint only.</string>
+    <string name="settings_test_face">Test face capture</string>
+    <string name="face_test_running">Checking capture…</string>
+    <string name="face_test_no_match_model">Face detected and validated. Matching isn\'t available yet — no approved model is configured.</string>
+    <string name="face_test_capture_failed">Capture problem: %1$s</string>
+
+    <string name="face_capture_title">Face capture</string>
+    <string name="face_capture_guidance">Center your face in the frame, in good light. This only tests detection — nothing is saved or matched.</string>
+    <string name="face_capture_action">Capture</string>
+    <string name="face_capture_status_searching">Looking for a face…</string>
+    <string name="face_capture_status_ready">Face ready</string>
+    <string name="face_capture_status_multiple">Only one person should be in frame</string>
+    <string name="face_capture_status_too_small">Move closer</string>
+    <string name="face_capture_permission_denied">Camera permission is required to test face capture</string>
+    <string name="face_capture_camera_unavailable">Camera is unavailable on this device</string>
+    <string name="face_capture_failed">Capture failed. Try again.</string>
 
     <string name="settings_security">Security</string>
     <string name="settings_security_policy">For your security, BioPay signs you out whenever you leave the app, and after 5 minutes of inactivity while it\'s open.</string>

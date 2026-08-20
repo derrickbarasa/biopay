@@ -49,6 +49,10 @@
         <activity android:name=".attendance.AttendanceActivity" android:exported="false" />
         <activity android:name=".attendance.AttendanceBeneficiariesActivity" android:exported="false" />
         <activity android:name=".vouchers.VoucherRedemptionActivity" android:exported="false" />
+        <activity
+            android:name=".face.FaceCaptureActivity"
+            android:exported="false"
+            android:screenOrientation="portrait" />
 
     </application>
 </manifest>
