@@ -13,9 +13,9 @@ import io.vertx.ext.auth.authentication.TokenCredentials;
 import io.vertx.mssqlclient.MSSQLPool;
 import io.vertx.sqlclient.Row;
 import io.vertx.sqlclient.Tuple;
-import io.github.cdimascio.dotenv.Dotenv;
 import com.biopay.databases.Datasource;
 import com.biopay.utilities.Crypto;
+import com.biopay.utilities.Env;
 import com.biopay.utilities.Hashing;
 import com.biopay.utilities.JwtSupport;
 import com.biopay.utilities.Logging;
@@ -97,7 +97,7 @@ public class Auth extends AbstractVerticle {
     }
 
     private static String frontendBaseUrl() {
-        return Dotenv.load().get("FRONTEND_BASE_URL", "http://localhost:5173");
+        return Env.get().get("FRONTEND_BASE_URL", "http://localhost:5173");
     }
 
     static boolean isOtpRequired(String configuredValue) {
@@ -105,7 +105,7 @@ public class Auth extends AbstractVerticle {
     }
 
     private static boolean otpRequired() {
-        return isOtpRequired(Dotenv.load().get("OTP_REQUIRED", "true"));
+        return isOtpRequired(Env.get().get("OTP_REQUIRED", "true"));
     }
 
     /** JWTOptions#setSubject serializes "sub" as a string per the JWT spec, overriding whatever

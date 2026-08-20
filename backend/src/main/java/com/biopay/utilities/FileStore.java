@@ -1,6 +1,5 @@
 package com.biopay.utilities;
 
-import io.github.cdimascio.dotenv.Dotenv;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -20,8 +19,7 @@ public final class FileStore {
     }
 
     private static Path uploadsDir() {
-        Dotenv dotenv = Dotenv.load();
-        Path dir = Path.of(System.getProperty("user.dir"), dotenv.get("UPLOADS_PATH", "uploads"));
+        Path dir = Path.of(System.getProperty("user.dir"), Env.get().get("UPLOADS_PATH", "uploads"));
         try {
             Files.createDirectories(dir);
         } catch (IOException ex) {
@@ -39,8 +37,7 @@ public final class FileStore {
         if (!ALLOWED_EXTENSIONS.contains(ext)) {
             throw new IllegalArgumentException("Only JPG/PNG images are allowed");
         }
-        Dotenv dotenv = Dotenv.load();
-        long maxBytes = Long.parseLong(dotenv.get("MAX_UPLOAD_BYTES", "5242880"));
+        long maxBytes = Long.parseLong(Env.get().get("MAX_UPLOAD_BYTES", "5242880"));
 
         byte[] bytes;
         try {

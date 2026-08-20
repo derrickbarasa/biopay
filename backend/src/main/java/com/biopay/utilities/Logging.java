@@ -1,6 +1,5 @@
 package com.biopay.utilities;
 
-import io.github.cdimascio.dotenv.Dotenv;
 import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileWriter;
@@ -13,8 +12,7 @@ public class Logging {
     private static String LOGS_PATH = "";
 
     public static void applicationLog(String details, String uniqueId, int logLevel) {
-        Dotenv dotenv = Dotenv.load();
-        LOGS_PATH = System.getProperty("user.dir") + File.separator + dotenv.get("LOGS_PATH", "logs").trim();
+        LOGS_PATH = System.getProperty("user.dir") + File.separator + Env.get().get("LOGS_PATH", "logs").trim();
 
         String typeOfLog;
         switch (logLevel) {

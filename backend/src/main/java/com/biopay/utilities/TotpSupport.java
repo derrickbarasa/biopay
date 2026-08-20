@@ -10,7 +10,6 @@ import dev.samstevens.totp.qr.QrGenerator;
 import dev.samstevens.totp.qr.ZxingPngQrGenerator;
 import dev.samstevens.totp.secret.DefaultSecretGenerator;
 import dev.samstevens.totp.time.SystemTimeProvider;
-import io.github.cdimascio.dotenv.Dotenv;
 import java.util.Base64;
 
 /**
@@ -42,8 +41,7 @@ public final class TotpSupport {
 
     /** A ready-to-embed {@code data:image/png;base64,...} URI for an enrollment QR code. */
     public static String qrCodeDataUri(String secret, String accountLabel) {
-        Dotenv dotenv = Dotenv.load();
-        String issuer = dotenv.get("TOTP_ISSUER", "BioPay");
+        String issuer = Env.get().get("TOTP_ISSUER", "BioPay");
         QrData data = new QrData.Builder()
                 .label(accountLabel)
                 .secret(secret)

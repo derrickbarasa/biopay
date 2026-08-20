@@ -190,7 +190,7 @@ public class Biometric extends AbstractVerticle {
         // Production matching belongs on the Android device where the licensed IDEMIA SDK
         // performs a scored live 1:1 verify. The legacy server equality matcher is disabled by
         // default and can only be enabled explicitly for migration diagnostics.
-        if (!Boolean.parseBoolean(io.github.cdimascio.dotenv.Dotenv.load()
+        if (!Boolean.parseBoolean(com.biopay.utilities.Env.get()
                 .get("ALLOW_LEGACY_FINGERPRINT_MATCH", "false"))) {
             replyError(message, "Server fingerprint matching is disabled; use the approved on-device biometric SDK");
             return;
