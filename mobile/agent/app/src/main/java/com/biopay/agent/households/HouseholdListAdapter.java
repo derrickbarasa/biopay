@@ -12,6 +12,7 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.biopay.agent.R;
 import com.biopay.agent.data.DatabaseHelper;
+import com.biopay.agent.data.GeoDao;
 import com.biopay.agent.data.HouseholdDao;
 
 import java.util.ArrayList;
@@ -25,6 +26,7 @@ public class HouseholdListAdapter extends RecyclerView.Adapter<HouseholdListAdap
 
     private final List<HouseholdDao.Household> households = new ArrayList<>();
     private final OnHouseholdClickListener listener;
+    private GeoDao geoDao;
 
     public HouseholdListAdapter(OnHouseholdClickListener listener) {
         this.listener = listener;
@@ -47,8 +49,15 @@ public class HouseholdListAdapter extends RecyclerView.Adapter<HouseholdListAdap
     public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
         HouseholdDao.Household household = households.get(position);
         Context context = holder.itemView.getContext();
+        if (geoDao == null) {
+            geoDao = new GeoDao(context);
+        }
         holder.tvName.setText(household.householdName);
-        String boma = household.bomaCode == null || household.bomaCode.isEmpty() ? "-" : household.bomaCode;
+        // The stored value may be a synced village code (picker) or a manually-typed village name
+        // (manual entry fallback) -- resolve to a name where possible, otherwise show it as-is.
+        String bomaName = household.bomaCode == null ? null : geoDao.findBomaName(household.bomaCode);
+        String boma = bomaName != null ? bomaName
+                : (household.bomaCode == null || household.bomaCode.isEmpty() ? "-" : household.bomaCode);
         holder.tvSubtitle.setText(context.getString(
                 R.string.household_subtitle, household.householdNumber, boma));
         boolean synced = household.syncStatus == DatabaseHelper.SYNC_SYNCED;

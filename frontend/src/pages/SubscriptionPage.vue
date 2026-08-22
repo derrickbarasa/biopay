@@ -24,6 +24,17 @@ interface Invoice {
   createdAt: string
 }
 
+interface AnchorSubscription {
+  anchorId: number
+  anchorCode?: string
+  anchorName?: string
+  status: 'NONE' | 'ACTIVE' | 'GRACE' | 'ARCHIVED'
+  planCode?: string
+  expiresAt?: string
+  graceDays?: number
+  daysToExpiry?: number
+}
+
 const auth = useAuthStore()
 const toast = useToast()
 
@@ -33,10 +44,26 @@ const invoices = ref<Invoice[]>([])
 const renewing = ref(false)
 const downloadingReceipt = ref<string | null>(null)
 
-const renewForm = ref({ amount: null as number | null, currency: 'SSP' })
+// The system owner can see every anchor's subscription, not just their own.
+const allSubscriptions = ref<AnchorSubscription[]>([])
+const loadingAll = ref(false)
+
+/** Currencies available for renewal records -- USD is the platform default, the rest cover
+ *  the anchors this system already operates across (see the org/anchor Country picker). */
+const CURRENCIES = ['USD', 'KES', 'UGX', 'SSP', 'ETB', 'TZS', 'RWF', 'NGN', 'XAF', 'GBP', 'EUR']
+
+const renewForm = ref({ amount: null as number | null, currency: 'USD' })
 const renewDialog = ref(false)
 
 const statusColor: Record<string, string> = { ACTIVE: 'success', GRACE: 'warning', ARCHIVED: 'error', NONE: 'grey' }
+
+const allSubsHeaders = [
+  { title: 'Anchor', key: 'anchorName' },
+  { title: 'Status', key: 'status' },
+  { title: 'Plan', key: 'planCode' },
+  { title: 'Expires', key: 'expiresAt' },
+  { title: 'Days to expiry', key: 'daysToExpiry' },
+]
 
 const headers = [
   { title: 'Invoice #', key: 'invoiceNumber' },
@@ -49,7 +76,7 @@ const headers = [
 
 function currency(amount: number | undefined, code: string | undefined) {
   if (amount == null) return '—'
-  return amount.toLocaleString(undefined, { style: 'currency', currency: code || 'SSP', maximumFractionDigits: 0 })
+  return amount.toLocaleString(undefined, { style: 'currency', currency: code || 'USD', maximumFractionDigits: 0 })
 }
 
 function displayDate(value: unknown) {
@@ -74,10 +101,23 @@ async function load() {
   }
 }
 
-onMounted(load)
+async function loadAllSubscriptions() {
+  if (!auth.isSystemAdmin) return
+  loadingAll.value = true
+  try {
+    const r = await dispatch<{ results: AnchorSubscription[] }>('GET_ALL_SUBSCRIPTIONS')
+    allSubscriptions.value = r.results ?? []
+  } catch (err) {
+    toast.error(err instanceof Error ? err.message : 'Failed to load anchor subscriptions')
+  } finally {
+    loadingAll.value = false
+  }
+}
+
+onMounted(() => { load(); loadAllSubscriptions() })
 
 function openRenew() {
-  renewForm.value = { amount: null, currency: 'SSP' }
+  renewForm.value = { amount: null, currency: 'USD' }
   renewDialog.value = true
 }
 
@@ -169,7 +209,7 @@ const statusHeadline = computed(() => {
         <h1 class="text-h5 font-weight-bold">Subscription</h1>
         <p class="text-body-2 text-medium-emphasis mt-1">Manage your anchor's subscription, and view payment history and receipts.</p>
       </div>
-      <v-btn v-if="auth.isAnchor" color="primary" prepend-icon="mdi-autorenew" :loading="renewing" @click="openRenew">
+      <v-btn v-if="auth.isAnchor" color="secondary" prepend-icon="mdi-autorenew" :loading="renewing" @click="openRenew">
         Renew subscription
       </v-btn>
     </div>
@@ -193,6 +233,19 @@ const statusHeadline = computed(() => {
         Pricing is per your agreement with BioPay — renewal here records the payment and extends access by one month,
         it does not process a card or bank charge itself.
       </p>
+    </v-card>
+
+    <v-card v-if="auth.isSystemAdmin" variant="flat" border class="mb-5">
+      <v-card-title class="text-subtitle-1 font-weight-bold">All anchors (system owner view)</v-card-title>
+      <v-data-table :headers="allSubsHeaders" :items="allSubscriptions" :loading="loadingAll">
+        <template #item.status="{ item }">
+          <v-chip size="small" :color="statusColor[item.status] ?? 'grey'" variant="tonal">{{ item.status }}</v-chip>
+        </template>
+        <template #item.expiresAt="{ item }">{{ displayDate(item.expiresAt) }}</template>
+        <template #no-data>
+          <div class="text-center text-medium-emphasis py-6">No anchors found.</div>
+        </template>
+      </v-data-table>
     </v-card>
 
     <v-card variant="flat" border>
@@ -228,13 +281,13 @@ const statusHeadline = computed(() => {
           </p>
           <v-row dense>
             <v-col cols="7"><v-text-field v-model.number="renewForm.amount" label="Amount paid (optional)" type="number" density="compact" /></v-col>
-            <v-col cols="5"><v-text-field v-model="renewForm.currency" label="Currency" density="compact" /></v-col>
+            <v-col cols="5"><v-select v-model="renewForm.currency" :items="CURRENCIES" label="Currency" density="compact" /></v-col>
           </v-row>
         </v-card-text>
         <v-card-actions>
           <v-spacer />
           <v-btn variant="text" @click="renewDialog = false">Cancel</v-btn>
-          <v-btn color="primary" :loading="renewing" @click="confirmRenew">Confirm renewal</v-btn>
+          <v-btn color="secondary" :loading="renewing" @click="confirmRenew">Confirm renewal</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>

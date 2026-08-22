@@ -17,6 +17,8 @@ import com.biopay.agent.data.PaymentDao;
 import com.biopay.agent.households.HouseholdListActivity;
 import com.biopay.agent.households.HouseholdFormActivity;
 import com.biopay.agent.location.LocationHelper;
+import com.biopay.agent.network.ApiCallback;
+import com.biopay.agent.network.ApiClient;
 import com.biopay.agent.payments.PaymentsActivity;
 import com.biopay.agent.reports.ReportsActivity;
 import com.biopay.agent.session.SessionManager;
@@ -26,9 +28,13 @@ import com.biopay.agent.ui.BaseActivity;
 import com.biopay.agent.vouchers.VoucherRedemptionActivity;
 import com.google.android.material.snackbar.Snackbar;
 
+import org.json.JSONObject;
+
 import android.location.Location;
 
 import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Map;
 
 /** Main menu + at-a-glance dashboard (KPIs and a paid/pending chart), all sourced from local data. */
 public class HomeActivity extends BaseActivity {
@@ -110,7 +116,37 @@ public class HomeActivity extends BaseActivity {
         super.onResume();
         refreshIdentity();
         refreshDashboard();
+        checkSubscriptionGrace();
         SyncScheduler.triggerNow(this);
+    }
+
+    /** Mirrors the web dashboard's grace banner (DefaultLayout.vue) for officers who may never
+     *  open it -- purely informational (only an anchor admin can actually renew, via the web
+     *  dashboard's RENEW_SUBSCRIPTION action), unlike SubscriptionGate's login-time ARCHIVED
+     *  lock. Fails silently offline, same reasoning as SubscriptionGate: a field officer without
+     *  signal shouldn't see a spurious error for a check that's purely advisory anyway. */
+    private void checkSubscriptionGrace() {
+        Integer anchorId = sessionManager.getAnchorId();
+        if (anchorId == null) return;
+        Map<String, Object> params = new HashMap<>();
+        params.put("anchorId", anchorId);
+        ApiClient.get(this).dispatch("GET_SUBSCRIPTION", params, new ApiCallback() {
+            @Override
+            public void onSuccess(JSONObject response) {
+                JSONObject results = response.optJSONObject("results");
+                String status = results != null ? results.optString("status", "NONE") : "NONE";
+                if ("GRACE".equals(status)) {
+                    int daysToArchive = results.optInt("daysToArchive", 0);
+                    Snackbar.make(findViewById(R.id.tvWelcome),
+                            getString(R.string.home_subscription_grace, daysToArchive), Snackbar.LENGTH_LONG).show();
+                }
+            }
+
+            @Override
+            public void onError(String message, String responseCode) {
+                // Offline or the check failed -- purely advisory, so say nothing.
+            }
+        });
     }
 
     private void refreshIdentity() {

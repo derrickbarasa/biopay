@@ -1,0 +1,148 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/bp_background"
+    android:fitsSystemWindows="true"
+    android:orientation="vertical">
+
+    <com.google.android.material.appbar.MaterialToolbar
+        android:id="@+id/toolbar"
+        style="@style/BioPay.Toolbar"
+        android:title="@string/person_capture_title"
+        app:navigationIcon="@drawable/ic_arrow_back"
+        app:navigationIconTint="@color/bp_text_primary" />
+
+    <androidx.core.widget.NestedScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:fillViewport="true">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingStart="16dp"
+            android:paddingTop="8dp"
+            android:paddingEnd="16dp"
+            android:paddingBottom="24dp">
+
+            <TextView
+                android:id="@+id/tvPersonName"
+                style="@style/BioPay.ScreenTitle" />
+            <TextView
+                android:id="@+id/tvPersonSubtitle"
+                style="@style/BioPay.SupportingText"
+                android:layout_marginTop="2dp"
+                android:layout_marginBottom="12dp" />
+
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/rowFingerprint"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="10dp"
+                android:visibility="gone"
+                app:cardBackgroundColor="@color/bp_surface"
+                app:cardCornerRadius="14dp"
+                app:cardElevation="1dp"
+                app:strokeWidth="0dp">
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+                    <TextView
+                        style="@style/BioPay.SectionHeader"
+                        android:layout_marginTop="0dp"
+                        android:drawableStart="@drawable/ic_fingerprint"
+                        android:drawablePadding="8dp"
+                        android:gravity="center_vertical"
+                        android:text="@string/person_capture_fingerprint_label" />
+                    <TextView
+                        android:id="@+id/tvFingerprintRowStatus"
+                        style="@style/BioPay.SupportingText"
+                        android:text="@string/person_capture_not_captured" />
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnCaptureFingerprint"
+                        style="@style/Widget.Material3.Button.OutlinedButton"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:text="@string/person_capture_fingerprint_action" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/rowFace"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="10dp"
+                android:visibility="gone"
+                app:cardBackgroundColor="@color/bp_surface"
+                app:cardCornerRadius="14dp"
+                app:cardElevation="1dp"
+                app:strokeWidth="0dp">
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+                    <TextView
+                        style="@style/BioPay.SectionHeader"
+                        android:layout_marginTop="0dp"
+                        android:drawableStart="@drawable/ic_face"
+                        android:drawablePadding="8dp"
+                        android:gravity="center_vertical"
+                        android:text="@string/person_capture_face_label" />
+                    <TextView
+                        style="@style/BioPay.SupportingText"
+                        android:text="@string/face_accuracy_notice"
+                        android:textColor="@color/bp_warning" />
+                    <TextView
+                        android:id="@+id/tvFaceRowStatus"
+                        style="@style/BioPay.SupportingText"
+                        android:text="@string/person_capture_not_captured" />
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnCaptureFace"
+                        style="@style/Widget.Material3.Button.OutlinedButton"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:text="@string/person_capture_face_action" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <LinearLayout
+                android:id="@+id/doneSection"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <TextView
+                    android:id="@+id/tvDoneMessage"
+                    style="@style/BioPay.SectionHeader"
+                    android:layout_marginTop="0dp"
+                    android:textColor="@color/bp_success" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnAddPerson"
+                    style="@style/Widget.Material3.Button.OutlinedButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="@string/person_capture_add_another" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnFinish"
+                    style="@style/BioPay.PrimaryButton"
+                    android:layout_width="match_parent"
+                    android:layout_marginTop="8dp"
+                    android:text="@string/person_capture_finish" />
+            </LinearLayout>
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+</LinearLayout>

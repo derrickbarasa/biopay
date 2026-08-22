@@ -15,7 +15,6 @@ import com.google.android.material.appbar.MaterialToolbar;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
 import com.biopay.agent.R;
 import com.biopay.agent.home.HomeActivity;
-import com.biopay.agent.profile.ProfileActivity;
 import com.biopay.agent.session.SessionManager;
 import com.biopay.agent.session.SessionTimeoutManager;
 import com.biopay.agent.settings.SettingsActivity;
@@ -88,14 +87,7 @@ public abstract class BaseActivity extends AppCompatActivity {
             if (targetId == selectedItemId) {
                 return true;
             }
-            Class<?> destination;
-            if (targetId == R.id.navSettings) {
-                destination = SettingsActivity.class;
-            } else if (targetId == R.id.navProfile) {
-                destination = ProfileActivity.class;
-            } else {
-                destination = HomeActivity.class;
-            }
+            Class<?> destination = targetId == R.id.navSettings ? SettingsActivity.class : HomeActivity.class;
             Intent intent = new Intent(this, destination)
                     .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
             startActivity(intent);

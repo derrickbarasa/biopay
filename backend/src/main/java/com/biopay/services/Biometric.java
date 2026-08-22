@@ -72,7 +72,19 @@ public class Biometric extends AbstractVerticle {
         replyError(message, "Failed with an error");
     }
 
+    private static boolean isAnchor(JsonObject payload) {
+        return "ANCHOR".equalsIgnoreCase(payload.getString("actorRole", ""));
+    }
+
+    /** Mobile SUPERVISOR sessions (the normal caller here) carry partnerCode directly on the
+     *  JWT; an anchor admin session (e.g. the web dashboard's "Add alternate" photo upload,
+     *  see HouseholdDetailPage.vue) carries no partnerCode claim at all, so it must be
+     *  supplied as a client organisationCode param instead -- same isAnchor() pattern
+     *  Household#scopedPartnerCode already uses. */
     private static String partnerCodeOf(JsonObject payload) {
+        if (isAnchor(payload)) {
+            return payload.getString("organisationCode", "");
+        }
         return payload.getString("partnerCode", "");
     }
 
@@ -456,15 +468,18 @@ public class Biometric extends AbstractVerticle {
         }
 
         Object anchorIdVal = payload.getValue("anchorId");
+        // Exactly one of fingerprintUuid/faceUuid is populated per call, matching whichever method
+        // PaymentVerificationActivity actually verified the beneficiary with (see 017_payments_matched_face.sql).
         String sql = "INSERT INTO payments (supervisor_id, household_number, partner_code, anchor_id, amount, "
-                + "matched_fp, latitude, longitude, uuid, status, approved, created_by, created_at) "
-                + "VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,1,1,@p10,GETDATE())";
+                + "matched_fp, matched_face_uuid, latitude, longitude, uuid, status, approved, created_by, created_at) "
+                + "VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,1,1,@p11,GETDATE())";
 
         pool.preparedQuery(sql)
                 .execute(Tuple.of(
                         String.valueOf(payload.getValue("actorId")), householdNumber, partnerCode,
                         anchorIdVal == null ? null : Integer.parseInt(anchorIdVal.toString()), amount,
-                        payload.getString("fingerprintUuid"), payload.getString("latitude"), payload.getString("longitude"),
+                        payload.getString("fingerprintUuid"), payload.getString("faceUuid"),
+                        payload.getString("latitude"), payload.getString("longitude"),
                         Utilities.newUuid(), Integer.parseInt(payload.getValue("actorId").toString())))
                 .onFailure(err -> onDbError(message, err))
                 .onSuccess(rows -> {

@@ -85,6 +85,17 @@ public class FaceDao {
         return results;
     }
 
+    /** Whether this beneficiary has any face capture at all, regardless of which model version
+     *  produced it -- for UI "captured?" checks (e.g. household edit screen) that don't care
+     *  which prototype/production model was in use at capture time, unlike {@link
+     *  #listForBeneficiary} which a real matching flow would need to filter by. */
+    public boolean existsForBeneficiary(String beneficiaryId) {
+        try (Cursor cursor = dbHelper.getReadableDatabase().query("faces", new String[]{"1"},
+                "beneficiary_id=?", new String[]{beneficiaryId}, null, null, null, "1")) {
+            return cursor.moveToFirst();
+        }
+    }
+
     private static FaceRecord fromCursor(Cursor cursor) {
         FaceRecord record = new FaceRecord();
         record.uuid = cursor.getString(cursor.getColumnIndexOrThrow("uuid"));

@@ -20,12 +20,14 @@ import com.biopay.agent.biometric.BiometricDeviceFactory;
 import com.biopay.agent.data.DatabaseHelper;
 import com.biopay.agent.data.HouseholdDao;
 import com.biopay.agent.face.FaceCaptureActivity;
+import com.biopay.agent.face.FaceRecognitionEngine;
 import com.biopay.agent.face.FaceRecognitionException;
 import com.biopay.agent.face.MlKitFaceRecognitionEngine;
 import com.biopay.agent.login.LoginActivity;
 import com.biopay.agent.network.ApiCallback;
 import com.biopay.agent.network.ApiClient;
 import com.biopay.agent.profile.ProfileActivity;
+import com.biopay.agent.security.SecurityActivity;
 import com.biopay.agent.session.SessionManager;
 import com.biopay.agent.sync.SyncAlertsManager;
 import com.biopay.agent.sync.SyncScheduler;
@@ -40,13 +42,9 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.util.HashMap;
-import java.util.Map;
 
 public class SettingsActivity extends BaseActivity {
     private EditText serverUrl;
-    private EditText currentPassword;
-    private EditText newPassword;
-    private EditText confirmPassword;
 
     private SessionManager sessionManager;
     private SyncAlertsManager syncAlertsManager;
@@ -80,13 +78,11 @@ public class SettingsActivity extends BaseActivity {
         syncAlertsManager = new SyncAlertsManager(this);
 
         serverUrl = findViewById(R.id.etSettingsServer);
-        currentPassword = findViewById(R.id.etCurrentPassword);
-        newPassword = findViewById(R.id.etNewPassword);
-        confirmPassword = findViewById(R.id.etConfirmPassword);
         tvScannerStatus = findViewById(R.id.tvScannerStatus);
         serverUrl.setText(ApiClient.getBaseUrl(this));
 
         setupAccountRow();
+        setupSecurityRow();
         setupNotifications();
         setupBiometrics();
         setupDataAndStorage();
@@ -97,7 +93,6 @@ public class SettingsActivity extends BaseActivity {
             SyncScheduler.triggerNow(this);
             show(R.string.settings_sync_queued);
         });
-        findViewById(R.id.btnChangePassword).setOnClickListener(view -> changePassword());
         findViewById(R.id.btnSendFeedback).setOnClickListener(view -> sendFeedback());
         findViewById(R.id.btnLogout).setOnClickListener(view -> confirmLogout());
 
@@ -117,6 +112,11 @@ public class SettingsActivity extends BaseActivity {
                 partnerCode == null || partnerCode.isEmpty() ? sessionManager.getEmail() : partnerCode);
         findViewById(R.id.rowAccount).setOnClickListener(v ->
                 startActivity(new Intent(this, ProfileActivity.class)));
+    }
+
+    private void setupSecurityRow() {
+        findViewById(R.id.rowSecurity).setOnClickListener(v ->
+                startActivity(new Intent(this, SecurityActivity.class)));
     }
 
     private void setupNotifications() {
@@ -143,38 +143,48 @@ public class SettingsActivity extends BaseActivity {
         findViewById(R.id.btnTestScanner).setOnClickListener(v -> refreshScannerStatus());
         findViewById(R.id.btnTestFace).setOnClickListener(v ->
                 faceCaptureLauncher.launch(new Intent(this, FaceCaptureActivity.class)));
+
+        // Read-only -- which methods are enabled is an org-admin (web dashboard) decision, not a
+        // per-device toggle, so every officer in an organisation sees the same thing here.
+        String enabledMethodsRes;
+        switch (sessionManager.getVerificationMethod()) {
+            case "FACIAL":
+                enabledMethodsRes = getString(R.string.settings_enabled_methods_face);
+                break;
+            case "BOTH":
+                enabledMethodsRes = getString(R.string.settings_enabled_methods_both);
+                break;
+            default:
+                enabledMethodsRes = getString(R.string.settings_enabled_methods_fingerprint);
+        }
+        ((TextView) findViewById(R.id.tvEnabledMethods)).setText(enabledMethodsRes);
     }
 
-    /** Runs the real capture-validation pipeline end to end and reports the honest outcome --
-     *  nothing here is saved or synced, this only exercises detection; see
-     *  {@link MlKitFaceRecognitionEngine} for why matching always reports unavailable. */
+    /** Runs the real capture-&gt;align-&gt;embed pipeline end to end and reports the honest outcome
+     *  -- nothing here is saved or synced. The embedding comes from the explicitly-unvalidated
+     *  prototype model; see {@link MlKitFaceRecognitionEngine} for its provenance/status. */
     private void runFaceDetectionTest(String imagePath) {
         TextView tvFaceBody = findViewById(R.id.tvFaceBody);
         tvFaceBody.setText(R.string.face_test_running);
         new Thread(() -> {
             String outcome;
+            MlKitFaceRecognitionEngine engine = new MlKitFaceRecognitionEngine(this);
             try {
                 byte[] bytes = readFile(imagePath);
-                new MlKitFaceRecognitionEngine().createEmbedding(bytes);
-                // createEmbedding always throws today (see its javadoc) -- reaching here would
-                // mean a real model got wired in without updating this message.
-                outcome = getString(R.string.face_test_no_match_model);
+                FaceRecognitionEngine.CaptureResult result = engine.createEmbedding(bytes);
+                outcome = getString(R.string.face_test_embedding_ok,
+                        result.embedding.length, result.qualityScore);
             } catch (FaceRecognitionException ex) {
-                outcome = isEmbeddingUnavailableMessage(ex)
-                        ? getString(R.string.face_test_no_match_model)
-                        : getString(R.string.face_test_capture_failed, ex.getMessage());
+                outcome = getString(R.string.face_test_capture_failed, ex.getMessage());
             } catch (IOException ex) {
                 outcome = getString(R.string.face_test_capture_failed, ex.getMessage());
             } finally {
+                engine.close();
                 new File(imagePath).delete();
             }
             String finalOutcome = outcome;
             runOnUiThread(() -> tvFaceBody.setText(finalOutcome));
         }).start();
-    }
-
-    private static boolean isEmbeddingUnavailableMessage(FaceRecognitionException ex) {
-        return ex.getMessage() != null && ex.getMessage().contains("no approved face-matching model");
     }
 
     private static byte[] readFile(String path) throws IOException {
@@ -239,37 +249,6 @@ public class SettingsActivity extends BaseActivity {
             @Override public void onError(String message, String responseCode) {
                 findViewById(R.id.btnTestConnection).setEnabled(true);
                 Snackbar.make(serverUrl, message, Snackbar.LENGTH_LONG).show();
-            }
-        });
-    }
-
-    private void changePassword() {
-        String current = currentPassword.getText().toString();
-        String next = newPassword.getText().toString();
-        String confirm = confirmPassword.getText().toString();
-        if (next.length() < 8) {
-            newPassword.setError(getString(R.string.settings_password_length));
-            return;
-        }
-        if (!next.equals(confirm)) {
-            confirmPassword.setError(getString(R.string.settings_password_mismatch));
-            return;
-        }
-        Map<String, Object> params = new HashMap<>();
-        params.put("oldPassword", current);
-        params.put("newPassword", next);
-        findViewById(R.id.btnChangePassword).setEnabled(false);
-        ApiClient.get(this).dispatch("CHANGE_PASSWORD", params, new ApiCallback() {
-            @Override public void onSuccess(JSONObject response) {
-                findViewById(R.id.btnChangePassword).setEnabled(true);
-                currentPassword.setText("");
-                newPassword.setText("");
-                confirmPassword.setText("");
-                show(R.string.settings_password_changed);
-            }
-            @Override public void onError(String message, String responseCode) {
-                findViewById(R.id.btnChangePassword).setEnabled(true);
-                Snackbar.make(currentPassword, message, Snackbar.LENGTH_LONG).show();
             }
         });
     }

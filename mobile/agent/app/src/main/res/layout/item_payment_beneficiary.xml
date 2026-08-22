@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_margin="5dp"
+    app:cardBackgroundColor="@color/bp_surface"
+    app:cardCornerRadius="14dp"
+    app:cardElevation="1dp"
+    app:strokeWidth="0dp">
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="16dp">
+        <TextView android:id="@+id/tvName" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="@color/bp_text_primary" android:textSize="17sp" android:textStyle="bold" />
+        <TextView android:id="@+id/tvSubtitle" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:textColor="@color/bp_text_secondary" android:textSize="13sp" />
+        <TextView
+            android:id="@+id/tvNotEnrolled"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:text="@string/payment_verify_not_enrolled"
+            android:textColor="@color/bp_warning"
+            android:textSize="13sp"
+            android:visibility="gone" />
+        <LinearLayout
+            android:id="@+id/verifyButtonRow"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:orientation="horizontal">
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnVerifyFingerprint"
+                style="@style/BioPay.PrimaryButton"
+                android:layout_width="0dp"
+                android:layout_height="52dp"
+                android:layout_marginEnd="5dp"
+                android:layout_weight="1"
+                android:text="@string/payment_verify_fingerprint"
+                app:icon="@drawable/ic_fingerprint" />
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnVerifyFace"
+                style="@style/BioPay.SecondaryButton"
+                android:layout_width="0dp"
+                android:layout_marginStart="5dp"
+                android:layout_weight="1"
+                android:text="@string/payment_verify_face"
+                android:textColor="@color/bp_secondary_dark"
+                app:icon="@drawable/ic_face"
+                app:strokeColor="@color/bp_secondary" />
+        </LinearLayout>
+        <TextView
+            android:id="@+id/tvFaceAccuracyNotice"
+            style="@style/BioPay.SupportingText"
+            android:layout_marginTop="6dp"
+            android:text="@string/face_accuracy_notice"
+            android:textColor="@color/bp_warning"
+            android:visibility="gone" />
+    </LinearLayout>
+</com.google.android.material.card.MaterialCardView>

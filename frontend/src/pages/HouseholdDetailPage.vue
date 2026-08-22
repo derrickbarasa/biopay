@@ -17,6 +17,9 @@ interface Alternate {
   alternateName?: string
   relationship?: string
   phoneNumber?: string
+  age?: number
+  gender?: string
+  images?: string[]
 }
 
 const route = useRoute()
@@ -39,15 +42,27 @@ interface AuditEvent {
   details?: string
   createdAt?: string
 }
+interface VoucherEvent {
+  voucherCode?: string
+  amount?: number
+  status?: string
+  purpose?: string
+  expiresAt?: string
+  redeemedAt?: string
+  createdAt?: string
+}
 
 const loading = ref(true)
 const detail = ref<Record<string, any> | null>(null)
 const alternates = ref<Alternate[]>([])
 const payments = ref<PaymentEvent[]>([])
 const events = ref<AuditEvent[]>([])
+const vouchers = ref<VoucherEvent[]>([])
 // Object URLs for photos fetched (with the auth header) through apiClient as blobs --
 // a plain <img src> can't reach the JWT-protected /files route.
 const photoUrls = ref<string[]>([])
+// Same blob-fetch pattern, keyed by alternateNumber, for each alternate's own gallery.
+const alternatePhotoUrls = ref<Record<string, string[]>>({})
 
 // Name-not-code lookups, matching the pattern used on the Households list page.
 const organizations = ref<{ organisationCode: string; name: string }[]>([])
@@ -100,10 +115,17 @@ function revokePhotos() {
   photoUrls.value = []
 }
 
+function revokeAlternatePhotos() {
+  for (const urls of Object.values(alternatePhotoUrls.value)) {
+    for (const u of urls) URL.revokeObjectURL(u)
+  }
+  alternatePhotoUrls.value = {}
+}
+
 // Fetches each JWT-protected photo through apiClient (which attaches the bearer
-// token) and turns the blob into a displayable object URL.
-async function loadPhotos(paths: string[]) {
-  revokePhotos()
+// token) and turns the blob into a displayable object URL. Shared by the household
+// head's own gallery and every alternate's gallery below.
+async function fetchPhotoBlobs(paths: string[]): Promise<string[]> {
   const urls: string[] = []
   for (const p of paths) {
     try {
@@ -114,7 +136,21 @@ async function loadPhotos(paths: string[]) {
       // Skip an image that fails to load rather than failing the whole page.
     }
   }
-  photoUrls.value = urls
+  return urls
+}
+
+async function loadPhotos(paths: string[]) {
+  revokePhotos()
+  photoUrls.value = await fetchPhotoBlobs(paths)
+}
+
+async function loadAlternatePhotos() {
+  revokeAlternatePhotos()
+  const withPhotos = alternates.value.filter((a) => a.alternateNumber && a.images?.length)
+  const entries = await Promise.all(
+    withPhotos.map(async (a) => [a.alternateNumber as string, await fetchPhotoBlobs(a.images ?? [])] as const),
+  )
+  alternatePhotoUrls.value = Object.fromEntries(entries)
 }
 
 async function load() {
@@ -123,7 +159,7 @@ async function load() {
     const [h, alts, hist] = await Promise.all([
       dispatch<{ results: any[] }>('GET_HOUSEHOLD', { householdNumber: householdNumber.value }),
       dispatch<{ results: Alternate[] }>('GET_ALTERNATES', { householdNumber: householdNumber.value }),
-      dispatch<{ results: { payments: PaymentEvent[]; events: AuditEvent[] } }>(
+      dispatch<{ results: { payments: PaymentEvent[]; events: AuditEvent[]; vouchers: VoucherEvent[] } }>(
         'GET_HOUSEHOLD_HISTORY', { householdNumber: householdNumber.value },
       ),
     ])
@@ -131,8 +167,10 @@ async function load() {
     alternates.value = alts.results ?? []
     payments.value = hist.results?.payments ?? []
     events.value = hist.results?.events ?? []
+    vouchers.value = hist.results?.vouchers ?? []
     const images: string[] = detail.value?.images ?? []
     if (images.length) loadPhotos(images)
+    loadAlternatePhotos()
   } catch (err) {
     toast.error(err instanceof Error ? err.message : 'Failed to load household')
   } finally {
@@ -160,7 +198,10 @@ async function loadNameLookups() {
   }
 }
 
-onUnmounted(revokePhotos)
+onUnmounted(() => {
+  revokePhotos()
+  revokeAlternatePhotos()
+})
 
 function goBack() {
   router.push({ name: 'households' })
@@ -256,6 +297,84 @@ function exportAlternates() {
   downloadCsv(`alternates-${householdNumber.value}.csv`, csv)
 }
 
+// ---- Add alternate (+ optional photo) -----------------------------------------
+// Creates the alternate via CREATE_ALTERNATE (already anchor/org scoped, same as
+// CREATE_HOUSEHOLD), then -- if a photo was picked -- uploads it via the existing
+// mobile-facing UPLOAD_IMAGE code, keyed to the new alternateNumber with
+// beneficiaryType 2 (alternate), matching the app-wide 1=head/2=alternate
+// convention. Nothing new is invented on the backend for either step.
+
+const addAltDialog = ref(false)
+const addingAlt = ref(false)
+const altForm = ref({ alternateName: '', relationship: '', phoneNumber: '', gender: '', age: null as number | null })
+const altPhotoFile = ref<File | null>(null)
+
+function openAddAlternate() {
+  altForm.value = { alternateName: '', relationship: '', phoneNumber: '', gender: '', age: null }
+  altPhotoFile.value = null
+  addAltDialog.value = true
+}
+
+function onAltPhotoFile(event: Event) {
+  altPhotoFile.value = (event.target as HTMLInputElement).files?.[0] ?? null
+}
+
+function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result ?? ''))
+    reader.onerror = () => reject(reader.error ?? new Error('Failed to read the selected file'))
+    reader.readAsDataURL(file)
+  })
+}
+
+async function saveAlternate() {
+  if (!altForm.value.alternateName.trim()) {
+    toast.error('Name is required')
+    return
+  }
+  addingAlt.value = true
+  try {
+    const organisationCode = auth.isAnchor ? detail.value?.organisationCode : undefined
+    const created = await dispatch<{ alternateNumber: string }>('CREATE_ALTERNATE', {
+      householdNumber: householdNumber.value,
+      organisationCode,
+      alternateName: altForm.value.alternateName.trim(),
+      relationship: altForm.value.relationship || undefined,
+      phoneNumber: altForm.value.phoneNumber || undefined,
+      gender: altForm.value.gender || undefined,
+      age: altForm.value.age ?? undefined,
+    })
+    if (altPhotoFile.value) {
+      try {
+        const dataUrl = await fileToDataUrl(altPhotoFile.value)
+        const extension = (altPhotoFile.value.name.split('.').pop() || 'jpg').toLowerCase()
+        await dispatch('UPLOAD_IMAGE', {
+          beneficiaryId: created.alternateNumber,
+          beneficiaryType: 2,
+          imageBase64: dataUrl,
+          extension,
+          organisationCode,
+        })
+      } catch (err) {
+        toast.error(err instanceof Error
+          ? `Alternate added, but the photo failed to upload: ${err.message}`
+          : 'Alternate added, but the photo failed to upload')
+        addAltDialog.value = false
+        await load()
+        return
+      }
+    }
+    toast.success('Alternate added')
+    addAltDialog.value = false
+    await load()
+  } catch (err) {
+    toast.error(err instanceof Error ? err.message : 'Failed to add alternate')
+  } finally {
+    addingAlt.value = false
+  }
+}
+
 onMounted(() => { load(); loadNameLookups() })
 </script>
 
@@ -323,20 +442,49 @@ onMounted(() => { load(); loadNameLookups() })
               size="small"
               variant="text"
               prepend-icon="mdi-download"
+              class="mr-2"
               @click="exportAlternates"
             >
               Export
             </v-btn>
+            <v-btn
+              size="small"
+              color="secondary"
+              prepend-icon="mdi-account-plus-outline"
+              @click="openAddAlternate"
+            >
+              Add alternate
+            </v-btn>
           </v-card-title>
           <v-divider />
           <v-list v-if="alternates.length">
-            <v-list-item
-              v-for="a in alternates"
-              :key="a.alternateNumber ?? a.alternateName"
-              :title="a.alternateName"
-              :subtitle="[a.relationship, a.phoneNumber].filter(Boolean).join(' · ') || undefined"
-              prepend-icon="mdi-account-child-outline"
-            />
+            <template v-for="a in alternates" :key="a.alternateNumber ?? a.alternateName">
+              <v-list-item
+                :title="a.alternateName"
+                :subtitle="[a.relationship, a.phoneNumber].filter(Boolean).join(' · ') || undefined"
+              >
+                <template #prepend>
+                  <v-avatar v-if="alternatePhotoUrls[a.alternateNumber ?? '']?.length" size="40">
+                    <v-img :src="alternatePhotoUrls[a.alternateNumber ?? '']![0]" cover />
+                  </v-avatar>
+                  <v-icon v-else icon="mdi-account-child-outline" />
+                </template>
+              </v-list-item>
+              <div
+                v-if="(alternatePhotoUrls[a.alternateNumber ?? ''] ?? []).length > 1"
+                class="px-4 pb-3 d-flex ga-2 flex-wrap"
+              >
+                <v-img
+                  v-for="(src, i) in (alternatePhotoUrls[a.alternateNumber ?? ''] ?? []).slice(1)"
+                  :key="i"
+                  :src="src"
+                  width="56"
+                  height="56"
+                  cover
+                  class="rounded-lg"
+                />
+              </div>
+            </template>
           </v-list>
           <v-card-text v-else class="text-medium-emphasis">
             No alternates registered for this household.
@@ -362,6 +510,31 @@ onMounted(() => { load(); loadNameLookups() })
             </v-list-item>
           </v-list>
           <v-card-text v-else class="text-medium-emphasis">No payments recorded for this household.</v-card-text>
+        </v-card>
+
+        <v-card variant="flat" border class="mt-4">
+          <v-card-title class="text-subtitle-1 font-weight-bold">Voucher history</v-card-title>
+          <v-divider />
+          <v-list v-if="vouchers.length">
+            <v-list-item
+              v-for="v in vouchers"
+              :key="v.voucherCode"
+              :title="`${(v.amount ?? 0).toLocaleString()}${v.purpose ? ' · ' + v.purpose : ''}`"
+              :subtitle="[v.voucherCode, v.status === 'REDEEMED' ? v.redeemedAt : v.createdAt].filter(Boolean).join(' · ') || undefined"
+              prepend-icon="mdi-ticket-confirmation-outline"
+            >
+              <template #append>
+                <v-chip
+                  size="small"
+                  variant="tonal"
+                  :color="v.status === 'REDEEMED' ? 'success' : v.status === 'VOID' ? 'error' : 'warning'"
+                >
+                  {{ v.status ?? 'ISSUED' }}
+                </v-chip>
+              </template>
+            </v-list-item>
+          </v-list>
+          <v-card-text v-else class="text-medium-emphasis">No vouchers issued to this household.</v-card-text>
         </v-card>
 
         <v-card variant="flat" border class="mt-4">
@@ -417,5 +590,45 @@ onMounted(() => { load(); loadNameLookups() })
         </v-card>
       </v-col>
     </v-row>
+
+    <v-dialog v-model="addAltDialog" max-width="520">
+      <v-card>
+        <v-card-title class="d-flex align-center">
+          Add alternate
+          <v-spacer />
+          <v-btn icon="mdi-close" variant="text" size="small" @click="addAltDialog = false" />
+        </v-card-title>
+        <v-divider />
+        <v-card-text class="d-flex flex-column ga-3 pt-4">
+          <v-text-field v-model="altForm.alternateName" label="Full name" hide-details density="compact" />
+          <v-text-field v-model="altForm.relationship" label="Relationship to household head" hide-details density="compact" />
+          <div class="d-flex ga-3">
+            <v-text-field v-model.number="altForm.age" label="Age" type="number" hide-details density="compact" />
+            <v-select
+              v-model="altForm.gender"
+              :items="[{ title: 'Male', value: 'M' }, { title: 'Female', value: 'F' }]"
+              label="Gender"
+              clearable
+              hide-details
+              density="compact"
+            />
+          </div>
+          <v-text-field v-model="altForm.phoneNumber" label="Phone number" hide-details density="compact" />
+          <v-file-input
+            label="Photo (optional)"
+            accept="image/*"
+            prepend-icon="mdi-camera-outline"
+            hide-details
+            density="compact"
+            @change="onAltPhotoFile"
+          />
+        </v-card-text>
+        <v-card-actions class="pa-4 pt-0">
+          <v-spacer />
+          <v-btn variant="text" @click="addAltDialog = false">Cancel</v-btn>
+          <v-btn color="secondary" :loading="addingAlt" @click="saveAlternate">Save</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </div>
 </template>

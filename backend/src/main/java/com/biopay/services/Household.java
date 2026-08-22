@@ -305,8 +305,12 @@ public class Household extends AbstractVerticle {
                 .recover(err -> Future.succeededFuture(new JsonArray()));
     }
 
-    // ---- GET_HOUSEHOLD_HISTORY (payment records + audit trail for one household) ----
-    // Backs the household detail page's "audit history / when it was paid" section.
+    // ---- GET_HOUSEHOLD_HISTORY (payment records + audit trail + vouchers for one household) ----
+    // Backs the household detail page's "audit history / when it was paid / voucher history"
+    // sections. Vouchers are folded into this existing handler (rather than a new
+    // GET_HOUSEHOLD_VOUCHERS code) since vouchers.household_number already exists
+    // (005_locations_and_vouchers.sql) and this is the same one-household-number-in,
+    // three-lists-out shape as the payments/audit pair already here.
 
     private void history(Message<Object> message) {
         JsonObject payload = new JsonObject(message.body().toString());
@@ -358,14 +362,37 @@ public class Household extends AbstractVerticle {
                 })
                 .recover(err -> Future.succeededFuture(new JsonArray()));
 
-        Future.all(paymentsFut, auditFut)
+        String voucherSql = "SELECT voucher_code, amount, status, purpose, expires_at, redeemed_at, created_at FROM vouchers "
+                + "WHERE household_number=@p1" + (anchor ? "" : " AND partner_code=@p2") + " ORDER BY created_at DESC";
+        Tuple voucherParams = anchor ? Tuple.of(householdNumber) : Tuple.of(householdNumber, partnerCode);
+
+        Future<JsonArray> vouchersFut = pool.preparedQuery(voucherSql)
+                .execute(voucherParams)
+                .map(rows -> {
+                    JsonArray arr = new JsonArray();
+                    for (Row r : rows) {
+                        arr.add(new JsonObject()
+                                .put("voucherCode", Rows.str(r, "voucher_code"))
+                                .put("amount", Rows.dbl(r, "amount"))
+                                .put("status", Rows.str(r, "status"))
+                                .put("purpose", Rows.str(r, "purpose"))
+                                .put("expiresAt", Rows.str(r, "expires_at"))
+                                .put("redeemedAt", Rows.str(r, "redeemed_at"))
+                                .put("createdAt", Rows.str(r, "created_at")));
+                    }
+                    return arr;
+                })
+                .recover(err -> Future.succeededFuture(new JsonArray()));
+
+        Future.all(paymentsFut, auditFut, vouchersFut)
                 .onFailure(err -> onDbError(message, err))
                 .onSuccess(cf -> reply(message, new JsonObject()
                         .put("responseCode", "000")
                         .put("responseMessage", "OK")
                         .put("results", new JsonObject()
                                 .put("payments", (JsonArray) cf.resultAt(0))
-                                .put("events", (JsonArray) cf.resultAt(1)))));
+                                .put("events", (JsonArray) cf.resultAt(1))
+                                .put("vouchers", (JsonArray) cf.resultAt(2)))));
     }
 
     // ---- GET_HOUSEHOLD_VOUCHER (self-contained printable payment voucher) -----------
@@ -828,6 +855,11 @@ public class Household extends AbstractVerticle {
     }
 
     // ---- GET_ALTERNATES (by household) -------------------------------------------
+    // Each alternate carries its own `images` gallery -- the images table's beneficiary_id
+    // is already a generic beneficiary key (household_number OR alternate_number, per the
+    // mobile beneficiaryType convention: 1 = household head, 2 = alternate), so no schema
+    // change is needed to look images up by alternate_number the same way GET_HOUSEHOLD
+    // already does by household_number (see #imageUrls).
 
     private void retrieveAlternates(Message<Object> message) {
         JsonObject payload = new JsonObject(message.body().toString());
@@ -840,21 +872,34 @@ public class Household extends AbstractVerticle {
                 .execute(params)
                 .onFailure(err -> onDbError(message, err))
                 .onSuccess(rows -> {
-                    JsonArray results = new JsonArray();
+                    java.util.List<Row> rowList = new java.util.ArrayList<>();
                     for (Row r : rows) {
-                        results.add(new JsonObject()
-                                .put("alternateNumber", Rows.str(r, "alternate_number"))
-                                .put("alternateName", Rows.str(r, "alternate_name"))
-                                .put("relationship", Rows.str(r, "relationship"))
-                                .put("age", Rows.intVal(r, "age"))
-                                .put("phoneNumber", Rows.str(r, "phone_number"))
-                                .put("gender", Rows.str(r, "gender"))
-                                .put("status", Rows.intVal(r, "status")));
+                        rowList.add(r);
                     }
-                    reply(message, new JsonObject()
-                            .put("responseCode", "000")
-                            .put("responseMessage", results.isEmpty() ? "No alternates found" : "Alternates found")
-                            .put("results", results));
+                    java.util.List<Future<?>> imageFutures = new java.util.ArrayList<>();
+                    for (Row r : rowList) {
+                        imageFutures.add(imageUrls(Rows.str(r, "alternate_number")));
+                    }
+                    Future.all(imageFutures).onComplete(ar -> {
+                        JsonArray results = new JsonArray();
+                        for (int i = 0; i < rowList.size(); i++) {
+                            Row r = rowList.get(i);
+                            JsonArray images = ar.succeeded() ? (JsonArray) ar.result().resultAt(i) : new JsonArray();
+                            results.add(new JsonObject()
+                                    .put("alternateNumber", Rows.str(r, "alternate_number"))
+                                    .put("alternateName", Rows.str(r, "alternate_name"))
+                                    .put("relationship", Rows.str(r, "relationship"))
+                                    .put("age", Rows.intVal(r, "age"))
+                                    .put("phoneNumber", Rows.str(r, "phone_number"))
+                                    .put("gender", Rows.str(r, "gender"))
+                                    .put("status", Rows.intVal(r, "status"))
+                                    .put("images", images));
+                        }
+                        reply(message, new JsonObject()
+                                .put("responseCode", "000")
+                                .put("responseMessage", results.isEmpty() ? "No alternates found" : "Alternates found")
+                                .put("results", results));
+                    });
                 });
     }
 }

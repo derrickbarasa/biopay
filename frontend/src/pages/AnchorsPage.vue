@@ -1,12 +1,18 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { onMounted, reactive, ref, watch } from 'vue'
 import { dispatch } from '@/api/client'
 import { useToast } from '@/composables/useToast'
+import { COUNTRIES } from '@/types/user'
+import { capitalFor } from '@/utils/countries'
 
-interface Anchor { id:number; anchorCode:string; name:string; authorisedName?:string; authorisedEmail?:string; authorisedContact?:string; address?:string; website?:string; status:number }
+interface Anchor { id:number; anchorCode:string; name:string; authorisedName?:string; authorisedEmail?:string; authorisedContact?:string; address?:string; country?:string; city?:string; website?:string; status:number }
 const toast=useToast(); const loading=ref(false); const saving=ref(false); const anchor=reactive<Anchor>({id:0,anchorCode:'',name:'',status:1})
 async function load(){loading.value=true;try{const r=await dispatch<{results:Anchor[]}>('GET_ANCHORS');Object.assign(anchor,r.results?.[0]??{})}catch(e){toast.error(e instanceof Error?e.message:'Unable to load anchor')}finally{loading.value=false}}
 async function save(){saving.value=true;try{await dispatch('UPDATE_ANCHOR',{...anchor});toast.success('Anchor details updated')}catch(e){toast.error(e instanceof Error?e.message:'Update failed')}finally{saving.value=false}}
+// Auto-fills the capital when a country is picked; still a plain editable field afterwards.
+watch(() => anchor.country, (country, previous) => {
+  if (country && country !== previous) anchor.city = capitalFor(country) || anchor.city
+})
 onMounted(load)
 </script>
 
@@ -25,9 +31,11 @@ onMounted(load)
         <v-text-field v-model="anchor.authorisedName" label="Authorised contact" variant="outlined" />
         <v-text-field v-model="anchor.authorisedEmail" label="Contact email" type="email" variant="outlined" />
         <v-text-field v-model="anchor.authorisedContact" label="Phone" variant="outlined" />
-        <v-text-field v-model="anchor.address" label="Address" variant="outlined" />
+        <v-autocomplete v-model="anchor.country" :items="COUNTRIES" label="Country" variant="outlined" />
+        <v-text-field v-model="anchor.city" label="City" variant="outlined" />
+        <v-text-field v-model="anchor.address" label="Address" placeholder="e.g. Karen Road" variant="outlined" />
       </v-card-text>
-      <v-card-actions class="px-6 pb-6"><v-spacer/><v-btn color="primary" :loading="saving" @click="save">Save changes</v-btn></v-card-actions>
+      <v-card-actions class="px-6 pb-6"><v-spacer/><v-btn color="secondary" :loading="saving" @click="save">Save changes</v-btn></v-card-actions>
     </v-card>
   </div>
 </template>

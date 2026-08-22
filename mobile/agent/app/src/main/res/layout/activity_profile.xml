@@ -7,6 +7,8 @@
     android:fitsSystemWindows="true"
     android:orientation="vertical">
 
+    <com.google.android.material.appbar.MaterialToolbar android:id="@+id/toolbar" style="@style/BioPay.Toolbar" android:title="@string/profile_title" app:navigationIcon="@drawable/ic_arrow_back" app:navigationIconTint="@color/bp_text_primary" />
+
     <androidx.core.widget.NestedScrollView
         android:layout_width="match_parent"
         android:layout_height="0dp"
@@ -65,15 +67,4 @@
             <com.google.android.material.button.MaterialButton android:id="@+id/btnSaveProfile" style="@style/BioPay.PrimaryButton" android:layout_marginTop="20dp" android:text="@string/profile_save" />
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>
-
-    <com.google.android.material.bottomnavigation.BottomNavigationView
-        android:id="@+id/bottomNavigation"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:background="@color/bp_surface"
-        android:minHeight="72dp"
-        app:itemIconTint="@color/navigation_item_color"
-        app:itemTextColor="@color/navigation_item_color"
-        app:labelVisibilityMode="labeled"
-        app:menu="@menu/main_navigation" />
 </LinearLayout>

@@ -1,9 +1,9 @@
 package com.biopay.agent.face;
 
+import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
-
-import androidx.annotation.NonNull;
+import android.graphics.PointF;
 
 import com.google.android.gms.tasks.Tasks;
 import com.google.mlkit.vision.common.InputImage;
@@ -11,6 +11,7 @@ import com.google.mlkit.vision.face.Face;
 import com.google.mlkit.vision.face.FaceDetection;
 import com.google.mlkit.vision.face.FaceDetector;
 import com.google.mlkit.vision.face.FaceDetectorOptions;
+import com.google.mlkit.vision.face.FaceLandmark;
 
 import java.util.List;
 import java.util.concurrent.ExecutionException;
@@ -20,28 +21,33 @@ import java.util.concurrent.TimeoutException;
 /**
  * The only {@link FaceRecognitionEngine} implementation in this app. Detection (find a single,
  * well-framed face) is real and fully functional via ML Kit -- a free, on-device, Google-shipped
- * SDK. The identity-matching half is not: Google does not publicly distribute a face-
- * identification (embedding) model (only detection and landmark/mesh models), and no unvalidated
- * community model may be silently wired in as if it were production-ready (see the explicit
- * decision recorded in progress.md). {@link #createEmbedding} therefore runs the real detection
- * validation first, and only then fails with a clearly-labelled, typed error -- it never fabricates
- * a fake embedding.
+ * SDK. Google does not publicly distribute a face-identification (embedding) model, so the
+ * embedding half is backed by a separate, explicitly-labeled <b>prototype</b>: the
+ * VirtuoTuring/virtuoturing-face-embedder ONNX model run via {@link OnnxFaceEmbedder} -- see
+ * {@code assets/face/README.md} and {@code progress.md} for its provenance, license, and why it
+ * must not be mistaken for a validated production model (zero community adoption, ~23,660-image
+ * training set, no published accuracy benchmark). The intended production path is IDEMIA
+ * MorphoKit, pending separate licensing; this prototype exists to prove out the
+ * capture-&gt;align-&gt;embed-&gt;match pipeline in the meantime and is expected to be replaced,
+ * not extended, once that licensing is settled.
  */
 public class MlKitFaceRecognitionEngine implements FaceRecognitionEngine {
 
-    /** Not a real production model tag -- deliberately unambiguous that no matching model backs
-     *  it, so this string can never be mistaken for (or silently synced as) a real embedding model
-     *  version if a caller ever ignores the thrown exception. */
-    public static final String MODEL_VERSION = "mlkit-detection-only-v1-no-embedding";
+    /** Flags this as the unvalidated prototype so nothing downstream can mistake it for a
+     *  production-grade model tag if it's ever synced/compared against a real one later. */
+    public static final String MODEL_VERSION = "virtuoturing-embedder-v1-PROTOTYPE-unvalidated";
 
     private static final long DETECT_TIMEOUT_SECONDS = 10;
 
+    private final Context appContext;
     private final FaceDetector detector;
+    private OnnxFaceEmbedder embedder;
 
-    public MlKitFaceRecognitionEngine() {
+    public MlKitFaceRecognitionEngine(Context context) {
+        this.appContext = context.getApplicationContext();
         FaceDetectorOptions options = new FaceDetectorOptions.Builder()
                 .setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_ACCURATE)
-                .setLandmarkMode(FaceDetectorOptions.LANDMARK_MODE_NONE)
+                .setLandmarkMode(FaceDetectorOptions.LANDMARK_MODE_ALL) // alignment needs eye positions
                 .setClassificationMode(FaceDetectorOptions.CLASSIFICATION_MODE_NONE)
                 .build();
         this.detector = FaceDetection.getClient(options);
@@ -54,29 +60,62 @@ public class MlKitFaceRecognitionEngine implements FaceRecognitionEngine {
 
     @Override
     public CaptureResult createEmbedding(byte[] encodedImage) throws FaceRecognitionException {
-        DetectedFace detected = detectSingleUsableFace(encodedImage);
-
-        // ---- Embedding integration point ----
-        // Detection above is real; this is where a *vetted, approved* embedding model would run
-        // (compute a fixed-length identity vector from `detected`, matched via FaceMatcher's
-        // existing cosine comparison). No such model is configured -- see the class javadoc for
-        // why one isn't simply downloaded here. Wire a real model in at this exact point once one
-        // is sourced and approved; until then this must keep throwing, not fabricate a vector.
-        throw new FaceRecognitionException(
-                "Face detected and validated, but no approved face-matching model is configured. "
-                        + "Identity verification is not available yet -- see "
-                        + "MlKitFaceRecognitionEngine.createEmbedding() for the integration point.");
-    }
-
-    /** Runs real ML Kit detection + the {@link FaceDetectionHeuristics} quality gate; throws a
-     *  specific, user-actionable {@link FaceRecognitionException} for each real capture problem
-     *  (no face / multiple faces / face too small) before ever reaching the embedding stub above,
-     *  so a caller can tell "bad capture, try again" apart from "feature not available yet". */
-    private DetectedFace detectSingleUsableFace(byte[] encodedImage) throws FaceRecognitionException {
         Bitmap bitmap = BitmapFactory.decodeByteArray(encodedImage, 0, encodedImage.length);
         if (bitmap == null) {
             throw new FaceRecognitionException("Captured image could not be decoded");
         }
+
+        Face face = detectSingleUsableFace(bitmap);
+        PointF leftEye = landmarkPosition(face, FaceLandmark.LEFT_EYE);
+        PointF rightEye = landmarkPosition(face, FaceLandmark.RIGHT_EYE);
+        if (leftEye == null || rightEye == null) {
+            throw new FaceRecognitionException(
+                    "Could not locate both eyes in the capture. Face the camera directly and try again.");
+        }
+
+        Bitmap aligned = FaceAligner.align(bitmap, leftEye, rightEye);
+        float[] embedding = embedder().embed(aligned);
+        double qualityScore = faceQualityScore(face, bitmap.getWidth(), bitmap.getHeight());
+
+        // Liveness is explicitly out of scope for this prototype -- see the class javadoc and
+        // progress.md. Never report true without a real liveness signal behind it.
+        return new CaptureResult(embedding, qualityScore, /*live=*/false);
+    }
+
+    private OnnxFaceEmbedder embedder() throws FaceRecognitionException {
+        if (embedder == null) {
+            embedder = new OnnxFaceEmbedder(appContext);
+        }
+        return embedder;
+    }
+
+    /** Releases the ONNX Runtime session if one was loaded. Safe to call even if never used. */
+    public void close() {
+        if (embedder != null) {
+            embedder.close();
+            embedder = null;
+        }
+    }
+
+    private static PointF landmarkPosition(Face face, int landmarkType) {
+        FaceLandmark landmark = face.getLandmark(landmarkType);
+        return landmark != null ? landmark.getPosition() : null;
+    }
+
+    /** Coarse, non-rigorous heuristic (relative face size in frame) -- not a calibrated
+     *  face-image-quality metric. Good enough to surface on the Settings test screen; not to be
+     *  used as an acceptance gate without real validation. */
+    private static double faceQualityScore(Face face, int imageWidth, int imageHeight) {
+        int shorterSide = Math.min(imageWidth, imageHeight);
+        if (shorterSide <= 0) return 0;
+        int smallerBoxSide = Math.min(face.getBoundingBox().width(), face.getBoundingBox().height());
+        return Math.max(0.0, Math.min(1.0, smallerBoxSide / (double) shorterSide));
+    }
+
+    /** Runs real ML Kit detection + the {@link FaceDetectionHeuristics} quality gate; throws a
+     *  specific, user-actionable {@link FaceRecognitionException} for each real capture problem
+     *  (no face / multiple faces / face too small). */
+    private Face detectSingleUsableFace(Bitmap bitmap) throws FaceRecognitionException {
         InputImage inputImage = InputImage.fromBitmap(bitmap, 0);
         List<Face> faces;
         try {
@@ -107,13 +146,7 @@ public class MlKitFaceRecognitionEngine implements FaceRecognitionEngine {
                 throw new FaceRecognitionException("The detected face is too small or off-frame. Move closer and center the face.");
             case OK:
             default:
-                return new DetectedFace(single);
+                return single;
         }
-    }
-
-    /** Marker wrapper -- keeps the ML Kit {@link Face} type from leaking past this file. */
-    private static final class DetectedFace {
-        @NonNull final Face face;
-        DetectedFace(@NonNull Face face) { this.face = face; }
     }
 }

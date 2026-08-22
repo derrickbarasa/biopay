@@ -64,17 +64,6 @@
                 <com.google.android.material.textfield.MaterialAutoCompleteTextView android:id="@+id/spinnerGender" android:layout_width="match_parent" android:layout_height="wrap_content" android:inputType="none" />
             </com.google.android.material.textfield.TextInputLayout>
 
-            <TextView style="@style/BioPay.SectionHeader" android:text="@string/section_biometric_registration" />
-            <com.google.android.material.textfield.TextInputLayout
-                style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="10dp"
-                android:hint="@string/field_registration_method">
-                <com.google.android.material.textfield.MaterialAutoCompleteTextView android:id="@+id/spinnerRegistrationMethod" android:layout_width="match_parent" android:layout_height="wrap_content" android:inputType="none" />
-            </com.google.android.material.textfield.TextInputLayout>
-            <TextView style="@style/BioPay.SupportingText" android:text="@string/biometric_registration_note" />
-
             <TextView style="@style/BioPay.SectionHeader" android:text="@string/section_location" />
             <TextView style="@style/BioPay.SupportingText" android:text="@string/location_picker_note" />
 
@@ -128,17 +117,17 @@
                 android:orientation="vertical"
                 android:visibility="gone">
 
-                <com.google.android.material.textfield.TextInputLayout style="@style/BioPay.FormField" android:hint="@string/field_state_code">
-                    <com.google.android.material.textfield.TextInputEditText android:id="@+id/etStateCode" android:layout_width="match_parent" android:layout_height="wrap_content" android:inputType="textCapCharacters" android:imeOptions="actionNext" android:singleLine="true" />
+                <com.google.android.material.textfield.TextInputLayout style="@style/BioPay.FormField" android:hint="@string/field_state_name">
+                    <com.google.android.material.textfield.TextInputEditText android:id="@+id/etStateName" android:layout_width="match_parent" android:layout_height="wrap_content" android:inputType="textCapWords" android:imeOptions="actionNext" android:singleLine="true" />
                 </com.google.android.material.textfield.TextInputLayout>
-                <com.google.android.material.textfield.TextInputLayout style="@style/BioPay.FormField" android:hint="@string/field_county_code">
-                    <com.google.android.material.textfield.TextInputEditText android:id="@+id/etCountyCode" android:layout_width="match_parent" android:layout_height="wrap_content" android:inputType="textCapCharacters" android:imeOptions="actionNext" android:singleLine="true" />
+                <com.google.android.material.textfield.TextInputLayout style="@style/BioPay.FormField" android:hint="@string/field_county_name">
+                    <com.google.android.material.textfield.TextInputEditText android:id="@+id/etCountyName" android:layout_width="match_parent" android:layout_height="wrap_content" android:inputType="textCapWords" android:imeOptions="actionNext" android:singleLine="true" />
                 </com.google.android.material.textfield.TextInputLayout>
-                <com.google.android.material.textfield.TextInputLayout style="@style/BioPay.FormField" android:hint="@string/field_location_code">
-                    <com.google.android.material.textfield.TextInputEditText android:id="@+id/etPayamCode" android:layout_width="match_parent" android:layout_height="wrap_content" android:inputType="textCapCharacters" android:imeOptions="actionNext" android:singleLine="true" />
+                <com.google.android.material.textfield.TextInputLayout style="@style/BioPay.FormField" android:hint="@string/field_location_name">
+                    <com.google.android.material.textfield.TextInputEditText android:id="@+id/etPayamName" android:layout_width="match_parent" android:layout_height="wrap_content" android:inputType="textCapWords" android:imeOptions="actionNext" android:singleLine="true" />
                 </com.google.android.material.textfield.TextInputLayout>
-                <com.google.android.material.textfield.TextInputLayout style="@style/BioPay.FormField" android:hint="@string/field_village_code">
-                    <com.google.android.material.textfield.TextInputEditText android:id="@+id/etBomaCode" android:layout_width="match_parent" android:layout_height="wrap_content" android:inputType="textCapCharacters" android:imeOptions="actionNext" android:singleLine="true" />
+                <com.google.android.material.textfield.TextInputLayout style="@style/BioPay.FormField" android:hint="@string/field_village_name">
+                    <com.google.android.material.textfield.TextInputEditText android:id="@+id/etBomaName" android:layout_width="match_parent" android:layout_height="wrap_content" android:inputType="textCapWords" android:imeOptions="actionNext" android:singleLine="true" />
                 </com.google.android.material.textfield.TextInputLayout>
             </LinearLayout>
 
@@ -182,6 +171,48 @@
                     <com.google.android.material.checkbox.MaterialCheckBox android:id="@+id/cbEligible" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="52dp" android:checked="true" android:text="@string/field_eligible" />
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
+
+            <!-- Editing an existing household: shows who's captured so far and lets the officer
+                 capture the head (if still missing) or add/capture more people. Hidden while
+                 creating a new household, since PersonCaptureActivity handles that flow instead. -->
+            <LinearLayout
+                android:id="@+id/capturedPeopleSection"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone">
+                <TextView style="@style/BioPay.SectionHeader" android:text="@string/household_captured_people_title" />
+                <LinearLayout
+                    android:id="@+id/capturedPeopleList"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical" />
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnAddPersonFromEdit"
+                    style="@style/Widget.Material3.Button.OutlinedButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:text="@string/person_capture_add_another" />
+            </LinearLayout>
+
+            <TextView style="@style/BioPay.SectionHeader" android:text="@string/section_biometric_registration" />
+            <com.google.android.material.textfield.TextInputLayout
+                style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="4dp"
+                android:hint="@string/field_registration_method">
+                <com.google.android.material.textfield.MaterialAutoCompleteTextView android:id="@+id/spinnerRegistrationMethod" android:layout_width="match_parent" android:layout_height="wrap_content" android:inputType="none" />
+            </com.google.android.material.textfield.TextInputLayout>
+            <TextView style="@style/BioPay.SupportingText" android:text="@string/biometric_registration_note" />
+            <TextView
+                android:id="@+id/tvFaceAccuracyNotice"
+                style="@style/BioPay.SupportingText"
+                android:layout_marginTop="4dp"
+                android:text="@string/face_accuracy_notice"
+                android:textColor="@color/bp_warning"
+                android:visibility="gone" />
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>
 

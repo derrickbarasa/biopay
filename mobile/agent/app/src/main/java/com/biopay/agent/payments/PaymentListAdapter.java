@@ -17,7 +17,19 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class PaymentListAdapter extends RecyclerView.Adapter<PaymentListAdapter.ViewHolder> {
+
+    /** Only ever invoked for a PENDING row -- a paid one has nothing left to verify. */
+    public interface OnVerifyClickListener {
+        void onVerifyClick(PaymentDao.LocalPayment payment);
+    }
+
     private final List<PaymentDao.LocalPayment> payments = new ArrayList<>();
+    private final OnVerifyClickListener listener;
+
+    PaymentListAdapter(OnVerifyClickListener listener) {
+        this.listener = listener;
+    }
+
     void submitList(List<PaymentDao.LocalPayment> rows) { payments.clear(); payments.addAll(rows); notifyDataSetChanged(); }
 
     @NonNull @Override public ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
@@ -38,6 +50,7 @@ public class PaymentListAdapter extends RecyclerView.Adapter<PaymentListAdapter.
         holder.status.setTextColor(ContextCompat.getColor(holder.itemView.getContext(),
                 paid ? R.color.bp_success : R.color.bp_warning));
         holder.status.setBackgroundResource(paid ? R.drawable.bg_status_success : R.drawable.bg_status_warning);
+        holder.itemView.setOnClickListener(paid ? null : v -> listener.onVerifyClick(payment));
     }
 
     @Override public int getItemCount() { return payments.size(); }

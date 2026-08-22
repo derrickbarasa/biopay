@@ -37,7 +37,9 @@ export type ProcessingCode =
   | 'GET_ANCHORS'
   | 'UPDATE_ANCHOR'
   | 'GET_USERS'
+  | 'GET_USER'
   | 'CREATE_USER'
+  | 'UPDATE_USER'
   | 'TOGGLE_USER_STATUS'
   | 'GET_ROLES'
   | 'SAVE_ROLE'
@@ -77,6 +79,7 @@ export type ProcessingCode =
   | 'UPDATE_ORGANIZATION_MODULES'
   // subscription
   | 'GET_SUBSCRIPTION'
+  | 'GET_ALL_SUBSCRIPTIONS'
   | 'RENEW_SUBSCRIPTION'
   | 'GET_SUBSCRIPTION_INVOICES'
   | 'GET_SUBSCRIPTION_INVOICE_RECEIPT'
@@ -89,6 +92,7 @@ export type ProcessingCode =
   | 'CREATE_LOCATION'
   | 'GET_VILLAGES'
   | 'CREATE_VILLAGE'
+  | 'BULK_UPLOAD_GEO_NODES'
   | 'UPDATE_GEO_NODE'
   | 'DELETE_GEO_NODE'
   // vouchers
@@ -105,6 +109,7 @@ export type ProcessingCode =
   | 'GENERATE_PAYROLL'
   | 'APPROVE_PAYROLL'
   | 'REJECT_PAYROLL'
+  | 'REJECT_PAYROLL_ITEMS'
   | 'DISBURSE_PAYROLL'
   | 'DELETE_PAYROLL'
   | 'GET_PAYROLL'

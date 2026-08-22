@@ -16,10 +16,10 @@ import com.biopay.agent.sync.SyncScheduler;
 
 public class BioPayAgentApplication extends Application {
 
-    // A short grace window before treating a background move as "the officer left the app" --
-    // long enough to survive a runtime-permission dialog or share-sheet flicker, short enough
-    // that anyone who actually switched away or locked the phone still has to log back in.
-    private static final long EXIT_LOGOUT_GRACE_MS = 5_000;
+    // A grace window before treating a background move as "the officer left the app" -- long
+    // enough to switch to another app (e.g. check a message) without losing their place, short
+    // enough that anyone who actually stepped away still has to log back in.
+    private static final long EXIT_LOGOUT_GRACE_MS = 2 * 60 * 1000;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Runnable logoutOnExit = this::logoutOnExit;

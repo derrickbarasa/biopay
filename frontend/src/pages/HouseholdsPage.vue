@@ -448,7 +448,7 @@ async function submitBulk() {
       <div class="d-flex ga-2">
         <v-btn variant="outlined" prepend-icon="mdi-download" @click="exportCsv">Export CSV</v-btn>
         <v-btn variant="outlined" prepend-icon="mdi-file-upload" @click="openBulk">Import CSV</v-btn>
-        <v-btn color="primary" prepend-icon="mdi-home-plus" @click="openCreate">Add Household</v-btn>
+        <v-btn color="secondary" prepend-icon="mdi-home-plus" @click="openCreate">Add Household</v-btn>
       </div>
     </div>
 
@@ -584,7 +584,7 @@ async function submitBulk() {
         <v-card-actions>
           <v-spacer />
           <v-btn variant="text" @click="reviewDialog = false">Cancel</v-btn>
-          <v-btn color="primary" :loading="reviewSaving" @click="saveReview">Save</v-btn>
+          <v-btn color="secondary" :loading="reviewSaving" @click="saveReview">Save</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -633,7 +633,7 @@ async function submitBulk() {
           >
             Register anyway
           </v-btn>
-          <v-btn v-else color="primary" :loading="checkingDup || saving" @click="attemptSave">Save</v-btn>
+          <v-btn v-else color="secondary" :loading="checkingDup || saving" @click="attemptSave">Save</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -677,7 +677,7 @@ async function submitBulk() {
         <v-card-actions>
           <v-spacer />
           <v-btn variant="text" @click="bulkDialog = false">Close</v-btn>
-          <v-btn color="primary" :loading="saving" :disabled="!bulkReady" @click="submitBulk">Upload</v-btn>
+          <v-btn color="secondary" :loading="saving" :disabled="!bulkReady" @click="submitBulk">Upload</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>

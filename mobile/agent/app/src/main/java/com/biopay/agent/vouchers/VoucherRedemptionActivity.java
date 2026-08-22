@@ -68,6 +68,14 @@ public class VoucherRedemptionActivity extends BaseActivity {
         } catch (BiometricDeviceException error) {
             Toast.makeText(this, R.string.attendance_verify_error, Toast.LENGTH_SHORT).show();
             return;
+        } catch (Throwable error) {
+            // A missing/mismatched vendor native library throws an unchecked UnsatisfiedLinkError,
+            // not the checked exception open() declares -- confirmed on-device (see PersonCaptureActivity's
+            // matching fix). Caught broadly so a hardware/library problem degrades to the same
+            // honest message instead of crashing the app.
+            android.util.Log.e("VoucherRedemption", "BiometricDevice.open() failed unexpectedly", error);
+            Toast.makeText(this, R.string.attendance_verify_error, Toast.LENGTH_SHORT).show();
+            return;
         }
         View content = LayoutInflater.from(this).inflate(R.layout.dialog_verify_progress, null);
         TextView progress = content.findViewById(R.id.tvVerifyProgress);

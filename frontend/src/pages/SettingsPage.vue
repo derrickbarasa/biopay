@@ -153,7 +153,7 @@ async function confirmDisable() {
             <v-text-field v-model="profileFirstName" label="First name" autocomplete="given-name" />
             <v-text-field v-model="profileLastName" label="Last name" autocomplete="family-name" />
             <v-text-field :model-value="auth.user?.email" label="Email address" readonly hint="Contact an administrator to change the sign-in email." persistent-hint />
-            <v-btn color="primary" class="mt-4" :loading="savingProfile" @click="saveProfile">Save profile</v-btn>
+            <v-btn color="secondary" class="mt-4" :loading="savingProfile" @click="saveProfile">Save profile</v-btn>
           </v-card-text>
         </v-card>
 
@@ -180,7 +180,7 @@ async function confirmDisable() {
                 </div>
               </div>
               <v-btn v-if="auth.user?.totpEnabled" size="small" variant="outlined" color="error" @click="openDisable">Disable</v-btn>
-              <v-btn v-else size="small" color="primary" :loading="enrolling" @click="startEnroll">Enable</v-btn>
+              <v-btn v-else size="small" color="secondary" :loading="enrolling" @click="startEnroll">Enable</v-btn>
             </div>
           </v-card-text>
         </v-card>
@@ -193,7 +193,7 @@ async function confirmDisable() {
             <v-text-field v-model="oldPassword" label="Current password" type="password" />
             <v-text-field v-model="newPassword" label="New password" type="password" hint="At least 8 characters" persistent-hint />
             <v-text-field v-model="confirmPassword" label="Confirm new password" type="password" class="mt-2" />
-            <v-btn color="primary" class="mt-4" :loading="saving" @click="changePassword">Update Password</v-btn>
+            <v-btn color="secondary" class="mt-4" :loading="saving" @click="changePassword">Update Password</v-btn>
           </v-card-text>
         </v-card>
       </v-col>
@@ -217,7 +217,7 @@ async function confirmDisable() {
         <v-card-actions>
           <v-spacer />
           <v-btn variant="text" @click="enrollDialog = false">Cancel</v-btn>
-          <v-btn color="primary" :loading="confirming" @click="confirmEnroll">Confirm</v-btn>
+          <v-btn color="secondary" :loading="confirming" @click="confirmEnroll">Confirm</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>

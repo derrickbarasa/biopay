@@ -9,12 +9,21 @@ interface VoucherRow {
   voucherCode: string
   householdNumber: string
   organisationCode: string
+  villageCode?: string
   amount: number
   purpose?: string
   status: 'ISSUED' | 'REDEEMED' | 'VOID'
   expiresAt?: string
   redeemedAt?: string
   createdAt: string
+}
+
+interface GeoNode {
+  code: string
+  name: string
+  stateCode?: string
+  countyCode?: string
+  locationCode?: string
 }
 
 const auth = useAuthStore()
@@ -28,6 +37,20 @@ const tableSearch = ref('')
 const organizations = ref<{ organisationCode: string; name: string }[]>([])
 const orgNameByCode = computed(() => new Map(organizations.value.map((o) => [o.organisationCode, o.name])))
 function orgName(code?: string) { return (code && orgNameByCode.value.get(code)) || code || '—' }
+
+// ---- Geo hierarchy -- shared by the Village column's name lookup and the "Generate by
+// Village" dialog's cascading selects, following the same client-side code->name lookup
+// convention as HouseholdsPage/LocationsPage (villageName()/orgName()). ----
+const states = ref<GeoNode[]>([])
+const counties = ref<GeoNode[]>([])
+const locations = ref<GeoNode[]>([])
+const villages = ref<GeoNode[]>([])
+const villageNameByCode = computed(() => new Map(villages.value.map((v) => [v.code, v.name])))
+function villageName(code?: string) { return (code && villageNameByCode.value.get(code)) || code || '—' }
+const countiesForState = (stateCode: string | null) => stateCode ? counties.value.filter((c) => c.stateCode === stateCode) : counties.value
+const locationsForCounty = (countyCode: string | null) => countyCode ? locations.value.filter((l) => l.countyCode === countyCode) : locations.value
+const villagesForLocation = (locationCode: string | null) => locationCode ? villages.value.filter((v) => v.locationCode === locationCode) : villages.value
+
 let householdDebounce: ReturnType<typeof setTimeout> | null = null
 
 function onHouseholdFilterInput() {
@@ -37,6 +60,7 @@ function onHouseholdFilterInput() {
 
 const issueDialog = ref(false)
 const bulkDialog = ref(false)
+const villageDialog = ref(false)
 const redeemDialog = ref(false)
 const saving = ref(false)
 const redeeming = ref<VoucherRow | null>(null)
@@ -50,9 +74,28 @@ const bulkFileName = ref('')
 const bulkRows = ref<{ householdNumber: string; amount: number }[]>([])
 const bulkErrors = ref<{ row: number; message: string }[]>([])
 
+// ---- Generate vouchers by village -- picks a village from the geo hierarchy, auto-fills
+// every active household in it as bulk-issue rows, then submits through the same
+// BULK_ISSUE_VOUCHERS endpoint the CSV bulk-issue flow already uses. ----
+const villageStateCode = ref<string | null>(null)
+const villageCountyCode = ref<string | null>(null)
+const villageLocationCode = ref<string | null>(null)
+const villageSelected = ref<string | null>(null)
+const villageLoading = ref(false)
+const villageFlatAmount = ref<number | null>(null)
+const villagePurpose = ref('')
+const villageExpiresAt = ref('')
+const villageRows = ref<{ householdNumber: string; amount: number }[]>([])
+const villageRowHeaders = [
+  { title: 'Household', key: 'householdNumber' },
+  { title: 'Amount', key: 'amount' },
+]
+let geoLoaded = false
+
 const headers = [
   { title: 'Voucher Code', key: 'voucherCode' },
   { title: 'Household', key: 'householdNumber' },
+  { title: 'Village', key: 'villageCode' },
   { title: 'Organization', key: 'organisationCode' },
   { title: 'Amount', key: 'amount' },
   { title: 'Status', key: 'status' },
@@ -61,7 +104,7 @@ const headers = [
 ]
 
 function currency(v: number | undefined) {
-  return (v ?? 0).toLocaleString(undefined, { style: 'currency', currency: 'SSP', maximumFractionDigits: 0 })
+  return (v ?? 0).toLocaleString(undefined, { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })
 }
 
 async function load() {
@@ -91,6 +134,12 @@ onMounted(async () => {
     } catch {
       // Table just falls back to showing the raw code; the list itself still loaded above.
     }
+  }
+  try {
+    const res = await dispatch<{ results: GeoNode[] }>('GET_VILLAGES')
+    villages.value = res.results
+  } catch {
+    // Village column just falls back to showing the raw code.
   }
 })
 
@@ -166,6 +215,108 @@ async function submitBulk() {
   }
 }
 
+async function openVillageGenerate() {
+  villageStateCode.value = null
+  villageCountyCode.value = null
+  villageLocationCode.value = null
+  villageSelected.value = null
+  villageFlatAmount.value = null
+  villagePurpose.value = ''
+  villageExpiresAt.value = ''
+  villageRows.value = []
+  villageDialog.value = true
+  if (!geoLoaded) {
+    try {
+      const [s, c, l, v] = await Promise.all([
+        dispatch<{ results: GeoNode[] }>('GET_STATES'),
+        dispatch<{ results: GeoNode[] }>('GET_COUNTIES'),
+        dispatch<{ results: GeoNode[] }>('GET_LOCATIONS'),
+        dispatch<{ results: GeoNode[] }>('GET_VILLAGES'),
+      ])
+      states.value = s.results
+      counties.value = c.results
+      locations.value = l.results
+      villages.value = v.results
+      geoLoaded = true
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to load locations')
+    }
+  }
+}
+
+// Every active household in the chosen village, one page at a time (GET_HOUSEHOLDS caps
+// pageSize at 200 server-side), stopping at BULK_ISSUE_VOUCHERS' own 500-row limit.
+async function onVillageSelected(villageCode: string | null) {
+  villageRows.value = []
+  if (!villageCode) return
+  villageLoading.value = true
+  try {
+    const rows: { householdNumber: string; amount: number }[] = []
+    const pageSize = 200
+    let page = 1
+    while (rows.length < 500) {
+      const res = await dispatch<{ results: { householdNumber: string }[] }>('GET_HOUSEHOLDS', {
+        villageCode, status: 1, page, pageSize,
+      })
+      for (const h of res.results) {
+        if (rows.length >= 500) break
+        rows.push({ householdNumber: h.householdNumber, amount: villageFlatAmount.value ?? 0 })
+      }
+      if (res.results.length < pageSize) break
+      page++
+    }
+    villageRows.value = rows
+    if (!rows.length) toast.error('No active households found in this village')
+  } catch (err) {
+    toast.error(err instanceof Error ? err.message : 'Failed to load households for this village')
+  } finally {
+    villageLoading.value = false
+  }
+}
+
+function onVillageStateChange() {
+  villageCountyCode.value = null
+  villageLocationCode.value = null
+  villageSelected.value = null
+  onVillageSelected(null)
+}
+function onVillageCountyChange() {
+  villageLocationCode.value = null
+  villageSelected.value = null
+  onVillageSelected(null)
+}
+function onVillageLocationChange() {
+  villageSelected.value = null
+  onVillageSelected(null)
+}
+
+function applyFlatAmountToAll() {
+  const amount = villageFlatAmount.value ?? 0
+  for (const row of villageRows.value) row.amount = amount
+}
+
+async function submitVillage() {
+  if (!villageRows.value.length) return
+  if (villageRows.value.some((r) => !r.amount || r.amount <= 0)) {
+    toast.error('Every household needs a positive amount')
+    return
+  }
+  saving.value = true
+  try {
+    const res = await dispatch<{ successCount: number; failureCount: number; errors: { row: number; message: string }[] }>(
+      'BULK_ISSUE_VOUCHERS',
+      { rows: villageRows.value, purpose: villagePurpose.value || undefined, expiresAt: villageExpiresAt.value || undefined },
+    )
+    toast.success(`${res.successCount} voucher(s) issued, ${res.failureCount} failed`)
+    if (!(res.errors ?? []).length) villageDialog.value = false
+    await load()
+  } catch (err) {
+    toast.error(err instanceof Error ? err.message : 'Village voucher generation failed')
+  } finally {
+    saving.value = false
+  }
+}
+
 function openRedeem(row: VoucherRow) {
   redeeming.value = row
   redeemNotes.value = ''
@@ -208,7 +359,8 @@ function statusColor(status: string) {
       <h1 class="page-title">Vouchers</h1>
       <div class="d-flex ga-2">
         <v-btn variant="outlined" prepend-icon="mdi-file-upload" @click="openBulk">Bulk Issue</v-btn>
-        <v-btn color="primary" prepend-icon="mdi-ticket-confirmation-outline" @click="openIssue">Issue Voucher</v-btn>
+        <v-btn color="secondary" prepend-icon="mdi-map-marker-radius-outline" @click="openVillageGenerate">Generate by Village</v-btn>
+        <v-btn color="secondary" prepend-icon="mdi-ticket-confirmation-outline" @click="openIssue">Issue Voucher</v-btn>
       </div>
     </div>
 
@@ -240,6 +392,7 @@ function statusColor(status: string) {
         <v-text-field v-model="tableSearch" prepend-inner-icon="mdi-magnify" label="Search" clearable hide-details density="compact" style="max-width: 220px" />
       </v-card-text>
       <v-data-table :headers="headers" :items="vouchers" :search="tableSearch" :loading="loading">
+        <template #item.villageCode="{ item }">{{ villageName(item.villageCode) }}</template>
         <template #item.organisationCode="{ item }">{{ orgName(item.organisationCode) }}</template>
         <template #item.amount="{ item }">{{ currency(item.amount) }}</template>
         <template #item.status="{ item }">
@@ -271,7 +424,7 @@ function statusColor(status: string) {
           </div>
           <div class="editor-actions">
             <v-btn variant="text" @click="issueDialog = false">Cancel</v-btn>
-            <v-btn color="primary" type="submit" :loading="saving" prepend-icon="mdi-ticket-confirmation-outline">Issue voucher</v-btn>
+            <v-btn color="secondary" type="submit" :loading="saving" prepend-icon="mdi-ticket-confirmation-outline">Issue voucher</v-btn>
           </div>
         </v-form>
       </v-card>
@@ -299,7 +452,67 @@ function statusColor(status: string) {
         <v-card-actions>
           <v-spacer />
           <v-btn variant="text" @click="bulkDialog = false">Close</v-btn>
-          <v-btn color="primary" :loading="saving" :disabled="!bulkRows.length" @click="submitBulk">Issue All</v-btn>
+          <v-btn color="secondary" :loading="saving" :disabled="!bulkRows.length" @click="submitBulk">Issue All</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <v-dialog v-model="villageDialog" max-width="680">
+      <v-card>
+        <v-card-title>Generate Vouchers by Village</v-card-title>
+        <v-card-text>
+          <v-alert type="info" variant="tonal" density="compact" class="mb-3">
+            Pick a village and every active household registered in it is issued a voucher.
+          </v-alert>
+          <div class="d-flex ga-3 flex-wrap mb-3">
+            <v-select
+              v-model="villageStateCode" :items="states" item-title="name" item-value="code" label="State"
+              clearable hide-details density="compact" style="max-width: 170px" @update:model-value="onVillageStateChange"
+            />
+            <v-select
+              v-model="villageCountyCode" :items="countiesForState(villageStateCode)" item-title="name" item-value="code" label="County"
+              clearable hide-details density="compact" style="max-width: 170px" @update:model-value="onVillageCountyChange"
+            />
+            <v-select
+              v-model="villageLocationCode" :items="locationsForCounty(villageCountyCode)" item-title="name" item-value="code" label="Location"
+              clearable hide-details density="compact" style="max-width: 170px" @update:model-value="onVillageLocationChange"
+            />
+            <v-select
+              v-model="villageSelected" :items="villagesForLocation(villageLocationCode)" item-title="name" item-value="code" label="Village"
+              clearable hide-details density="compact" style="max-width: 170px" @update:model-value="onVillageSelected"
+            />
+          </div>
+
+          <v-alert v-if="villageLoading" type="info" variant="tonal" density="compact" class="mb-3">Loading households…</v-alert>
+          <v-alert v-else-if="villageSelected && !villageRows.length" type="warning" variant="tonal" density="compact" class="mb-3">
+            No active households found in this village.
+          </v-alert>
+
+          <template v-if="villageRows.length">
+            <div class="d-flex align-center ga-3 flex-wrap mb-3">
+              <v-text-field
+                v-model.number="villageFlatAmount" label="Amount per voucher" type="number" density="compact"
+                hide-details style="max-width: 200px"
+              />
+              <v-btn size="small" variant="outlined" @click="applyFlatAmountToAll">Apply to all rows</v-btn>
+              <v-spacer />
+              <span class="text-caption text-medium-emphasis">{{ villageRows.length }} household(s)</span>
+            </div>
+            <v-text-field v-model="villagePurpose" label="Purpose (applies to all, optional)" density="compact" class="mb-2" />
+            <v-text-field v-model="villageExpiresAt" label="Expires on (applies to all, optional)" type="date" density="compact" class="mb-3" />
+            <div class="village-rows-scroll">
+              <v-data-table :headers="villageRowHeaders" :items="villageRows" density="compact" :items-per-page="10">
+                <template #item.amount="{ item }">
+                  <v-text-field v-model.number="item.amount" type="number" density="compact" hide-details style="max-width: 140px" />
+                </template>
+              </v-data-table>
+            </div>
+          </template>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" @click="villageDialog = false">Close</v-btn>
+          <v-btn color="secondary" :loading="saving" :disabled="!villageRows.length" @click="submitVillage">Generate Vouchers</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -331,6 +544,8 @@ function statusColor(status: string) {
 .summary-value { color: #0f172a; font-size: 1.25rem; font-weight: 750; letter-spacing: -.02em; margin-top: 6px; }
 .summary-detail { color: #64748b; font-size: .74rem; margin-top: 4px; }
 @media (max-width: 620px) { .voucher-summary-grid { grid-template-columns: 1fr; } }
+
+.village-rows-scroll { max-height: 320px; overflow-y: auto; }
 
 .voucher-editor { padding: 22px 24px; }
 .editor-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 18px; }

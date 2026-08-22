@@ -215,7 +215,7 @@ async function assignLocation() {
   <div>
     <div class="d-flex align-center justify-space-between mb-4">
       <h1 class="page-title">Field Officers</h1>
-      <v-btn color="primary" prepend-icon="mdi-account-plus" @click="openCreate">Register Officer</v-btn>
+      <v-btn color="secondary" prepend-icon="mdi-account-plus" @click="openCreate">Register Officer</v-btn>
     </div>
 
     <v-card variant="flat" border>
@@ -276,7 +276,7 @@ async function assignLocation() {
           </v-alert>
           <div class="editor-actions">
             <v-btn variant="text" @click="dialog = false">Cancel</v-btn>
-            <v-btn color="primary" type="submit" :loading="saving" prepend-icon="mdi-check">Save</v-btn>
+            <v-btn color="secondary" type="submit" :loading="saving" prepend-icon="mdi-check">Save</v-btn>
           </div>
         </v-form>
       </v-card>

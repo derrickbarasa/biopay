@@ -104,8 +104,8 @@ public class Organization extends AbstractVerticle {
             replyError(message, "organisationCode and name are required");
             return;
         }
-        if (!"BIOMETRIC".equals(verificationMethod) && !"FACIAL".equals(verificationMethod)) {
-            replyError(message, "verificationMethod must be BIOMETRIC or FACIAL");
+        if (!"BIOMETRIC".equals(verificationMethod) && !"FACIAL".equals(verificationMethod) && !"BOTH".equals(verificationMethod)) {
+            replyError(message, "verificationMethod must be BIOMETRIC, FACIAL, or BOTH");
             return;
         }
         if (modules.isEmpty()) {
@@ -119,12 +119,14 @@ public class Organization extends AbstractVerticle {
             }
         }
 
+        String capitalCity = strOrEmpty(payload.getString("capitalCity")).trim();
+
         String sql = "INSERT INTO partners (partner_id, name, types, authorised_name, authorised_email, "
-                + "authorised_contact, address, country, verification_method, anchor_id, status, created_by, created_at, updated_at) "
-                + "VALUES (@p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10, @p11, @p12, GETDATE(), GETDATE())";
+                + "authorised_contact, address, country, capital_city, verification_method, anchor_id, status, created_by, created_at, updated_at) "
+                + "VALUES (@p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10, @p11, @p12, @p13, GETDATE(), GETDATE())";
         pool.preparedQuery(sql)
                 .execute(Tuple.of(partnerId, name, "1", authorisedName, authorisedEmail, authorisedContact,
-                        address, country.isEmpty() ? null : country, verificationMethod,
+                        address, country.isEmpty() ? null : country, capitalCity.isEmpty() ? null : capitalCity, verificationMethod,
                         Integer.parseInt(anchorIdVal.toString()), 1, payload.getValue("actorId")))
                 .onFailure(err -> onDbError(message, err))
                 .onSuccess(rows -> {
@@ -220,14 +222,15 @@ public class Organization extends AbstractVerticle {
         }
 
         String verificationMethod = strOrEmpty(payload.getString("verificationMethod")).trim().toUpperCase();
-        if (!verificationMethod.isEmpty() && !"BIOMETRIC".equals(verificationMethod) && !"FACIAL".equals(verificationMethod)) {
-            replyError(message, "verificationMethod must be BIOMETRIC or FACIAL");
+        if (!verificationMethod.isEmpty() && !"BIOMETRIC".equals(verificationMethod)
+                && !"FACIAL".equals(verificationMethod) && !"BOTH".equals(verificationMethod)) {
+            replyError(message, "verificationMethod must be BIOMETRIC, FACIAL, or BOTH");
             return;
         }
 
         String sql = "UPDATE partners SET name=@p1, authorised_name=@p2, authorised_email=@p3, "
-                + "authorised_contact=@p4, address=@p5, country=@p6, "
-                + "verification_method=COALESCE(NULLIF(@p7,''), verification_method), updated_at=GETDATE() WHERE partner_id=@p8";
+                + "authorised_contact=@p4, address=@p5, country=@p6, capital_city=@p7, "
+                + "verification_method=COALESCE(NULLIF(@p8,''), verification_method), updated_at=GETDATE() WHERE partner_id=@p9";
         pool.preparedQuery(sql)
                 .execute(Tuple.of(
                         payload.getString("name", "").trim(),
@@ -236,6 +239,7 @@ public class Organization extends AbstractVerticle {
                         payload.getString("authorisedContact", "").trim(),
                         payload.getString("address", "").trim(),
                         strOrEmpty(payload.getString("country")).trim(),
+                        strOrEmpty(payload.getString("capitalCity")).trim(),
                         verificationMethod,
                         partnerId))
                 .onFailure(err -> onDbError(message, err))
@@ -372,6 +376,7 @@ public class Organization extends AbstractVerticle {
                 .put("authorisedContact", Rows.str(r, "authorised_contact"))
                 .put("address", Rows.str(r, "address"))
                 .put("country", Rows.str(r, "country"))
+                .put("capitalCity", Rows.str(r, "capital_city"))
                 .put("verificationMethod", Rows.str(r, "verification_method"))
                 .put("anchorId", Rows.intVal(r, "anchor_id"))
                 .put("status", Rows.intVal(r, "status"))

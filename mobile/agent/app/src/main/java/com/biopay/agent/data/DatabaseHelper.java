@@ -18,7 +18,7 @@ import android.database.sqlite.SQLiteOpenHelper;
 public class DatabaseHelper extends SQLiteOpenHelper {
 
     private static final String DB_NAME = "biopay_agent.db";
-    private static final int DB_VERSION = 5;
+    private static final int DB_VERSION = 6;
 
     /** Every offline-captured row starts PENDING and flips to SYNCED once the server accepts it. */
     public static final int SYNC_PENDING = 0;
@@ -169,6 +169,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
                 "household_name VARCHAR," +
                 "amount NUMERIC," +
                 "matched_fingerprint_uuid VARCHAR," +
+                "matched_face_uuid VARCHAR," +
                 "latitude VARCHAR," +
                 "longitude VARCHAR," +
                 "uuid VARCHAR NOT NULL UNIQUE," +
@@ -223,6 +224,11 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             // necessarily plaintext; default 0 keeps FaceDao reading those correctly instead of
             // trying to decrypt data that was never encrypted.
             db.execSQL("ALTER TABLE faces ADD COLUMN embedding_encrypted INTEGER NOT NULL DEFAULT 0");
+        }
+        if (oldVersion < 6) {
+            // Face-verified field payments (PaymentVerificationActivity) need somewhere to record
+            // which enrolled face embedding matched, parallel to the existing matched_fingerprint_uuid.
+            db.execSQL("ALTER TABLE payments ADD COLUMN matched_face_uuid VARCHAR");
         }
     }
 

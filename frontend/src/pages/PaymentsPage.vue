@@ -42,6 +42,25 @@ const headers = [
 const orgNameByCode = computed(() => new Map(organizations.value.map((o) => [o.organisationCode, o.name])))
 function orgName(code?: string) { return (code && orgNameByCode.value.get(code)) || code || '—' }
 
+// Small decorative progress rings for the three summary cards -- paid/pending share of the
+// total count, and (for the amount card) the paid share of the total amount. Plain stroke-
+// dasharray circles rather than the full PieChart component, which carries a legend/hover
+// state sized for a standalone chart, not a compact card accent.
+const RING_R = 15.9155
+const RING_CIRC = 2 * Math.PI * RING_R
+function ringDash(fraction: number) {
+  const clamped = Math.max(0, Math.min(1, fraction || 0))
+  return `${(clamped * RING_CIRC).toFixed(2)} ${RING_CIRC.toFixed(2)}`
+}
+const totalCount = computed(() => (summary.value.paidCount ?? 0) + (summary.value.pendingCount ?? 0))
+const paidShare = computed(() => (totalCount.value ? (summary.value.paidCount ?? 0) / totalCount.value : 0))
+const pendingShare = computed(() => (totalCount.value ? (summary.value.pendingCount ?? 0) / totalCount.value : 0))
+const paidAmountShare = computed(() => {
+  const paidAmount = summary.value.paidAmount
+  const total = summary.value.totalAmount
+  return total ? (paidAmount ?? 0) / total : paidShare.value
+})
+
 async function load() {
   loading.value = true
   try {
@@ -133,21 +152,51 @@ async function remove(row: PaymentRow) {
 
     <v-row class="mb-2">
       <v-col cols="12" sm="4">
-        <v-card class="pa-4" variant="flat" border>
-          <div class="text-caption text-medium-emphasis">Total Amount</div>
-          <div class="text-h5 font-weight-bold">{{ (summary.totalAmount ?? 0).toLocaleString() }}</div>
+        <v-card class="pa-4 summary-card" variant="flat" border>
+          <div>
+            <div class="text-caption text-medium-emphasis">Total Amount</div>
+            <div class="text-h5 font-weight-bold">{{ (summary.totalAmount ?? 0).toLocaleString() }}</div>
+          </div>
+          <svg viewBox="0 0 36 36" class="summary-ring" role="img" aria-label="Paid share of total amount">
+            <circle cx="18" cy="18" r="15.9155" fill="none" stroke="#EEF2F6" stroke-width="3.2" />
+            <circle
+              cx="18" cy="18" r="15.9155" fill="none" stroke="#0D9488" stroke-width="3.2"
+              stroke-linecap="round" transform="rotate(-90 18 18)"
+              :stroke-dasharray="ringDash(paidAmountShare)"
+            />
+          </svg>
         </v-card>
       </v-col>
       <v-col cols="12" sm="4">
-        <v-card class="pa-4" variant="flat" border>
-          <div class="text-caption text-medium-emphasis">Paid</div>
-          <div class="text-h5 font-weight-bold">{{ summary.paidCount ?? 0 }}</div>
+        <v-card class="pa-4 summary-card" variant="flat" border>
+          <div>
+            <div class="text-caption text-medium-emphasis">Paid</div>
+            <div class="text-h5 font-weight-bold">{{ summary.paidCount ?? 0 }}</div>
+          </div>
+          <svg viewBox="0 0 36 36" class="summary-ring" role="img" aria-label="Paid share of all payments">
+            <circle cx="18" cy="18" r="15.9155" fill="none" stroke="#EEF2F6" stroke-width="3.2" />
+            <circle
+              cx="18" cy="18" r="15.9155" fill="none" stroke="#10B981" stroke-width="3.2"
+              stroke-linecap="round" transform="rotate(-90 18 18)"
+              :stroke-dasharray="ringDash(paidShare)"
+            />
+          </svg>
         </v-card>
       </v-col>
       <v-col cols="12" sm="4">
-        <v-card class="pa-4" variant="flat" border>
-          <div class="text-caption text-medium-emphasis">Pending</div>
-          <div class="text-h5 font-weight-bold">{{ summary.pendingCount ?? 0 }}</div>
+        <v-card class="pa-4 summary-card" variant="flat" border>
+          <div>
+            <div class="text-caption text-medium-emphasis">Pending</div>
+            <div class="text-h5 font-weight-bold">{{ summary.pendingCount ?? 0 }}</div>
+          </div>
+          <svg viewBox="0 0 36 36" class="summary-ring" role="img" aria-label="Pending share of all payments">
+            <circle cx="18" cy="18" r="15.9155" fill="none" stroke="#EEF2F6" stroke-width="3.2" />
+            <circle
+              cx="18" cy="18" r="15.9155" fill="none" stroke="#F59E0B" stroke-width="3.2"
+              stroke-linecap="round" transform="rotate(-90 18 18)"
+              :stroke-dasharray="ringDash(pendingShare)"
+            />
+          </svg>
         </v-card>
       </v-col>
     </v-row>
@@ -201,3 +250,8 @@ async function remove(row: PaymentRow) {
     </v-card>
   </div>
 </template>
+
+<style scoped>
+.summary-card { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.summary-ring { width: 52px; height: 52px; flex-shrink: 0; }
+</style>

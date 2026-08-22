@@ -15,17 +15,24 @@ import com.biopay.utilities.Logging;
 import com.biopay.utilities.Rows;
 
 /**
- * Per-anchor subscription lifecycle (010_subscriptions.sql). Manual-renewal
- * model: {@code RENEW_SUBSCRIPTION} is an explicit admin action extending the
- * period by one month; there is no external billing gateway wired yet.
+ * Per-anchor subscription lifecycle (010_subscriptions.sql, grace/notification columns added in
+ * 016_verification_method_both_and_grace_period.sql). Manual-renewal model: {@code
+ * RENEW_SUBSCRIPTION} is an explicit admin action extending the period by 30 days; there is no
+ * external billing gateway wired yet.
  *
- * <p>Status is always derived in SQL from {@code expires_at + grace_days}
- * (ACTIVE / GRACE / ARCHIVED), so it can never fall out of date. The web
- * dashboard reads it via {@code GET_SUBSCRIPTION} to show a grace-period
- * banner and gate access once ARCHIVED; hard server-side enforcement at the
- * dispatch layer is a documented follow-up (see progress.md).
+ * <p>Status is always derived in SQL from {@code expires_at + grace_days} (ACTIVE / GRACE /
+ * ARCHIVED, currently a 7-day grace window), so it can never fall out of date. The web dashboard
+ * reads it via {@code GET_SUBSCRIPTION} to show a grace-period banner and gate access once
+ * ARCHIVED; hard server-side enforcement lives in {@code EntryPoint.dispatchGated}. {@link
+ * #sendGraceReminders} is this backend's first scheduled job -- it emails each anchor once per
+ * lapse when they enter GRACE, complementing the always-on in-app banner.
  */
 public class Subscription extends AbstractVerticle {
+
+    /** First scheduled job in this backend (see {@link #sendGraceReminders}) -- checked every
+     *  6 hours rather than continuously, since a subscription reminder has no real-time
+     *  requirement and this keeps the query load negligible. */
+    private static final long GRACE_REMINDER_INTERVAL_MS = 6 * 60 * 60 * 1000;
 
     EventBus eventBus;
     MSSQLPool pool;
@@ -37,9 +44,11 @@ public class Subscription extends AbstractVerticle {
         pool = Datasource.pool();
 
         eventBus.consumer("GET_SUBSCRIPTION", this::getStatus);
+        eventBus.consumer("GET_ALL_SUBSCRIPTIONS", this::getAllSubscriptions);
         eventBus.consumer("RENEW_SUBSCRIPTION", this::renew);
         eventBus.consumer("GET_SUBSCRIPTION_INVOICES", this::getInvoices);
         eventBus.consumer("GET_SUBSCRIPTION_INVOICE_RECEIPT", this::getInvoiceReceipt);
+        vertx.setPeriodic(GRACE_REMINDER_INTERVAL_MS, id -> sendGraceReminders());
         startPromise.complete();
     }
 
@@ -126,6 +135,40 @@ public class Subscription extends AbstractVerticle {
                 });
     }
 
+    // ---- GET_ALL_SUBSCRIPTIONS (system owner only -- every anchor, cross-tenant) -----
+
+    private void getAllSubscriptions(Message<Object> message) {
+        JsonObject payload = new JsonObject(message.body().toString());
+        if (!payload.getBoolean("systemAdmin", false)) {
+            replyError(message, "Only the system owner can view every anchor's subscription");
+            return;
+        }
+        String sql = "SELECT a.id AS anchor_id, a.anchor_code, a.name AS anchor_name, s.plan_code, s.expires_at, s.grace_days, "
+                + "CASE WHEN s.expires_at IS NULL THEN 'NONE' "
+                + "     WHEN CAST(GETDATE() AS DATE) <= s.expires_at THEN 'ACTIVE' "
+                + "     WHEN CAST(GETDATE() AS DATE) <= DATEADD(DAY, s.grace_days, s.expires_at) THEN 'GRACE' "
+                + "     ELSE 'ARCHIVED' END AS status, "
+                + "DATEDIFF(DAY, CAST(GETDATE() AS DATE), s.expires_at) AS days_to_expiry "
+                + "FROM anchors a LEFT JOIN subscriptions s ON s.anchor_id = a.id ORDER BY a.name";
+        pool.query(sql).execute()
+                .onFailure(err -> onDbError(message, err))
+                .onSuccess(rows -> {
+                    JsonArray results = new JsonArray();
+                    for (Row r : rows) {
+                        results.add(new JsonObject()
+                                .put("anchorId", Rows.intVal(r, "anchor_id"))
+                                .put("anchorCode", Rows.str(r, "anchor_code"))
+                                .put("anchorName", Rows.str(r, "anchor_name"))
+                                .put("status", Rows.str(r, "status"))
+                                .put("planCode", Rows.str(r, "plan_code"))
+                                .put("expiresAt", Rows.str(r, "expires_at"))
+                                .put("graceDays", Rows.intVal(r, "grace_days"))
+                                .put("daysToExpiry", Rows.intVal(r, "days_to_expiry")));
+                    }
+                    reply(message, new JsonObject().put("responseCode", "000").put("responseMessage", "OK").put("results", results));
+                });
+    }
+
     // ---- RENEW_SUBSCRIPTION (manual admin action; upsert, extends by one month) ------
 
     private void renew(Message<Object> message) {
@@ -144,18 +187,21 @@ public class Subscription extends AbstractVerticle {
         Double amount = payload.getDouble("amount");
         String currency = payload.getString("currency", null);
 
-        // Upsert: a new period runs one month from whichever is later -- the current
+        // Upsert: a new period runs 30 days from whichever is later -- the current
         // (not-yet-lapsed) expiry, or today for an expired/absent subscription -- so
         // renewing early never loses remaining paid days. periodStart/periodEnd are read
         // back afterward (rather than recomputed in Java) so the invoice always matches
-        // exactly what was just written, even under concurrent renewals.
+        // exactly what was just written, even under concurrent renewals. Clearing
+        // grace_notified_at on renewal lets the reminder job email again next time this
+        // anchor lapses into GRACE, rather than staying permanently "already notified".
         String sql = "IF EXISTS (SELECT 1 FROM subscriptions WHERE anchor_id=@p1) "
-                + "UPDATE subscriptions SET expires_at = DATEADD(MONTH, 1, "
+                + "UPDATE subscriptions SET expires_at = DATEADD(DAY, 30, "
                 + "  CASE WHEN expires_at > CAST(GETDATE() AS DATE) THEN expires_at ELSE CAST(GETDATE() AS DATE) END), "
-                + "  plan_code = COALESCE(@p2, plan_code), renewed_by=@p3, renewed_at=GETDATE(), updated_at=GETDATE() "
+                + "  plan_code = COALESCE(@p2, plan_code), renewed_by=@p3, renewed_at=GETDATE(), updated_at=GETDATE(), "
+                + "  grace_notified_at = NULL "
                 + "  WHERE anchor_id=@p1; "
                 + "ELSE INSERT INTO subscriptions (anchor_id, plan_code, expires_at, grace_days, renewed_by, renewed_at, created_at) "
-                + "  VALUES (@p1, @p2, DATEADD(MONTH, 1, CAST(GETDATE() AS DATE)), 30, @p3, GETDATE(), GETDATE());";
+                + "  VALUES (@p1, @p2, DATEADD(DAY, 30, CAST(GETDATE() AS DATE)), 7, @p3, GETDATE(), GETDATE());";
 
         pool.preparedQuery(sql)
                 .execute(Tuple.of(anchorId, planCode, String.valueOf(actorId)))
@@ -186,6 +232,60 @@ public class Subscription extends AbstractVerticle {
                 .execute(Tuple.of(anchorId, invoiceNumber, planCode, amount, currency, periodEnd, createdBy))
                 .onFailure(err -> Logging.applicationLog(
                         Logging.logPreString() + "recordInvoice failed. " + err.getMessage() + "\n\n", "", 3));
+    }
+
+    // ---- Grace-period renewal reminder (scheduled, not an event-bus action) ---------
+
+    /** Finds anchors that have lapsed past {@code expires_at} but are still within their
+     *  grace window and haven't been emailed about it yet ({@code grace_notified_at IS NULL}),
+     *  and notifies each one once. The web dashboard's always-shown grace banner (see
+     *  DefaultLayout.vue) already covers the in-app half of "notify by email, in-app, or
+     *  both"; this covers the email half by reusing the existing EMAIL event-bus channel
+     *  (same fire-and-forget pattern as Auth/Officer emails). {@link #renew} clears
+     *  grace_notified_at so a later lapse is emailed again, not just the first ever one. */
+    private void sendGraceReminders() {
+        String sql = "SELECT s.anchor_id, a.name AS anchor_name, "
+                + "DATEDIFF(DAY, CAST(GETDATE() AS DATE), DATEADD(DAY, s.grace_days, s.expires_at)) AS days_to_archive "
+                + "FROM subscriptions s JOIN anchors a ON a.id = s.anchor_id "
+                + "WHERE CAST(GETDATE() AS DATE) > s.expires_at "
+                + "  AND CAST(GETDATE() AS DATE) <= DATEADD(DAY, s.grace_days, s.expires_at) "
+                + "  AND s.grace_notified_at IS NULL";
+        pool.query(sql).execute()
+                .onFailure(err -> Logging.applicationLog(
+                        Logging.logPreString() + "sendGraceReminders lookup failed. " + err.getMessage() + "\n\n", "", 3))
+                .onSuccess(rows -> {
+                    for (Row r : rows) {
+                        notifyAnchorInGrace(Rows.intVal(r, "anchor_id"), Rows.str(r, "anchor_name"), Rows.intVal(r, "days_to_archive"));
+                    }
+                });
+    }
+
+    private void notifyAnchorInGrace(int anchorId, String anchorName, int daysToArchive) {
+        pool.preparedQuery("SELECT email FROM users WHERE anchor_id=@p1 AND user_scope='ANCHOR' AND active=1")
+                .execute(Tuple.of(anchorId))
+                .onFailure(err -> Logging.applicationLog(Logging.logPreString()
+                        + "notifyAnchorInGrace lookup failed for anchor " + anchorId + ". " + err.getMessage() + "\n\n", "", 3))
+                .onSuccess(rows -> {
+                    for (Row r : rows) {
+                        String email = Rows.str(r, "email");
+                        if (email == null || email.isEmpty()) continue;
+                        eventBus.send("EMAIL", new JsonObject()
+                                .put("mailTo", email)
+                                .put("subject", "BioPay subscription renewal needed")
+                                .put("msg", "Your BioPay subscription for "
+                                        + (anchorName == null || anchorName.isEmpty() ? "your organisation" : anchorName)
+                                        + " has expired. You have " + daysToArchive + " day(s) left in the grace period "
+                                        + "before access is locked. Please renew from the Subscription page to avoid interruption."));
+                    }
+                    markGraceNotified(anchorId);
+                });
+    }
+
+    private void markGraceNotified(int anchorId) {
+        pool.preparedQuery("UPDATE subscriptions SET grace_notified_at = GETDATE() WHERE anchor_id=@p1")
+                .execute(Tuple.of(anchorId))
+                .onFailure(err -> Logging.applicationLog(Logging.logPreString()
+                        + "markGraceNotified failed for anchor " + anchorId + ". " + err.getMessage() + "\n\n", "", 3));
     }
 
     // ---- GET_SUBSCRIPTION_INVOICES (payment history for the Subscription page) ------

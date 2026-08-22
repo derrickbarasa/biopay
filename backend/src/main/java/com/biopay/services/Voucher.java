@@ -211,7 +211,14 @@ public class Voucher extends AbstractVerticle {
         int pageSize = Math.min(Math.max(payload.getInteger("pageSize", 25), 1), 200);
         int offset = (page - 1) * pageSize;
 
-        String sql = "SELECT v.* FROM vouchers v JOIN partners p ON p.partner_id = v.partner_code "
+        // LEFT JOIN households so the row carries its village code (vouchers itself has no
+        // village column -- it lives on households, see 006_geo_hierarchy.sql); the frontend
+        // resolves village name from this code via GET_VILLAGES, the same convention already
+        // used for organisation/village names elsewhere (VouchersPage/HouseholdsPage orgName()/
+        // villageName()). LEFT JOIN so a voucher survives even if its household was hard-deleted.
+        String sql = "SELECT v.*, hh.boma_code AS village_code FROM vouchers v "
+                + "JOIN partners p ON p.partner_id = v.partner_code "
+                + "LEFT JOIN households hh ON hh.household_number = v.household_number "
                 + "WHERE (@p1 IS NULL OR v.partner_code=@p1) "
                 + "AND (@p2 IS NULL OR v.status=@p2) AND (@p3 IS NULL OR v.household_number=@p3) "
                 + "AND (@p6 = 1 OR p.anchor_id=@p7) "
@@ -376,11 +383,19 @@ public class Voucher extends AbstractVerticle {
                 });
     }
 
+    /** Null-safe read of a column that may not exist on this row -- village_code is only
+     *  present on GET_VOUCHERS' joined listing query, not on GET_VOUCHER/SYNC_VOUCHERS'
+     *  plain "SELECT * FROM vouchers" (mirrors Household#strSafe). */
+    private static String strSafe(Row r, String column) {
+        return r.getColumnIndex(column) < 0 ? null : Rows.str(r, column);
+    }
+
     private static JsonObject summary(Row r) {
         return new JsonObject()
                 .put("voucherCode", Rows.str(r, "voucher_code"))
                 .put("householdNumber", Rows.str(r, "household_number"))
                 .put("organisationCode", Rows.str(r, "partner_code"))
+                .put("villageCode", strSafe(r, "village_code"))
                 .put("amount", Rows.dbl(r, "amount"))
                 .put("purpose", Rows.str(r, "purpose"))
                 .put("status", Rows.str(r, "status"))

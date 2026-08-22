@@ -92,7 +92,7 @@ public class SyncManager {
      * hierarchy so the household form can offer name-based pickers offline (see GeoDao). Fails
      * open like the other catalogue pulls -- an anchor that hasn't configured a hierarchy yet
      * (or a device that's simply offline) must never block household registration, it just falls
-     * back to the form's manual-code entry.
+     * back to the form's manual name entry.
      */
     private boolean syncGeography() {
         Integer anchorId = new SessionManager(context).getAnchorId();
@@ -307,6 +307,7 @@ public class SyncManager {
                 params.put("amount", p.amount);
                 params.put("biometricVerified", true);
                 params.put("fingerprintUuid", p.matchedFingerprintUuid);
+                params.put("faceUuid", p.matchedFaceUuid);
                 params.put("latitude", p.latitude);
                 params.put("longitude", p.longitude);
                 ApiClient.get(context).dispatchSync("RECORD_FIELD_PAYMENT", params);

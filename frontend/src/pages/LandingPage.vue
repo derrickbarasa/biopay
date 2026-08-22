@@ -199,7 +199,7 @@ const howTrackStyle = computed(() => ({
 
 // Contact email is configurable via VITE_CONTACT_EMAIL so it can be swapped
 // for a real inbox without a code change.
-const contactEmail = import.meta.env.VITE_CONTACT_EMAIL || 'biopay@money.com'
+const contactEmail = import.meta.env.VITE_CONTACT_EMAIL || 'info@biopay.com'
 
 onMounted(() => {
   const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -637,7 +637,7 @@ onBeforeUnmount(() => {
                         </div>
                       </div>
                       <div class="dmetric">
-                        <div class="dmetric-copy"><span class="lbl">Value disbursed</span><span class="num">SSP 2.4M</span><span class="sub">Cash + vouchers</span></div>
+                        <div class="dmetric-copy"><span class="lbl">Value disbursed</span><span class="num">USD 2.4M</span><span class="sub">Cash + vouchers</span></div>
                         <div class="dmetric-icon amber">
                           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="13" rx="2" /><path d="M3 10h18" /><circle cx="16" cy="14.5" r="1.4" /></svg>
                         </div>
@@ -929,11 +929,11 @@ onBeforeUnmount(() => {
 }
 .landing-root .btn:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 3px; }
 .landing-root .btn-primary {
-  background: var(--color-primary);
+  background: var(--color-accent);
   color: #fff;
   box-shadow: 0 1px 0 rgba(0, 0, 0, 0.08);
 }
-.landing-root .btn-primary:hover { background: var(--color-primary-deep); transform: translateY(-1px); box-shadow: 0 6px 16px -6px var(--shadow-color); }
+.landing-root .btn-primary:hover { background: var(--color-accent-deep); transform: translateY(-1px); box-shadow: 0 6px 16px -6px var(--shadow-color); }
 .landing-root .btn-nav { padding: 0.68em 1.15em; font-size: 0.9rem; }
 .landing-root .btn-ghost {
   background: transparent;
@@ -1033,11 +1033,19 @@ onBeforeUnmount(() => {
    background -- the scrim keeps the text side readable regardless of photo). */
 .landing-root .hero-visual { position: relative; isolation: isolate; overflow: hidden; min-height: 420px; display: flex; flex-direction: column; justify-content: center; border-top: none; border-bottom: 0; }
 .landing-root .hero-image, .landing-root .hero-scrim { position: absolute; inset: 0; }
-.landing-root .hero-image { opacity: 0; background-size: cover; background-position: center; background-color: var(--color-primary-deep); filter: saturate(1.2) contrast(1.05); transform: scale(1.03); transition: opacity 900ms ease, transform 7s ease; z-index: -2; }
+.landing-root .hero-image { opacity: 0; background-size: cover; background-position: right center; background-color: var(--color-primary-deep); filter: saturate(1.05) contrast(1.02); transform: scale(1.03); transition: opacity 900ms ease, transform 7s ease; z-index: -2; }
 .landing-root .hero-image.active { opacity: 1; transform: scale(1); }
-.landing-root .hero-scrim { z-index: -1; background: radial-gradient(circle at 85% 18%, rgba(251, 191, 36, .34), transparent 26rem), linear-gradient(90deg, rgba(4, 47, 46, .92) 0%, rgba(15, 118, 110, .74) 45%, rgba(4, 47, 46, .28) 100%); }
+/* Neutral dark-to-clear scrim (not a colour wash) so the photo reads true on the
+   right; it clears by ~58% of the width so the subject isn't hidden behind text
+   on the left. A soft bottom fade keeps the dot/arrow controls legible too. */
+.landing-root .hero-scrim {
+  z-index: -1;
+  background:
+    linear-gradient(90deg, rgba(3, 12, 11, .86) 0%, rgba(3, 12, 11, .66) 30%, rgba(3, 12, 11, .28) 50%, rgba(3, 12, 11, 0) 62%),
+    linear-gradient(0deg, rgba(3, 12, 11, .35) 0%, rgba(3, 12, 11, 0) 22%);
+}
 .landing-root .hero-visual .wrap { position: relative; z-index: 1; width: 100%; }
-.landing-root .hero-copy { max-width: 42rem; }
+.landing-root .hero-copy { max-width: 34rem; }
 
 .landing-root .hero-slide { min-height: 13rem; }
 .landing-root .hero-fade-enter-active { transition: opacity 420ms ease, transform 420ms cubic-bezier(0.16, 1, 0.3, 1); }
@@ -1127,7 +1135,7 @@ onBeforeUnmount(() => {
   position: relative;
   flex: 0 0 auto;
   width: 340px;
-  height: 260px;
+  height: 300px;
   overflow: hidden;
   border-radius: var(--radius-card);
   background: var(--color-primary-deep);
@@ -1163,8 +1171,9 @@ onBeforeUnmount(() => {
   margin: 0;
   overflow: hidden;
   display: -webkit-box;
-  -webkit-line-clamp: 3;
+  -webkit-line-clamp: 5;
   -webkit-box-orient: vertical;
+  text-overflow: ellipsis;
   font-size: 0.78rem;
   line-height: 1.4;
   color: rgba(255, 255, 255, .82);
@@ -1186,10 +1195,10 @@ onBeforeUnmount(() => {
 .landing-root .how-carousel-btn:hover { border-color: var(--color-primary); color: var(--color-primary); }
 .landing-root .how-carousel-btn:focus-visible { outline: 3px solid var(--color-primary); outline-offset: 2px; }
 @media (max-width: 820px) {
-  .landing-root .how-card { width: 280px; height: 280px; }
+  .landing-root .how-card { width: 280px; height: 320px; }
 }
 @media (max-width: 390px) {
-  .landing-root .how-card { width: 240px; }
+  .landing-root .how-card { width: 240px; height: 340px; }
 }
 
 /* Feature grid */
@@ -1353,17 +1362,17 @@ onBeforeUnmount(() => {
 .landing-root footer {
   padding: var(--space-5) 0 var(--space-4);
   background: var(--color-accent);
-  color: #1A1200;
+  color: #FFFFFF;
 }
 .landing-root .foot-grid { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--space-4); flex-wrap: wrap; }
 .landing-root .foot-brand .brand { margin-bottom: 0.5rem; }
-.landing-root .foot-brand p { color: var(--color-primary-deep); opacity: 0.82; font-size: 0.85rem; max-width: 34ch; }
+.landing-root .foot-brand p { color: #FFFFFF; opacity: 0.88; font-size: 0.85rem; max-width: 34ch; }
 .landing-root .foot-links { display: flex; gap: var(--space-5); flex-wrap: wrap; }
-.landing-root .foot-col h5 { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--color-primary-deep); opacity: 0.75; margin-bottom: 0.6rem; }
-.landing-root .foot-col a { display: block; font-size: 0.88rem; text-decoration: none; color: var(--color-primary-deep); margin-bottom: 0.5rem; transition: color 150ms ease, transform 150ms ease; }
+.landing-root .foot-col h5 { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: #FFFFFF; opacity: 0.8; margin-bottom: 0.6rem; }
+.landing-root .foot-col a { display: block; font-size: 0.88rem; text-decoration: none; color: #FFFFFF; opacity: 0.92; margin-bottom: 0.5rem; transition: color 150ms ease, transform 150ms ease; }
 .landing-root .foot-col a:hover { color: #1A1200; transform: translateX(3px); }
-.landing-root .foot-col a:focus-visible { outline: 2px solid var(--color-primary-deep); outline-offset: 3px; }
-.landing-root .foot-bottom { margin-top: var(--space-5); padding-top: var(--space-3); border-top: 1px solid rgba(26, 18, 0, 0.24); display: flex; justify-content: space-between; font-size: 0.78rem; color: var(--color-primary-deep); opacity: 0.85; flex-wrap: wrap; gap: 0.5rem; }
+.landing-root .foot-col a:focus-visible { outline: 2px solid #FFFFFF; outline-offset: 3px; }
+.landing-root .foot-bottom { margin-top: var(--space-5); padding-top: var(--space-3); border-top: 1px solid rgba(255, 255, 255, 0.32); display: flex; justify-content: space-between; font-size: 0.78rem; color: #FFFFFF; opacity: 0.85; flex-wrap: wrap; gap: 0.5rem; }
 
 /* Reveal-on-scroll */
 .landing-root .reveal { opacity: 0; transform: translateY(14px); transition: opacity 0.6s ease, transform 0.6s ease; }
@@ -1414,11 +1423,11 @@ onBeforeUnmount(() => {
    modest -- the previous version scaled these up enough that the page no
    longer fit at 100% zoom on an ordinary 1440-1920px display. */
 @media (min-width: 1440px) {
-  .landing-root .hero-copy { max-width: 44rem; }
+  .landing-root .hero-copy { max-width: 36rem; }
 }
 
 @media (min-width: 2200px) {
-  .landing-root .hero-copy { max-width: 46rem; }
+  .landing-root .hero-copy { max-width: 37.5rem; }
   .landing-root .hero-visual { min-height: clamp(440px, 46vh, 500px); }
 }
 </style>

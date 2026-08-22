@@ -93,7 +93,8 @@ public class LoginActivity extends BaseActivity {
                         user != null ? user.optString("firstName") : "",
                         user != null ? user.optString("lastName") : "",
                         anchorId,
-                        user != null ? user.optString("partnerCode", null) : null);
+                        user != null ? user.optString("partnerCode", null) : null,
+                        user != null ? user.optString("verificationMethod", "BIOMETRIC") : "BIOMETRIC");
 
                 // Mirrors the web dashboard's archived-subscription gate -- see
                 // SubscriptionGate's javadoc for why this only needs checking here.

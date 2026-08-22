@@ -27,9 +27,11 @@ public class PaymentDao {
         dbHelper = DatabaseHelper.get(context);
     }
 
+    /** Exactly one of matchedFingerprintUuid/matchedFaceUuid should be non-null -- whichever
+     *  method PaymentVerificationActivity actually verified the beneficiary with. */
     public long recordFieldPayment(String supervisorId, String partnerCode, String householdNumber,
-            String householdName, double amount, String matchedFingerprintUuid, String latitude,
-            String longitude, String uuid) {
+            String householdName, double amount, String matchedFingerprintUuid, String matchedFaceUuid,
+            String latitude, String longitude, String uuid) {
         ContentValues values = new ContentValues();
         values.put("supervisor_id", supervisorId);
         values.put("partner_code", partnerCode);
@@ -37,6 +39,7 @@ public class PaymentDao {
         values.put("household_name", householdName);
         values.put("amount", amount);
         values.put("matched_fingerprint_uuid", matchedFingerprintUuid);
+        values.put("matched_face_uuid", matchedFaceUuid);
         values.put("latitude", latitude);
         values.put("longitude", longitude);
         values.put("uuid", uuid);
@@ -112,6 +115,7 @@ public class PaymentDao {
                 p.householdNumber = cursor.getString(cursor.getColumnIndexOrThrow("household_number"));
                 p.amount = cursor.getDouble(cursor.getColumnIndexOrThrow("amount"));
                 p.matchedFingerprintUuid = cursor.getString(cursor.getColumnIndexOrThrow("matched_fingerprint_uuid"));
+                p.matchedFaceUuid = cursor.getString(cursor.getColumnIndexOrThrow("matched_face_uuid"));
                 p.latitude = cursor.getString(cursor.getColumnIndexOrThrow("latitude"));
                 p.longitude = cursor.getString(cursor.getColumnIndexOrThrow("longitude"));
                 results.add(p);
@@ -131,6 +135,7 @@ public class PaymentDao {
         public String householdNumber;
         public double amount;
         public String matchedFingerprintUuid;
+        public String matchedFaceUuid;
         public String latitude;
         public String longitude;
     }

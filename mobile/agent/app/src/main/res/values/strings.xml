@@ -34,6 +34,7 @@
     <string name="home_sync_now">Sync now</string>
     <string name="home_local_ready">Local data ready</string>
     <string name="home_sync_clear">All local records are synced</string>
+    <string name="home_subscription_grace">Subscription expired - %1$d day(s) left before your organisation is locked out. Ask your anchor administrator to renew.</string>
     <string name="home_sync_pending">%1$d record(s) waiting to sync</string>
     <string name="home_overview">Operational summary</string>
     <string name="home_tasks">Field tasks</string>
@@ -66,7 +67,6 @@
     <string name="home_location_unavailable">Location unavailable. Grant location permission and try again outdoors.</string>
     <string name="home_location_current">Current location: %1$.5f, %2$.5f</string>
     <string name="nav_home">Home</string>
-    <string name="nav_profile">Profile</string>
     <string name="nav_settings">Settings</string>
     <string name="logout_title">Log out of BioPay?</string>
     <string name="logout_message">Local records remain on this device. You will need to sign in again to continue.</string>
@@ -92,22 +92,25 @@
     <string name="section_household_breakdown">Household breakdown</string>
     <string name="section_vulnerability_literacy">Eligibility and support needs</string>
     <string name="section_biometric_registration">Registration method</string>
-    <string name="biometric_registration_note">Households register and verify with the configured Morpho fingerprint scanner. Face recognition isn\'t available in this build yet, so it isn\'t offered here — check Settings › Biometrics for status.</string>
+    <string name="biometric_registration_note">Choose how this household enrolls, then capture the household head (and anyone else you add) before finishing registration.</string>
+    <string name="face_accuracy_notice">Face verification accuracy hasn\'t been fully validated yet - fingerprint is more reliable until then.</string>
     <string name="field_household_name">Household name</string>
     <string name="field_id_number">ID number</string>
     <string name="field_phone_number">Phone number</string>
     <string name="field_age">Age</string>
     <string name="field_gender">Gender</string>
     <string name="field_registration_method">Biometric method</string>
+    <string name="field_alternate_name">Full name</string>
+    <string name="field_alternate_relationship">Relationship to household head</string>
     <string name="field_state">State</string>
     <string name="field_county">County</string>
     <string name="field_location">Location</string>
     <string name="field_village">Village</string>
-    <string name="field_state_code">State code</string>
-    <string name="field_county_code">County code</string>
-    <string name="field_location_code">Location code</string>
-    <string name="field_village_code">Village code</string>
-    <string name="location_enter_manually">Can\'t find your area? Enter codes manually</string>
+    <string name="field_state_name">State name</string>
+    <string name="field_county_name">County name</string>
+    <string name="field_location_name">Location name</string>
+    <string name="field_village_name">Village name</string>
+    <string name="location_enter_manually">Can\'t find your area? Enter names manually</string>
     <string name="location_use_picker">Use the location picker instead</string>
     <string name="location_picker_note">Choose from the state, county, location, and village configured for your organisation.</string>
     <string name="field_household_size">Household size</string>
@@ -116,8 +119,30 @@
     <string name="field_has_disabled_members">Household has members with disabilities</string>
     <string name="field_literate">Household head is literate</string>
     <string name="field_eligible">Eligible for the programme</string>
-    <string name="household_save_continue">Save household</string>
+    <string name="household_continue_to_capture">Continue to capture</string>
+    <string name="household_save_continue">Save changes</string>
     <string name="household_saved">Household saved on this device</string>
+    <string name="household_captured_people_title">Captured people</string>
+    <string name="household_person_head">Household head</string>
+    <string name="household_person_alternate">Alternate</string>
+    <string name="household_person_not_captured">Not yet captured</string>
+    <string name="household_capture_this_person">Capture</string>
+
+    <string name="person_capture_title">Capture biometrics</string>
+    <string name="person_capture_subtitle_head">Household head</string>
+    <string name="person_capture_subtitle_alternate">Alternate household member</string>
+    <string name="person_capture_fingerprint_label">Fingerprint</string>
+    <string name="person_capture_face_label">Face</string>
+    <string name="person_capture_not_captured">Not captured yet</string>
+    <string name="person_capture_captured">Captured ✓</string>
+    <string name="person_capture_fingerprint_action">Capture fingerprint</string>
+    <string name="person_capture_face_action">Capture face</string>
+    <string name="person_capture_add_another">Add another person</string>
+    <string name="person_capture_add_confirm">Add and continue</string>
+    <string name="person_capture_add_cancel">Cancel</string>
+    <string name="person_capture_finish">Finish registration</string>
+    <string name="person_capture_done">%1$s captured</string>
+    <string name="person_capture_failed">Capture problem: %1$s</string>
 
     <string name="attendance_title">Attendance</string>
     <string name="attendance_description">Choose a household, then verify the person clocking in or out.</string>
@@ -157,6 +182,13 @@
     <string name="payment_amount">Amount %1$s</string>
     <string name="payment_paid">Paid</string>
     <string name="payment_pending">Pending</string>
+    <string name="payment_verify_title">Verify to pay</string>
+    <string name="payment_verify_body">Verify whoever\'s here to collect this payment, using whichever method they\'re enrolled with.</string>
+    <string name="payment_verify_not_enrolled">Not enrolled with any verification method yet.</string>
+    <string name="payment_verify_fingerprint">Fingerprint</string>
+    <string name="payment_verify_face">Face</string>
+    <string name="payment_verify_recorded">Payment recorded and queued to sync</string>
+    <string name="payment_verify_no_face_match">Face did not match. Check the beneficiary and try again.</string>
 
     <string name="voucher_title">Voucher redemption</string>
     <string name="voucher_subtitle">Choose an issued voucher and verify the household fingerprint before redemption.</string>
@@ -214,15 +246,18 @@
     <string name="settings_sync_queued">Sync queued. It will run when a network is available.</string>
 
     <string name="settings_biometrics">Biometrics</string>
+    <string name="settings_enabled_methods_fingerprint">Your organisation has fingerprint registration enabled.</string>
+    <string name="settings_enabled_methods_face">Your organisation has face registration enabled.</string>
+    <string name="settings_enabled_methods_both">Your organisation has both fingerprint and face registration enabled.</string>
     <string name="settings_scanner_role">Fingerprint scanner used for enrollment and verification</string>
     <string name="settings_test_scanner">Test scanner connection</string>
     <string name="settings_scanner_connected">Connected</string>
     <string name="settings_scanner_disconnected">Not connected</string>
     <string name="settings_face_title">Face recognition</string>
-    <string name="settings_face_body">Face detection works and can be tested below. Identity matching isn\'t available yet, so verification still uses fingerprint only.</string>
+    <string name="settings_face_body">Face capture and matching work as a prototype - accuracy hasn\'t been fully validated yet. You can test it below.</string>
     <string name="settings_test_face">Test face capture</string>
     <string name="face_test_running">Checking capture…</string>
-    <string name="face_test_no_match_model">Face detected and validated. Matching isn\'t available yet — no approved model is configured.</string>
+    <string name="face_test_embedding_ok">Embedding computed (prototype model, not yet validated): %1$d dimensions, quality score %2$.2f.</string>
     <string name="face_test_capture_failed">Capture problem: %1$s</string>
 
     <string name="face_capture_title">Face capture</string>
@@ -237,7 +272,7 @@
     <string name="face_capture_failed">Capture failed. Try again.</string>
 
     <string name="settings_security">Security</string>
-    <string name="settings_security_policy">For your security, BioPay signs you out whenever you leave the app, and after 5 minutes of inactivity while it\'s open.</string>
+    <string name="settings_security_policy">For your security, BioPay signs you out after 2 minutes away from the app, and after 5 minutes of inactivity while it\'s open.</string>
     <string name="settings_change_password_intro">Change your sign-in password</string>
     <string name="settings_current_password">Current password</string>
     <string name="settings_new_password">New password</string>

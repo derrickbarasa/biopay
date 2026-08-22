@@ -139,6 +139,24 @@ public class Auth extends AbstractVerticle {
         return OrgModules.enabledForAsArray(pool, partnerCode);
     }
 
+    /** Lets the Android field app show only the household-registration methods (fingerprint/face)
+     *  the officer's organisation has actually enabled, without a second round-trip after login.
+     *  Anchor-scoped sessions and any lookup failure default to BIOMETRIC (fingerprint-only), the
+     *  same default {@link Organization} applies when an org is created without specifying one. */
+    private Future<String> verificationMethodFor(String partnerCode) {
+        if (partnerCode == null || partnerCode.isEmpty()) {
+            return Future.succeededFuture("BIOMETRIC");
+        }
+        return pool.preparedQuery("SELECT verification_method FROM partners WHERE partner_id=@p1")
+                .execute(Tuple.of(partnerCode))
+                .map(rows -> {
+                    if (rows.size() == 0) return "BIOMETRIC";
+                    String method = Rows.str(rows.iterator().next(), "verification_method");
+                    return method == null || method.isEmpty() ? "BIOMETRIC" : method;
+                })
+                .otherwise("BIOMETRIC");
+    }
+
     // ---- LOGIN_USER (users table -- anchor or organisation, merged) -------------
 
     private void loginUser(Message<Object> message) {
@@ -604,7 +622,9 @@ public class Auth extends AbstractVerticle {
                             .onFailure(err -> onDbError(message, err))
                             .onSuccess(tokens -> {
                                 audit(id, anchorId, "SUPERVISOR", partnerCode, "LOGIN_SUCCESS", ip, new JsonObject());
-                                enabledModulesFor("SUPERVISOR", partnerCode).onComplete(modulesAr -> reply(message, new JsonObject()
+                                Future<JsonArray> modulesF = enabledModulesFor("SUPERVISOR", partnerCode);
+                                Future<String> verificationMethodF = verificationMethodFor(partnerCode);
+                                Future.all(modulesF, verificationMethodF).onComplete(cf -> reply(message, new JsonObject()
                                         .put("responseCode", "000")
                                         .put("responseMessage", "Login successful")
                                         .put("accessToken", tokens.getString("accessToken"))
@@ -618,7 +638,8 @@ public class Auth extends AbstractVerticle {
                                                 .put("role", "SUPERVISOR")
                                                 .put("anchorId", anchorId)
                                                 .put("partnerCode", partnerCode)
-                                                .put("enabledModules", modulesAr.succeeded() ? modulesAr.result() : new JsonArray()))));
+                                                .put("enabledModules", modulesF.succeeded() ? modulesF.result() : new JsonArray())
+                                                .put("verificationMethod", verificationMethodF.succeeded() ? verificationMethodF.result() : "BIOMETRIC"))));
                             });
                 });
     }

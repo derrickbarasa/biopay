@@ -12,12 +12,9 @@ export const ORG_MODULES: { code: OrgModule; label: string }[] = [
   { code: 'FOOD_DISTRIBUTION', label: 'Food Distribution' },
 ]
 
-/** ISO-ish common country list for the organisation form's Country dropdown -- kept short and
- *  regionally relevant rather than exhaustive; "Other" always lets a form move forward. */
-export const COUNTRIES: string[] = [
-  'South Sudan', 'Kenya', 'Uganda', 'Ethiopia', 'Sudan', 'Somalia', 'Tanzania', 'Rwanda',
-  'Democratic Republic of the Congo', 'Nigeria', 'Chad', 'Central African Republic', 'Other',
-]
+/** Full world country list (see utils/countries.ts, which also carries each country's
+ *  capital for the Country -> Capital City auto-fill on the organisation/anchor forms). */
+export { countryNames as COUNTRIES } from '@/utils/countries'
 
 export type VerificationMethod = 'BIOMETRIC' | 'FACIAL'
 

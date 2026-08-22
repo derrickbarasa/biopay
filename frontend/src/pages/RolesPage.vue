@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { dispatch } from '@/api/client'
 import { useToast } from '@/composables/useToast'
 
@@ -16,6 +16,59 @@ const selected = ref<number | null>(null)
 
 const form = reactive({ roleId: null as number | null, name: '', description: '', scope: 'ORGANISATION', permissionIds: [] as number[] })
 const newPermission = reactive({ name: '', description: '' })
+
+const GROUP_LABELS: Record<string, string> = {
+  ORGANISATIONS: 'Organisations',
+  USERS: 'User Management',
+  ROLES: 'Roles & Permissions',
+  OFFICERS: 'Officers',
+  HOUSEHOLDS: 'Households',
+  PAYMENTS: 'Payments',
+  VOUCHERS: 'Vouchers',
+  REPORTS: 'Reports',
+  LOCATIONS: 'Locations',
+  ATTENDANCE: 'Attendance',
+  ANCHORS: 'Anchors',
+}
+
+function toTitle(s: string) {
+  return s.toLowerCase().split('_').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
+}
+
+interface PermissionGroup { key: string; label: string; items: { permission: Permission; actionLabel: string }[] }
+
+const permissionGroups = computed<PermissionGroup[]>(() => {
+  const map = new Map<string, PermissionGroup>()
+  for (const p of permissions.value) {
+    const parts = p.name.split('_')
+    const verb = parts[0]
+    const rest = parts.slice(1).join('_') || verb
+    if (!map.has(rest)) map.set(rest, { key: rest, label: GROUP_LABELS[rest] ?? toTitle(rest), items: [] })
+    map.get(rest)!.items.push({ permission: p, actionLabel: toTitle(verb) })
+  }
+  return [...map.values()].sort((a, b) => a.label.localeCompare(b.label))
+})
+
+const allPermissionsSelected = computed(() => permissions.value.length > 0 && form.permissionIds.length === permissions.value.length)
+
+function groupSelectedCount(group: PermissionGroup) {
+  return group.items.filter((i) => form.permissionIds.includes(i.permission.id)).length
+}
+function isGroupFullySelected(group: PermissionGroup) {
+  return group.items.length > 0 && groupSelectedCount(group) === group.items.length
+}
+function isGroupPartiallySelected(group: PermissionGroup) {
+  const count = groupSelectedCount(group)
+  return count > 0 && count < group.items.length
+}
+function toggleGroup(group: PermissionGroup) {
+  const groupIds = new Set(group.items.map((i) => i.permission.id))
+  if (isGroupFullySelected(group)) {
+    form.permissionIds = form.permissionIds.filter((id) => !groupIds.has(id))
+  } else {
+    form.permissionIds = [...new Set([...form.permissionIds, ...groupIds])]
+  }
+}
 
 async function load() {
   loading.value = true
@@ -90,7 +143,7 @@ onMounted(load)
           <h1>Roles &amp; permissions</h1>
           <v-chip size="small" variant="tonal" color="primary">Anchor-wide policy</v-chip>
         </div>
-        <p>Define what a role can do, then bundle those capabilities into the roles your users are assigned.</p>
+        <p>Define what a role can do, then bundle those permissions into the roles your users are assigned.</p>
       </div>
     </header>
 
@@ -101,7 +154,7 @@ onMounted(load)
         Permissions
       </v-card-title>
       <v-card-text>
-        <p class="section-hint">The individual capabilities available to bundle into roles below.</p>
+        <p class="section-hint">The individual permissions available to bundle into roles below.</p>
         <div class="permission-chips">
           <v-chip v-for="p in permissions" :key="p.id" variant="tonal" color="primary" size="small" class="mb-1">
             <strong class="mr-1">{{ p.name.replaceAll('_', ' ') }}</strong>
@@ -154,21 +207,41 @@ onMounted(load)
                 <v-select v-model="form.scope" :items="['ANCHOR', 'ORGANISATION']" label="Scope" variant="outlined" density="compact" />
                 <v-textarea v-model="form.description" label="Description" variant="outlined" rows="2" density="compact" class="wide" />
               </div>
-              <h2>Capabilities</h2>
-              <div class="permissions">
-                <label v-for="p in permissions" :key="p.id">
-                  <v-checkbox-btn v-model="form.permissionIds" :value="p.id" color="primary" />
-                  <span>
-                    <strong>{{ p.name.replaceAll('_', ' ') }}</strong>
-                    <small>{{ p.description }}</small>
-                  </span>
-                </label>
+              <div class="permissions-head d-flex align-center justify-space-between flex-wrap">
+                <h2 class="mb-0">Permissions</h2>
+                <v-chip v-if="allPermissionsSelected" size="small" color="primary" variant="tonal">Full access -- every permission selected</v-chip>
+              </div>
+              <div class="permission-groups">
+                <div v-for="group in permissionGroups" :key="group.key" class="permission-group">
+                  <div class="group-head">
+                    <span class="group-title">{{ group.label }}</span>
+                    <label class="select-all">
+                      <v-checkbox-btn
+                        :model-value="isGroupFullySelected(group)"
+                        :indeterminate="isGroupPartiallySelected(group)"
+                        color="primary"
+                        density="compact"
+                        @update:model-value="toggleGroup(group)"
+                      />
+                      <span>Select all</span>
+                    </label>
+                  </div>
+                  <div class="permissions">
+                    <label v-for="item in group.items" :key="item.permission.id">
+                      <v-checkbox-btn v-model="form.permissionIds" :value="item.permission.id" color="primary" />
+                      <span>
+                        <strong>{{ item.actionLabel }}</strong>
+                        <small>{{ item.permission.description }}</small>
+                      </span>
+                    </label>
+                  </div>
+                </div>
                 <p v-if="!permissions.length" class="text-caption text-medium-emphasis">Add a permission above first.</p>
               </div>
             </v-card-text>
             <v-card-actions class="px-6 pb-6">
               <v-spacer />
-              <v-btn color="primary" :loading="saving" @click="save">Save role</v-btn>
+              <v-btn color="secondary" :loading="saving" @click="save">Save role</v-btn>
             </v-card-actions>
           </v-card>
         </div>
@@ -201,6 +274,15 @@ aside small { color: #64748b; margin-top: 3px; }
 .fields { display: grid; grid-template-columns: 1fr 220px; gap: 0 16px; }
 .wide { grid-column: 1 / -1; }
 h2 { font-size: .82rem; text-transform: uppercase; letter-spacing: .1em; color: #475569; margin: 8px 0 12px; }
+.permissions-head { gap: 8px; margin: 8px 0 12px; }
+.permissions-head h2 { margin: 0; }
+
+.permission-groups { display: flex; flex-direction: column; gap: 14px; }
+.permission-group { border: 1px solid #e2e8f0; border-radius: 14px; padding: 14px; }
+.group-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+.group-title { font-size: .78rem; font-weight: 750; text-transform: uppercase; letter-spacing: .07em; color: #334155; }
+.select-all { display: flex; align-items: center; gap: 2px; cursor: pointer; font-size: .78rem; color: #475569; user-select: none; }
+
 .permissions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .permissions label { display: flex; gap: 8px; border: 1px solid #e2e8f0; border-radius: 12px; padding: 10px; }
 .permissions strong, .permissions small { display: block; }

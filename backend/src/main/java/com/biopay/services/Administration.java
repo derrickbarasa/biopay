@@ -3,9 +3,11 @@ package com.biopay.services;
 import com.biopay.databases.Datasource;
 import com.biopay.utilities.Passwords;
 import com.biopay.utilities.Rows;
+import com.biopay.utilities.Utilities;
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Future;
 import io.vertx.core.Promise;
+import io.vertx.core.eventbus.EventBus;
 import io.vertx.core.eventbus.Message;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
@@ -16,14 +18,18 @@ import io.vertx.sqlclient.Tuple;
 /** Tenant-scoped administration for anchors, dashboard users, roles and permissions. */
 public class Administration extends AbstractVerticle {
     private MSSQLPool pool;
+    private EventBus eventBus;
 
     @Override
     public void start(Promise<Void> startPromise) {
         pool = Datasource.pool();
+        eventBus = vertx.eventBus();
         vertx.eventBus().consumer("GET_ANCHORS", this::getAnchors);
         vertx.eventBus().consumer("UPDATE_ANCHOR", this::updateAnchor);
         vertx.eventBus().consumer("GET_USERS", this::getUsers);
+        vertx.eventBus().consumer("GET_USER", this::getUser);
         vertx.eventBus().consumer("CREATE_USER", this::createUser);
+        vertx.eventBus().consumer("UPDATE_USER", this::updateUser);
         vertx.eventBus().consumer("TOGGLE_USER_STATUS", this::toggleUserStatus);
         vertx.eventBus().consumer("GET_ROLES", this::getRoles);
         vertx.eventBus().consumer("SAVE_ROLE", this::saveRole);
@@ -61,6 +67,7 @@ public class Administration extends AbstractVerticle {
                             .put("anchorCode",Rows.str(r,"anchor_code")).put("name",Rows.str(r,"name"))
                             .put("authorisedName",Rows.str(r,"authorised_name")).put("authorisedEmail",Rows.str(r,"authorised_email"))
                             .put("authorisedContact",Rows.str(r,"authorised_contact")).put("address",Rows.str(r,"address"))
+                            .put("country",Rows.str(r,"country")).put("city",Rows.str(r,"city"))
                             .put("website",Rows.str(r,"website")).put("status",Rows.intVal(r,"status")));
                     ok(message, "Anchor found", out);
                 });
@@ -69,9 +76,10 @@ public class Administration extends AbstractVerticle {
     private void updateAnchor(Message<Object> message) {
         JsonObject p = data(message);
         if (!anchor(p)) { fail(message, "Only an anchor administrator can update anchor settings"); return; }
-        pool.preparedQuery("UPDATE anchors SET name=@p1, authorised_name=@p2, authorised_email=@p3, authorised_contact=@p4, address=@p5, website=@p6, updated_at=GETDATE() WHERE id=@p7")
+        pool.preparedQuery("UPDATE anchors SET name=@p1, authorised_name=@p2, authorised_email=@p3, authorised_contact=@p4, address=@p5, country=@p6, city=@p7, website=@p8, updated_at=GETDATE() WHERE id=@p9")
                 .execute(Tuple.of(p.getString("name","").trim(),p.getString("authorisedName"),p.getString("authorisedEmail"),
-                        p.getString("authorisedContact"),p.getString("address"),p.getString("website"),Integer.parseInt(p.getValue("anchorId").toString())))
+                        p.getString("authorisedContact"),p.getString("address"),strOrEmpty(p.getString("country")).trim(),
+                        strOrEmpty(p.getString("city")).trim(),p.getString("website"),Integer.parseInt(p.getValue("anchorId").toString())))
                 .onFailure(e -> dbFail(message,e)).onSuccess(r -> ok(message,"Anchor updated",null));
     }
 
@@ -104,19 +112,67 @@ public class Administration extends AbstractVerticle {
     private void createUser(Message<Object> message) {
         JsonObject p = data(message);
         String email=p.getString("email","").trim().toLowerCase();
-        String password=p.getString("password","");
         String requestedScope=p.getString("userScope","ORGANISATION").toUpperCase();
         String partner = anchor(p) ? p.getString("organisationCode") : p.getString("partnerCode");
         if (!anchor(p) && !"ORGANISATION".equals(requestedScope)) { fail(message,"Organisation administrators can only create organisation users"); return; }
-        if (email.isEmpty() || password.length()<12) { fail(message,"Email and a password of at least 12 characters are required"); return; }
+        String firstName = strOrEmpty(p.getString("firstName")).trim();
+        if (email.isEmpty() || firstName.isEmpty()) { fail(message,"Email and first name are required"); return; }
         if ("ORGANISATION".equals(requestedScope) && (partner==null || partner.isBlank())) { fail(message,"Organisation is required"); return; }
         Integer anchorId=Integer.parseInt(p.getValue("anchorId").toString());
         String username=p.getString("username",email.split("@")[0]).trim();
+        // Temporary passwords are always generated here, never accepted from the client --
+        // matches the existing Officer.create() pattern (same helper, same email shape).
+        String tempPassword = Utilities.generateRandomPassword(10);
         pool.preparedQuery("INSERT INTO users (partner_code,email,username,password,first_name,other_names,role_id,active,status,anchor_id,user_scope,created_by,created_at,updated_at) VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,1,1,@p8,@p9,@p10,GETDATE(),GETDATE())")
-                .execute(Tuple.of("ANCHOR".equals(requestedScope)?null:partner,email,username,Passwords.hash(password),p.getString("firstName"),
+                .execute(Tuple.of("ANCHOR".equals(requestedScope)?null:partner,email,username,Passwords.hash(tempPassword),firstName,
                         p.getString("otherNames"),p.getInteger("roleId"),anchorId,requestedScope,Integer.parseInt(p.getValue("actorId").toString())))
                 .onFailure(e -> fail(message,"A user with that email or username may already exist"))
-                .onSuccess(r -> ok(message,"User created",null));
+                .onSuccess(r -> {
+                    eventBus.send("EMAIL", new JsonObject()
+                            .put("mailTo", email)
+                            .put("subject", "Your BioPay Dashboard Account")
+                            .put("msg", "Dear " + firstName + ",<br />Your BioPay dashboard account has been created. "
+                                    + "Your temporary password is <strong>" + tempPassword
+                                    + "</strong>. Please log in and change it as soon as possible.")
+                            .toString());
+                    ok(message,"User created. Temporary password sent by email",null);
+                });
+    }
+
+    private void getUser(Message<Object> message) {
+        JsonObject p = data(message);
+        int userId = p.getInteger("userId", 0);
+        String sql = "SELECT u.*, r.role_name FROM users u LEFT JOIN roles r ON r.id=u.role_id WHERE u.id=@p1"
+                + (systemAdmin(p) ? "" : anchor(p) ? " AND u.anchor_id=@p2" : " AND u.partner_code=@p2");
+        Tuple params = systemAdmin(p) ? Tuple.of(userId)
+                : anchor(p) ? Tuple.of(userId, Integer.parseInt(p.getValue("anchorId").toString()))
+                : Tuple.of(userId, p.getString("partnerCode",""));
+        pool.preparedQuery(sql).execute(params).onFailure(e -> dbFail(message,e)).onSuccess(rows -> {
+            if (rows.size() == 0) { fail(message,"User not found"); return; }
+            Row r = rows.iterator().next();
+            ok(message,"User found", new JsonObject().put("id",Rows.intVal(r,"id")).put("email",Rows.str(r,"email"))
+                    .put("username",Rows.str(r,"username")).put("firstName",Rows.str(r,"first_name"))
+                    .put("otherNames",Rows.str(r,"other_names")).put("partnerCode",Rows.str(r,"partner_code"))
+                    .put("userScope",Rows.str(r,"user_scope")).put("roleId",Rows.intVal(r,"role_id"))
+                    .put("roleName",Rows.str(r,"role_name")).put("status",Rows.intVal(r,"status"))
+                    .put("createdAt",Rows.str(r,"created_at")));
+        });
+    }
+
+    private void updateUser(Message<Object> message) {
+        JsonObject p = data(message);
+        int userId = p.getInteger("userId", 0);
+        String firstName = strOrEmpty(p.getString("firstName")).trim();
+        String otherNames = strOrEmpty(p.getString("otherNames")).trim();
+        Integer roleId = p.getInteger("roleId");
+        if (firstName.isEmpty()) { fail(message,"First name is required"); return; }
+        String sql = "UPDATE users SET first_name=@p1, other_names=@p2, role_id=@p3, updated_at=GETDATE() WHERE id=@p4"
+                + (systemAdmin(p) ? "" : anchor(p) ? " AND anchor_id=@p5" : " AND partner_code=@p5");
+        Tuple params = systemAdmin(p) ? Tuple.of(firstName, otherNames, roleId, userId)
+                : anchor(p) ? Tuple.of(firstName, otherNames, roleId, userId, Integer.parseInt(p.getValue("anchorId").toString()))
+                : Tuple.of(firstName, otherNames, roleId, userId, p.getString("partnerCode",""));
+        pool.preparedQuery(sql).execute(params).onFailure(e -> dbFail(message,e))
+                .onSuccess(r -> { if (r.rowCount()==0) fail(message,"User not found"); else ok(message,"User updated",null); });
     }
 
     private void toggleUserStatus(Message<Object> message) {

@@ -5,6 +5,10 @@ const TOKEN_KEY = 'bp_token'
 const USER_KEY = 'bp_user'
 const REFRESH_TOKEN_KEY = 'bp_refresh'
 
+// sessionStorage, not localStorage: the browser itself clears it only when the tab/window is
+// actually closed, never on a mere tab switch, minimize, or app-switch away -- exactly "stay
+// signed in until you close the tab", with no visibility-timer heuristic needed to approximate it.
+
 /** Marks which processing code produced a request, read back in the response interceptor -- a
  *  header rather than a parsed request body, so it survives whatever axios does to `config.data`
  *  on the way out. Purely a client-side signal; the backend ignores it. */
@@ -20,7 +24,7 @@ export const apiClient = axios.create({
 })
 
 apiClient.interceptors.request.use((config) => {
-  const token = localStorage.getItem(TOKEN_KEY)
+  const token = sessionStorage.getItem(TOKEN_KEY)
   if (token) {
     config.headers.Authorization = `Bearer ${token}`
   }
@@ -40,20 +44,20 @@ let renewalInFlight: Promise<string> | null = null
 type RetriableConfig = InternalAxiosRequestConfig & { _retried?: boolean }
 
 export function clearSession() {
-  localStorage.removeItem(TOKEN_KEY)
-  localStorage.removeItem(USER_KEY)
-  localStorage.removeItem(REFRESH_TOKEN_KEY)
+  sessionStorage.removeItem(TOKEN_KEY)
+  sessionStorage.removeItem(USER_KEY)
+  sessionStorage.removeItem(REFRESH_TOKEN_KEY)
 }
 
 export function storeSession(accessToken: string, refreshToken: string, user: unknown) {
-  localStorage.setItem(TOKEN_KEY, accessToken)
-  localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken)
-  localStorage.setItem(USER_KEY, JSON.stringify(user))
+  sessionStorage.setItem(TOKEN_KEY, accessToken)
+  sessionStorage.setItem(REFRESH_TOKEN_KEY, refreshToken)
+  sessionStorage.setItem(USER_KEY, JSON.stringify(user))
 }
 
 export function readStoredUser<T>(): T | null {
   try {
-    const raw = localStorage.getItem(USER_KEY)
+    const raw = sessionStorage.getItem(USER_KEY)
     return raw ? (JSON.parse(raw) as T) : null
   } catch {
     return null
@@ -61,21 +65,21 @@ export function readStoredUser<T>(): T | null {
 }
 
 export function storedToken(): string | null {
-  return localStorage.getItem(TOKEN_KEY)
+  return sessionStorage.getItem(TOKEN_KEY)
 }
 
 /** Refresh tokens rotate on every use (see backend Auth#refreshToken) -- persist the replacement
  *  or the next renewal spends an already-revoked token. */
 async function renewAccessToken(): Promise<string> {
-  const stored = localStorage.getItem(REFRESH_TOKEN_KEY)
+  const stored = sessionStorage.getItem(REFRESH_TOKEN_KEY)
   if (!stored) throw new Error('No refresh token')
 
   const { data } = await refreshClient.post<{ accessToken: string; refreshToken: string }>(
     '/authentication',
     { processingCode: 'REFRESH_TOKEN', refreshToken: stored },
   )
-  localStorage.setItem(TOKEN_KEY, data.accessToken)
-  localStorage.setItem(REFRESH_TOKEN_KEY, data.refreshToken)
+  sessionStorage.setItem(TOKEN_KEY, data.accessToken)
+  sessionStorage.setItem(REFRESH_TOKEN_KEY, data.refreshToken)
   return data.accessToken
 }
 
@@ -91,7 +95,7 @@ apiClient.interceptors.response.use(
       original &&
       !original._retried &&
       !isSessionCall &&
-      localStorage.getItem(REFRESH_TOKEN_KEY)
+      sessionStorage.getItem(REFRESH_TOKEN_KEY)
     ) {
       original._retried = true
       try {

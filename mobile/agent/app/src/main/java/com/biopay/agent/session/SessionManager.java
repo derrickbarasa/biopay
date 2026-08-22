@@ -21,6 +21,7 @@ public class SessionManager {
     private static final String KEY_LAST_NAME = "last_name";
     private static final String KEY_ANCHOR_ID = "anchor_id";
     private static final String KEY_PARTNER_CODE = "partner_code";
+    private static final String KEY_VERIFICATION_METHOD = "verification_method";
 
     private final SharedPreferences prefs;
 
@@ -29,7 +30,7 @@ public class SessionManager {
     }
 
     public void saveSession(String accessToken, String refreshToken, int userId, String email,
-            String firstName, String lastName, Integer anchorId, String partnerCode) {
+            String firstName, String lastName, Integer anchorId, String partnerCode, String verificationMethod) {
         SharedPreferences.Editor editor = prefs.edit();
         editor.putString(KEY_ACCESS_TOKEN, accessToken);
         editor.putString(KEY_REFRESH_TOKEN, refreshToken);
@@ -39,6 +40,7 @@ public class SessionManager {
         editor.putString(KEY_LAST_NAME, lastName);
         editor.putInt(KEY_ANCHOR_ID, anchorId == null ? -1 : anchorId);
         editor.putString(KEY_PARTNER_CODE, partnerCode);
+        editor.putString(KEY_VERIFICATION_METHOD, verificationMethod);
         editor.apply();
     }
 
@@ -101,5 +103,13 @@ public class SessionManager {
 
     public String getPartnerCode() {
         return prefs.getString(KEY_PARTNER_CODE, null);
+    }
+
+    /** BIOMETRIC (fingerprint only), FACIAL (face only), or BOTH -- set by the organisation's
+     *  admin via the web dashboard (see Organization.java), never changeable on-device. Defaults
+     *  to BIOMETRIC, matching the backend's own default for an org with no explicit setting. */
+    public String getVerificationMethod() {
+        String stored = prefs.getString(KEY_VERIFICATION_METHOD, null);
+        return stored == null || stored.isEmpty() ? "BIOMETRIC" : stored;
     }
 }

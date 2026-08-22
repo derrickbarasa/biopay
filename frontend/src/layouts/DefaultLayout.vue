@@ -104,15 +104,25 @@ const navSections: NavSection[] = [
     items: [
       { title: 'Households', icon: 'mdi-home-group', to: '/app/households', roles: ['ANCHOR', 'ORGANISATION'], module: 'HOUSEHOLDS' },
       { title: 'Payments', icon: 'mdi-cash-multiple', to: '/app/payments', roles: ['ANCHOR', 'ORGANISATION'], module: 'CASH_TRANSFERS' },
+      { title: 'Attendance', icon: 'mdi-calendar-check', to: '/app/attendance', roles: ['ANCHOR', 'ORGANISATION'] },
+    ],
+  },
+  {
+    title: 'Payment Generation',
+    items: [
       { title: 'Payment Cycles', icon: 'mdi-calendar-month-outline', to: '/app/payroll', roles: ['ANCHOR', 'ORGANISATION'], module: 'CASH_TRANSFERS' },
       { title: 'Vouchers', icon: 'mdi-ticket-confirmation', to: '/app/vouchers', roles: ['ANCHOR', 'ORGANISATION'], module: 'VOUCHERS' },
-      { title: 'Attendance', icon: 'mdi-calendar-check', to: '/app/attendance', roles: ['ANCHOR', 'ORGANISATION'] },
     ],
   },
   {
     title: '',
     items: [
       { title: 'Subscription', icon: 'mdi-credit-card-outline', to: '/app/subscription' },
+    ],
+  },
+  {
+    title: '',
+    items: [
       { title: 'Settings', icon: 'mdi-cog-outline', to: '/app/settings' },
     ],
   },
@@ -213,7 +223,7 @@ async function handleLogout() {
         </v-card>
       </v-dialog>
 
-      <!-- Grace period: subscription lapsed but still within the 30-day window. -->
+      <!-- Grace period: subscription lapsed but still within the 7-day window. -->
       <v-alert
         v-if="inGrace"
         type="warning" variant="tonal" class="mb-4" border="start"
@@ -237,10 +247,10 @@ async function handleLogout() {
           <v-icon icon="mdi-lock-clock" size="48" color="error" class="mb-3" />
           <h2 class="text-h6 font-weight-bold mb-2">Subscription expired</h2>
           <p class="text-body-2 text-medium-emphasis mb-4">
-            The 30-day grace period has ended and your data is archived. Renew the subscription
+            The 7-day grace period has ended and your data is archived. Renew the subscription
             to restore access.
           </p>
-          <v-btn v-if="auth.isAnchor" color="primary" :loading="renewing" @click="renewSubscription">
+          <v-btn v-if="auth.isAnchor" color="secondary" :loading="renewing" @click="renewSubscription">
             Renew subscription
           </v-btn>
           <p v-else class="text-caption text-medium-emphasis">

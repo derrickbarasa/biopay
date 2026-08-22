@@ -4,6 +4,7 @@ import { dispatch } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
 import { ORG_MODULES, COUNTRIES } from '@/types/user'
+import { capitalFor } from '@/utils/countries'
 
 interface Organization {
   organisationCode: string
@@ -13,6 +14,7 @@ interface Organization {
   authorisedContact?: string
   address?: string
   country?: string
+  capitalCity?: string
   verificationMethod?: string
   status: number
   createdAt?: string
@@ -30,14 +32,33 @@ const editing = ref(false)
 const saving = ref(false)
 const form = ref({
   organisationCode: '', name: '', authorisedName: '', authorisedEmail: '', authorisedContact: '', address: '',
-  country: '', verificationMethod: 'BIOMETRIC',
+  country: '', capitalCity: '', verificationMethod: 'BIOMETRIC',
   modules: [] as string[],
+})
+
+// Auto-fills the capital when a country is picked; still a plain editable field afterwards
+// in case the operator wants to record a different city.
+watch(() => form.value.country, (country, previous) => {
+  if (country && country !== previous) form.value.capitalCity = capitalFor(country) || form.value.capitalCity
 })
 
 const VERIFICATION_METHODS = [
   { title: 'Biometric (fingerprint)', value: 'BIOMETRIC' },
   { title: 'Facial recognition', value: 'FACIAL' },
+  { title: 'Both', value: 'BOTH' },
 ]
+
+function verificationMethodIcon(method?: string) {
+  if (method === 'FACIAL') return 'mdi-account-outline'
+  if (method === 'BOTH') return 'mdi-account-multiple-check-outline'
+  return 'mdi-fingerprint'
+}
+
+function verificationMethodLabel(method?: string) {
+  if (method === 'FACIAL') return 'Facial'
+  if (method === 'BOTH') return 'Both'
+  return 'Fingerprint'
+}
 
 const required = (value: string) => !!value?.trim() || 'Required'
 const emailRule = (value: string) => !value || /.+@.+\..+/.test(value) || 'Enter a valid email'
@@ -73,7 +94,7 @@ function openCreate() {
   editing.value = false
   form.value = {
     organisationCode: '', name: '', authorisedName: '', authorisedEmail: '', authorisedContact: '', address: '',
-    country: '', verificationMethod: 'BIOMETRIC', modules: [],
+    country: '', capitalCity: '', verificationMethod: 'BIOMETRIC', modules: [],
   }
   dialog.value = true
 }
@@ -84,7 +105,7 @@ async function openEdit(org: Organization) {
     organisationCode: org.organisationCode, name: org.name,
     authorisedName: org.authorisedName ?? '', authorisedEmail: org.authorisedEmail ?? '',
     authorisedContact: org.authorisedContact ?? '', address: org.address ?? '',
-    country: org.country ?? '', verificationMethod: org.verificationMethod ?? 'BIOMETRIC',
+    country: org.country ?? '', capitalCity: org.capitalCity ?? '', verificationMethod: org.verificationMethod ?? 'BIOMETRIC',
     modules: [],
   }
   dialog.value = true
@@ -158,7 +179,7 @@ async function toggleStatus(org: Organization) {
         <h1 class="page-title">Organizations</h1>
         <p>Configure delivery partners, verification policy and programme access.</p>
       </div>
-      <v-btn color="primary" prepend-icon="mdi-domain-plus" @click="openCreate">New Organization</v-btn>
+      <v-btn color="secondary" prepend-icon="mdi-domain-plus" @click="openCreate">New Organization</v-btn>
     </div>
 
     <v-dialog v-model="dialog" max-width="880">
@@ -177,7 +198,8 @@ async function toggleStatus(org: Organization) {
               <div id="org-details-heading" class="form-group-title"><v-icon icon="mdi-domain" size="19" /> Organization details</div>
               <v-text-field v-model="form.organisationCode" label="Organization code" :disabled="editing" :rules="[required]" density="compact" hide-details="auto" />
               <v-text-field v-model="form.name" label="Organization name" :rules="[required]" density="compact" hide-details="auto" />
-              <v-select v-model="form.country" :items="COUNTRIES" label="Country" :rules="[required]" density="compact" hide-details="auto" />
+              <v-autocomplete v-model="form.country" :items="COUNTRIES" label="Country" :rules="[required]" density="compact" hide-details="auto" />
+              <v-text-field v-model="form.capitalCity" label="Capital city" prepend-inner-icon="mdi-city-variant-outline" density="compact" hide-details="auto" />
             </section>
 
             <section class="form-group" aria-labelledby="contact-details-heading">
@@ -190,13 +212,13 @@ async function toggleStatus(org: Organization) {
 
           <div class="policy-row">
             <v-text-field v-model="form.address" label="Address" prepend-inner-icon="mdi-map-marker-outline" density="compact" hide-details="auto" />
-            <v-select v-model="form.verificationMethod" :items="VERIFICATION_METHODS" label="Verification method" :prepend-inner-icon="form.verificationMethod === 'FACIAL' ? 'mdi-account-outline' : 'mdi-fingerprint'" :rules="[required]" density="compact" hide-details="auto" />
+            <v-select v-model="form.verificationMethod" :items="VERIFICATION_METHODS" label="Verification method" :prepend-inner-icon="verificationMethodIcon(form.verificationMethod)" :rules="[required]" density="compact" hide-details="auto" />
           </div>
 
           <section class="module-section" aria-labelledby="module-heading">
             <div class="module-heading-row">
               <div>
-                <div id="module-heading" class="form-group-title"><v-icon icon="mdi-view-dashboard-outline" size="19" /> Enabled programmes</div>
+                <div id="module-heading" class="form-group-title"><v-icon icon="mdi-view-dashboard-outline" size="19" /> Enabled modules</div>
                 <p>Teams only see and use the capabilities selected here.</p>
               </div>
               <span>{{ form.modules.length }} selected</span>
@@ -211,7 +233,7 @@ async function toggleStatus(org: Organization) {
 
           <div class="editor-actions">
             <v-btn variant="text" @click="dialog = false">Cancel</v-btn>
-            <v-btn color="primary" type="submit" :loading="saving" prepend-icon="mdi-check">
+            <v-btn color="secondary" type="submit" :loading="saving" prepend-icon="mdi-check">
               {{ editing ? 'Save changes' : 'Create organization' }}
             </v-btn>
           </div>
@@ -236,8 +258,8 @@ async function toggleStatus(org: Organization) {
         <template #item.country="{ item }">{{ item.country || '—' }}</template>
         <template #item.verificationMethod="{ item }">
           <v-chip size="small" color="primary" variant="tonal">
-            <v-icon :icon="item.verificationMethod === 'FACIAL' ? 'mdi-account-outline' : 'mdi-fingerprint'" start />
-            {{ item.verificationMethod === 'FACIAL' ? 'Facial' : 'Fingerprint' }}
+            <v-icon :icon="verificationMethodIcon(item.verificationMethod)" start />
+            {{ verificationMethodLabel(item.verificationMethod) }}
           </v-chip>
         </template>
         <template #item.actions="{ item }">
