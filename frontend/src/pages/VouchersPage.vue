@@ -44,14 +44,10 @@ const summary = ref<Record<string, any>>({})
 const tableSearch = ref('')
 const organizations = ref<OrganizationOption[]>([])
 
-// Anchor Administrators must choose an organisation before this page shows
-// anything; the System Owner must choose an anchor first (may optionally
-// narrow further with the organisation filter below).
-const scopeReady = computed(() => {
-  if (auth.isSystemAdmin) return anchorChosen.value
-  if (auth.isAnchorAdministrator) return !!organisationFilter.value
-  return true
-})
+// Both roles see everything in their scope immediately -- the backend already
+// treats an unset anchor/organisation filter as "show all" (`IS NULL OR ...`),
+// so the picker below narrows the view without ever blocking it.
+const scopeReady = computed(() => true)
 const householdOptions = ref<HouseholdOption[]>([])
 const householdsLoading = ref(false)
 const orgNameByCode = computed(() => new Map(organizations.value.map((o) => [o.organisationCode, o.name])))
@@ -135,7 +131,6 @@ function currency(v: number | undefined) {
 }
 
 async function load() {
-  if (!scopeReady.value) { vouchers.value = []; summary.value = {}; return }
   loading.value = true
   try {
     const [v, s] = await Promise.all([
@@ -549,8 +544,8 @@ function statusColor(status: string) {
       label="Choose organisation" variant="outlined" class="mb-4" style="max-width: 420px"
       prepend-inner-icon="mdi-domain"
     />
-    <v-alert v-if="!scopeReady" type="info" variant="tonal" class="mb-4">
-      {{ auth.isSystemAdmin && !anchorChosen ? 'Choose an anchor to see its vouchers.' : 'Choose an organisation to see its vouchers.' }}
+    <v-alert v-if="auth.isSystemAdmin ? !anchorChosen : (auth.isAnchorAdministrator && !organisationFilter)" type="info" variant="tonal" class="mb-4">
+      {{ auth.isSystemAdmin ? 'Showing vouchers across every anchor. Choose one above to narrow the list.' : 'Showing vouchers across every organisation. Choose one above to narrow the list.' }}
     </v-alert>
 
     <template v-if="scopeReady">

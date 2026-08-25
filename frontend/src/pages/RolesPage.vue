@@ -28,8 +28,14 @@ const newPermission = reactive({ name: '', displayName: '', groupKey: 'REPORTS',
 
 const assignablePermissions = computed(() => permissions.value.filter((permission) => !isLegacyPermission(permission.name)))
 const selectedRole = computed(() => roles.value.find((role) => role.id === selected.value))
+const anchorNameById = computed(() => new Map(anchors.value.map((a) => [a.id, a.name])))
+function roleAnchorName(role: Role) { return role.anchorId != null ? anchorNameById.value.get(role.anchorId) ?? null : null }
 const isBuiltInRole = computed(() => !!selectedRole.value?.builtIn)
-const canSave = computed(() => auth.can('ACCESS_ROLES') && (!auth.isSystemAdmin || !!selectedAnchorId.value) && !isBuiltInRole.value)
+// Creating a brand-new tenant role needs a target anchor chosen first (a role has to belong
+// to some anchor); editing an existing one never does -- the System Owner manages every role
+// and permission by definition and can save changes to any anchor's role without narrowing
+// the page down to that one tenant first.
+const canSave = computed(() => auth.can('ACCESS_ROLES') && (!auth.isSystemAdmin || !!selectedAnchorId.value || form.roleId !== null) && !isBuiltInRole.value)
 const isUnlimitedRole = computed(() => !!selectedRole.value?.systemRole)
 const selectedPermissionCount = computed(() => form.permissionIds.filter((id) => assignablePermissions.value.some((permission) => permission.id === id)).length)
 const allPermissionsSelected = computed(() => assignablePermissions.value.length > 0 && selectedPermissionCount.value === assignablePermissions.value.length)
@@ -168,7 +174,7 @@ watch(selectedAnchorId, () => { selected.value = null; void load() })
           <h1>Roles &amp; permissions</h1>
           <v-chip size="small" variant="tonal" color="success">{{ auth.isSystemAdmin ? 'System policy control' : 'Anchor policy control' }}</v-chip>
         </div>
-        <p>{{ auth.isSystemAdmin ? 'Your System Owner access is permanent. Choose an anchor to manage roles inside that tenant.' : 'Create a role, then choose exactly what people with that role can view or change.' }}</p>
+        <p>{{ auth.isSystemAdmin ? 'Your System Owner access is permanent. Every anchor\'s roles are shown below -- choose one to focus on just that tenant, or create a new role for it.' : 'Create a role, then choose exactly what people with that role can view or change.' }}</p>
       </div>
       <div class="head-actions">
         <v-btn v-if="auth.isSystemAdmin" variant="outlined" prepend-icon="mdi-shield-plus-outline" @click="openCreatePermission">Create permission</v-btn>
@@ -177,8 +183,8 @@ watch(selectedAnchorId, () => { selected.value = null; void load() })
     </header>
 
     <v-select
-      v-if="auth.isSystemAdmin" v-model="selectedAnchorId" :items="anchors" item-title="name" item-value="id"
-      label="Manage roles for anchor" variant="outlined" class="mb-5" style="max-width: 420px"
+      v-if="auth.isSystemAdmin" v-model="selectedAnchorId" :items="anchors" item-title="name" item-value="id" clearable
+      label="Filter by anchor (optional)" variant="outlined" class="mb-5" style="max-width: 420px"
     />
 
     <div class="role-workspace">
@@ -188,7 +194,7 @@ watch(selectedAnchorId, () => { selected.value = null; void load() })
         <template v-else>
           <button v-for="role in roles" :key="role.id" type="button" :class="{ active: selected === role.id }" @click="edit(role)">
             <span>{{ role.name }}</span>
-            <small>{{ role.systemRole ? 'Unlimited platform access' : `${role.permissions.filter((permission) => !isLegacyPermission(permission)).length} permissions` }} · {{ role.scope === 'SYSTEM' ? 'System' : role.scope === 'ANCHOR' ? 'Anchor' : 'Organisation' }}</small>
+            <small>{{ role.systemRole ? 'Unlimited platform access' : `${role.permissions.filter((permission) => !isLegacyPermission(permission)).length} permissions` }} · {{ role.scope === 'SYSTEM' ? 'System' : role.scope === 'ANCHOR' ? 'Anchor' : 'Organisation' }}{{ auth.isSystemAdmin && !selectedAnchorId && roleAnchorName(role) ? ` · ${roleAnchorName(role)}` : '' }}</small>
           </button>
         </template>
         <p v-if="!loading && !roles.length" class="empty-copy">No roles yet. Create the first role.</p>
@@ -238,7 +244,7 @@ watch(selectedAnchorId, () => { selected.value = null; void load() })
         </div>
 
         <div class="editor-actions">
-          <p v-if="!canSave">{{ isUnlimitedRole ? 'System Owner access is enforced by the platform and cannot be changed.' : isBuiltInRole ? 'Built-in tenant administrator permissions are managed by BioPay policy.' : auth.isSystemAdmin && !selectedAnchorId ? 'Choose an anchor before creating or changing tenant roles.' : 'Your role can view roles but cannot change them.' }}</p>
+          <p v-if="!canSave">{{ isUnlimitedRole ? 'System Owner access is enforced by the platform and cannot be changed.' : isBuiltInRole ? 'Built-in tenant administrator permissions are managed by BioPay policy.' : auth.isSystemAdmin && !selectedAnchorId ? 'Choose an anchor before creating a new role for it.' : 'Your role can view roles but cannot change them.' }}</p>
           <v-btn color="secondary" :loading="saving" :disabled="!canSave" prepend-icon="mdi-content-save-outline" @click="save">{{ form.roleId === null ? 'Create role' : 'Save permissions' }}</v-btn>
         </div>
       </main>

@@ -203,7 +203,10 @@ public class Auth extends AbstractVerticle {
                     if (otpRequired()) {
                         startOtpChallenge(message, id, scope, anchorId, partnerCode, email, totpEnabled);
                     } else {
-                        finishLogin(message, id, ip);
+                        // Already have the full, just-verified row in hand -- skip the extra
+                        // round-trip to the (often remote, latency-dominated) database that
+                        // re-fetching by id here would otherwise cost on every single login.
+                        finishLogin(message, r, ip);
                     }
                 });
     }
@@ -326,7 +329,11 @@ public class Auth extends AbstractVerticle {
     }
 
     /** The only place a real session gets minted for a users-table (anchor/organisation)
-     *  login -- reached from {@link #verifyLoginOtp} once the OTP checks out. */
+     *  login -- reached straight from {@link #loginUser} when no OTP step is required (row
+     *  already in hand, no re-fetch needed), or from {@link #verifyLoginOtp} once the OTP
+     *  checks out (only the user id survived across the OTP round-trip, so this re-fetches
+     *  a fresh row itself -- the account may no longer exist or may have been deactivated
+     *  in the time between the password check and the OTP being verified). */
     private void finishLogin(Message<Object> message, int userId, String ip) {
         pool.preparedQuery("SELECT * FROM users WHERE id=@p1")
                 .execute(Tuple.of(userId))
@@ -336,46 +343,56 @@ public class Auth extends AbstractVerticle {
                         replyError(message, "Account no longer available");
                         return;
                     }
-                    Row r = rows.iterator().next();
-                    String scope = Rows.str(r, "user_scope");
-                    Integer anchorId = intOr(r, "anchor_id", null);
-                    String partnerCode = "ORGANISATION".equalsIgnoreCase(scope) ? Rows.str(r, "organization_code") : null;
-                    String email = Rows.str(r, "email");
-                    boolean systemAdmin = Boolean.TRUE.equals(r.getBoolean("is_system_admin"));
+                    finishLogin(message, rows.iterator().next(), ip);
+                });
+    }
 
-                    JsonObject claims = new JsonObject()
-                            .put("sub", userId)
-                            .put("role", scope)
-                            .put("anchorId", anchorId)
-                            .put("partnerCode", partnerCode)
-                            .put("email", email)
-                            .put("systemAdmin", systemAdmin);
+    private void finishLogin(Message<Object> message, Row r, String ip) {
+        int userId = intOr(r, "id", 0);
+        String scope = Rows.str(r, "user_scope");
+        Integer anchorId = intOr(r, "anchor_id", null);
+        String partnerCode = "ORGANISATION".equalsIgnoreCase(scope) ? Rows.str(r, "organization_code") : null;
+        String email = Rows.str(r, "email");
+        boolean systemAdmin = Boolean.TRUE.equals(r.getBoolean("is_system_admin"));
 
-                    issueTokens("USER", userId, claims)
-                            .onFailure(err -> onDbError(message, err))
-                            .onSuccess(tokens -> {
-                                audit(userId, anchorId, "USER", partnerCode, "LOGIN_SUCCESS", ip, new JsonObject());
-                                Future<JsonArray> permsF = getPermissions(intOr(r, "role_id", null));
-                                Future<JsonArray> modulesF = enabledModulesFor(scope, partnerCode);
-                                Future.all(permsF, modulesF).onComplete(cf -> reply(message, new JsonObject()
-                                        .put("responseCode", "000")
-                                        .put("responseMessage", "Login successful")
-                                        .put("accessToken", tokens.getString("accessToken"))
-                                        .put("refreshToken", tokens.getString("refreshToken"))
-                                        .put("expiresIn", tokens.getInteger("expiresIn"))
-                                        .put("user", new JsonObject()
-                                                .put("id", userId)
-                                                .put("email", email)
-                                                .put("firstName", Rows.str(r, "first_name"))
-                                                .put("otherNames", Rows.str(r, "other_names"))
-                                                .put("role", scope)
-                                                .put("anchorId", anchorId)
-                                                .put("partnerCode", partnerCode)
-                                                .put("systemAdmin", systemAdmin)
-                                                .put("totpEnabled", Boolean.TRUE.equals(r.getBoolean("totp_enabled")))
-                                                .put("permissions", permsF.result() != null ? permsF.result() : new JsonArray())
-                                                .put("enabledModules", modulesF.result() != null ? modulesF.result() : new JsonArray()))));
-                            });
+        JsonObject claims = new JsonObject()
+                .put("sub", userId)
+                .put("role", scope)
+                .put("anchorId", anchorId)
+                .put("partnerCode", partnerCode)
+                .put("email", email)
+                .put("systemAdmin", systemAdmin);
+
+        // issueTokens (mints the JWT + one INSERT for the refresh token) has no data
+        // dependency on the permissions/modules lookups -- starting all three at once
+        // instead of waiting on issueTokens first saves one full network round-trip to
+        // the database on every login, which matters most when it's a remote instance.
+        Future<JsonObject> tokensF = issueTokens("USER", userId, claims);
+        Future<JsonArray> permsF = getPermissions(intOr(r, "role_id", null));
+        Future<JsonArray> modulesF = enabledModulesFor(scope, partnerCode);
+        Future.all(tokensF, permsF, modulesF)
+                .onFailure(err -> onDbError(message, err))
+                .onSuccess(cf -> {
+                    audit(userId, anchorId, "USER", partnerCode, "LOGIN_SUCCESS", ip, new JsonObject());
+                    JsonObject tokens = tokensF.result();
+                    reply(message, new JsonObject()
+                            .put("responseCode", "000")
+                            .put("responseMessage", "Login successful")
+                            .put("accessToken", tokens.getString("accessToken"))
+                            .put("refreshToken", tokens.getString("refreshToken"))
+                            .put("expiresIn", tokens.getInteger("expiresIn"))
+                            .put("user", new JsonObject()
+                                    .put("id", userId)
+                                    .put("email", email)
+                                    .put("firstName", Rows.str(r, "first_name"))
+                                    .put("otherNames", Rows.str(r, "other_names"))
+                                    .put("role", scope)
+                                    .put("anchorId", anchorId)
+                                    .put("partnerCode", partnerCode)
+                                    .put("systemAdmin", systemAdmin)
+                                    .put("totpEnabled", Boolean.TRUE.equals(r.getBoolean("totp_enabled")))
+                                    .put("permissions", permsF.result() != null ? permsF.result() : new JsonArray())
+                                    .put("enabledModules", modulesF.result() != null ? modulesF.result() : new JsonArray())));
                 });
     }
 
@@ -615,13 +632,19 @@ public class Auth extends AbstractVerticle {
                             .put("partnerCode", partnerCode)
                             .put("email", email);
 
-                    issueTokens("SUPERVISOR", id, claims)
+                    // Same fix as the web login path: issueTokens has no data dependency on
+                    // the modules/verification-method lookups, so start all three at once
+                    // instead of waiting on issueTokens first -- saves a full network
+                    // round-trip on every field-officer login too.
+                    Future<JsonObject> tokensF = issueTokens("SUPERVISOR", id, claims);
+                    Future<JsonArray> modulesF = enabledModulesFor("SUPERVISOR", partnerCode);
+                    Future<String> verificationMethodF = verificationMethodFor(partnerCode);
+                    Future.all(tokensF, modulesF, verificationMethodF)
                             .onFailure(err -> onDbError(message, err))
-                            .onSuccess(tokens -> {
+                            .onSuccess(cf -> {
                                 audit(id, anchorId, "SUPERVISOR", partnerCode, "LOGIN_SUCCESS", ip, new JsonObject());
-                                Future<JsonArray> modulesF = enabledModulesFor("SUPERVISOR", partnerCode);
-                                Future<String> verificationMethodF = verificationMethodFor(partnerCode);
-                                Future.all(modulesF, verificationMethodF).onComplete(cf -> reply(message, new JsonObject()
+                                JsonObject tokens = tokensF.result();
+                                reply(message, new JsonObject()
                                         .put("responseCode", "000")
                                         .put("responseMessage", "Login successful")
                                         .put("accessToken", tokens.getString("accessToken"))
@@ -636,7 +659,7 @@ public class Auth extends AbstractVerticle {
                                                 .put("anchorId", anchorId)
                                                 .put("partnerCode", partnerCode)
                                                 .put("enabledModules", modulesF.succeeded() ? modulesF.result() : new JsonArray())
-                                                .put("verificationMethod", verificationMethodF.succeeded() ? verificationMethodF.result() : "BIOMETRIC"))));
+                                                .put("verificationMethod", verificationMethodF.succeeded() ? verificationMethodF.result() : "BIOMETRIC")));
                             });
                 });
     }

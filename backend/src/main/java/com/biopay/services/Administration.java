@@ -288,14 +288,17 @@ public class Administration extends AbstractVerticle {
         // Explicit column list rather than r.* -- MSSQL requires every selected column to be
         // aggregated or in GROUP BY, so r.* silently breaks the moment the roles table carries
         // any column (e.g. a legacy one on an older database) that isn't in the GROUP BY list.
-        boolean systemPolicyView = systemAdmin(p) && anchorId == null;
+        // The System Owner manages every role and permission by definition -- browsing the page
+        // without first picking a target anchor shows every anchor's roles (plus its own System
+        // Owner role) rather than nothing; picking an anchor narrows the list to just that tenant.
+        boolean browseAll = systemAdmin(p) && anchorId == null;
         String sql="SELECT r.id, r.role_name, r.description, r.anchor_id, r.organization_code, r.role_scope, r.status, r.created_at, r.updated_at, "
                 + "STRING_AGG(p.permission_name, ',') AS permission_names FROM roles r LEFT JOIN role_permissions rp ON rp.role_id=r.id AND rp.status=1 LEFT JOIN permissions p ON p.id=rp.permission_id "
-                + (systemPolicyView
-                    ? "WHERE r.status=1 AND r.role_scope='SYSTEM' AND r.anchor_id IS NULL "
+                + (browseAll
+                    ? "WHERE r.status=1 "
                     : "WHERE r.status=1 AND r.role_scope<>'SYSTEM' AND ((r.anchor_id IS NULL AND r.role_name IN ('Anchor Administrator','Organisation Administrator')) OR r.anchor_id=@p1) ")
                 + "GROUP BY r.id,r.role_name,r.description,r.anchor_id,r.organization_code,r.role_scope,r.status,r.created_at,r.updated_at ORDER BY r.role_name";
-        pool.preparedQuery(sql).execute(systemPolicyView ? Tuple.tuple() : Tuple.of(anchorId)).onFailure(e->dbFail(message,e)).onSuccess(rows->{
+        pool.preparedQuery(sql).execute(browseAll ? Tuple.tuple() : Tuple.of(anchorId)).onFailure(e->dbFail(message,e)).onSuccess(rows->{
             JsonArray out=new JsonArray(); for(Row r:rows){String roleName=Rows.str(r,"role_name");String names=Rows.str(r,"permission_names");boolean builtIn="System Owner".equals(roleName)||"Anchor Administrator".equals(roleName)||"Organisation Administrator".equals(roleName);out.add(new JsonObject().put("id",Rows.intVal(r,"id")).put("name",roleName).put("description",Rows.str(r,"description")).put("scope",Rows.str(r,"role_scope")).put("anchorId",Rows.intVal(r,"anchor_id")).put("builtIn",builtIn).put("systemRole","SYSTEM".equalsIgnoreCase(Rows.str(r,"role_scope"))).put("status",Rows.intVal(r,"status")).put("permissions",names==null?new JsonArray():new JsonArray(java.util.Arrays.asList(names.split(",")))));}
             ok(message,"Roles found",out);
         });
@@ -303,17 +306,29 @@ public class Administration extends AbstractVerticle {
 
     private void saveRole(Message<Object> message) {
         JsonObject p=data(message); if(!anchor(p)){fail(message,"Only the system owner or an anchor administrator can manage roles");return;}
-        Integer anchorId=TenantScope.anchorId(p); if(anchorId==null){fail(message,"Choose an anchor before managing its roles");return;}
+        boolean isSystemAdmin=systemAdmin(p);
+        Integer anchorId=TenantScope.anchorId(p);
         Integer roleId=p.getInteger("roleId"); String name=p.getString("name","").trim(); JsonArray ids=p.getJsonArray("permissionIds",new JsonArray());
         if(name.isEmpty()){fail(message,"Role name is required");return;}
         String scope=p.getString("scope","ORGANISATION").toUpperCase();
         if(!"ANCHOR".equals(scope) && !"ORGANISATION".equals(scope)){fail(message,"Role scope must be Anchor or Organisation");return;}
         if(roleId==null && ("System Owner".equalsIgnoreCase(name) || "Anchor Administrator".equalsIgnoreCase(name) || "Organisation Administrator".equalsIgnoreCase(name))){fail(message,"That role name is reserved for a built-in administrator");return;}
+        // A brand-new tenant role has to belong to some anchor, so creating one still needs a
+        // target chosen first. Editing an existing role never does: an Anchor Administrator's
+        // own anchor is always known from their session, and the System Owner -- who manages
+        // every role and permission by definition -- can edit any anchor's role without first
+        // narrowing the page down to that one tenant.
+        if(anchorId==null && roleId==null){fail(message,"Choose an anchor before creating a new role for it");return;}
+        if(anchorId==null && !isSystemAdmin){fail(message,"Choose an anchor before managing its roles");return;}
         Future<Integer> roleFuture;
         if(roleId==null){
             roleFuture=pool.preparedQuery("INSERT INTO roles (role_name,description,anchor_id,role_scope,status,created_at) OUTPUT INSERTED.id VALUES (@p1,@p2,@p3,@p4,1,GETDATE())")
                     .execute(Tuple.of(name,p.getString("description"),anchorId,scope))
                     .map(rows->Rows.intVal(rows.iterator().next(),"id"));
+        }else if(isSystemAdmin){
+            roleFuture=pool.preparedQuery("UPDATE roles SET role_name=@p1,description=@p2,role_scope=@p3,updated_at=GETDATE() OUTPUT INSERTED.id WHERE id=@p4")
+                    .execute(Tuple.of(name,p.getString("description"),scope,roleId))
+                    .compose(rows->rows.size()==0?Future.failedFuture("Role not found or is system-managed"):Future.succeededFuture(Rows.intVal(rows.iterator().next(),"id")));
         }else{
             roleFuture=pool.preparedQuery("UPDATE roles SET role_name=@p1,description=@p2,role_scope=@p3,updated_at=GETDATE() OUTPUT INSERTED.id WHERE id=@p4 AND anchor_id=@p5")
                     .execute(Tuple.of(name,p.getString("description"),scope,roleId,anchorId))

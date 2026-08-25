@@ -30,8 +30,6 @@ import com.google.android.material.snackbar.Snackbar;
 
 import org.json.JSONObject;
 
-import android.location.Location;
-
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
@@ -98,17 +96,10 @@ public class HomeActivity extends BaseActivity {
                 startActivity(new Intent(this, VoucherRedemptionActivity.class)));
         findViewById(R.id.btnQuickVerifyIdentity).setOnClickListener(v ->
                 startActivity(new Intent(this, SettingsActivity.class)));
-        findViewById(R.id.btnQuickMyLocation).setOnClickListener(v -> showCurrentLocation());
+        findViewById(R.id.btnQuickMyLocation).setOnClickListener(v ->
+                startActivity(new Intent(this, com.biopay.agent.location.MyLocationActivity.class)));
         findViewById(R.id.btnQuickSyncHistory).setOnClickListener(v ->
                 startActivity(new Intent(this, ReportsActivity.class)));
-    }
-
-    private void showCurrentLocation() {
-        Location location = LocationHelper.getLastKnownLocation(this);
-        String message = location == null
-                ? getString(R.string.home_location_unavailable)
-                : getString(R.string.home_location_current, location.getLatitude(), location.getLongitude());
-        Snackbar.make(findViewById(R.id.btnQuickMyLocation), message, Snackbar.LENGTH_LONG).show();
     }
 
     @Override
@@ -171,9 +162,10 @@ public class HomeActivity extends BaseActivity {
                 ? getString(R.string.home_sync_clear)
                 : getString(R.string.home_sync_pending, pendingSync));
 
-        SimpleBarChartView chart = findViewById(R.id.chartPayments);
-        chart.setBars(Arrays.asList(
-                new SimpleBarChartView.Bar("Paid", paidCount, ContextCompat.getColor(this, R.color.bp_primary)),
-                new SimpleBarChartView.Bar("Pending", pendingPaymentCount, ContextCompat.getColor(this, R.color.bp_secondary))));
+        SimpleDonutChartView chart = findViewById(R.id.chartPayments);
+        chart.setSlices(Arrays.asList(
+                new SimpleDonutChartView.Slice("Paid", paidCount, ContextCompat.getColor(this, R.color.bp_primary)),
+                new SimpleDonutChartView.Slice("Pending", pendingPaymentCount, ContextCompat.getColor(this, R.color.bp_secondary))),
+                "Total");
     }
 }

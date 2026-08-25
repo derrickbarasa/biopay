@@ -48,16 +48,10 @@ const { anchors, selectedAnchorId, anchorGateActive, anchorChosen } = useAnchorS
 const loading = ref(true)
 const households = ref<HouseholdRow[]>([])
 
-// Anchor Administrators must choose an organisation before this page shows
-// anything (the hierarchy: System Owner -> Anchor -> Organisation); the
-// System Owner must choose an anchor first (same anchor-picker pattern as
-// Organizations/Roles/Subscription), then may optionally narrow further to
-// one organisation via the existing filter below.
-const scopeReady = computed(() => {
-  if (auth.isSystemAdmin) return anchorChosen.value
-  if (auth.isAnchorAdministrator) return !!filters.value.organisationCode
-  return true
-})
+// Both roles see everything in their scope immediately -- the backend already
+// treats an unset anchor/organisation filter as "show all" (`IS NULL OR ...`),
+// so the picker below narrows the view without ever blocking it.
+const scopeReady = computed(() => true)
 const dialog = ref(false)
 const saving = ref(false)
 
@@ -197,7 +191,6 @@ async function loadGeo() {
 }
 
 async function load() {
-  if (!scopeReady.value) { households.value = []; return }
   loading.value = true
   try {
     const res = await dispatch<{ results: HouseholdRow[] }>('GET_HOUSEHOLDS', {
@@ -494,8 +487,8 @@ async function submitBulk() {
       label="Choose organisation" variant="outlined" class="mb-4" style="max-width: 420px"
       prepend-inner-icon="mdi-domain"
     />
-    <v-alert v-if="!scopeReady" type="info" variant="tonal" class="mb-4">
-      {{ auth.isSystemAdmin && !anchorChosen ? 'Choose an anchor to see its households.' : 'Choose an organisation to see its households.' }}
+    <v-alert v-if="auth.isSystemAdmin ? !anchorChosen : (auth.isAnchorAdministrator && !filters.organisationCode)" type="info" variant="tonal" class="mb-4">
+      {{ auth.isSystemAdmin ? 'Showing households across every anchor. Choose one above to narrow the list.' : 'Showing households across every organisation. Choose one above to narrow the list.' }}
     </v-alert>
 
     <template v-if="scopeReady">

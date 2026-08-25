@@ -366,14 +366,14 @@ public class Geography extends AbstractVerticle {
 
     private void list(Message<Object> message, String table, String codeColumn, String filterColumn, String filterField) {
         JsonObject payload = new JsonObject(message.body().toString());
+        // Same "show everything, then filter" rule every other browse endpoint follows: a
+        // System Owner who hasn't picked a target anchor sees geography across all of them
+        // instead of an error; an Anchor Administrator always has their own anchorId from
+        // the JWT, so this never affects that role.
         Integer anchorId = anchorIdOf(payload);
-        if (anchorId == null) {
-            replyError(message, "anchorId is required");
-            return;
-        }
         String filterValue = filterField == null ? null : payload.getString(filterField, null);
 
-        String sql = "SELECT * FROM " + table + " WHERE anchor_id=@p1 AND status=1"
+        String sql = "SELECT * FROM " + table + " WHERE (@p1 IS NULL OR anchor_id=@p1) AND status=1"
                 + (filterColumn == null ? "" : " AND (@p2 IS NULL OR " + filterColumn + "=@p2)")
                 + " ORDER BY name";
         Tuple params = filterColumn == null ? Tuple.of(anchorId) : Tuple.of(anchorId, filterValue);

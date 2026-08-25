@@ -3,7 +3,14 @@
 -- idempotent and extend these tables. No foreign keys are declared, preserving the
 -- project's code/id based integration convention.
 
+-- Also checks `organizations` doesn't already exist: on an already-migrated
+-- database, 029 has renamed `partners` -> `organizations`, and re-running 000
+-- (idempotent replay) must not recreate a stale, empty, pre-rename `partners`
+-- table under the old name (see 033's cleanup for a database that already hit
+-- this). A truly fresh install has neither table yet, so this is a no-op
+-- change there -- `partners` is still created normally for 029 to rename.
 IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'partners')
+   AND NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'organizations')
 BEGIN
     CREATE TABLE partners (
         id INT IDENTITY(1,1) PRIMARY KEY,
@@ -79,7 +86,10 @@ BEGIN
 END
 GO
 
+-- Same "don't resurrect the pre-rename table" guard as `partners` above --
+-- 029 renames `supervisors` -> `field_officers`.
 IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'supervisors')
+   AND NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'field_officers')
 BEGIN
     CREATE TABLE supervisors (
         id INT IDENTITY(1,1) PRIMARY KEY,

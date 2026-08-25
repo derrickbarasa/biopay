@@ -1,9 +1,11 @@
 package com.biopay.agent.session;
 
 import android.app.Activity;
+import android.app.Dialog;
 import android.content.Intent;
 import android.os.Handler;
 import android.os.Looper;
+import android.view.Window;
 
 import androidx.appcompat.app.AlertDialog;
 
@@ -97,6 +99,21 @@ public final class SessionTimeoutManager {
         Intent intent = new Intent(activity, LoginActivity.class);
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
         activity.startActivity(intent);
+    }
+
+    /**
+     * A {@link Dialog} runs on its own window, so touches inside it never reach the hosting
+     * Activity's {@link Activity#onUserInteraction()} -- a long biometric-capture or data-entry
+     * dialog would otherwise keep counting down to the idle prompt/logout underneath it even
+     * while the officer is actively working. Call right after building a dialog that can stay
+     * open for a while (capture progress, verification, multi-field entry) so any touch on it
+     * also counts as activity.
+     */
+    public static void keepAlive(Dialog dialog) {
+        Window window = dialog.getWindow();
+        if (window != null && !(window.getCallback() instanceof KeepAliveWindowCallback)) {
+            window.setCallback(new KeepAliveWindowCallback(window.getCallback()));
+        }
     }
 
     private void dismissPrompt() {

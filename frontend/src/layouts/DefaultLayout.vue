@@ -158,13 +158,17 @@ async function handleLogout() {
   router.push('/login')
 }
 
-// Vuetify's built-in `v-list-item :to` click-to-navigate integration
-// intermittently swallows a click -- the native mousedown/mouseup/click
-// sequence fires correctly on the right element but no navigation follows,
-// so the drawer sat still until a second click. Driving navigation from our
-// own plain Vue @click handler (bound directly, not through Vuetify's
-// internal RouterLink wiring) makes the very first click reliable; `:to` is
-// kept only for the active-item styling and the semantic href.
+// A previous fix drove navigation from a plain @click handler while still
+// passing `:to` for styling -- but `:to` makes Vuetify's own internal
+// RouterLink/useLink wiring ALSO bind a click handler to the same element,
+// so a single click fired two competing `router.push` calls. Vue Router
+// cancels the first in-flight navigation when the second starts; when both
+// targeted the same URL, the second was silently treated as a no-op against
+// the (just-cancelled) first, so neither ever completed -- only a second,
+// solitary click actually got through. The real fix is to stop giving
+// v-list-item/v-btn a `:to` at all here, so Vuetify never wires its own
+// navigation; `:active`/route-equality drives the styling instead, and this
+// handler is the only thing that ever calls `router.push`.
 function onNavClick(event: MouseEvent | KeyboardEvent, to: string) {
   event.preventDefault()
   if (route.path !== to) router.push(to)
@@ -184,12 +188,13 @@ function onNavClick(event: MouseEvent | KeyboardEvent, to: string) {
         <v-list-item
           v-for="item in section.items"
           :key="item.to"
-          :to="item.to"
+          :active="route.path === item.to"
           :prepend-icon="item.icon"
           :title="item.title"
           rounded="lg"
           color="primary"
           :ripple="false"
+          role="link"
           @click="onNavClick($event, item.to)"
         />
       </template>
@@ -226,7 +231,7 @@ function onNavClick(event: MouseEvent | KeyboardEvent, to: string) {
       </template>
       <v-list density="compact">
         <v-list-item
-          to="/app/settings" prepend-icon="mdi-account" title="Profile & Settings" :ripple="false"
+          :active="route.path === '/app/settings'" prepend-icon="mdi-account" title="Profile & Settings" :ripple="false" role="link"
           @click="onNavClick($event, '/app/settings')"
         />
         <v-divider />
@@ -289,7 +294,7 @@ function onNavClick(event: MouseEvent | KeyboardEvent, to: string) {
           <div class="mt-4 d-flex ga-2 justify-center">
             <v-btn
               v-if="auth.isAnchorAdministrator" variant="text" size="small" prepend-icon="mdi-credit-card-outline"
-              to="/app/subscription" @click="onNavClick($event, '/app/subscription')"
+              @click="onNavClick($event, '/app/subscription')"
             >View subscription</v-btn>
             <v-btn variant="text" size="small" prepend-icon="mdi-logout" @click="handleLogout">Log out</v-btn>
           </div>

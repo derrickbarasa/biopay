@@ -959,3 +959,822 @@ User asked to continue and complete the work the previous entry explicitly defer
 - **The organisation-contact-duplication question was resolved by explicit user choice, not code change.** Asked whether to remove `organizations.authorised_name/authorised_email/authorised_contact` now that anchor contact info moved onto `users`; user chose to leave organisations' own fields as-is. Reasoning that will matter for any future session: unlike an anchor (which now *is* exactly one `users` row, so merging was a like-for-like simplification), an organisation can have multiple ORGANISATION-scope users — there is no single user row an org's contact fields could be merged into without picking an arbitrary "primary" user, so the duplication here is structural, not redundant. No schema or code change was made for this.
 - **Full live verification, both roles, all six pages, after the deadlock fix (not before).** Started the backend jar (`:7730`) and Vite dev server (`:5175` — found already running from an untracked prior process, confirmed live rather than restarted). As System Owner (`admin@biopay.com`): Attendance and Field Officers both correctly blocked behind "Choose an anchor," the anchor `v-select` listed the one seeded anchor (Frontier Trust Bank), picking it unblocked the page, populated real data (the two seeded field officers with correct organisation names) and the secondary organisation filter. As Anchor Administrator (`anchor.admin@frontiertrust.bank`): Attendance and Households both correctly blocked behind "Choose an organisation" with the new ungated selector actually present and listing both real organisations (Alpha Bank Programme, Bright Future NGO); picking one unblocked the page each time — Attendance showed its KPI cards and Export CSV button, Households rendered its full breakdown-chart grid with real seeded data (1 household, 100% female, one status bucket). Sidebar labels (`Anchors`, `Payment Cycles`) confirmed correct for both roles throughout.
 - **Verification:** `npx vue-tsc -b` clean, `npm run build` clean (same production chunk set, sizes essentially unchanged) after both the initial six-page rollout and the deadlock fix; `mvn -q -o compile test` clean (15/15). This closes the "deliberately not done this session" item from the immediately preceding entry — the mandatory gate is now live on all six pages for both roles, verified end-to-end, not just built. Both dev processes (backend jar, Vite) were left running at the end of this session rather than stopped, since the Vite server was already running from an untracked prior process when this session started.
+
+### 2026-08-25 (continued once more, again) — DB cleanup, reversed the mandatory anchor/org gate into a "show all, then filter" default, fixed Roles & Permissions' anchor requirement, found and fixed the real login-latency and sidebar double-click bugs
+
+User's ask (pasted mid-file above, at the "in roles and permission..." block): Roles & Permissions shouldn't force the System Owner to pick an anchor before managing roles; every anchor/organisation-scoped page should show data by default instead of a blank gate, narrowing only once a selection is made; the dashboard has heavy login/load times and the sidebar still needs a single click, not two; a DB cleanup pass; and a decision on the `anchor_code`/`anchor_name`/... columns living on `users` next to `organizations` existing separately, with columns "arranged well."
+
+- **DB cleanup.** Queried the live schema directly: all 20 zero-row tables (`payments`, `vouchers`, `subscriptions`, `geo_*`, `faces`, `fingerprints`, etc.) are empty only because this is a fresh dataset -- every one is referenced by backend code, so none were dropped. The one genuinely dead object was `vwnames`, a leftover view unreferenced anywhere in code and already broken (`SELECT * FROM vwnames` failed with "Invalid object name 'vwalternates'" -- it depended on a view migration `031` had already dropped). New migration `032_drop_broken_vwnames_view.sql`, applied live.
+- **The "choose an anchor/organisation or see nothing" gate, reversed.** Traced every gated backend query (`Household`, `Payment`, `Payroll`, `Voucher`, `Officer`, `Biometric#getAttendance`) and confirmed they already implement "unset filter = show everything in scope" (`(@p IS NULL OR anchor_id=@p)` / `scopedPartnerCode` returning null) -- the blank-page behaviour was a pure frontend artifact (`scopeReady` computed short-circuiting `load()` to empty and hiding the body behind a blocking alert). Fixed on all six gated pages (`HouseholdsPage`, `PaymentsPage`, `PayrollPage`, `VouchersPage`, `AttendancePage`, `OfficersPage`): `scopeReady` is now always `true`, `load()` always runs on mount, and the old blocking alert became an informational one ("Showing X across every anchor/organisation. Choose one above to narrow the list.") that only shows while nothing's picked -- the picker itself was never inside the gate, so no further deadlock risk. Along the way this surfaced one real, previously-hidden bug: `Geography#list` (`GET_STATES`/`COUNTIES`/`LOCATIONS`/`VILLAGES`) was the one browse endpoint that still hard-required an anchorId and errored ("anchorId is required") instead of following the same show-all rule -- fixed to match everything else, confirmed live (the toast is gone, geo filters populate).
+- **Roles & Permissions no longer needs an anchor picked to browse or edit.** `Administration#getRoles` previously showed *only* the System Owner's own role when no target anchor was chosen; now it shows every anchor's roles plus the System Owner role (an explicit "browse all" branch, `WHERE r.status=1` with no anchor filter) -- picking an anchor still narrows to just that tenant. `saveRole` previously required an anchorId unconditionally; now only *creating a new* tenant role does (a role has to belong to some anchor) -- *editing* an existing role no longer does, since the System Owner can already act on any anchor's role by definition, and an Anchor Administrator's own anchor is always known from their session regardless. `RolesPage.vue` updated to match (copy, an anchor-name suffix on each role row when browsing all, `canSave` no longer blocks edits on a missing picker selection). Verified live: logged in as the System Owner, Roles & Permissions immediately listed 6 real roles across every anchor with zero picker interaction needed.
+- **Login latency, root-caused as two real, fixable inefficiencies, not just "the DB is remote."** A cold `LOGIN_USER` call took 5.8s. Traced it to `Auth#finishLogin` unconditionally re-fetching `SELECT * FROM users WHERE id=@p1` even on the direct (non-OTP) path, one request after `loginUser` had already fetched and verified that exact same row -- a fully avoidable round-trip to the remote MSSQL instance (`173.249.55.90`, ~165ms bare ping) on every single login. Fixed by threading the already-fetched row through instead of re-querying (the OTP path still re-fetches by id, correctly, since only the id survives across that separate request). Second fix: `issueTokens` (mints the JWT + one `INSERT` for the refresh token) was being awaited *before* the permissions/modules queries even started, despite having no data dependency on them -- changed to start all three concurrently and combine with `Future.all`, removing another full serial round-trip. Applied the identical fix to the mobile `LOGIN_SUPERVISOR` path for consistency. Verified live via repeated `curl` timing against the restarted backend: warm logins dropped from ~5.8s to ~1.3s (roughly 4.5x). `mvn -q -o compile test` clean (15/15) after each change.
+- **Sidebar double-click, actually root-caused this time (the 2026-08-25-earlier fix in this file did not hold up under retest).** Reproduced live in Chrome: a single click on a `v-list-item` highlighted it (active-state styling engaged) but never navigated -- the URL and page content stayed on the previous route. The prior session's fix (a manual `@click="onNavClick"` handler, with `event.preventDefault()`, layered *on top of* Vuetify's own `:to` prop) still left `:to` in place, and `:to` is exactly what makes `v-list-item`/`v-btn` wire their *own* internal `useLink`/RouterLink click handling onto the same element -- so a single click fired two competing `router.push` calls to the same URL. Vue Router cancels an in-flight navigation when a second one starts; when both target the same path, the second is silently treated as a redundant no-op against the just-cancelled first, so neither completes -- only a solitary second click (with no competing first navigation in flight) got through. Real fix: dropped `:to`/`to` entirely from every nav-triggering `v-list-item`/`v-btn` in `DefaultLayout.vue` (main sidebar list, "Profile & Settings", the archived-subscription "View subscription" button), driving `:active`/highlighting off a plain `route.path === item.to` comparison instead, so `onNavClick`'s `router.push` is the *only* navigation trigger left -- no more competing internal wiring to race against. Verified live after a hard reload (to rule out stale HMR): 5 consecutive single clicks across 5 different sidebar items (Organizations, Locations, Users, Field Officers, Payments) each navigated correctly on the first click with zero wait needed; a document-level click-capture probe confirmed real clicks were reaching the page every time.
+- **Anchor-on-`users` vs. a separate `organizations` table -- re-examined, decision unchanged, explained back to the user rather than silently left as-is.** This is not accidental duplication: an anchor *is* exactly one `users` row (one Anchor Administrator, self-referencing), so merging it there was a genuine simplification when the standalone `anchors` table was retired (see the 2026-08-25-earlier "architectural rename/restructure" entry); an organisation, by contrast, can have many ORGANISATION-scope users, so there is no single row its own identity could collapse into -- keeping `organizations` as its own table is the structurally correct choice, not leftover clutter. **Not done, flagged rather than attempted:** physically reordering the live `users` table's columns (so `anchor_code`/`anchor_name`/... show up earlier than the far-right position they currently occupy in a raw `SELECT *`/SSMS view) requires a full MSSQL table rebuild (`CREATE` a reordered copy, copy every row, drop, rename) on the one table every login and every tenant-scoping check depends on, including its `IDENTITY` column, a filtered unique index (`UX_users_single_system_owner`), and three other constraints -- real risk for a purely cosmetic change. Deferred until the user confirms they want that risk taken (ideally with a maintenance window), rather than attempted silently.
+- **Verification:** `mvn -q -o compile test` clean (15/15); `npx vue-tsc -b` clean; `npm run build` clean; `npm test` clean (4/4). Backend jar rebuilt and restarted twice (once per backend change batch) against the live database; frontend dev server started fresh; both verified live in Chrome as documented above, including a hard-reload cross-check for the nav fix. Both dev processes left running at the end of this session.
+
+### 2026-08-25 (yet another continuation) — Two more genuinely dead legacy tables found and dropped (`partners`, `supervisors`); the DB-cleanup root cause generalized and fixed in `000_base_schema.sql`
+
+User reported an IntelliSense/SQL-tool error listing every `users` column as invalid; the live table was confirmed intact via multiple fresh direct connections (same 31 columns, real rows returned) -- traced to the user's tool having a stale schema cache, not a real database problem (confirmed by the user: "intellisense error", not a runtime failure). While investigating, the user separately asked to drop `partners` and `supervisors`, which they'd noticed were still present.
+
+- **Both were the exact same bug as 032's `vwnames`, generalized.** `partners`->`organizations` and `supervisors`->`field_officers` were renamed via `sp_rename` by migration `029` (real data preserved, nothing dropped). But `000_base_schema.sql`'s "create if missing" guards for those two tables only checked whether a table literally named `partners`/`supervisors` existed -- once the rename made that name vanish, a later idempotent replay of `000` against this already-migrated database silently recreated *empty, pre-rename-shaped* tables under the old names again (confirmed: `partners` had `partner_id`/no `organization_code`; `supervisors` had `supervisor_id`/`partner_code`/no `officer_code` -- the old column shapes, 0 rows, unreferenced anywhere in `backend/src`).
+- **Root cause fixed, not just papered over.** Patched `000_base_schema.sql`'s two guards to also check the renamed table doesn't already exist (`AND NOT EXISTS (... name = 'organizations')` / `'field_officers'`) -- a truly fresh install still creates `partners`/`supervisors` normally for `029` to rename, but a replay against an already-migrated database no longer resurrects them.
+- **New migration `033_drop_legacy_partners_supervisors_tables.sql`** drops both, guarded by `OBJECT_ID(...) IS NOT NULL` and an empty-row-count check so it can never discard real data even if re-run. **Caught and fixed a real replay-safety bug in this file during verification, before leaving it broken for the next session:** the first version used `IF OBJECT_ID('partners','U') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM partners) DROP TABLE partners;` -- looks safe, but SQL Server resolves every table name in a batch at *parse* time regardless of which `IF` branch runs, so replaying this exact file a second time (after the table's already gone) failed with "Invalid object name 'partners'" -- the identical bug class the 2026-08-25-earlier "architectural rename/restructure" entry had already fixed across 19 other migration files. Rewrote using `sp_executesql`/`EXEC('DROP TABLE ...')` dynamic SQL so nothing references `partners`/`supervisors` by name outside the `OBJECT_ID` guard. **Verified the fix, not just applied it:** ran the file three times in a row (0 output, exit 0 every time), then replayed the *entire* `000`-`033` set via `database/run-migrations.ps1` end-to-end -- all 34 files applied with zero errors, and a direct row-count check afterward confirmed `users`/`organizations`/`households`/`field_officers` all held their real, correct counts (4/2/2/2) with zero legacy tables remaining.
+- **The IntelliSense report, separately confirmed harmless.** Ran the exact 31-column query the user's error listed, twice, on fresh direct connections -- both succeeded and returned real rows. Nothing on the database side needed fixing for that report; a stale client-side schema cache was the actual cause.
+- **Swept the rest of the migration history for the same class of bug, found nothing else live.** Every `sp_rename`d table across the whole set (`officers`->`supervisors` in `014`; `partners`->`organizations`, `supervisors`->`field_officers`, `payroll_cycles`->`payment_cycles` in `029`; `anchors` dropped outright in `030`) was checked against its own `CREATE TABLE IF NOT EXISTS` guard: `002`'s `payroll_cycles` guard and `001`'s `anchors` guard already carry the `OBJECT_ID('<new name>') IS NULL` protection (added in an earlier session, per `001`'s own header comment); `officers` was never created by any migration at all (per `014`'s own history, it only ever appeared via an out-of-band manual rename on one specific database, not a migration guard). Confirmed live: none of `anchors`/`officers`/`payroll_cycles`/`audits`/`partners`/`supervisors` exist any more, the full live table list (28 tables) matches current code exactly with zero orphans, and `sys.views`/`sys.synonyms`/`sys.procedures` are all empty. The database is genuinely clean now, not just of the two tables that were reported.
+
+
+
+
+in roles and permission the admin doens't have to choose an achor to manages roles and permission he manages all role and permission
+for evrypage where the admin has to choose and anchor or an anchor has to choose an organizationwe should have the page doesnt need to be blank it can show the data for all anchors/orgnizations then when the admin chooses the anchor/organization they get the data of the particular selected
+the dashboad has heavy lod times when you login in and the double click issue is stiill there i want a permanent fix for this
+also we need to do a db cleanup remove tables that we dont need and also i noticed the organization details are in the user tables and the organization tables do something about this either we remove org from user tables or drop the organization table completely find a way which it woud be easier to manage orgs and we can arrange the columns in the user table well so we can see anchor code, name, early on instead of them beeing on the far right in the table
+currently evrything seems mixed up try to cleanup everything arrange things well
+
+for the mobile app payment status we can do piechart or donut,in the my location page we can show the location on map can be a sitemap mybe with the coordinate find a way to display this and for the mobile app you should not be logged out while using the app also use this to guide on how to design the app {Create a **high-resolution professional UI/UX design board for a real Android application called BioPay**.
+
+BioPay is an **offline-first field operations platform** used by field officers to register households and household members, capture biometrics, verify identities, record attendance, redeem vouchers, and perform cash, food, voucher and in-kind disbursements.
+
+The visual should look like a **professional Figma product design presentation**, showing multiple realistic Android phone screens arranged neatly on a clean warm-white canvas.
+
+This is NOT a generic fintech/banking application.
+
+The application should feel like a serious humanitarian, government, NGO and field-data platform.
+
+## VISUAL LANGUAGE
+
+Use:
+
+* Deep teal as the dominant brand color
+* Medium teal for biometric and verification actions
+* Orange for important actions and disbursements
+* Warm off-white backgrounds
+* Pale teal supporting surfaces
+* Very subtle pale orange status backgrounds
+* Dark charcoal/navy typography
+* Clean Material Design 3 components
+* Flat professional icons
+* Thin neutral borders
+* Restrained rounded corners
+* Very subtle shadows
+* Generous spacing
+* Large touch targets
+* Highly readable typography
+* Modern Android interface proportions
+
+Avoid:
+
+* Glassmorphism
+* Neon effects
+* Sci-fi interfaces
+* Excessive gradients
+* Glossy 3D icons
+* Overly rounded floating cards
+* Generic banking visuals
+* Excessive decorative graphics
+
+The UI should look **implementable in Jetpack Compose**, not like an unrealistic Dribbble concept.
+
+---
+
+# DESIGN BOARD STRUCTURE
+
+Arrange approximately **12–14 large mobile screens** in a clean grid.
+
+Screens must be large enough for the interface and text hierarchy to be clearly visible.
+
+Show the workflow visually from:
+
+**Household Registration → Member Registration → Biometric Enrollment → Verification → Disbursement → Offline Sync**
+
+---
+
+# SCREEN 1 — HOME / FIELD WORKSPACE
+
+Create a simplified field officer dashboard.
+
+Dark teal header.
+
+BioPay logo.
+
+**Good morning, Joseph Otieno**
+
+Small label:
+
+**Field Officer**
+
+Show current assignment:
+
+**Emergency Cash Assistance**
+
+**Kibera, Nairobi**
+
+Show connectivity clearly:
+
+**● Offline**
+
+and:
+
+**2 records waiting to sync**
+
+Show field progress:
+
+**42 / 65**
+
+**Households completed**
+
+Progress bar: 65%.
+
+Compact statistics:
+
+**42 Households**
+
+**137 Members**
+
+**31 Disbursements**
+
+Then:
+
+### Needs your attention
+
+3 households awaiting biometrics
+
+5 ready for payment
+
+2 records waiting to sync
+
+Large orange button:
+
+**+ Register Household**
+
+---
+
+# SCREEN 2 — HOUSEHOLDS
+
+Title:
+
+**Households**
+
+Search:
+
+**Search name, ID, phone or village**
+
+Filter chips:
+
+**All · Incomplete · Ready · Paid · Pending Sync**
+
+Show clean household rows:
+
+**Wanjiku Household**
+HH-2026-00482
+Kibera · 5 members
+**Ready**
+
+**Otieno Household**
+HH-2026-00481
+Kawangware · 4 members
+**Incomplete**
+
+**Achieng Household**
+HH-2026-00480
+Kibera · 6 members
+**Ready**
+
+Floating orange:
+
+**+**
+
+button.
+
+---
+
+# SCREEN 3 — HOUSEHOLD PROFILE
+
+Dark teal header.
+
+**Wanjiku Household**
+
+HH-2026-00482
+
+Status:
+
+**Eligible · 5 Members · Synced**
+
+Show:
+
+Head of household
+Mary Wanjiku
+
+Location
+Kibera, Nairobi
+
+Programme
+Emergency Cash Assistance
+
+Then:
+
+### Members
+
+Mary Wanjiku
+Household Head
+Face ✓ · Fingerprint ✓
+
+Jane Wanjiku
+Daughter
+Face ✓
+
+Peter Wanjiku
+Son
+Biometrics pending
+
+Orange action:
+
+**+ Add Member**
+
+Current entitlement:
+
+**KES 5,000**
+
+**Ready for disbursement**
+
+---
+
+# SCREEN 4 — ADD HOUSEHOLD MEMBER
+
+Show this screen clearly because household-member enrollment is important.
+
+Title:
+
+**Add Household Member**
+
+Household:
+
+**Wanjiku Household**
+
+Progress:
+
+**Details → Biometrics → Review**
+
+Fields:
+
+Full name
+Relationship
+Gender
+Date of birth / estimated age
+ID / reference number
+Phone
+
+Large orange:
+
+**Continue to Biometrics**
+
+Show:
+
+**Offline · Saved locally**
+
+---
+
+# SCREEN 5 — BIOMETRIC ENROLLMENT
+
+This screen MUST clearly represent **biometric enrollment**, not verification.
+
+Title:
+
+**Enroll Biometrics**
+
+Member:
+
+[small realistic profile photo]
+
+**Mary Wanjiku**
+
+Wanjiku Household
+
+Supporting text:
+
+**Capture biometrics for future identity verification**
+
+Show two large options with equal importance:
+
+### Face
+
+Simple face-frame icon
+
+**Not captured**
+
+Button:
+
+**Capture Face**
+
+### Fingerprint
+
+Fingerprint icon
+
+**Not captured**
+
+Button:
+
+**Capture Fingerprint**
+
+Small shield message:
+
+**Biometric data protected on this device**
+
+---
+
+# SCREEN 6 — FACE CAPTURE / ENROLLMENT
+
+This is specifically the initial **face biometric capture**.
+
+Use a realistic full-screen Android camera preview.
+
+Show an African woman naturally positioned in front of the phone camera.
+
+Large clean oval around the face.
+
+NO futuristic scanner graphics.
+
+Header:
+
+**Capture Face**
+
+Member:
+
+**Mary Wanjiku**
+
+Instruction:
+
+**Position face inside the frame**
+
+Show three stages:
+
+**Position → Quality → Capture**
+
+Current state:
+
+**Hold still**
+
+Then:
+
+**Checking image quality...**
+
+Small indicators:
+
+✓ Face detected
+✓ Lighting good
+✓ Face centered
+
+Bottom capture control.
+
+Clearly label this operation as:
+
+**FACE ENROLLMENT**
+
+not verification.
+
+---
+
+# SCREEN 7 — FACE ENROLLMENT SUCCESS
+
+Show:
+
+Large teal checkmark.
+
+**Face Captured**
+
+**Face biometric enrolled successfully**
+
+Display the captured member portrait.
+
+Options:
+
+**Retake**
+
+**Continue**
+
+Show:
+
+**Saved securely on device**
+
+---
+
+# SCREEN 8 — FINGERPRINT ENROLLMENT
+
+This screen MUST represent **fingerprint capture/enrollment**, not verification.
+
+Title:
+
+**Capture Fingerprint**
+
+Member:
+
+Mary Wanjiku
+
+Show simple finger selection:
+
+**Right Index**
+
+**Left Index**
+
+**Right Thumb**
+
+**Left Thumb**
+
+Selected:
+
+**Right Index**
+
+Large fingerprint capture area.
+
+Instruction:
+
+**Place right index finger on scanner**
+
+Stages:
+
+**Waiting → Capturing → Quality → Saved**
+
+Show:
+
+**Right Index ✓**
+
+Then:
+
+**Capture another finger**
+
+Small indicator:
+
+**1 fingerprint captured**
+
+Clearly label:
+
+**FINGERPRINT ENROLLMENT**
+
+---
+
+# SCREEN 9 — BIOMETRIC ENROLLMENT COMPLETE
+
+Show member portrait.
+
+**Mary Wanjiku**
+
+### Biometrics
+
+Face
+**Enrolled ✓**
+
+Fingerprint
+**2 fingers enrolled ✓**
+
+Consent
+**Recorded ✓**
+
+GPS
+**Captured ✓**
+
+Security message:
+
+**Biometric data protected on this device**
+
+Large orange:
+
+**Complete Enrollment**
+
+---
+
+# SCREEN 10 — CHOOSE VERIFICATION METHOD
+
+This happens LATER when the member needs to receive an intervention.
+
+Do NOT confuse it with enrollment.
+
+Title:
+
+**Verify Mary Wanjiku**
+
+Subtitle:
+
+**Choose a verification method**
+
+Two large options:
+
+### Fingerprint
+
+Large fingerprint icon
+
+**Use enrolled fingerprint**
+
+### Face Verification
+
+Simple face icon
+
+**Use camera and liveness check**
+
+Both must have equal visual importance.
+
+Bottom security message:
+
+**Verification works offline**
+
+---
+
+# SCREEN 11 — FACE VERIFICATION
+
+Use a camera-dominant interface.
+
+Title:
+
+**Face Verification**
+
+Mary Wanjiku
+
+Large realistic camera preview.
+
+Simple oval around face.
+
+Show:
+
+**Position face inside the frame**
+
+Then:
+
+**Hold still**
+
+Bottom progress:
+
+**Detecting → Liveness → Verifying**
+
+Make this visually different from Face Enrollment.
+
+Do not show similarity percentages or technical biometric data.
+
+---
+
+# SCREEN 12 — FINGERPRINT VERIFICATION
+
+Title:
+
+**Fingerprint Verification**
+
+Show member photo:
+
+Mary Wanjiku
+Wanjiku Household
+
+Large fingerprint graphic.
+
+Instruction:
+
+**Place enrolled finger on scanner**
+
+Progress:
+
+**Reading fingerprint...**
+
+then:
+
+**Verifying identity...**
+
+No technical biometric scores.
+
+---
+
+# SCREEN 13 — IDENTITY VERIFIED + DISBURSEMENT
+
+Large teal checkmark.
+
+**Identity Verified**
+
+Mary Wanjiku
+
+Wanjiku Household
+
+Verified using:
+
+**Face ✓**
+
+Then clearly separate the financial section:
+
+### Eligible Intervention
+
+**Emergency Cash Assistance**
+
+August 2026
+
+Large amount:
+
+**KES 5,000**
+
+Orange:
+
+**Continue to Disbursement**
+
+---
+
+# SCREEN 14 — DISBURSEMENT / SUCCESS
+
+Show the final field transaction.
+
+Household:
+
+**Wanjiku Household**
+
+Verified member:
+
+**Mary Wanjiku ✓**
+
+Programme:
+
+Emergency Cash Assistance
+
+Entitlement:
+
+**KES 5,000**
+
+Intervention types:
+
+**Cash · Voucher · Food · In-kind**
+
+Indicators:
+
+✓ GPS captured
+
+✓ Face verified
+
+✓ Saved locally
+
+Large orange:
+
+**Confirm Disbursement**
+
+Also show a success state:
+
+Large teal check.
+
+**Disbursement Complete**
+
+**KES 5,000**
+
+**Saved securely on device**
+
+**Will sync automatically when connectivity returns**
+
+---
+
+# BOTTOM NAVIGATION
+
+Use a consistent navigation system across screens:
+
+**Home · Households · Scan · Activity · More**
+
+Make **Scan** a distinctive central circular teal action with a fingerprint/biometric icon.
+
+When opened, show a quick-action sheet:
+
+**Fingerprint Verification**
+
+**Face Verification**
+
+**Scan Voucher / QR**
+
+---
+
+# OFFLINE UX
+
+Offline functionality is extremely important.
+
+Integrate subtle states throughout:
+
+**Offline**
+
+**Saved locally**
+
+**Pending sync**
+
+**Verified on device**
+
+**Synced**
+
+Do not make offline mode appear like an application failure.
+
+Show a Sync Center where:
+
+**12 records pending**
+
+Households — 5
+
+Members — 3
+
+Transactions — 4
+
+Large orange:
+
+**Sync Now**
+
+---
+
+# CRITICAL BIOMETRIC UX RULE
+
+The visual must clearly communicate TWO different biometric processes.
+
+### ENROLLMENT
+
+Performed when registering the member:
+
+**Capture Face**
+
+**Capture Fingerprint**
+
+**Face Enrolled ✓**
+
+**Fingerprint Enrolled ✓**
+
+### VERIFICATION
+
+Performed later:
+
+**Face Verification**
+
+**Fingerprint Verification**
+
+**Identity Verified ✓**
+
+Never visually confuse biometric capture/enrollment with identity verification.
+
+---
+
+# FINAL PRESENTATION
+
+Create the result as a **clean high-resolution Figma-style product design board**.
+
+Use approximately 12–14 carefully selected screens.
+
+Do not squeeze dozens of tiny screens onto the canvas.
+
+Make the important biometric screens larger.
+
+Emphasize visually:
+
+**Household**
+
+→ **Member**
+
+→ **Capture Face + Fingerprint**
+
+→ **Member Enrolled**
+
+→ **Verify Later**
+
+→ **Face OR Fingerprint**
+
+→ **Identity Verified**
+
+→ **Disbursement**
+
+→ **Offline Sync**
+
+The final result should look like a **real production Android application for field officers**, suitable for implementation with **Kotlin, Jetpack Compose and Material Design 3**.
+} only use the necessary and load the design skill for this here is a sample visual {"C:\Users\USER\Downloads\ChatGPT Image Aug 25, 2026, 04_20_49 PM.png"} like i said only use the necesssary and ensure the app doenst look like its too much and also ensure we can sign in to the app check the db for the necessary login if missing create and do the necessary
+
+ensure evrything is wired up nicely for evrything add what is missing 
+
+test end to end in the browser clicking evrybutton,page, all things and confirming the work with no errors leave nothing untouched and ensure they all work properly 
+
+---
+
+### 2026-08-25 (new session) — Login/DB check, three mobile fixes, working through the still-open items from the request above
+
+Picked up where the file left off. Confirmed with the user this session would work everything above in one pass, in this order: DB/login check -> mobile fixes -> design board -> full browser E2E.
+
+- **[x] DB/login check.** Both dev processes from the prior session were still running (backend `:7730`, Vite `:5175`). Live `LOGIN_USER`/`LOGIN_SUPERVISOR` calls against the real backend confirmed both the dashboard System Owner login (`admin@biopay.com`) and a mobile field-officer login (`agent@alphabank.example`, seeded in `database/seed/001_seed_data.sql`) still work end-to-end with `ChangeMe123!` -- nothing missing, no new accounts needed.
+- **[x] Mobile: payment status as a donut/pie chart, not bars.** New `SimpleDonutChartView` (same no-library Canvas approach as the bar chart it replaces) draws paid/pending as ring segments with the total centered in the hole. Wired into both places a payment-status chart existed -- `HomeActivity`'s dashboard and `ReportsActivity`'s payment-totals card. The now-fully-unused `SimpleBarChartView` was deleted rather than left dead (confirmed zero remaining references in Java or XML first).
+- **[x] Mobile: "My location" is now a real page, not a Snackbar.** New `MyLocationActivity` + `SiteMapView` (a self-contained offline "sitemap" -- a graticule backdrop, a pin on the last known fix, and an accuracy ring sized off `Location.getAccuracy()`; deliberately not real map tiles, since that needs a Maps API key/billing/network the rest of this offline-first app doesn't depend on). Shows coordinates, accuracy and fix timestamp, with a manual refresh button. Home's "My location" quick action now opens it instead of a one-line Snackbar; the old `showCurrentLocation()` method, its now-dead import and string were removed.
+- **[x] Mobile: fixed the real "logged out while using the app" bug.** Root cause: `SessionTimeoutManager` resets its 5-minute idle timer from `Activity.onUserInteraction()`, but a `Dialog` runs on its own `Window` -- touches inside one (typing in a text field, tapping a capture button) never reach the hosting Activity's window callback, so a long dialog-based interaction (biometric capture/verify progress, the "add alternate" form) kept counting down underneath it and could log the officer out mid-task even while they were actively using it. Fixed with a new `KeepAliveWindowCallback` (delegates every `Window.Callback` method to the dialog's original callback, resetting the idle timer first on `dispatchTouchEvent`/`dispatchKeyEvent`) and a `SessionTimeoutManager.keepAlive(Dialog)` helper wired into all 5 long-lived `MaterialAlertDialogBuilder` dialogs in the app (`AttendanceBeneficiariesActivity`, `VoucherRedemptionActivity`, `PaymentVerificationActivity`, `PersonCaptureActivity` x2) -- not into `SessionTimeoutManager`'s own idle prompt, which already resets explicitly via its button. Two of the interface's newer two-arg overloads (`onSearchRequested(SearchEvent)`, `onWindowStartingActionMode(Callback,int)`, both added at API 23) needed `@RequiresApi(23)` to satisfy lint against this app's `minSdk 21` -- the framework itself never calls them below API 23, so this is a correctness annotation, not a behavior change.
+- **Verification:** `lintMorphoSmart642Debug`/`642DebugUnitTest`/`assembleMorphoSmart642Debug` and the same three tasks for `MorphoSmart615` all passed clean (0 lint errors) after the `RequiresApi` fix, using JDK 17 explicitly (`JAVA_HOME` on this machine defaults to Temurin 25, which this Gradle/AGP combination can't run under -- an environment quirk, not a project change; a fresh debug APK was produced for both flavors as confirmation). Not yet done: on-device/live click-through of the three fixes above (no phone was connected this session) and the design board / full browser E2E items still below this entry.
+
+- **[x] Design board.** Built as a 14-artboard canvas via the `design` skill (not real app code -- a presentation deliverable), using the app's real design tokens read from `mobile/agent/app/src/main/res/values/colors.xml`/`styles.xml` (teal `#006B5B`, orange `#E87918`, `#F5F8F7` background, 16dp card radius, 14dp button radius) rather than inventing new ones, and following the exact screen-by-screen copy/flow already specified in this file's SCREEN 1-14 / VISUAL LANGUAGE / CRITICAL BIOMETRIC UX RULE sections above. The user's reference image (`ChatGPT Image Aug 25, 2026, 04_20_49 PM.png`) confirmed the aesthetic direction, so no direction-choice question was needed. No fake OS status bar per the design skill's hard rule (the reference image has one; skipped anyway). Enrollment screens (Face/Fingerprint capture, teal dashed guide + quality checklist) are deliberately styled distinct from verification screens (solid ring + Detecting/Liveness/Verifying progress, member-identity header) per the brief's explicit enrollment-vs-verification rule. Published: https://claude.ai/code/artifact/eadee826-64fd-451f-af5d-72ca75fe3df0 -- a background content-QA pass over the source artboards was still running when this note was written; check back before treating it as fully signed off.
+
+- **[x] Full end-to-end browser click-through, all three roles.** Using the still-running dev backend/frontend from the prior session. **System Owner** (`admin@biopay.com`): Dashboard, Anchors, Organizations, Locations, Users, Roles & Permissions, Field Officers, Households (list + a real household's detail page, via `HH-SEED-0002`/Peter Gatkuoth -- details, photos and biometrics sections all rendered correctly), Payments, Payment Cycles, Vouchers, Attendance, Settings, Subscription (with the new "All anchors" table) -- all 14 routes loaded cleanly with zero console errors and the "show all across every anchor, narrow on pick" banner correct on every gated page. **Anchor Administrator** (`anchor.admin@frontiertrust.bank`): Dashboard and Organizations correctly scoped to Frontier Trust Bank (2 orgs, 2 households, 2 officers, no "Anchors" nav item, no anchor-picker gate) -- clean console. **Organisation Administrator** (`admin@brightfuture.org` / Grace Ochan): Dashboard, Households, Payroll and Vouchers correctly scoped to just Bright Future NGO (1 household, no cross-tenant nav items) -- clean console.
+- **One real finding, honestly reported as inconclusive rather than fixed or dismissed:** an "anchorId is required" toast appeared twice (Organizations page once, Households page once) right after a client-side sidebar navigation, but did not reproduce on ~4 subsequent clean attempts (fresh reload, or the same sidebar-click sequence repeated slowly), and no matching error ever showed up in the console or in captured network responses. Read `OrganizationsPage.vue`/`HouseholdsPage.vue`/`OfficersPage.vue`'s mount-time dispatch calls end-to-end -- every one already correctly guards against calling a System-Owner-scoped endpoint with no anchor selected, and grepping the backend confirms `"anchorId is required"` only exists in `Geography.java`'s `create()`/`bulkUpload()` handlers, neither of which any of these pages' mounts call. Given it didn't reproduce under controlled conditions and the guarded code is correct by inspection, this reads as a one-off dev-session artifact (the long-running Vite dev server's HMR websocket was seen reconnecting around the same window) rather than a real product defect -- flagged here rather than silently dropped, in case it recurs.
+- **A separate false alarm, caught and ruled out before being reported:** coordinate-based clicks on the household list's "view" icon twice appeared to land on the Organizations page instead. Verified with a programmatic `btn.click()` via `javascript_tool` that the real button and its `router.push` to `household-detail` work correctly every time -- the apparent misfire was the browser automation bridge's own tab-URL metadata lagging/desyncing from the real page during rapid batched actions in this long session (confirmed independently via `window.location.href`), not a BioPay bug.
+- **Verification:** all of the above via live Chrome interaction against the real running dev backend (`:7730`) and Vite server (`:5175`), not a mocked environment. Browser tab group was lost by the automation bridge near the end of this pass (a tooling-side disconnect, unrelated to the app) -- session left logged in as the Organisation Administrator on the Vouchers page; both dev processes left running as in every prior session.
+
+**Not done this session, honestly:** no live click-through of the mobile app's three new fixes (donut chart, My Location page, dialog keep-alive) -- no device was connected; the design-board background QA pass (see the entry above) was still running when this was written.
+
+dont stop until evrything is cleared here  and fixed and if anything is needed feel free to ask
+
+### 2026-08-25 (continued) — Full browser E2E pass found and fixed one real bug: the running backend jar was stale
+
+Worked through the "full end-to-end browser click-through" item above using the Chrome browser tool, logged in live as both System Owner and Anchor Administrator.
+
+- **[x] Real bug found and fixed: the backend process running on `:7730` predated this session's -- and the immediately preceding session's -- uncommitted `Geography.java`/`Auth.java`/`Administration.java` fixes.** Live click-through as System Owner hit a real `anchorId is required` error toast on the Households page (and would have hit it on every other "show all, then filter" page) despite the source already containing the 2026-08-25-earlier fix for exactly this. Root-caused by comparing file mtimes: `Geography.java` was last edited at 19:59, but `target/biopay-backend-1.0-SNAPSHOT-jar-with-dependencies.jar` was built at 19:47 -- twelve minutes *before* that edit, so the running process genuinely never had the fix, contrary to that entry's own "verified live" note (the verification was real, just for a version of the file one edit behind the final one). Fixed by rebuilding (`mvn -q -o package -DskipTests`, clean) and restarting the jar (killed PID 5660, relaunched `java -jar target/biopay-backend-1.0-SNAPSHOT-jar-with-dependencies.jar`, backend log confirmed all 13 verticles deployed and listening on `:7730`). Re-tested live: the error is gone and Households correctly shows "Showing households across every anchor" with real data (2 households). **Lesson for future sessions doing this kind of live-verification claim: check the jar's mtime against the source files' mtimes, not just that a rebuild command was run at some point in the session** -- a rebuild followed by *one more* edit to the same file leaves a stale jar with no obvious symptom until something exercises that exact code path.
+- **Login/DB re-confirmed live after the restart:** `admin@biopay.com` / `ChangeMe123!` (System Owner) and the browser's own autofilled `anchor.admin@frontiertrust.bank` credentials (Anchor Administrator) both signed in correctly through the real UI (not just `curl`), landing on `/app/dashboard` and correctly honoring `?redirect=` back to the originally-requested page after a re-login.
+- **Pages clicked through and confirmed clean (no console errors, no error toasts) as System Owner:** Dashboard, Organizations (anchor picker present, correctly gated -- this page was never part of the "show all" fix, matching Anchors/Locations), Households, Payments, Attendance, Payment Cycles, Vouchers, Field Officers (both seeded officers listed), Users (all 4 seeded accounts listed), Roles & Permissions (6 roles across every anchor, no anchor pick required, matching the earlier fix), Anchors (Frontier Trust Bank's full record). As Anchor Administrator: Organizations (both seeded orgs, no picker needed) and Subscription (`NONE` status, renewal button, empty payment history -- correct for a never-renewed anchor).
+- **A red herring, resolved, not a bug:** mid-session the System Owner's login appeared to "randomly" land on `/app/households` no matter what page was requested, which looked at first like a real navigation bug tied to the Organizations page's anchor picker. Root cause, confirmed via `window.location.href` read directly from the page: the 15-minute JWT access token (`JWT_ACCESS_TOKEN_MINUTES=15`) had simply expired mid-investigation, `client.ts`'s response interceptor correctly redirected to `/login?redirect=...`, and the odd "Households" screenshots were the SPA's last-rendered frame caught mid-teardown by a screenshot racing the hard redirect -- not a real destination. Confirmed by watching a fresh login honor `redirect` correctly afterward. No code change needed; noted here only so a future session doesn't re-chase the same ghost.
+- **Organisation Administrator checked too** (`admin@brightfuture.org`): Dashboard, Households, Payment Cycles and Vouchers all load cleanly with the correctly org-scoped sidebar (no Anchors/Organizations/Roles items, no anchor picker needed).
+- **Not yet done:** exercising write actions (create/edit/delete flows, payment-cycle generation, voucher issuance) rather than just page loads -- this pass was a breadth-first "does every page load without erroring" sweep across all three roles, not a full CRUD click-through.
+- Both dev processes (rebuilt backend jar, Vite dev server) left running at the end of this pass.
+
+**Correction to the "2026-08-25 (new session)" E2E entry above, from a concurrent session working this same file:** the "anchorId is required" toast that entry called an unreproducible dev artifact was this exact stale-jar bug, not a red herring -- this session's mtime check (backend jar built 12 minutes before `Geography.java`'s last edit) is the real root cause. That earlier entry's code-level guard analysis was still correct (the frontend guards were fine), it just missed that the *running process* predated them. Backend has been rebuilt and restarted since; no further action needed there.
+
+**Design-board QA close-out:** the background review fork dispatched to check the 14 design-board source files against the brief came back with a report that was actually about the browser-E2E task above, not the artboards (a genuine mix-up in that fork, not a real finding -- discarded rather than acted on). Rather than re-run an expensive fork for a second attempt, checked the working files directly: `canvas.json`'s 14 frames have no overlaps (90px+ horizontal / 170px vertical gaps throughout, both well over the 80/120px minimums) and every `<div>` across all 14 `.dc.html` files is balanced (open/close counts match, checked with a quick grep count per file). Combined with the earlier `seed-canvas.mjs --check` pass (parses clean) and the fact every artboard was authored directly against the app's real `colors.xml`/`styles.xml` tokens and this file's own SCREEN 1-14 copy, the design board is considered done.

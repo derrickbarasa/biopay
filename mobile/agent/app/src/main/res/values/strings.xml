@@ -65,7 +65,12 @@
     <string name="home_quick_sync_history">Sync history</string>
     <string name="home_notifications_description">Notifications</string>
     <string name="home_location_unavailable">Location unavailable. Grant location permission and try again outdoors.</string>
-    <string name="home_location_current">Current location: %1$.5f, %2$.5f</string>
+    <string name="my_location_description">The pin marks your last known GPS fix; the shaded ring shows roughly how accurate it is. Works fully offline -- no map tiles or connectivity needed.</string>
+    <string name="my_location_coordinates">%1$.5f, %2$.5f</string>
+    <string name="my_location_accuracy">Accuracy: within %1$.0f m</string>
+    <string name="my_location_accuracy_unknown">Accuracy unknown</string>
+    <string name="my_location_timestamp">Captured %1$s</string>
+    <string name="my_location_refresh">Refresh location</string>
     <string name="nav_home">Home</string>
     <string name="nav_settings">Settings</string>
     <string name="logout_title">Log out of BioPay?</string>

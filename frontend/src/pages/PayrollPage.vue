@@ -57,14 +57,10 @@ const organizations = ref<{ organisationCode: string; name: string }[]>([])
 const statusFilter = ref<string | null>(null)
 const organisationFilter = ref<string | null>(null)
 
-// Anchor Administrators must choose an organisation before this page shows
-// anything or lets them generate a cycle; the System Owner must choose an
-// anchor first (may optionally narrow further with the filter below).
-const scopeReady = computed(() => {
-  if (auth.isSystemAdmin) return anchorChosen.value
-  if (auth.isAnchorAdministrator) return !!organisationFilter.value
-  return true
-})
+// Both roles see everything in their scope immediately -- the backend already
+// treats an unset anchor/organisation filter as "show all" (`IS NULL OR ...`),
+// so the picker below narrows the view without ever blocking it.
+const scopeReady = computed(() => true)
 
 const headers = [
   { title: 'Cycle', key: 'cycleCode' },
@@ -80,7 +76,6 @@ const headers = [
 ]
 
 async function load() {
-  if (!scopeReady.value) { cycles.value = []; return }
   loading.value = true
   try {
     const res = await dispatch<{ results: Cycle[] }>('GET_PAYROLLS', {
@@ -478,8 +473,8 @@ function itemStatusColor(item: PaymentLine) {
       label="Choose organisation" variant="outlined" class="mb-4" style="max-width: 420px"
       prepend-inner-icon="mdi-domain"
     />
-    <v-alert v-if="!scopeReady" type="info" variant="tonal" class="mb-4">
-      {{ auth.isSystemAdmin && !anchorChosen ? 'Choose an anchor to see its payment cycles.' : 'Choose an organisation to see its payment cycles.' }}
+    <v-alert v-if="auth.isSystemAdmin ? !anchorChosen : (auth.isAnchorAdministrator && !organisationFilter)" type="info" variant="tonal" class="mb-4">
+      {{ auth.isSystemAdmin ? 'Showing payment cycles across every anchor. Choose one above to narrow the list.' : 'Showing payment cycles across every organisation. Choose one above to narrow the list.' }}
     </v-alert>
 
     <template v-if="scopeReady">

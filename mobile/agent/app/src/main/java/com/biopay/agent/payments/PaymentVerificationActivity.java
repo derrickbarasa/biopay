@@ -193,6 +193,7 @@ public class PaymentVerificationActivity extends BaseActivity {
                 })
                 .create();
         dialog.show();
+        com.biopay.agent.session.SessionTimeoutManager.keepAlive(dialog);
         attemptFingerprintVerify(device, templates, 0, progress, dialog, beneficiary);
     }
 

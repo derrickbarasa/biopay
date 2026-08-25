@@ -10,7 +10,7 @@ import com.biopay.agent.data.AlternateDao;
 import com.biopay.agent.data.DatabaseHelper;
 import com.biopay.agent.data.HouseholdDao;
 import com.biopay.agent.data.PaymentDao;
-import com.biopay.agent.home.SimpleBarChartView;
+import com.biopay.agent.home.SimpleDonutChartView;
 import com.biopay.agent.ui.BaseActivity;
 
 import java.text.NumberFormat;
@@ -52,12 +52,13 @@ public class ReportsActivity extends BaseActivity {
         setText(R.id.tvAlternateCount, String.valueOf(alternateDao.countAll()));
         setText(R.id.tvWaitingSync, String.valueOf(waitingSync));
 
-        SimpleBarChartView chart = findViewById(R.id.chartPayments);
-        chart.setBars(Arrays.asList(
-                new SimpleBarChartView.Bar(getString(R.string.payment_paid), paidCount,
+        SimpleDonutChartView chart = findViewById(R.id.chartPayments);
+        chart.setSlices(Arrays.asList(
+                new SimpleDonutChartView.Slice(getString(R.string.payment_paid), paidCount,
                         ContextCompat.getColor(this, R.color.bp_success)),
-                new SimpleBarChartView.Bar(getString(R.string.payment_pending), pendingCount,
-                        ContextCompat.getColor(this, R.color.bp_secondary))));
+                new SimpleDonutChartView.Slice(getString(R.string.payment_pending), pendingCount,
+                        ContextCompat.getColor(this, R.color.bp_secondary))),
+                "Total");
     }
 
     private void setText(int viewId, String value) {

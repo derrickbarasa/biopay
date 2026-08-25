@@ -29,11 +29,10 @@ const dateFilter = ref<string | null>(null)
 const clockFilter = ref<string | null>(null)
 const organisationFilter = ref<string | null>(null)
 
-const scopeReady = computed(() => {
-  if (auth.isSystemAdmin) return anchorChosen.value
-  if (auth.isAnchorAdministrator) return !!organisationFilter.value
-  return true
-})
+// Both roles see everything in their scope immediately -- the backend already
+// treats an unset anchor/organisation filter as "show all" (`IS NULL OR ...`),
+// so the picker below narrows the view without ever blocking it.
+const scopeReady = computed(() => true)
 
 const headers = [
   { title: 'Household', key: 'householdNumber' },
@@ -54,7 +53,6 @@ const orgNameByCode = computed(() => new Map(organizations.value.map((o) => [o.o
 function orgName(code?: string) { return (code && orgNameByCode.value.get(code)) || code || '—' }
 
 async function load() {
-  if (!scopeReady.value) { records.value = []; return }
   loading.value = true
   try {
     const r = await dispatch<{ results: AttendanceRow[] }>('GET_ATTENDANCE', {
@@ -133,8 +131,8 @@ function exportCsv() {
       label="Choose organisation" variant="outlined" class="mb-4" style="max-width: 420px"
       prepend-inner-icon="mdi-domain"
     />
-    <v-alert v-if="!scopeReady" type="info" variant="tonal" class="mb-4">
-      {{ auth.isSystemAdmin && !anchorChosen ? 'Choose an anchor to see attendance records.' : 'Choose an organisation to see attendance records.' }}
+    <v-alert v-if="auth.isSystemAdmin ? !anchorChosen : (auth.isAnchorAdministrator && !organisationFilter)" type="info" variant="tonal" class="mb-4">
+      {{ auth.isSystemAdmin ? 'Showing attendance records across every anchor. Choose one above to narrow the list.' : 'Showing attendance records across every organisation. Choose one above to narrow the list.' }}
     </v-alert>
 
     <template v-if="scopeReady">

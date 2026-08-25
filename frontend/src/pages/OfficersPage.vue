@@ -47,11 +47,10 @@ const geoLoading = ref(true)
 
 const filters = ref({ organisationCode: null as string | null, active: null as string | null })
 
-const scopeReady = computed(() => {
-  if (auth.isSystemAdmin) return anchorChosen.value
-  if (auth.isAnchorAdministrator) return !!filters.value.organisationCode
-  return true
-})
+// Both roles see everything in their scope immediately -- the backend already
+// treats an unset anchor/organisation filter as "show all" (`IS NULL OR ...`),
+// so the picker below narrows the view without ever blocking it.
+const scopeReady = computed(() => true)
 
 const headers = [
   { title: 'Name', key: 'name' },
@@ -72,7 +71,6 @@ const locationsForCounty = (countyCode: string) => countyCode ? locations.value.
 const villagesForLocation = (locationCode: string) => locationCode ? villages.value.filter((v) => v.locationCode === locationCode) : villages.value
 
 async function load() {
-  if (!scopeReady.value) { officers.value = []; return }
   loading.value = true
   try {
     const res = await dispatch<{ results: Officer[] }>('GET_OFFICERS', {
@@ -258,8 +256,8 @@ async function assignLocation() {
       label="Choose organisation" variant="outlined" class="mb-4" style="max-width: 420px"
       prepend-inner-icon="mdi-domain"
     />
-    <v-alert v-if="!scopeReady" type="info" variant="tonal" class="mb-4">
-      {{ auth.isSystemAdmin && !anchorChosen ? 'Choose an anchor to see its field officers.' : 'Choose an organisation to see its field officers.' }}
+    <v-alert v-if="auth.isSystemAdmin ? !anchorChosen : (auth.isAnchorAdministrator && !filters.organisationCode)" type="info" variant="tonal" class="mb-4">
+      {{ auth.isSystemAdmin ? 'Showing field officers across every anchor. Choose one above to narrow the list.' : 'Showing field officers across every organisation. Choose one above to narrow the list.' }}
     </v-alert>
 
     <template v-if="scopeReady">

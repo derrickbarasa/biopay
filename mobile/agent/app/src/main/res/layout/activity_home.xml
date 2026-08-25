@@ -538,11 +538,12 @@
                     android:textSize="16sp"
                     android:textStyle="bold" />
 
-                <com.biopay.agent.home.SimpleBarChartView
+                <com.biopay.agent.home.SimpleDonutChartView
                     android:id="@+id/chartPayments"
-                    android:layout_width="match_parent"
-                    android:layout_height="180dp"
-                    android:layout_marginTop="8dp" />
+                    android:layout_width="160dp"
+                    android:layout_height="160dp"
+                    android:layout_marginTop="8dp"
+                    android:layout_gravity="center_horizontal" />
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
     </LinearLayout>

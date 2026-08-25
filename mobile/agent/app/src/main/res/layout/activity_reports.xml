@@ -25,7 +25,7 @@
                             <TextView style="@style/BioPay.KpiLabel" android:text="@string/reports_pending_amount" />
                         </LinearLayout>
                     </LinearLayout>
-                    <com.biopay.agent.home.SimpleBarChartView android:id="@+id/chartPayments" android:layout_width="match_parent" android:layout_height="190dp" android:layout_marginTop="16dp" />
+                    <com.biopay.agent.home.SimpleDonutChartView android:id="@+id/chartPayments" android:layout_width="170dp" android:layout_height="170dp" android:layout_marginTop="16dp" android:layout_gravity="center_horizontal" />
                     <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
                         <TextView android:id="@+id/tvPaidCount" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:gravity="center" android:textColor="@color/bp_success" android:textStyle="bold" />
                         <TextView android:id="@+id/tvPendingCount" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:gravity="center" android:textColor="@color/bp_warning" android:textStyle="bold" />
