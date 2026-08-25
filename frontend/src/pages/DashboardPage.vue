@@ -84,11 +84,16 @@ const anchorMetricCards = computed<MetricCard[]>(() => [
   },
   { label: 'Alternates Registered', value: metrics.value.totalAlternates ?? '—', detail: 'Approved alternate recipients', art: 'alternates' },
   { label: 'Active Officers', value: metrics.value.activeOfficers ?? '—', detail: 'Field officers currently enabled', art: 'officers', tone: 'blue' },
-  { label: 'Pending Approvals', value: metrics.value.pendingPayrolls ?? '—', detail: 'Payment cycles awaiting a checker', art: 'pending', tone: 'amber' },
+  { label: 'Registered Fingerprints', value: metrics.value.registeredFingerprints ?? '—', detail: 'Biometric templates across accessible organisations', art: 'fingerprints' },
   {
     label: 'Total Generated', value: compactCurrency(metrics.value.totalGeneratedAmount),
     detail: `${metrics.value.generatedCycles ?? 0} non-rejected payment cycle${metrics.value.generatedCycles === 1 ? '' : 's'}`,
     art: 'generated', wide: true,
+  },
+  { label: 'Pending Approvals', value: metrics.value.pendingPayrolls ?? '—', detail: 'Payment cycles awaiting a checker', art: 'pending', tone: 'amber' },
+  {
+    label: 'Latest Payroll', value: metrics.value.latestPayroll?.status ?? 'No cycles yet',
+    detail: metrics.value.latestPayroll?.cycleCode ?? 'Generate a cycle to begin', art: 'payroll', tone: 'blue',
   },
 ])
 
@@ -144,13 +149,13 @@ const organisationMetricCards = computed<MetricCard[]>(() => [
         <v-btn size="small" variant="text" prepend-icon="mdi-refresh" :loading="loading" @click="load">
           Refresh
         </v-btn>
-        <v-btn v-if="auth.isAnchor" size="small" color="secondary" prepend-icon="mdi-domain-plus" @click="router.push('/app/organizations')">
+        <v-btn v-if="auth.isAnchor && auth.can('ACCESS_ORGANISATIONS')" size="small" color="secondary" prepend-icon="mdi-domain-plus" @click="router.push('/app/organizations')">
           New Organization
         </v-btn>
-        <v-btn v-if="auth.hasModule('CASH_TRANSFERS')" size="small" color="secondary" prepend-icon="mdi-calendar-month-outline" @click="router.push('/app/payroll')">
+        <v-btn v-if="auth.hasModule('CASH_TRANSFERS') && auth.can('ACCESS_PAYMENT_CYCLES')" size="small" color="secondary" prepend-icon="mdi-calendar-month-outline" @click="router.push('/app/payroll')">
           Generate Payment Cycle
         </v-btn>
-        <v-btn v-if="auth.hasModule('VOUCHERS')" size="small" color="secondary" variant="tonal" prepend-icon="mdi-ticket-confirmation-outline" @click="router.push('/app/vouchers')">
+        <v-btn v-if="auth.hasModule('VOUCHERS') && auth.can('ACCESS_VOUCHERS')" size="small" color="secondary" variant="tonal" prepend-icon="mdi-ticket-confirmation-outline" @click="router.push('/app/vouchers')">
           Issue Voucher
         </v-btn>
       </div>
@@ -414,7 +419,7 @@ const organisationMetricCards = computed<MetricCard[]>(() => [
   border-color: #e2e8f0 !important;
 }
 .metric-card.tone-amber { --metric-color: #d97706; --metric-soft: #fef3c7; }
-.metric-card.tone-blue { --metric-color: #2563eb; --metric-soft: #dbeafe; }
+.metric-card.tone-blue { --metric-color: #15803d; --metric-soft: #dcfce7; }
 .metric-card-wide { grid-column: span 2; grid-template-columns: minmax(0, 1fr) 96px; }
 .metric-copy { position: relative; z-index: 1; min-width: 0; }
 .metric-label { color: #64748b; font-size: .66rem; font-weight: 700; letter-spacing: .045em; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

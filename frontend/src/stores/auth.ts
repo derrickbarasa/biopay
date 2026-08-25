@@ -3,6 +3,7 @@ import { ref, computed } from 'vue'
 import { dispatch } from '@/api/client'
 import { clearSession, readStoredUser, storeSession, storedToken } from '@/api/client'
 import type { OtpMethod, PendingLogin, SessionUser, UserRole } from '@/types/user'
+import { normalizePermissionCode } from '@/constants/permissionCatalog'
 
 interface SessionResponse {
   responseCode: string
@@ -29,10 +30,13 @@ export const useAuthStore = defineStore('auth', () => {
 
   const isAuthenticated = computed(() => !!token.value)
   const role = computed<UserRole | null>(() => user.value?.role ?? null)
-  const isAnchor = computed(() => role.value === 'ANCHOR')
+  const isSystemAdmin = computed(() => !!user.value?.systemAdmin || role.value === 'SYSTEM')
+  const isAnchorAdministrator = computed(() => role.value === 'ANCHOR' && !isSystemAdmin.value)
+  // Existing tenant-management screens use isAnchor to mean cross-organisation access.
+  // The separately exposed isAnchorAdministrator remains strict.
+  const isAnchor = computed(() => isAnchorAdministrator.value || isSystemAdmin.value)
   const isOrganisation = computed(() => role.value === 'ORGANISATION')
   const isSupervisor = computed(() => role.value === 'SUPERVISOR')
-  const isSystemAdmin = computed(() => !!user.value?.systemAdmin)
 
   const fullName = computed(() => {
     if (!user.value) return 'User'
@@ -49,7 +53,7 @@ export const useAuthStore = defineStore('auth', () => {
   })
 
   const roleLabel = computed(() => {
-    if (isSystemAdmin.value) return 'System Administrator'
+    if (isSystemAdmin.value) return 'System Owner'
     switch (role.value) {
       case 'ANCHOR': return 'Anchor Administrator'
       case 'ORGANISATION': return 'Organisation Administrator'
@@ -59,8 +63,29 @@ export const useAuthStore = defineStore('auth', () => {
   })
 
   function can(permission: string): boolean {
-    if (isAnchor.value) return true
-    return user.value?.permissions?.includes(permission) ?? false
+    if (isSystemAdmin.value) return true
+    const granted = new Set((user.value?.permissions ?? []).map(normalizePermissionCode))
+    const aliases: Record<string, string[]> = {
+      VIEW_REPORTS: ['VIEW_REPORTS', 'VIEW_DASHBOARD', 'DASHBOARD', 'REPORTS'],
+      DOWNLOAD_REPORTS: ['DOWNLOAD_REPORTS', 'EXPORT_REPORTS', 'DOWNLOAD_HOUSEHOLDS', 'EXPORT_HOUSEHOLDS', 'EXPORT_ALTERNATES', 'EXPORT_PAYMENTS', 'EXPORT_ATTENDANCE'],
+      ACCESS_HOUSEHOLDS: ['ACCESS_HOUSEHOLDS', 'HOUSEHOLDS', 'MANAGE_HOUSEHOLDS', 'VIEW_HOUSEHOLDS'],
+      ACCESS_ALTERNATES: ['ACCESS_ALTERNATES', 'HOUSEHOLDS', 'MANAGE_HOUSEHOLDS', 'VIEW_ALTERNATES'],
+      ACCESS_PAYMENTS: ['ACCESS_PAYMENTS', 'MANAGE_PAYMENTS', 'VIEW_PAYMENTS'],
+      ACCESS_PAYMENT_CYCLES: ['ACCESS_PAYMENT_CYCLES', 'MANAGE_PAYMENTS', 'VIEW_PAYMENT_CYCLES'],
+      ACCESS_VOUCHERS: ['ACCESS_VOUCHERS', 'MANAGE_VOUCHERS', 'VIEW_VOUCHERS'],
+      ACCESS_ATTENDANCE: ['ACCESS_ATTENDANCE', 'VIEW_ATTENDANCE', 'RECORD_ATTENDANCE', 'MANAGE_OFFICERS'],
+      ACCESS_USERS: ['ACCESS_USERS', 'USER_MANAGEMENT', 'MANAGE_USERS', 'VIEW_USERS'],
+      ACCESS_ROLES: ['ACCESS_ROLES', 'MANAGE_ROLES', 'VIEW_ROLES'],
+      ACCESS_PERMISSIONS: ['ACCESS_PERMISSIONS', 'MANAGE_ROLES'],
+      ACCESS_SUPERVISORS: ['ACCESS_SUPERVISORS', 'MANAGE_OFFICERS', 'VIEW_OFFICERS'],
+      ACCESS_ORGANISATIONS: ['ACCESS_ORGANISATIONS', 'MANAGE_ORGANISATIONS', 'VIEW_ORGANISATIONS'],
+      ACCESS_LOCATIONS: ['ACCESS_LOCATIONS', 'VIEW_LOCATIONS', 'MANAGE_ORGANISATIONS', 'MANAGE_HOUSEHOLDS'],
+      ACCESS_SUBSCRIPTION: ['ACCESS_SUBSCRIPTION', 'VIEW_SUBSCRIPTION', 'MANAGE_SUBSCRIPTION'],
+    }
+    const accepted = aliases[permission] ?? [permission]
+    if (accepted.some((code) => granted.has(code))) return true
+    // Subscription was historically available to every anchor and had no permission row.
+    return permission === 'ACCESS_SUBSCRIPTION' && isAnchor.value
   }
 
   /** Anchors implicitly have every module; organisation/supervisor sessions are
@@ -154,7 +179,7 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   return {
-    token, user, pendingLogin, isAuthenticated, role, isAnchor, isOrganisation, isSupervisor, isSystemAdmin,
+    token, user, pendingLogin, isAuthenticated, role, isAnchor, isAnchorAdministrator, isOrganisation, isSupervisor, isSystemAdmin,
     fullName, initials, roleLabel, can, hasModule,
     login, signup, requestLoginOtp, verifyLoginOtp, cancelPendingLogin, requestPasswordReset, resetPassword,
     logout, refreshProfile, updateProfile,

@@ -16,7 +16,7 @@ import com.biopay.utilities.Utilities;
  * is wired end-to-end here -- TOTP needs a per-user enrolled secret that
  * doesn't exist yet in this schema, so {@link #request} only accepts EMAIL
  * today. Adding TOTP later means enrolling a secret column on users/
- * supervisors and branching in {@link #verify}; the otp_verifications table
+ * field_officers and branching in {@link #verify}; the otp_verifications table
  * and processingCode contract already support a "channel" of either kind.
  */
 final class OtpService {

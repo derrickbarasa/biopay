@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { dispatch } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
@@ -47,6 +47,8 @@ const downloadingReceipt = ref<string | null>(null)
 // The system owner can see every anchor's subscription, not just their own.
 const allSubscriptions = ref<AnchorSubscription[]>([])
 const loadingAll = ref(false)
+const selectedAnchorId = ref<number | null>(null)
+const subscriptionScope = computed(() => auth.isSystemAdmin ? { targetAnchorId: selectedAnchorId.value } : {})
 
 /** Currencies available for renewal records -- USD is the platform default, the rest cover
  *  the anchors this system already operates across (see the org/anchor Country picker). */
@@ -86,11 +88,17 @@ function displayDate(value: unknown) {
 }
 
 async function load() {
+  if (auth.isSystemAdmin && !selectedAnchorId.value) {
+    subscription.value = { status: 'NONE' }
+    invoices.value = []
+    loading.value = false
+    return
+  }
   loading.value = true
   try {
     const [s, i] = await Promise.all([
-      dispatch<{ results: SubscriptionStatus }>('GET_SUBSCRIPTION'),
-      dispatch<{ results: Invoice[] }>('GET_SUBSCRIPTION_INVOICES'),
+      dispatch<{ results: SubscriptionStatus }>('GET_SUBSCRIPTION', subscriptionScope.value),
+      dispatch<{ results: Invoice[] }>('GET_SUBSCRIPTION_INVOICES', subscriptionScope.value),
     ])
     subscription.value = s.results ?? { status: 'NONE' }
     invoices.value = i.results ?? []
@@ -114,7 +122,11 @@ async function loadAllSubscriptions() {
   }
 }
 
-onMounted(() => { load(); loadAllSubscriptions() })
+onMounted(async () => {
+  await loadAllSubscriptions()
+  await load()
+})
+watch(selectedAnchorId, () => { void load() })
 
 function openRenew() {
   renewForm.value = { amount: null, currency: 'USD' }
@@ -125,6 +137,7 @@ async function confirmRenew() {
   renewing.value = true
   try {
     await dispatch('RENEW_SUBSCRIPTION', {
+      ...subscriptionScope.value,
       amount: renewForm.value.amount ?? undefined,
       currency: renewForm.value.amount != null ? renewForm.value.currency : undefined,
     })
@@ -151,7 +164,7 @@ async function downloadReceipt(invoice: Invoice) {
   downloadingReceipt.value = invoice.invoiceNumber
   try {
     const res = await dispatch<{ results: Invoice & { anchorName?: string } }>(
-      'GET_SUBSCRIPTION_INVOICE_RECEIPT', { invoiceNumber: invoice.invoiceNumber },
+      'GET_SUBSCRIPTION_INVOICE_RECEIPT', { invoiceNumber: invoice.invoiceNumber, ...subscriptionScope.value },
     )
     const r = res.results
     const w = window.open('', '_blank', 'width=640,height=800')
@@ -161,15 +174,15 @@ async function downloadReceipt(invoice: Invoice) {
     }
     w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Receipt ${escapeHtml(r.invoiceNumber)}</title>
       <style>
-        * { box-sizing: border-box; font-family: Arial, Helvetica, sans-serif; }
+        * { box-sizing: border-box; font-family: "Segoe UI", sans-serif; }
         body { margin: 0; padding: 32px; color: #0f172a; }
         .receipt { max-width: 480px; margin: 0 auto; border: 2px solid #0d9488; border-radius: 14px; padding: 28px; }
         .title { font-size: 20px; font-weight: 800; color: #0f766e; letter-spacing: -.01em; }
         .sub { color: #64748b; font-size: 13px; margin-top: 4px; }
-        .row { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #e2e8f0; font-size: 14px; }
+        .row { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #e2e8f0; font-size: 13px; }
         .row span:first-child { color: #64748b; }
         .row span:last-child { font-weight: 600; }
-        .total { font-size: 18px; font-weight: 800; color: #0f766e; }
+        .total { font-size: 20px; font-weight: 800; color: #0f766e; }
         @media print { body { padding: 0; } }
       </style></head>
       <body onload="window.print()">
@@ -209,14 +222,25 @@ const statusHeadline = computed(() => {
         <h1 class="text-h5 font-weight-bold">Subscription</h1>
         <p class="text-body-2 text-medium-emphasis mt-1">Manage your anchor's subscription, and view payment history and receipts.</p>
       </div>
-      <v-btn v-if="auth.isAnchor" color="secondary" prepend-icon="mdi-autorenew" :loading="renewing" @click="openRenew">
+      <v-btn v-if="auth.isAnchor && auth.can('ACCESS_SUBSCRIPTION') && (!auth.isSystemAdmin || selectedAnchorId)" color="secondary" prepend-icon="mdi-autorenew" :loading="renewing" @click="openRenew">
         Renew subscription
       </v-btn>
     </div>
 
+    <v-select
+      v-if="auth.isSystemAdmin" v-model="selectedAnchorId" :items="allSubscriptions"
+      item-title="anchorName" item-value="anchorId" label="Manage subscription for anchor"
+      variant="outlined" class="mb-4" style="max-width: 460px"
+      hint="Choose the anchor before viewing invoices or recording a renewal." persistent-hint
+    />
+
+    <v-alert v-if="auth.isSystemAdmin && !selectedAnchorId" type="info" variant="tonal" class="mb-5">
+      Choose an anchor to open its subscription dashboard. The overview below remains system-wide.
+    </v-alert>
+
     <v-progress-linear v-if="loading" indeterminate color="primary" class="mb-4" />
 
-    <v-card variant="flat" border class="pa-5 mb-5 status-card">
+    <v-card v-if="!auth.isSystemAdmin || selectedAnchorId" variant="flat" border class="pa-5 mb-5 status-card">
       <div class="d-flex align-center flex-wrap ga-4">
         <v-chip :color="statusColor[subscription.status] ?? 'grey'" variant="tonal" size="large" class="font-weight-bold">
           {{ subscription.status }}
@@ -248,7 +272,7 @@ const statusHeadline = computed(() => {
       </v-data-table>
     </v-card>
 
-    <v-card variant="flat" border>
+    <v-card v-if="!auth.isSystemAdmin || selectedAnchorId" variant="flat" border>
       <v-card-title class="text-subtitle-1 font-weight-bold">Payment history</v-card-title>
       <v-data-table :headers="headers" :items="invoices" :loading="loading">
         <template #item.period="{ item }">{{ displayDate(item.periodStart) }} – {{ displayDate(item.periodEnd) }}</template>
@@ -273,6 +297,7 @@ const statusHeadline = computed(() => {
 
     <v-dialog v-model="renewDialog" max-width="440">
       <v-card>
+        <dialog-close-button @close="renewDialog = false" />
         <v-card-title>Renew subscription</v-card-title>
         <v-card-text>
           <p class="text-body-2 text-medium-emphasis mb-3">

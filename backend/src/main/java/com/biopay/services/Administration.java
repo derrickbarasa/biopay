@@ -4,6 +4,7 @@ import com.biopay.databases.Datasource;
 import com.biopay.utilities.Passwords;
 import com.biopay.utilities.Rows;
 import com.biopay.utilities.Utilities;
+import com.biopay.utilities.TenantScope;
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Future;
 import io.vertx.core.Promise;
@@ -25,6 +26,7 @@ public class Administration extends AbstractVerticle {
         pool = Datasource.pool();
         eventBus = vertx.eventBus();
         vertx.eventBus().consumer("GET_ANCHORS", this::getAnchors);
+        vertx.eventBus().consumer("CREATE_ANCHOR", this::createAnchor);
         vertx.eventBus().consumer("UPDATE_ANCHOR", this::updateAnchor);
         vertx.eventBus().consumer("GET_USERS", this::getUsers);
         vertx.eventBus().consumer("GET_USER", this::getUser);
@@ -39,8 +41,8 @@ public class Administration extends AbstractVerticle {
     }
 
     private static JsonObject data(Message<Object> message) { return new JsonObject(message.body().toString()); }
-    private static boolean anchor(JsonObject p) { return "ANCHOR".equalsIgnoreCase(p.getString("actorRole", "")); }
-    private static boolean systemAdmin(JsonObject p) { return p.getBoolean("systemAdmin", false); }
+    private static boolean anchor(JsonObject p) { return TenantScope.managesOrganisations(p); }
+    private static boolean systemAdmin(JsonObject p) { return TenantScope.isSystemOwner(p); }
     private static String strOrEmpty(String s) { return s == null ? "" : s; }
     private static void ok(Message<Object> m, String text, Object results) {
         JsonObject response = new JsonObject().put("responseCode", "000").put("responseMessage", text);
@@ -54,32 +56,78 @@ public class Administration extends AbstractVerticle {
 
     private void getAnchors(Message<Object> message) {
         JsonObject p = data(message);
-        if (!anchor(p)) { fail(message, "Only an anchor administrator can view anchor settings"); return; }
-        // The system admin can browse every anchor (for the anchor-picker on admin@biopay.com's
-        // sessions); a plain anchor admin only ever sees their own row.
-        String sql = systemAdmin(p) ? "SELECT * FROM anchors ORDER BY name" : "SELECT * FROM anchors WHERE id=@p1";
+        if (!anchor(p)) { fail(message, "Only the system owner or an anchor administrator can view anchor settings"); return; }
+        // An anchor is its Anchor Administrator's own row in `users` (user_scope='ANCHOR'),
+        // not a separate table -- so "every anchor" is every such row. The system admin can
+        // browse every anchor (for the anchor-picker on admin@biopay.com's sessions); a plain
+        // anchor admin only ever sees their own row.
+        String sql = systemAdmin(p)
+                ? "SELECT * FROM users WHERE user_scope='ANCHOR' ORDER BY anchor_name"
+                : "SELECT * FROM users WHERE user_scope='ANCHOR' AND id=@p1";
         Tuple params = systemAdmin(p) ? Tuple.tuple() : Tuple.of(Integer.parseInt(p.getValue("anchorId").toString()));
         pool.preparedQuery(sql)
                 .execute(params)
                 .onFailure(e -> dbFail(message, e)).onSuccess(rows -> {
                     JsonArray out = new JsonArray();
                     for (Row r : rows) out.add(new JsonObject().put("id", Rows.intVal(r,"id"))
-                            .put("anchorCode",Rows.str(r,"anchor_code")).put("name",Rows.str(r,"name"))
-                            .put("authorisedName",Rows.str(r,"authorised_name")).put("authorisedEmail",Rows.str(r,"authorised_email"))
-                            .put("authorisedContact",Rows.str(r,"authorised_contact")).put("address",Rows.str(r,"address"))
+                            .put("anchorCode",Rows.str(r,"anchor_code")).put("name",Rows.str(r,"anchor_name"))
+                            .put("authorisedName",(strOrEmpty(Rows.str(r,"first_name")) + " " + strOrEmpty(Rows.str(r,"other_names"))).trim())
+                            .put("authorisedEmail",Rows.str(r,"email"))
+                            .put("authorisedContact",Rows.str(r,"phone")).put("address",Rows.str(r,"address"))
                             .put("country",Rows.str(r,"country")).put("city",Rows.str(r,"city"))
                             .put("website",Rows.str(r,"website")).put("status",Rows.intVal(r,"status")));
                     ok(message, "Anchor found", out);
                 });
     }
 
+    private void createAnchor(Message<Object> message) {
+        JsonObject p = data(message);
+        if (!systemAdmin(p)) { fail(message, "Only the system owner can create anchors"); return; }
+        String name = strOrEmpty(p.getString("name")).trim();
+        String authorisedName = strOrEmpty(p.getString("authorisedName")).trim();
+        String authorisedEmail = strOrEmpty(p.getString("authorisedEmail")).trim().toLowerCase();
+        if (name.isEmpty() || authorisedName.isEmpty() || authorisedEmail.isEmpty()) {
+            fail(message, "Anchor name, administrator name and email are required");
+            return;
+        }
+        String temporaryPassword = Utilities.generateRandomPassword(10);
+        String passwordHash = Passwords.hash(temporaryPassword);
+        String username = authorisedEmail;
+        String createdBy = String.valueOf(p.getValue("actorId"));
+        Utilities.nextAnchorCode(pool).compose(anchorCode -> pool.withTransaction(connection -> connection.preparedQuery(
+                        "INSERT INTO users (email,username,password,first_name,other_names,role_id,active,status,user_scope,is_system_admin,"
+                                + "anchor_code,anchor_name,phone,address,country,city,website,created_by,created_at,updated_at) "
+                                + "OUTPUT INSERTED.id VALUES (@p1,@p2,@p3,@p4,'',(SELECT TOP 1 id FROM roles WHERE role_name='Anchor Administrator' AND anchor_id IS NULL AND status=1),"
+                                + "1,1,'ANCHOR',0,@p5,@p6,@p7,@p8,@p9,@p10,@p11,@p12,GETDATE(),GETDATE())")
+                .execute(Tuple.of(authorisedEmail, username, passwordHash, authorisedName, anchorCode, name,
+                        p.getString("authorisedContact"), p.getString("address"), p.getString("country"),
+                        p.getString("city"), p.getString("website"), createdBy))
+                .map(rows -> Rows.intVal(rows.iterator().next(), "id"))
+                .compose(userId -> connection.preparedQuery("UPDATE users SET anchor_id=id WHERE id=@p1")
+                        .execute(Tuple.of(userId)).map(userId))))
+                .onFailure(e -> fail(message, "Administrator email already exists"))
+                .onSuccess(anchorId -> {
+                    eventBus.send("EMAIL", new JsonObject()
+                            .put("mailTo", authorisedEmail)
+                            .put("subject", "Your BioPay Anchor Administrator Account")
+                            .put("msg", "Dear " + authorisedName + ",<br />Your anchor has been created in BioPay. "
+                                    + "Your temporary password is <strong>" + temporaryPassword
+                                    + "</strong>. Please sign in and change it immediately.")
+                            .toString());
+                    ok(message, "Anchor and anchor administrator created", new JsonObject().put("anchorId", anchorId));
+                });
+    }
+
     private void updateAnchor(Message<Object> message) {
         JsonObject p = data(message);
-        if (!anchor(p)) { fail(message, "Only an anchor administrator can update anchor settings"); return; }
-        pool.preparedQuery("UPDATE anchors SET name=@p1, authorised_name=@p2, authorised_email=@p3, authorised_contact=@p4, address=@p5, country=@p6, city=@p7, website=@p8, updated_at=GETDATE() WHERE id=@p9")
-                .execute(Tuple.of(p.getString("name","").trim(),p.getString("authorisedName"),p.getString("authorisedEmail"),
+        if (!anchor(p)) { fail(message, "Only the system owner or an anchor administrator can update anchor settings"); return; }
+        int targetAnchorId = systemAdmin(p)
+                ? p.getInteger("targetAnchorId", Integer.parseInt(p.getValue("anchorId").toString()))
+                : Integer.parseInt(p.getValue("anchorId").toString());
+        pool.preparedQuery("UPDATE users SET anchor_name=@p1, first_name=@p2, phone=@p3, address=@p4, country=@p5, city=@p6, website=@p7, updated_at=GETDATE() WHERE id=@p8 AND user_scope='ANCHOR'")
+                .execute(Tuple.of(p.getString("name","").trim(),p.getString("authorisedName"),
                         p.getString("authorisedContact"),p.getString("address"),strOrEmpty(p.getString("country")).trim(),
-                        strOrEmpty(p.getString("city")).trim(),p.getString("website"),Integer.parseInt(p.getValue("anchorId").toString())))
+                        strOrEmpty(p.getString("city")).trim(),p.getString("website"),targetAnchorId))
                 .onFailure(e -> dbFail(message,e)).onSuccess(r -> ok(message,"Anchor updated",null));
     }
 
@@ -94,16 +142,18 @@ public class Administration extends AbstractVerticle {
             sql = "SELECT u.*, r.role_name FROM users u LEFT JOIN roles r ON r.id=u.role_id WHERE u.anchor_id=@p1 ORDER BY u.created_at DESC";
             params = Tuple.of(Integer.parseInt(p.getValue("anchorId").toString()));
         } else {
-            sql = "SELECT u.*, r.role_name FROM users u LEFT JOIN roles r ON r.id=u.role_id WHERE u.partner_code=@p1 ORDER BY u.created_at DESC";
+            sql = "SELECT u.*, r.role_name FROM users u LEFT JOIN roles r ON r.id=u.role_id WHERE u.organization_code=@p1 ORDER BY u.created_at DESC";
             params = Tuple.of(p.getString("partnerCode", ""));
         }
         pool.preparedQuery(sql).execute(params).onFailure(e -> dbFail(message,e)).onSuccess(rows -> {
             JsonArray out = new JsonArray();
             for (Row r: rows) out.add(new JsonObject().put("id",Rows.intVal(r,"id")).put("email",Rows.str(r,"email"))
                     .put("username",Rows.str(r,"username")).put("firstName",Rows.str(r,"first_name"))
-                    .put("otherNames",Rows.str(r,"other_names")).put("partnerCode",Rows.str(r,"partner_code"))
+                    .put("otherNames",Rows.str(r,"other_names")).put("partnerCode",Rows.str(r,"organization_code"))
+                    .put("anchorId",Rows.intVal(r,"anchor_id"))
                     .put("userScope",Rows.str(r,"user_scope")).put("roleId",Rows.intVal(r,"role_id"))
                     .put("roleName",Rows.str(r,"role_name")).put("status",Rows.intVal(r,"status"))
+                    .put("systemAdmin",Boolean.TRUE.equals(r.getBoolean("is_system_admin")))
                     .put("createdAt",Rows.str(r,"created_at")));
             ok(message,"Users found",out);
         });
@@ -114,18 +164,24 @@ public class Administration extends AbstractVerticle {
         String email=p.getString("email","").trim().toLowerCase();
         String requestedScope=p.getString("userScope","ORGANISATION").toUpperCase();
         String partner = anchor(p) ? p.getString("organisationCode") : p.getString("partnerCode");
+        if (!"ANCHOR".equals(requestedScope) && !"ORGANISATION".equals(requestedScope)) { fail(message,"User scope must be Anchor or Organisation"); return; }
         if (!anchor(p) && !"ORGANISATION".equals(requestedScope)) { fail(message,"Organisation administrators can only create organisation users"); return; }
         String firstName = strOrEmpty(p.getString("firstName")).trim();
         if (email.isEmpty() || firstName.isEmpty()) { fail(message,"Email and first name are required"); return; }
         if ("ORGANISATION".equals(requestedScope) && (partner==null || partner.isBlank())) { fail(message,"Organisation is required"); return; }
-        Integer anchorId=Integer.parseInt(p.getValue("anchorId").toString());
+        Integer anchorId=TenantScope.anchorId(p);
+        if (anchorId == null) { fail(message,"Choose an anchor before creating a user"); return; }
         String username=p.getString("username",email.split("@")[0]).trim();
         // Temporary passwords are always generated here, never accepted from the client --
         // matches the existing Officer.create() pattern (same helper, same email shape).
         String tempPassword = Utilities.generateRandomPassword(10);
-        pool.preparedQuery("INSERT INTO users (partner_code,email,username,password,first_name,other_names,role_id,active,status,anchor_id,user_scope,created_by,created_at,updated_at) VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,1,1,@p8,@p9,@p10,GETDATE(),GETDATE())")
-                .execute(Tuple.of("ANCHOR".equals(requestedScope)?null:partner,email,username,Passwords.hash(tempPassword),firstName,
-                        p.getString("otherNames"),p.getInteger("roleId"),anchorId,requestedScope,Integer.parseInt(p.getValue("actorId").toString())))
+        Integer roleId = p.getInteger("roleId");
+        pool.preparedQuery("SELECT 1 AS allowed FROM roles WHERE id=@p1 AND role_scope=@p2 AND status=1 AND (anchor_id IS NULL OR anchor_id=@p3)")
+                .execute(Tuple.of(roleId, requestedScope, anchorId))
+                .compose(roleRows -> roleRows.size()==0 ? Future.failedFuture("Role is outside the selected anchor or has the wrong scope")
+                        : pool.preparedQuery("INSERT INTO users (organization_code,email,username,password,first_name,other_names,role_id,active,status,anchor_id,user_scope,created_by,created_at,updated_at) VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,1,1,@p8,@p9,@p10,GETDATE(),GETDATE())")
+                        .execute(Tuple.of("ANCHOR".equals(requestedScope)?null:partner,email,username,Passwords.hash(tempPassword),firstName,
+                                p.getString("otherNames"),roleId,anchorId,requestedScope,Integer.parseInt(p.getValue("actorId").toString()))))
                 .onFailure(e -> fail(message,"A user with that email or username may already exist"))
                 .onSuccess(r -> {
                     eventBus.send("EMAIL", new JsonObject()
@@ -143,7 +199,7 @@ public class Administration extends AbstractVerticle {
         JsonObject p = data(message);
         int userId = p.getInteger("userId", 0);
         String sql = "SELECT u.*, r.role_name FROM users u LEFT JOIN roles r ON r.id=u.role_id WHERE u.id=@p1"
-                + (systemAdmin(p) ? "" : anchor(p) ? " AND u.anchor_id=@p2" : " AND u.partner_code=@p2");
+                + (systemAdmin(p) ? "" : anchor(p) ? " AND u.anchor_id=@p2" : " AND u.organization_code=@p2");
         Tuple params = systemAdmin(p) ? Tuple.of(userId)
                 : anchor(p) ? Tuple.of(userId, Integer.parseInt(p.getValue("anchorId").toString()))
                 : Tuple.of(userId, p.getString("partnerCode",""));
@@ -152,9 +208,11 @@ public class Administration extends AbstractVerticle {
             Row r = rows.iterator().next();
             ok(message,"User found", new JsonObject().put("id",Rows.intVal(r,"id")).put("email",Rows.str(r,"email"))
                     .put("username",Rows.str(r,"username")).put("firstName",Rows.str(r,"first_name"))
-                    .put("otherNames",Rows.str(r,"other_names")).put("partnerCode",Rows.str(r,"partner_code"))
+                    .put("otherNames",Rows.str(r,"other_names")).put("partnerCode",Rows.str(r,"organization_code"))
+                    .put("anchorId",Rows.intVal(r,"anchor_id"))
                     .put("userScope",Rows.str(r,"user_scope")).put("roleId",Rows.intVal(r,"role_id"))
                     .put("roleName",Rows.str(r,"role_name")).put("status",Rows.intVal(r,"status"))
+                    .put("systemAdmin",Boolean.TRUE.equals(r.getBoolean("is_system_admin")))
                     .put("createdAt",Rows.str(r,"created_at")));
         });
     }
@@ -166,8 +224,10 @@ public class Administration extends AbstractVerticle {
         String otherNames = strOrEmpty(p.getString("otherNames")).trim();
         Integer roleId = p.getInteger("roleId");
         if (firstName.isEmpty()) { fail(message,"First name is required"); return; }
-        String sql = "UPDATE users SET first_name=@p1, other_names=@p2, role_id=@p3, updated_at=GETDATE() WHERE id=@p4"
-                + (systemAdmin(p) ? "" : anchor(p) ? " AND anchor_id=@p5" : " AND partner_code=@p5");
+        String sql = "UPDATE users SET first_name=@p1, other_names=@p2, role_id=@p3, updated_at=GETDATE() WHERE id=@p4 AND is_system_admin=0 "
+                + "AND EXISTS (SELECT 1 FROM roles r WHERE r.id=@p3 AND r.status=1 AND r.role_scope=users.user_scope "
+                + "AND r.role_scope<>'SYSTEM' AND (r.anchor_id IS NULL OR r.anchor_id=users.anchor_id))"
+                + (systemAdmin(p) ? "" : anchor(p) ? " AND anchor_id=@p5" : " AND organization_code=@p5");
         Tuple params = systemAdmin(p) ? Tuple.of(firstName, otherNames, roleId, userId)
                 : anchor(p) ? Tuple.of(firstName, otherNames, roleId, userId, Integer.parseInt(p.getValue("anchorId").toString()))
                 : Tuple.of(firstName, otherNames, roleId, userId, p.getString("partnerCode",""));
@@ -178,64 +238,86 @@ public class Administration extends AbstractVerticle {
     private void toggleUserStatus(Message<Object> message) {
         JsonObject p=data(message); int userId=p.getInteger("userId",0); int status=p.getInteger("status",0);
         if (userId==Integer.parseInt(p.getValue("actorId").toString()) && status==0) { fail(message,"You cannot deactivate your own account"); return; }
-        String sql=anchor(p)?"UPDATE users SET status=@p1, active=@p1, updated_at=GETDATE() WHERE id=@p2 AND anchor_id=@p3"
-                :"UPDATE users SET status=@p1, active=@p1, updated_at=GETDATE() WHERE id=@p2 AND partner_code=@p3";
-        Object scope=anchor(p)?Integer.parseInt(p.getValue("anchorId").toString()):p.getString("partnerCode","");
-        pool.preparedQuery(sql).execute(Tuple.of(status,userId,scope)).onFailure(e->dbFail(message,e))
+        String sql=systemAdmin(p)?"UPDATE users SET status=@p1, active=@p1, updated_at=GETDATE() WHERE id=@p2 AND is_system_admin=0"
+                :anchor(p)?"UPDATE users SET status=@p1, active=@p1, updated_at=GETDATE() WHERE id=@p2 AND anchor_id=@p3"
+                :"UPDATE users SET status=@p1, active=@p1, updated_at=GETDATE() WHERE id=@p2 AND organization_code=@p3";
+        Tuple params=systemAdmin(p)?Tuple.of(status,userId)
+                :anchor(p)?Tuple.of(status,userId,Integer.parseInt(p.getValue("anchorId").toString()))
+                :Tuple.of(status,userId,p.getString("partnerCode",""));
+        pool.preparedQuery(sql).execute(params).onFailure(e->dbFail(message,e))
                 .onSuccess(r->{if(r.rowCount()==0)fail(message,"User not found");else ok(message,"User status updated",null);});
     }
 
     private void getPermissions(Message<Object> message) {
         pool.query("SELECT * FROM permissions ORDER BY permission_name").execute().onFailure(e->dbFail(message,e)).onSuccess(rows->{
-            JsonArray out=new JsonArray(); for(Row r:rows)out.add(new JsonObject().put("id",Rows.intVal(r,"id")).put("name",Rows.str(r,"permission_name")).put("description",Rows.str(r,"description")));
+            JsonArray out=new JsonArray(); for(Row r:rows)out.add(new JsonObject()
+                    .put("id",Rows.intVal(r,"id"))
+                    .put("name",Rows.str(r,"permission_name"))
+                    .put("displayName",Rows.str(r,"display_name"))
+                    .put("groupKey",Rows.str(r,"permission_group"))
+                    .put("systemDefined",Boolean.TRUE.equals(r.getBoolean("system_defined")))
+                    .put("description",Rows.str(r,"description")));
             ok(message,"Permissions found",out);
         });
     }
 
     private void createPermission(Message<Object> message) {
         JsonObject p = data(message);
-        if (!anchor(p)) { fail(message, "Only an anchor administrator can create permissions"); return; }
+        if (!systemAdmin(p)) { fail(message, "Only the system administrator can create permissions"); return; }
         // getString(key, def) only substitutes def when the key is entirely absent -- an
         // explicit JSON null still comes back null, so these go through strOrEmpty first.
         String name = strOrEmpty(p.getString("name")).trim().toUpperCase().replace(' ', '_');
+        String displayName = strOrEmpty(p.getString("displayName")).trim();
+        String groupKey = strOrEmpty(p.getString("groupKey")).trim().toUpperCase();
         String description = strOrEmpty(p.getString("description")).trim();
-        if (name.isEmpty()) { fail(message, "Permission name is required"); return; }
+        if (name.isEmpty() || displayName.isEmpty() || groupKey.isEmpty()) { fail(message, "Permission name, label and group are required"); return; }
         pool.preparedQuery("SELECT 1 AS v FROM permissions WHERE permission_name=@p1").execute(Tuple.of(name))
                 .onFailure(e -> dbFail(message, e)).onSuccess(existing -> {
                     if (existing.size() > 0) { fail(message, "A permission with that name already exists"); return; }
-                    pool.preparedQuery("INSERT INTO permissions (permission_name, description, created_at) OUTPUT INSERTED.id VALUES (@p1,@p2,GETDATE())")
-                            .execute(Tuple.of(name, description.isEmpty() ? null : description))
+                    pool.preparedQuery("INSERT INTO permissions (permission_name,display_name,permission_group,description,system_defined,created_at) OUTPUT INSERTED.id VALUES (@p1,@p2,@p3,@p4,0,GETDATE())")
+                            .execute(Tuple.of(name, displayName, groupKey, description.isEmpty() ? null : description))
                             .onFailure(e -> dbFail(message, e))
                             .onSuccess(rows -> ok(message, "Permission created",
-                                    new JsonObject().put("id", Rows.intVal(rows.iterator().next(), "id")).put("name", name).put("description", description)));
+                                    new JsonObject().put("id", Rows.intVal(rows.iterator().next(), "id")).put("name", name)
+                                            .put("displayName", displayName).put("groupKey", groupKey).put("description", description)));
                 });
     }
 
     private void getRoles(Message<Object> message) {
-        JsonObject p=data(message); Integer anchorId=Integer.parseInt(p.getValue("anchorId").toString());
+        JsonObject p=data(message); Integer anchorId=TenantScope.anchorId(p);
         // Explicit column list rather than r.* -- MSSQL requires every selected column to be
         // aggregated or in GROUP BY, so r.* silently breaks the moment the roles table carries
         // any column (e.g. a legacy one on an older database) that isn't in the GROUP BY list.
-        String sql="SELECT r.id, r.role_name, r.description, r.anchor_id, r.partner_code, r.role_scope, r.status, r.created_at, r.updated_at, "
-                + "STRING_AGG(p.permission_name, ',') AS permission_names FROM roles r LEFT JOIN role_permissions rp ON rp.role_id=r.id AND rp.status=1 LEFT JOIN permissions p ON p.id=rp.permission_id WHERE r.anchor_id IS NULL OR r.anchor_id=@p1 GROUP BY r.id,r.role_name,r.description,r.anchor_id,r.partner_code,r.role_scope,r.status,r.created_at,r.updated_at ORDER BY r.role_name";
-        pool.preparedQuery(sql).execute(Tuple.of(anchorId)).onFailure(e->dbFail(message,e)).onSuccess(rows->{
-            JsonArray out=new JsonArray(); for(Row r:rows){String names=Rows.str(r,"permission_names"); out.add(new JsonObject().put("id",Rows.intVal(r,"id")).put("name",Rows.str(r,"role_name")).put("description",Rows.str(r,"description")).put("scope",Rows.str(r,"role_scope")).put("status",Rows.intVal(r,"status")).put("permissions",names==null?new JsonArray():new JsonArray(java.util.Arrays.asList(names.split(",")))));}
+        boolean systemPolicyView = systemAdmin(p) && anchorId == null;
+        String sql="SELECT r.id, r.role_name, r.description, r.anchor_id, r.organization_code, r.role_scope, r.status, r.created_at, r.updated_at, "
+                + "STRING_AGG(p.permission_name, ',') AS permission_names FROM roles r LEFT JOIN role_permissions rp ON rp.role_id=r.id AND rp.status=1 LEFT JOIN permissions p ON p.id=rp.permission_id "
+                + (systemPolicyView
+                    ? "WHERE r.status=1 AND r.role_scope='SYSTEM' AND r.anchor_id IS NULL "
+                    : "WHERE r.status=1 AND r.role_scope<>'SYSTEM' AND ((r.anchor_id IS NULL AND r.role_name IN ('Anchor Administrator','Organisation Administrator')) OR r.anchor_id=@p1) ")
+                + "GROUP BY r.id,r.role_name,r.description,r.anchor_id,r.organization_code,r.role_scope,r.status,r.created_at,r.updated_at ORDER BY r.role_name";
+        pool.preparedQuery(sql).execute(systemPolicyView ? Tuple.tuple() : Tuple.of(anchorId)).onFailure(e->dbFail(message,e)).onSuccess(rows->{
+            JsonArray out=new JsonArray(); for(Row r:rows){String roleName=Rows.str(r,"role_name");String names=Rows.str(r,"permission_names");boolean builtIn="System Owner".equals(roleName)||"Anchor Administrator".equals(roleName)||"Organisation Administrator".equals(roleName);out.add(new JsonObject().put("id",Rows.intVal(r,"id")).put("name",roleName).put("description",Rows.str(r,"description")).put("scope",Rows.str(r,"role_scope")).put("anchorId",Rows.intVal(r,"anchor_id")).put("builtIn",builtIn).put("systemRole","SYSTEM".equalsIgnoreCase(Rows.str(r,"role_scope"))).put("status",Rows.intVal(r,"status")).put("permissions",names==null?new JsonArray():new JsonArray(java.util.Arrays.asList(names.split(",")))));}
             ok(message,"Roles found",out);
         });
     }
 
     private void saveRole(Message<Object> message) {
-        JsonObject p=data(message); if(!anchor(p)){fail(message,"Only an anchor administrator can manage roles");return;}
+        JsonObject p=data(message); if(!anchor(p)){fail(message,"Only the system owner or an anchor administrator can manage roles");return;}
+        Integer anchorId=TenantScope.anchorId(p); if(anchorId==null){fail(message,"Choose an anchor before managing its roles");return;}
         Integer roleId=p.getInteger("roleId"); String name=p.getString("name","").trim(); JsonArray ids=p.getJsonArray("permissionIds",new JsonArray());
         if(name.isEmpty()){fail(message,"Role name is required");return;}
+        String scope=p.getString("scope","ORGANISATION").toUpperCase();
+        if(!"ANCHOR".equals(scope) && !"ORGANISATION".equals(scope)){fail(message,"Role scope must be Anchor or Organisation");return;}
+        if(roleId==null && ("System Owner".equalsIgnoreCase(name) || "Anchor Administrator".equalsIgnoreCase(name) || "Organisation Administrator".equalsIgnoreCase(name))){fail(message,"That role name is reserved for a built-in administrator");return;}
         Future<Integer> roleFuture;
         if(roleId==null){
             roleFuture=pool.preparedQuery("INSERT INTO roles (role_name,description,anchor_id,role_scope,status,created_at) OUTPUT INSERTED.id VALUES (@p1,@p2,@p3,@p4,1,GETDATE())")
-                    .execute(Tuple.of(name,p.getString("description"),Integer.parseInt(p.getValue("anchorId").toString()),p.getString("scope","ORGANISATION")))
+                    .execute(Tuple.of(name,p.getString("description"),anchorId,scope))
                     .map(rows->Rows.intVal(rows.iterator().next(),"id"));
         }else{
-            roleFuture=pool.preparedQuery("UPDATE roles SET role_name=@p1,description=@p2,role_scope=@p3,updated_at=GETDATE() WHERE id=@p4 AND (anchor_id=@p5 OR anchor_id IS NULL)")
-                    .execute(Tuple.of(name,p.getString("description"),p.getString("scope","ORGANISATION"),roleId,Integer.parseInt(p.getValue("anchorId").toString()))).map(roleId);
+            roleFuture=pool.preparedQuery("UPDATE roles SET role_name=@p1,description=@p2,role_scope=@p3,updated_at=GETDATE() OUTPUT INSERTED.id WHERE id=@p4 AND anchor_id=@p5")
+                    .execute(Tuple.of(name,p.getString("description"),scope,roleId,anchorId))
+                    .compose(rows->rows.size()==0?Future.failedFuture("Role not found or is system-managed"):Future.succeededFuture(Rows.intVal(rows.iterator().next(),"id")));
         }
         roleFuture.compose(id->pool.preparedQuery("DELETE FROM role_permissions WHERE role_id=@p1").execute(Tuple.of(id)).map(id))
                 .compose(id->{Future<Void> chain=Future.succeededFuture(); for(Object value:ids){int permissionId=Integer.parseInt(value.toString()); chain=chain.compose(v->pool.preparedQuery("INSERT INTO role_permissions (role_id,permission_id,status,created_at) VALUES (@p1,@p2,1,GETDATE())").execute(Tuple.of(id,permissionId)).mapEmpty());} return chain;})

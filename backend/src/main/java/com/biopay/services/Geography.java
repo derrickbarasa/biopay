@@ -158,6 +158,12 @@ public class Geography extends AbstractVerticle {
                 .compose(prefix -> nextSequence(table, codeColumn, anchorId).map(seq -> prefix + seq));
     }
 
+    private static String statePrefix(String name, String requestedPrefix) {
+        if (requestedPrefix != null && !requestedPrefix.isBlank()) return requestedPrefix.trim().toUpperCase();
+        String letters = name.replaceAll("[^A-Za-z]", "").toUpperCase();
+        return letters.substring(0, Math.min(2, letters.length()));
+    }
+
     // ---- shared insert used by both the single create() and the bulk loop ---------
 
     private Future<RowSet<Row>> insertGeoRow(String table, String codeColumn, Integer anchorId,
@@ -214,7 +220,8 @@ public class Geography extends AbstractVerticle {
             parentValues[i] = v;
         }
         String stateCode = parentFields.length > 0 ? parentValues[0] : null;
-        String explicitCountry = payload.getString("country");
+        final String explicitCountry = "STATE".equalsIgnoreCase(level)
+                ? statePrefix(name, payload.getString("country")) : payload.getString("country");
 
         nextCode(anchorId, level, table, codeColumn, stateCode, explicitCountry)
                 .onComplete(codeAr -> {
@@ -329,7 +336,8 @@ public class Geography extends AbstractVerticle {
                     actorId, rows, index + 1, created, errors);
             return;
         }
-        String explicitCountry = row.getString("country");
+        final String explicitCountry = "STATE".equalsIgnoreCase(level)
+                ? statePrefix(name, row.getString("country")) : row.getString("country");
 
         nextCode(anchorId, level, table, codeColumn, stateCode, explicitCountry)
                 .onComplete(codeAr -> {

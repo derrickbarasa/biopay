@@ -12,6 +12,7 @@ import io.vertx.sqlclient.Tuple;
 import com.biopay.databases.Datasource;
 import com.biopay.utilities.Logging;
 import com.biopay.utilities.Rows;
+import com.biopay.utilities.TenantScope;
 
 /**
  * Payment line items -- generated in bulk by {@link Payroll#generate}, then
@@ -51,12 +52,12 @@ public class Payment extends AbstractVerticle {
     }
 
     private static boolean isAnchor(JsonObject payload) {
-        return "ANCHOR".equalsIgnoreCase(payload.getString("actorRole", ""));
+        return TenantScope.managesOrganisations(payload);
     }
 
     /** The one designated cross-anchor operator (admin@biopay.com). */
     private static boolean isSystemAdmin(JsonObject payload) {
-        return payload.getBoolean("systemAdmin", false);
+        return TenantScope.isSystemOwner(payload);
     }
 
     // ---- GET_PAYMENTS (filters: organisationCode, status, dateFrom/dateTo, page) --
@@ -74,13 +75,14 @@ public class Payment extends AbstractVerticle {
         int pageSize = Math.min(Math.max(payload.getInteger("pageSize", 25), 1), 200);
         int offset = (page - 1) * pageSize;
 
-        // Joined against partners.anchor_id (@p7/@p8) so a plain anchor admin can never see
-        // another anchor's payments even with organisationCode left blank or forged; the
-        // system admin (@p7=1) bypasses that join entirely.
-        String sql = "SELECT pay.* FROM payments pay JOIN partners p ON p.partner_id = pay.partner_code "
-                + "WHERE (@p1 IS NULL OR pay.partner_code=@p1) AND (@p2 IS NULL OR pay.status=@p2) "
+        // Joined against organizations.anchor_id (@p8) so a plain anchor admin can never see
+        // another anchor's payments even with organisationCode left blank or forged. @p8 is
+        // NULL for a system admin with no target anchor chosen (browse everything), the
+        // requested target anchor once chosen, or the caller's own anchor for an anchor admin.
+        String sql = "SELECT pay.* FROM payments pay JOIN organizations p ON p.organization_code = pay.organization_code "
+                + "WHERE (@p1 IS NULL OR pay.organization_code=@p1) AND (@p2 IS NULL OR pay.status=@p2) "
                 + "AND (@p3 IS NULL OR pay.date_from >= @p3) AND (@p4 IS NULL OR pay.date_from <= @p4) "
-                + "AND (@p7 = 1 OR p.anchor_id=@p8) "
+                + "AND (@p8 IS NULL OR p.anchor_id=@p8) "
                 + "ORDER BY pay.created_at DESC OFFSET @p5 ROWS FETCH NEXT @p6 ROWS ONLY";
 
         pool.preparedQuery(sql)
@@ -106,10 +108,10 @@ public class Payment extends AbstractVerticle {
     private void getOne(Message<Object> message) {
         JsonObject payload = new JsonObject(message.body().toString());
         Integer id = payload.getInteger("id");
-        String scopeClause = isAnchor(payload) ? "" : " AND partner_code=@p2";
+        String scopeClause = isAnchor(payload) ? " AND (@p2=1 OR anchor_id=@p3)" : " AND organization_code=@p2";
 
         pool.preparedQuery("SELECT * FROM payments WHERE id=@p1" + scopeClause)
-                .execute(isAnchor(payload) ? Tuple.of(id) : Tuple.of(id, payload.getString("partnerCode", "")))
+                .execute(isAnchor(payload) ? Tuple.of(id, isSystemAdmin(payload), TenantScope.anchorId(payload)) : Tuple.of(id, payload.getString("partnerCode", "")))
                 .onFailure(err -> onDbError(message, err))
                 .onSuccess(rows -> {
                     if (rows.size() == 0) {
@@ -133,11 +135,11 @@ public class Payment extends AbstractVerticle {
             replyError(message, "id and status are required");
             return;
         }
-        String scopeClause = isAnchor(payload) ? "" : " AND partner_code=@p4";
+        String scopeClause = isAnchor(payload) ? " AND (@p4=1 OR anchor_id=@p5)" : " AND organization_code=@p4";
         Object actorId = payload.getValue("actorId");
         String sql = "UPDATE payments SET status=@p1, verified_by=@p2, verified_at=GETDATE(), updated_at=GETDATE() WHERE id=@p3" + scopeClause;
         Tuple params = isAnchor(payload)
-                ? Tuple.of(status, actorId, id)
+                ? Tuple.of(status, actorId, id, isSystemAdmin(payload), TenantScope.anchorId(payload))
                 : Tuple.of(status, actorId, id, payload.getString("partnerCode", ""));
 
         pool.preparedQuery(sql)
@@ -157,10 +159,10 @@ public class Payment extends AbstractVerticle {
     private void delete(Message<Object> message) {
         JsonObject payload = new JsonObject(message.body().toString());
         Integer id = payload.getInteger("id");
-        String scopeClause = isAnchor(payload) ? "" : " AND partner_code=@p2";
+        String scopeClause = isAnchor(payload) ? " AND (@p2=1 OR anchor_id=@p3)" : " AND organization_code=@p2";
 
         pool.preparedQuery("DELETE FROM payments WHERE id=@p1 AND status=0" + scopeClause)
-                .execute(isAnchor(payload) ? Tuple.of(id) : Tuple.of(id, payload.getString("partnerCode", "")))
+                .execute(isAnchor(payload) ? Tuple.of(id, isSystemAdmin(payload), TenantScope.anchorId(payload)) : Tuple.of(id, payload.getString("partnerCode", "")))
                 .onFailure(err -> onDbError(message, err))
                 .onSuccess(rows -> {
                     if (rows.rowCount() > 0) {
@@ -183,8 +185,8 @@ public class Payment extends AbstractVerticle {
         String sql = "SELECT COUNT(*) AS cnt, ISNULL(SUM(pay.amount), 0) AS total, "
                 + "SUM(CASE WHEN pay.status=0 THEN 1 ELSE 0 END) AS pendingCount, "
                 + "SUM(CASE WHEN pay.status=1 THEN 1 ELSE 0 END) AS paidCount "
-                + "FROM payments pay JOIN partners p ON p.partner_id = pay.partner_code "
-                + "WHERE (@p1 IS NULL OR pay.partner_code=@p1) AND (@p2 = 1 OR p.anchor_id=@p3)";
+                + "FROM payments pay JOIN organizations p ON p.organization_code = pay.organization_code "
+                + "WHERE (@p1 IS NULL OR pay.organization_code=@p1) AND (@p3 IS NULL OR p.anchor_id=@p3)";
 
         pool.preparedQuery(sql)
                 .execute(Tuple.of(partnerCode).addBoolean(systemAdmin).addInteger(anchorId))
@@ -208,7 +210,7 @@ public class Payment extends AbstractVerticle {
                 .put("householdNumber", Rows.str(r, "household_number"))
                 .put("householdName", Rows.str(r, "household_name"))
                 .put("gender", Rows.str(r, "gender"))
-                .put("organisationCode", Rows.str(r, "partner_code"))
+                .put("organisationCode", Rows.str(r, "organization_code"))
                 .put("bomaCode", Rows.str(r, "boma_code"))
                 .put("amount", Rows.dbl(r, "amount"))
                 .put("status", Rows.intVal(r, "status"))

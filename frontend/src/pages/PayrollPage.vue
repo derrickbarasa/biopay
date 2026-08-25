@@ -3,6 +3,8 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { dispatch } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
+import { useConfirm } from '@/composables/useConfirm'
+import { useAnchorScope } from '@/composables/useAnchorScope'
 
 interface Cycle {
   cycleCode: string
@@ -44,6 +46,9 @@ interface HouseholdOption {
 
 const auth = useAuthStore()
 const toast = useToast()
+const { confirmAction } = useConfirm()
+const { anchors, selectedAnchorId, anchorGateActive, anchorChosen } = useAnchorScope()
+const CURRENCIES = ['USD', 'SSP', 'KES', 'UGX', 'ETB', 'EUR', 'GBP']
 
 const loading = ref(true)
 const cycles = ref<Cycle[]>([])
@@ -51,6 +56,15 @@ const tableSearch = ref('')
 const organizations = ref<{ organisationCode: string; name: string }[]>([])
 const statusFilter = ref<string | null>(null)
 const organisationFilter = ref<string | null>(null)
+
+// Anchor Administrators must choose an organisation before this page shows
+// anything or lets them generate a cycle; the System Owner must choose an
+// anchor first (may optionally narrow further with the filter below).
+const scopeReady = computed(() => {
+  if (auth.isSystemAdmin) return anchorChosen.value
+  if (auth.isAnchorAdministrator) return !!organisationFilter.value
+  return true
+})
 
 const headers = [
   { title: 'Cycle', key: 'cycleCode' },
@@ -66,9 +80,11 @@ const headers = [
 ]
 
 async function load() {
+  if (!scopeReady.value) { cycles.value = []; return }
   loading.value = true
   try {
     const res = await dispatch<{ results: Cycle[] }>('GET_PAYROLLS', {
+      targetAnchorId: auth.isSystemAdmin ? selectedAnchorId.value : undefined,
       status: statusFilter.value ?? undefined,
       organisationCode: organisationFilter.value ?? undefined,
     })
@@ -87,16 +103,25 @@ function clearFilters() {
   organisationFilter.value = null
 }
 
-onMounted(async () => {
-  load()
-  if (auth.isAnchor) {
-    try {
-      const res = await dispatch<{ results: typeof organizations.value }>('GET_ORGANIZATIONS')
-      organizations.value = res.results
-    } catch {
-      // Filter dropdown just stays empty; the list itself still loaded above.
-    }
+async function loadOrganizations() {
+  if (!auth.isAnchorAdministrator && !(auth.isSystemAdmin && selectedAnchorId.value)) { organizations.value = []; return }
+  try {
+    const res = await dispatch<{ results: typeof organizations.value }>('GET_ORGANIZATIONS', {
+      targetAnchorId: auth.isSystemAdmin ? selectedAnchorId.value : undefined,
+    })
+    organizations.value = res.results
+  } catch {
+    // Filter dropdown just stays empty; the list itself still loaded above.
   }
+}
+
+// System Owner picking a different anchor resets whatever organisation was
+// selected under the previous one, then reloads both lists.
+watch(selectedAnchorId, () => { organisationFilter.value = null; loadOrganizations(); load() })
+
+onMounted(() => {
+  load()
+  loadOrganizations()
 })
 
 const statusColor: Record<string, string> = {
@@ -108,6 +133,12 @@ function orgName(code?: string) { return (code && orgNameByCode.value.get(code))
 function fmtAmount(v?: number | null) { return (v ?? 0).toLocaleString() }
 
 async function removeCycle(cycle: Cycle) {
+  if (!await confirmAction({
+    title: 'Delete payment cycle?',
+    message: `${cycle.cycleCode} and its generated payment lines will be removed. This action cannot be undone.`,
+    confirmLabel: 'Delete cycle',
+    color: 'error',
+  })) return
   try {
     await dispatch('DELETE_PAYROLL', { cycleCode: cycle.cycleCode })
     toast.success('Payroll cycle deleted')
@@ -150,6 +181,9 @@ const genForm = ref({
 const otpSent = ref(false)
 const sendingOtp = ref(false)
 const generating = ref(false)
+const rateLoading = ref(false)
+const rateAsOf = ref('')
+const rateError = ref('')
 const householdOptions = ref<HouseholdOption[]>([])
 const householdsLoading = ref(false)
 const householdItems = computed(() =>
@@ -165,9 +199,41 @@ function openWizard() {
   }
   householdOptions.value = []
   otpSent.value = false
+  rateAsOf.value = ''
+  rateError.value = ''
   wizard.value = true
   if (!auth.isAnchor) loadHouseholdOptions(null)
 }
+
+async function fetchExchangeRate(currency: string) {
+  const quote = currency.trim().toUpperCase()
+  genForm.value.currency = quote
+  rateError.value = ''
+  rateAsOf.value = ''
+  if (!quote || quote === 'USD') {
+    genForm.value.exchangeRate = 1
+    rateAsOf.value = new Date().toISOString().slice(0, 10)
+    return
+  }
+  rateLoading.value = true
+  try {
+    const response = await fetch(`https://api.frankfurter.dev/v2/rate/USD/${encodeURIComponent(quote)}`)
+    if (!response.ok) throw new Error('Rate is unavailable for this currency')
+    const result = await response.json() as { rate?: number; date?: string }
+    if (!result.rate || result.rate <= 0) throw new Error('The exchange-rate service returned an invalid rate')
+    genForm.value.exchangeRate = result.rate
+    rateAsOf.value = result.date ?? ''
+  } catch (err) {
+    genForm.value.exchangeRate = 0
+    rateError.value = err instanceof Error ? err.message : 'Unable to retrieve the exchange rate'
+  } finally {
+    rateLoading.value = false
+  }
+}
+
+watch(() => genForm.value.currency, (currency) => {
+  if (wizard.value) fetchExchangeRate(currency)
+})
 
 async function loadHouseholdOptions(organisationCode: string | null) {
   genForm.value.householdNumbers = []
@@ -206,7 +272,7 @@ async function sendGenerateOtp() {
 async function confirmGenerate() {
   generating.value = true
   try {
-    await dispatch('GENERATE_PAYROLL', genForm.value)
+    await dispatch('GENERATE_PAYROLL', { ...genForm.value, targetAnchorId: auth.isSystemAdmin ? selectedAnchorId.value : undefined })
     toast.success('Payroll cycle generated and pending approval')
     wizard.value = false
     await load()
@@ -315,6 +381,12 @@ async function saveRejections() {
 }
 
 async function disburse(cycle: Cycle) {
+  if (!await confirmAction({
+    title: 'Disburse payment cycle?',
+    message: `${cycle.cycleCode} will be posted to the payment ledger for ${cycle.householdCount} household(s).`,
+    confirmLabel: 'Disburse cycle',
+    color: 'secondary',
+  })) return
   try {
     await dispatch('DISBURSE_PAYROLL', { cycleCode: cycle.cycleCode })
     toast.success('Payroll cycle disbursed')
@@ -324,14 +396,33 @@ async function disburse(cycle: Cycle) {
   }
 }
 
-async function reject(cycle: Cycle) {
-  const reason = window.prompt('Reason for rejecting this payroll cycle?') ?? ''
+const rejectDialog = ref(false)
+const rejectTarget = ref<Cycle | null>(null)
+const rejectReason = ref('')
+const rejecting = ref(false)
+
+function openReject(cycle: Cycle) {
+  rejectTarget.value = cycle
+  rejectReason.value = ''
+  rejectDialog.value = true
+}
+
+async function confirmReject() {
+  if (!rejectTarget.value) return
+  if (!rejectReason.value.trim()) {
+    toast.error('Enter a reason for rejecting this payment cycle')
+    return
+  }
+  rejecting.value = true
   try {
-    await dispatch('REJECT_PAYROLL', { cycleCode: cycle.cycleCode, reason })
+    await dispatch('REJECT_PAYROLL', { cycleCode: rejectTarget.value.cycleCode, reason: rejectReason.value.trim() })
     toast.success('Payroll cycle rejected')
+    rejectDialog.value = false
     await load()
   } catch (err) {
     toast.error(err instanceof Error ? err.message : 'Rejection failed')
+  } finally {
+    rejecting.value = false
   }
 }
 
@@ -374,13 +465,28 @@ function itemStatusColor(item: PaymentLine) {
   <div>
     <div class="d-flex align-center justify-space-between mb-4">
       <h1 class="text-h5 font-weight-bold">Payment Cycles</h1>
-      <v-btn color="secondary" prepend-icon="mdi-calendar-month-outline" @click="openWizard">Generate Payment Cycle</v-btn>
+      <v-btn v-if="scopeReady && auth.can('ACCESS_PAYMENT_CYCLES')" color="secondary" prepend-icon="mdi-calendar-month-outline" @click="openWizard">Generate Payment Cycle</v-btn>
     </div>
 
+    <v-select
+      v-if="anchorGateActive" v-model="selectedAnchorId" :items="anchors" item-title="name" item-value="id"
+      label="Choose anchor" variant="outlined" class="mb-4" style="max-width: 420px"
+      prepend-inner-icon="mdi-bank-outline"
+    />
+    <v-select
+      v-else-if="auth.isAnchorAdministrator" v-model="organisationFilter" :items="organizations" item-title="name" item-value="organisationCode"
+      label="Choose organisation" variant="outlined" class="mb-4" style="max-width: 420px"
+      prepend-inner-icon="mdi-domain"
+    />
+    <v-alert v-if="!scopeReady" type="info" variant="tonal" class="mb-4">
+      {{ auth.isSystemAdmin && !anchorChosen ? 'Choose an anchor to see its payment cycles.' : 'Choose an organisation to see its payment cycles.' }}
+    </v-alert>
+
+    <template v-if="scopeReady">
     <v-card variant="flat" border>
       <v-card-text>
         <v-row dense align="center">
-          <v-col v-if="auth.isAnchor" cols="12" sm="4" md="3">
+          <v-col v-if="auth.isSystemAdmin" cols="12" sm="4" md="3">
             <v-select v-model="organisationFilter" :items="organizations" item-title="name" item-value="organisationCode" label="Organisation" clearable hide-details density="compact" />
           </v-col>
           <v-col cols="6" sm="4" md="3">
@@ -416,8 +522,8 @@ function itemStatusColor(item: PaymentLine) {
         <template #item.actions="{ item }">
           <v-btn icon="mdi-eye-outline" variant="text" size="small" class="mr-1" :aria-label="`View ${item.cycleCode}`" @click="openView(item)" />
           <template v-if="auth.isAnchor && item.status === 'PENDING_APPROVAL'">
-            <v-btn size="small" color="success" variant="tonal" class="mr-1" @click="openApprove(item)">Approve</v-btn>
-            <v-btn size="small" color="error" variant="tonal" @click="reject(item)">Reject</v-btn>
+            <v-btn v-if="auth.can('ACCESS_PAYMENT_CYCLES')" size="small" color="success" variant="tonal" class="mr-1" @click="openApprove(item)">Approve</v-btn>
+            <v-btn v-if="auth.can('ACCESS_PAYMENT_CYCLES')" size="small" color="error" variant="tonal" @click="openReject(item)">Reject</v-btn>
           </template>
           <v-btn
             v-if="!auth.isAnchor && item.status === 'PENDING_APPROVAL' && isMakerOf(item)"
@@ -425,21 +531,23 @@ function itemStatusColor(item: PaymentLine) {
           >
             Review
           </v-btn>
-          <v-btn v-if="auth.isAnchor && item.status === 'APPROVED'" size="small" color="secondary" variant="tonal" @click="disburse(item)">
+          <v-btn v-if="auth.isAnchor && auth.can('ACCESS_PAYMENT_CYCLES') && item.status === 'APPROVED'" size="small" color="secondary" variant="tonal" @click="disburse(item)">
             Disburse
           </v-btn>
           <v-btn
-            v-if="item.status === 'DRAFT' || item.status === 'PENDING_APPROVAL'"
+            v-if="auth.can('ACCESS_PAYMENT_CYCLES') && (item.status === 'DRAFT' || item.status === 'PENDING_APPROVAL')"
             icon="mdi-delete" variant="text" size="small" color="error"
             :aria-label="`Delete cycle ${item.cycleCode}`" @click="removeCycle(item)"
           />
         </template>
       </v-data-table>
     </v-card>
+    </template>
 
     <!-- Generate wizard -->
     <v-dialog v-model="wizard" max-width="620" persistent>
       <v-card>
+        <dialog-close-button @close="wizard = false" />
         <v-card-title>Generate Payment Cycle</v-card-title>
         <v-card-text>
           <v-stepper v-model="step" flat :items="['Period', 'Households', 'Amount & Currency', 'Verify & Confirm']">
@@ -484,16 +592,22 @@ function itemStatusColor(item: PaymentLine) {
               <v-text-field v-model.number="genForm.amountPerHousehold" label="Amount per household (amount out)" type="number" />
               <v-row dense>
                 <v-col cols="6">
-                  <v-text-field v-model="genForm.currency" label="Currency" placeholder="USD" />
+                  <v-autocomplete v-model="genForm.currency" :items="CURRENCIES" label="Payout currency" />
                 </v-col>
                 <v-col cols="6">
-                  <v-text-field v-model.number="genForm.exchangeRate" label="Exchange rate (out → in)" type="number" step="0.000001" />
+                  <v-text-field
+                    v-model.number="genForm.exchangeRate" label="USD exchange rate" type="number"
+                    readonly :loading="rateLoading" hint="Picked automatically from the latest reference rate" persistent-hint
+                  />
                 </v-col>
               </v-row>
-              <v-alert type="info" variant="tonal" density="compact" class="mb-3">
-                Amount in per household = amount per household × exchange rate. Same currency on both sides means rate 1, so amount in equals amount out.
+              <v-alert v-if="rateError" type="error" variant="tonal" density="compact" class="mb-3">
+                {{ rateError }}. Choose another currency or try again.
               </v-alert>
-              <v-btn color="secondary" block :disabled="!genForm.amountPerHousehold || !genForm.currency || !genForm.exchangeRate" @click="step = 4">
+              <v-alert v-else type="info" variant="tonal" density="compact" class="mb-3">
+                USD 1 = {{ genForm.currency }} {{ genForm.exchangeRate }}{{ rateAsOf ? `, reference date ${rateAsOf}` : '' }}. The rate is locked into this cycle when generated.
+              </v-alert>
+              <v-btn color="secondary" block :disabled="rateLoading || !!rateError || !genForm.amountPerHousehold || !genForm.currency || !genForm.exchangeRate" @click="step = 4">
                 Next
               </v-btn>
             </template>
@@ -522,6 +636,7 @@ function itemStatusColor(item: PaymentLine) {
     <!-- Approve dialog: per-row reject checkboxes apply before the rest of the cycle is approved -->
     <v-dialog v-model="approveDialog" max-width="640">
       <v-card v-if="approveTarget">
+        <dialog-close-button @close="approveDialog = false" />
         <v-card-title>{{ auth.isAnchor ? 'Approve' : 'Review' }} {{ approveTarget.cycleCode }}</v-card-title>
         <v-card-text>
           <div v-if="!auth.isAnchor" class="text-body-2 text-medium-emphasis mb-3">
@@ -571,9 +686,26 @@ function itemStatusColor(item: PaymentLine) {
       </v-card>
     </v-dialog>
 
+    <v-dialog v-model="rejectDialog" max-width="460" persistent>
+      <v-card v-if="rejectTarget">
+        <dialog-close-button @close="rejectDialog = false" />
+        <v-card-title>Reject payment cycle?</v-card-title>
+        <v-card-text>
+          <p class="mb-3">Explain why {{ rejectTarget.cycleCode }} cannot proceed. This reason is kept with the cycle.</p>
+          <v-textarea v-model="rejectReason" label="Rejection reason" rows="3" autofocus required />
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" @click="rejectDialog = false">Cancel</v-btn>
+          <v-btn color="error" :loading="rejecting" @click="confirmReject">Reject cycle</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <!-- View more: read-only line items for any cycle status -->
     <v-dialog v-model="viewDialog" max-width="640">
       <v-card v-if="viewTarget">
+        <dialog-close-button @close="viewDialog = false" />
         <v-card-title>{{ viewTarget.cycleCode }} — Payments</v-card-title>
         <v-card-text>
           <div class="mb-3">

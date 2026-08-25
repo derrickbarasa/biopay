@@ -14,9 +14,10 @@ import com.biopay.utilities.Logging;
 import com.biopay.utilities.Passwords;
 import com.biopay.utilities.Rows;
 import com.biopay.utilities.Utilities;
+import com.biopay.utilities.TenantScope;
 
 /**
- * Officers (the existing {@code supervisors} table -- the field agents who
+ * Officers (the existing {@code field_officers} table -- the field agents who
  * log into the Android app). Scoped the same way as {@link Organization}:
  * an anchor admin can manage officers across every organisation, an
  * organisation admin only within their own {@code partnerCode}.
@@ -35,6 +36,7 @@ public class Officer extends AbstractVerticle {
         eventBus.consumer("CREATE_OFFICER", this::create);
         eventBus.consumer("UPDATE_OFFICER", this::update);
         eventBus.consumer("DELETE_OFFICER", this::delete);
+        eventBus.consumer("TOGGLE_OFFICER_STATUS", this::toggleStatus);
         eventBus.consumer("ASSIGN_OFFICER_LOCATION", this::assignLocation);
         eventBus.consumer("GET_OFFICER", this::getOne);
         eventBus.consumer("GET_OFFICERS", this::retrieveAll);
@@ -55,7 +57,7 @@ public class Officer extends AbstractVerticle {
     }
 
     private static boolean isAnchor(JsonObject payload) {
-        return "ANCHOR".equalsIgnoreCase(payload.getString("actorRole", ""));
+        return TenantScope.managesOrganisations(payload);
     }
 
     /** The organisation an actor is allowed to act within; null (anchor) means "any". */
@@ -68,7 +70,7 @@ public class Officer extends AbstractVerticle {
 
     /** The one designated cross-anchor operator (admin@biopay.com). */
     private static boolean isSystemAdmin(JsonObject payload) {
-        return payload.getBoolean("systemAdmin", false);
+        return TenantScope.isSystemOwner(payload);
     }
 
     // ---- CREATE_OFFICER (anchor or organisation admin) ---------------------------
@@ -79,7 +81,7 @@ public class Officer extends AbstractVerticle {
         String firstName = payload.getString("firstName", "").trim();
         String lastName = payload.getString("lastName", "").trim();
         String email = payload.getString("email", "").trim().toLowerCase();
-        Object anchorIdVal = payload.getValue("anchorId");
+        Integer anchorId = TenantScope.anchorId(payload);
 
         if (partnerCode.isEmpty() || email.isEmpty() || firstName.isEmpty()) {
             replyError(message, "organisationCode, firstName and email are required");
@@ -90,12 +92,14 @@ public class Officer extends AbstractVerticle {
         String hash = Passwords.hash(tempPassword);
         int supervisorId = (int) (System.currentTimeMillis() % 1000000);
 
-        String sql = "INSERT INTO supervisors (supervisor_id, username, email, password, firstname, lastname, "
-                + "partner_code, role, active, anchor_id, created_by, created_at) "
+        String sql = "INSERT INTO field_officers (officer_code, username, email, password, firstname, lastname, "
+                + "organization_code, role, active, anchor_id, created_by, created_at) "
                 + "VALUES (@p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10, @p11, GETDATE())";
-        pool.preparedQuery(sql)
-                .execute(Tuple.of(supervisorId, email, email, hash, firstName, lastName, partnerCode, 2, "1",
-                        anchorIdVal == null ? null : Integer.parseInt(anchorIdVal.toString()), null))
+        pool.preparedQuery("SELECT anchor_id FROM organizations WHERE organization_code=@p1 AND (@p2=1 OR anchor_id=@p3)")
+                .execute(Tuple.of(partnerCode, isSystemAdmin(payload), anchorId))
+                .compose(orgRows -> orgRows.size() == 0 ? io.vertx.core.Future.failedFuture("Organisation is outside your anchor")
+                        : pool.preparedQuery(sql).execute(Tuple.of(supervisorId, email, email, hash, firstName, lastName,
+                                partnerCode, 2, "1", Rows.intVal(orgRows.iterator().next(), "anchor_id"), payload.getValue("actorId"))))
                 .onFailure(err -> onDbError(message, err))
                 .onSuccess(rows -> {
                     if (rows.rowCount() <= 0) {
@@ -124,11 +128,12 @@ public class Officer extends AbstractVerticle {
             return;
         }
 
-        String sql = "UPDATE supervisors SET firstname=@p1, lastname=@p2, updated_at=GETDATE() WHERE email=@p3"
-                + (isAnchor(payload) ? "" : " AND partner_code=@p4");
+        String sql = "UPDATE field_officers SET firstname=@p1, lastname=@p2, updated_at=GETDATE() WHERE email=@p3"
+                + (isAnchor(payload) ? " AND (@p4=1 OR anchor_id=@p5)" : " AND organization_code=@p4");
 
         Tuple params = isAnchor(payload)
-                ? Tuple.of(payload.getString("firstName", "").trim(), payload.getString("lastName", "").trim(), email)
+                ? Tuple.of(payload.getString("firstName", "").trim(), payload.getString("lastName", "").trim(), email,
+                        isSystemAdmin(payload), TenantScope.anchorId(payload))
                 : Tuple.of(payload.getString("firstName", "").trim(), payload.getString("lastName", "").trim(), email, payload.getString("partnerCode", ""));
 
         pool.preparedQuery(sql)
@@ -149,10 +154,10 @@ public class Officer extends AbstractVerticle {
         JsonObject payload = new JsonObject(message.body().toString());
         String email = payload.getString("email", "").trim().toLowerCase();
 
-        String sql = "UPDATE supervisors SET active=@p1, updated_at=GETDATE() WHERE email=@p2"
-                + (isAnchor(payload) ? "" : " AND partner_code=@p3");
+        String sql = "UPDATE field_officers SET active=@p1, updated_at=GETDATE() WHERE email=@p2"
+                + (isAnchor(payload) ? " AND (@p3=1 OR anchor_id=@p4)" : " AND organization_code=@p3");
         Tuple params = isAnchor(payload)
-                ? Tuple.of("0", email)
+                ? Tuple.of("0", email, isSystemAdmin(payload), TenantScope.anchorId(payload))
                 : Tuple.of("0", email, payload.getString("partnerCode", ""));
 
         pool.preparedQuery(sql)
@@ -167,6 +172,27 @@ public class Officer extends AbstractVerticle {
                 });
     }
 
+    private void toggleStatus(Message<Object> message) {
+        JsonObject payload = new JsonObject(message.body().toString());
+        String email = payload.getString("email", "").trim().toLowerCase();
+        String active = payload.getInteger("active", 0) == 1 ? "1" : "0";
+        if (email.isEmpty()) {
+            replyError(message, "email is required");
+            return;
+        }
+        String sql = "UPDATE field_officers SET active=@p1, updated_at=GETDATE() WHERE email=@p2"
+                + (isAnchor(payload) ? " AND (@p3=1 OR anchor_id=@p4)" : " AND organization_code=@p3");
+        Tuple params = isAnchor(payload) ? Tuple.of(active, email, isSystemAdmin(payload), TenantScope.anchorId(payload))
+                : Tuple.of(active, email, payload.getString("partnerCode", ""));
+        pool.preparedQuery(sql).execute(params)
+                .onFailure(err -> onDbError(message, err))
+                .onSuccess(rows -> {
+                    if (rows.rowCount() == 0) replyError(message, "Officer not found or not in your organisation");
+                    else reply(message, new JsonObject().put("responseCode", "000")
+                            .put("responseMessage", "1".equals(active) ? "Officer activated" : "Officer deactivated"));
+                });
+    }
+
     // ---- ASSIGN_OFFICER_LOCATION -----------------------------------------------------
 
     private void assignLocation(Message<Object> message) {
@@ -178,7 +204,7 @@ public class Officer extends AbstractVerticle {
             return;
         }
 
-        String sql = "INSERT INTO officer_locations (supervisor_id, state_code, county_code, payam_code, boma_code, assigned_by, created_at) "
+        String sql = "INSERT INTO officer_locations (officer_code, state_code, county_code, payam_code, boma_code, assigned_by, created_at) "
                 + "VALUES (@p1, @p2, @p3, @p4, @p5, @p6, GETDATE())";
         pool.preparedQuery(sql)
                 .execute(Tuple.of(supervisorId,
@@ -199,8 +225,8 @@ public class Officer extends AbstractVerticle {
         JsonObject payload = new JsonObject(message.body().toString());
         String email = payload.getString("email", "").trim().toLowerCase();
 
-        String sql = "SELECT * FROM supervisors WHERE email=@p1" + (isAnchor(payload) ? "" : " AND partner_code=@p2");
-        Tuple params = isAnchor(payload) ? Tuple.of(email) : Tuple.of(email, payload.getString("partnerCode", ""));
+        String sql = "SELECT * FROM field_officers WHERE email=@p1" + (isAnchor(payload) ? " AND (@p2=1 OR anchor_id=@p3)" : " AND organization_code=@p2");
+        Tuple params = isAnchor(payload) ? Tuple.of(email, isSystemAdmin(payload), TenantScope.anchorId(payload)) : Tuple.of(email, payload.getString("partnerCode", ""));
 
         pool.preparedQuery(sql)
                 .execute(params)
@@ -227,12 +253,14 @@ public class Officer extends AbstractVerticle {
         Object anchorIdVal = payload.getValue("anchorId");
         Integer anchorId = anchorIdVal == null ? null : Integer.parseInt(anchorIdVal.toString());
 
-        // supervisors already carries anchor_id directly, so a plain anchor admin is
-        // scoped to it with no join needed; the system admin (@p3=1) sees every anchor.
+        // field_officers already carries anchor_id directly, so a plain anchor admin is
+        // scoped to it with no join needed. @p4 is NULL for a system admin with no target
+        // anchor chosen (browse everything), the requested target anchor once chosen, or
+        // the caller's own anchor for an anchor admin.
         String sql = isAnchor(payload)
-                ? "SELECT * FROM supervisors WHERE (@p1 IS NULL OR partner_code=@p1) AND (@p2 IS NULL OR active=@p2) "
-                        + "AND (@p3 = 1 OR anchor_id=@p4) ORDER BY created_at DESC"
-                : "SELECT * FROM supervisors WHERE partner_code=@p1 AND (@p2 IS NULL OR active=@p2) ORDER BY created_at DESC";
+                ? "SELECT * FROM field_officers WHERE (@p1 IS NULL OR organization_code=@p1) AND (@p2 IS NULL OR active=@p2) "
+                        + "AND (@p4 IS NULL OR anchor_id=@p4) ORDER BY created_at DESC"
+                : "SELECT * FROM field_officers WHERE organization_code=@p1 AND (@p2 IS NULL OR active=@p2) ORDER BY created_at DESC";
         String organisationFilter = payload.getString("organisationCode", null);
         Tuple params = Tuple.of(isAnchor(payload) ? organisationFilter : payload.getString("partnerCode", ""), activeFilter);
         if (isAnchor(payload)) {
@@ -258,7 +286,7 @@ public class Officer extends AbstractVerticle {
         if (supervisorId == null) {
             return io.vertx.core.Future.succeededFuture(new JsonArray());
         }
-        return pool.preparedQuery("SELECT * FROM officer_locations WHERE supervisor_id=@p1 ORDER BY created_at DESC")
+        return pool.preparedQuery("SELECT * FROM officer_locations WHERE officer_code=@p1 ORDER BY created_at DESC")
                 .execute(Tuple.of(supervisorId))
                 .map(rows -> {
                     JsonArray arr = new JsonArray();
@@ -280,7 +308,7 @@ public class Officer extends AbstractVerticle {
                 .put("email", Rows.str(r, "email"))
                 .put("firstName", Rows.str(r, "firstname"))
                 .put("lastName", Rows.str(r, "lastname"))
-                .put("organisationCode", Rows.str(r, "partner_code"))
+                .put("organisationCode", Rows.str(r, "organization_code"))
                 .put("anchorId", Rows.intVal(r, "anchor_id"))
                 .put("active", Rows.str(r, "active"))
                 .put("createdAt", Rows.str(r, "created_at"))

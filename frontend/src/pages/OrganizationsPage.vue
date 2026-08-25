@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { dispatch } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
 import { ORG_MODULES, COUNTRIES } from '@/types/user'
 import { capitalFor } from '@/utils/countries'
+import { useConfirm } from '@/composables/useConfirm'
 
 interface Organization {
   organisationCode: string
@@ -16,16 +17,22 @@ interface Organization {
   country?: string
   capitalCity?: string
   verificationMethod?: string
+  anchorId?: number
+  anchorName?: string
   status: number
   createdAt?: string
 }
+interface Anchor { id: number; name: string; anchorCode: string }
 
 const auth = useAuthStore()
 const toast = useToast()
+const { confirmAction } = useConfirm()
 
 const loading = ref(true)
 const statusFilter = ref<number | null>(null)
 const organizations = ref<Organization[]>([])
+const anchors = ref<Anchor[]>([])
+const selectedAnchorId = ref<number | null>(null)
 const tableSearch = ref('')
 const dialog = ref(false)
 const editing = ref(false)
@@ -63,7 +70,8 @@ function verificationMethodLabel(method?: string) {
 const required = (value: string) => !!value?.trim() || 'Required'
 const emailRule = (value: string) => !value || /.+@.+\..+/.test(value) || 'Enter a valid email'
 
-const headers = [
+const headers = computed(() => [
+  ...(auth.isSystemAdmin ? [{ title: 'Anchor', key: 'anchorName' }] : []),
   { title: 'Code', key: 'organisationCode' },
   { title: 'Name', key: 'name' },
   { title: 'Contact', key: 'authorisedName' },
@@ -72,12 +80,25 @@ const headers = [
   { title: 'Verification', key: 'verificationMethod' },
   { title: 'Status', key: 'status' },
   { title: 'Actions', key: 'actions', sortable: false, align: 'end' as const },
-]
+])
+
+async function loadAnchors() {
+  if (!auth.isSystemAdmin) return
+  const res = await dispatch<{ results: Anchor[] }>('GET_ANCHORS')
+  anchors.value = res.results ?? []
+}
 
 async function load() {
   loading.value = true
   try {
-    const res = await dispatch<{ results: Organization[] }>('GET_ORGANIZATIONS', { status: statusFilter.value ?? undefined })
+    if (auth.isSystemAdmin && !selectedAnchorId.value) {
+      organizations.value = []
+      return
+    }
+    const res = await dispatch<{ results: Organization[] }>('GET_ORGANIZATIONS', {
+      status: statusFilter.value ?? undefined,
+      targetAnchorId: auth.isSystemAdmin ? selectedAnchorId.value : undefined,
+    })
     organizations.value = res.results
   } catch (err) {
     toast.error(err instanceof Error ? err.message : 'Failed to load organizations')
@@ -86,11 +107,15 @@ async function load() {
   }
 }
 
-watch(statusFilter, load)
+watch([statusFilter, selectedAnchorId], load)
 
-onMounted(load)
+onMounted(async () => { await loadAnchors(); await load() })
 
 function openCreate() {
+  if (auth.isSystemAdmin && !selectedAnchorId.value) {
+    toast.error('Choose an anchor before creating an organization')
+    return
+  }
   editing.value = false
   form.value = {
     organisationCode: '', name: '', authorisedName: '', authorisedEmail: '', authorisedContact: '', address: '',
@@ -110,7 +135,10 @@ async function openEdit(org: Organization) {
   }
   dialog.value = true
   try {
-    const res = await dispatch<{ results: string[] }>('GET_ORGANIZATION_MODULES', { organisationCode: org.organisationCode })
+    const res = await dispatch<{ results: string[] }>('GET_ORGANIZATION_MODULES', {
+      organisationCode: org.organisationCode,
+      targetAnchorId: auth.isSystemAdmin ? selectedAnchorId.value : undefined,
+    })
     form.value.modules = res.results
   } catch (err) {
     toast.error(err instanceof Error ? err.message : 'Failed to load modules')
@@ -118,8 +146,14 @@ async function openEdit(org: Organization) {
 }
 
 async function remove(org: Organization) {
+  if (!await confirmAction({
+    title: 'Delete organization?',
+    message: `${org.name} and its dashboard access will be removed. This action cannot be undone.`,
+    confirmLabel: 'Delete organization',
+    color: 'error',
+  })) return
   try {
-    await dispatch('DELETE_ORGANIZATION', { organisationCode: org.organisationCode })
+    await dispatch('DELETE_ORGANIZATION', { organisationCode: org.organisationCode, targetAnchorId: auth.isSystemAdmin ? selectedAnchorId.value : undefined })
     toast.success('Organization deleted')
     await load()
   } catch (err) {
@@ -144,12 +178,15 @@ async function save() {
   try {
     if (editing.value) {
       await Promise.all([
-        dispatch('UPDATE_ORGANIZATION', form.value),
-        dispatch('UPDATE_ORGANIZATION_MODULES', { organisationCode: form.value.organisationCode, modules: form.value.modules }),
+        dispatch('UPDATE_ORGANIZATION', { ...form.value, targetAnchorId: auth.isSystemAdmin ? selectedAnchorId.value : undefined }),
+        dispatch('UPDATE_ORGANIZATION_MODULES', { organisationCode: form.value.organisationCode, modules: form.value.modules, targetAnchorId: auth.isSystemAdmin ? selectedAnchorId.value : undefined }),
       ])
       toast.success('Organization updated')
     } else {
-      await dispatch('CREATE_ORGANIZATION', { ...form.value, anchorId: auth.user?.anchorId })
+      await dispatch('CREATE_ORGANIZATION', {
+        ...form.value,
+        targetAnchorId: auth.isSystemAdmin ? selectedAnchorId.value : undefined,
+      })
       toast.success('Organization created')
     }
     dialog.value = false
@@ -162,8 +199,21 @@ async function save() {
 }
 
 async function toggleStatus(org: Organization) {
+  const deactivating = org.status === 1
+  if (!await confirmAction({
+    title: `${deactivating ? 'Deactivate' : 'Activate'} organization?`,
+    message: deactivating
+      ? `${org.name} will no longer be able to operate in BioPay until it is reactivated.`
+      : `${org.name} will regain access to its enabled BioPay modules.`,
+    confirmLabel: deactivating ? 'Deactivate' : 'Activate',
+    color: deactivating ? 'warning' : 'secondary',
+  })) return
   try {
-    await dispatch('TOGGLE_ORGANIZATION_STATUS', { organisationCode: org.organisationCode, status: org.status === 1 ? 0 : 1 })
+    await dispatch('TOGGLE_ORGANIZATION_STATUS', {
+      organisationCode: org.organisationCode,
+      status: org.status === 1 ? 0 : 1,
+      targetAnchorId: auth.isSystemAdmin ? selectedAnchorId.value : undefined,
+    })
     toast.success('Status updated')
     await load()
   } catch (err) {
@@ -177,10 +227,20 @@ async function toggleStatus(org: Organization) {
     <div class="page-heading d-flex align-center justify-space-between mb-5 ga-4">
       <div>
         <h1 class="page-title">Organizations</h1>
-        <p>Configure delivery partners, verification policy and programme access.</p>
+        <p>{{ auth.isSystemAdmin ? 'Choose an anchor, then manage only the organizations beneath it.' : 'Manage the organizations beneath your anchor.' }}</p>
       </div>
-      <v-btn color="secondary" prepend-icon="mdi-domain-plus" @click="openCreate">New Organization</v-btn>
+      <v-btn v-if="auth.can('ACCESS_ORGANISATIONS')" color="secondary" prepend-icon="mdi-domain-plus" :disabled="auth.isSystemAdmin && !selectedAnchorId" @click="openCreate">New Organization</v-btn>
     </div>
+
+    <v-select
+      v-if="auth.isSystemAdmin" v-model="selectedAnchorId" :items="anchors" item-title="name" item-value="id"
+      label="Choose anchor" variant="outlined" prepend-inner-icon="mdi-bank-outline" class="anchor-scope-picker"
+      hint="Organizations are always created and managed inside the selected anchor." persistent-hint
+    />
+
+    <v-alert v-if="auth.isSystemAdmin && !selectedAnchorId" type="info" variant="tonal" class="mb-5">
+      Choose an anchor to view or create its organizations.
+    </v-alert>
 
     <v-dialog v-model="dialog" max-width="880">
       <v-card class="org-editor" variant="flat" border>
@@ -189,7 +249,7 @@ async function toggleStatus(org: Organization) {
             <div class="editor-title">{{ editing ? 'Edit Organization' : 'New Organization' }}</div>
             <p>{{ editing ? 'Update the organization profile and programme access.' : 'Create the delivery partner, then choose what its teams can operate.' }}</p>
           </div>
-          <v-btn icon="mdi-close" variant="text" size="small" aria-label="Close organization form" @click="dialog = false" />
+          <dialog-close-button @close="dialog = false" />
         </div>
 
         <v-form @submit.prevent="save">
@@ -263,9 +323,9 @@ async function toggleStatus(org: Organization) {
           </v-chip>
         </template>
         <template #item.actions="{ item }">
-          <v-btn icon="mdi-pencil" variant="text" size="small" :aria-label="`Edit ${item.name}`" @click="openEdit(item)" />
-          <v-btn :icon="item.status === 1 ? 'mdi-toggle-switch-off-outline' : 'mdi-toggle-switch'" variant="text" size="small" :aria-label="`${item.status === 1 ? 'Deactivate' : 'Activate'} ${item.name}`" @click="toggleStatus(item)" />
-          <v-btn icon="mdi-delete" variant="text" size="small" color="error" :aria-label="`Delete ${item.name}`" @click="remove(item)" />
+          <v-btn v-if="auth.can('ACCESS_ORGANISATIONS')" icon="mdi-pencil" variant="text" size="small" :aria-label="`Edit ${item.name}`" @click="openEdit(item)" />
+          <v-btn v-if="auth.can('ACCESS_ORGANISATIONS')" :icon="item.status === 1 ? 'mdi-toggle-switch-off-outline' : 'mdi-toggle-switch'" variant="text" size="small" :aria-label="`${item.status === 1 ? 'Deactivate' : 'Activate'} ${item.name}`" @click="toggleStatus(item)" />
+          <v-btn v-if="auth.can('ACCESS_ORGANISATIONS')" icon="mdi-delete" variant="text" size="small" color="error" :aria-label="`Delete ${item.name}`" @click="remove(item)" />
         </template>
       </v-data-table>
     </v-card>
@@ -274,6 +334,7 @@ async function toggleStatus(org: Organization) {
 
 <style scoped>
 .page-heading h1 { color: #0f172a; letter-spacing: -.025em; }
+.anchor-scope-picker { max-width: 460px; margin-bottom: 20px; }
 .page-heading p { color: #64748b; font-size: .9rem; margin: 5px 0 0; }
 .org-editor { padding: clamp(18px, 2.4vw, 26px); border-color: #cbd5e1 !important; background: #fff !important; }
 .editor-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; margin-bottom: 16px; }

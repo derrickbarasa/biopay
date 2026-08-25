@@ -17,6 +17,7 @@ import com.biopay.utilities.OrgModules;
 import com.biopay.utilities.QrSupport;
 import com.biopay.utilities.Rows;
 import com.biopay.utilities.Utilities;
+import com.biopay.utilities.TenantScope;
 
 /**
  * Households and their alternates -- the beneficiary registry. Every read
@@ -67,12 +68,12 @@ public class Household extends AbstractVerticle {
     }
 
     private static boolean isAnchor(JsonObject payload) {
-        return "ANCHOR".equalsIgnoreCase(payload.getString("actorRole", ""));
+        return TenantScope.managesOrganisations(payload);
     }
 
     /** The one designated cross-anchor operator (admin@biopay.com). */
     private static boolean isSystemAdmin(JsonObject payload) {
-        return payload.getBoolean("systemAdmin", false);
+        return TenantScope.isSystemOwner(payload);
     }
 
     /** organisationCode requested by the caller, constrained to their own scope unless anchor. */
@@ -95,7 +96,7 @@ public class Household extends AbstractVerticle {
         String requestedHouseholdNumber = payload.getString("householdNumber", "").trim();
         final String householdNumber = requestedHouseholdNumber.isEmpty() ? Utilities.generateCode("HH") : requestedHouseholdNumber;
 
-        String sql = "INSERT INTO households (supervisor_id, partner_code, household_number, beneficiary_type, "
+        String sql = "INSERT INTO households (officer_code, organization_code, household_number, beneficiary_type, "
                 + "household_name, age, marital_status, spouse_name, id_number, phone_number, gender, "
                 + "household_size, female_dependants, male_dependants, state_code, county_code, payam_code, boma_code, "
                 + "latitude, longitude, status, created_by, created_at, updated_at) "
@@ -146,7 +147,9 @@ public class Household extends AbstractVerticle {
             return;
         }
 
-        String scopeClause = isAnchor(payload) ? "" : " AND partner_code=@p10";
+        String scopeClause = isAnchor(payload)
+                ? " AND (@p10=1 OR organization_code IN (SELECT organization_code FROM organizations WHERE anchor_id=@p11))"
+                : " AND organization_code=@p10";
         String sql = "UPDATE households SET household_name=@p1, age=@p2, marital_status=@p3, phone_number=@p4, "
                 + "gender=@p5, household_size=@p6, boma_code=@p7, updated_by=@p8, updated_at=GETDATE() WHERE household_number=@p9"
                 + scopeClause;
@@ -155,7 +158,9 @@ public class Household extends AbstractVerticle {
                 payload.getString("householdName"), payload.getInteger("age"), payload.getString("maritalStatus"),
                 payload.getString("phoneNumber"), payload.getString("gender"), payload.getInteger("householdSize"),
                 payload.getString("bomaCode"), String.valueOf(payload.getValue("actorId")), householdNumber);
-        if (!isAnchor(payload)) {
+        if (isAnchor(payload)) {
+            params = params.addBoolean(isSystemAdmin(payload)).addInteger(TenantScope.anchorId(payload));
+        } else {
             params = params.addString(payload.getString("partnerCode", ""));
         }
 
@@ -178,9 +183,9 @@ public class Household extends AbstractVerticle {
         String householdNumber = payload.getString("householdNumber", "").trim();
 
         String sql = "UPDATE households SET status=0, updated_by=@p1, updated_at=GETDATE() WHERE household_number=@p2"
-                + (isAnchor(payload) ? "" : " AND partner_code=@p3");
+                + (isAnchor(payload) ? " AND (@p3=1 OR organization_code IN (SELECT organization_code FROM organizations WHERE anchor_id=@p4))" : " AND organization_code=@p3");
         Tuple params = isAnchor(payload)
-                ? Tuple.of(String.valueOf(payload.getValue("actorId")), householdNumber)
+                ? Tuple.of(String.valueOf(payload.getValue("actorId")), householdNumber, isSystemAdmin(payload), TenantScope.anchorId(payload))
                 : Tuple.of(String.valueOf(payload.getValue("actorId")), householdNumber, payload.getString("partnerCode", ""));
 
         pool.preparedQuery(sql)
@@ -223,10 +228,12 @@ public class Household extends AbstractVerticle {
 
         String sql = "UPDATE households SET review_status=@p1, "
                 + "rejection_reason=@p2, updated_by=@p3, updated_at=GETDATE() WHERE household_number=@p4"
-                + (isAnchor(payload) ? "" : " AND partner_code=@p5");
+                + (isAnchor(payload) ? " AND (@p5=1 OR organization_code IN (SELECT organization_code FROM organizations WHERE anchor_id=@p6))" : " AND organization_code=@p5");
         Tuple params = Tuple.of(reviewStatus, "REJECTED".equals(reviewStatus) ? rejectionReason : null,
                 String.valueOf(payload.getValue("actorId")), householdNumber);
-        if (!isAnchor(payload)) {
+        if (isAnchor(payload)) {
+            params = params.addBoolean(isSystemAdmin(payload)).addInteger(TenantScope.anchorId(payload));
+        } else {
             params = params.addString(payload.getString("partnerCode", ""));
         }
 
@@ -248,8 +255,12 @@ public class Household extends AbstractVerticle {
         JsonObject payload = new JsonObject(message.body().toString());
         String householdNumber = payload.getString("householdNumber", "").trim();
 
-        String sql = "SELECT * FROM households WHERE household_number=@p1" + (isAnchor(payload) ? "" : " AND partner_code=@p2");
-        Tuple params = isAnchor(payload) ? Tuple.of(householdNumber) : Tuple.of(householdNumber, payload.getString("partnerCode", ""));
+        String sql = "SELECT * FROM households WHERE household_number=@p1" + (isAnchor(payload)
+                ? " AND (@p2=1 OR organization_code IN (SELECT organization_code FROM organizations WHERE anchor_id=@p3))"
+                : " AND organization_code=@p2");
+        Tuple params = isAnchor(payload)
+                ? Tuple.of(householdNumber, isSystemAdmin(payload), TenantScope.anchorId(payload))
+                : Tuple.of(householdNumber, payload.getString("partnerCode", ""));
 
         pool.preparedQuery(sql)
                 .execute(params)
@@ -323,8 +334,8 @@ public class Household extends AbstractVerticle {
         String partnerCode = payload.getString("partnerCode", "");
 
         String paymentSql = "SELECT id, amount, status, cycle, approved, created_at FROM payments "
-                + "WHERE household_number=@p1" + (anchor ? "" : " AND partner_code=@p2") + " ORDER BY created_at DESC";
-        Tuple paymentParams = anchor ? Tuple.of(householdNumber) : Tuple.of(householdNumber, partnerCode);
+                + "WHERE household_number=@p1" + (anchor ? " AND (@p2=1 OR anchor_id=@p3)" : " AND organization_code=@p2") + " ORDER BY created_at DESC";
+        Tuple paymentParams = anchor ? Tuple.of(householdNumber, isSystemAdmin(payload), TenantScope.anchorId(payload)) : Tuple.of(householdNumber, partnerCode);
 
         Future<JsonArray> paymentsFut = pool.preparedQuery(paymentSql)
                 .execute(paymentParams)
@@ -344,8 +355,8 @@ public class Household extends AbstractVerticle {
                 .recover(err -> Future.succeededFuture(new JsonArray()));
 
         String auditSql = "SELECT action, entity_type, details, created_at FROM audit_logs "
-                + "WHERE entity_id=@p1" + (anchor ? "" : " AND partner_code=@p2") + " ORDER BY created_at DESC";
-        Tuple auditParams = anchor ? Tuple.of(householdNumber) : Tuple.of(householdNumber, partnerCode);
+                + "WHERE entity_id=@p1" + (anchor ? " AND (@p2=1 OR anchor_id=@p3)" : " AND organization_code=@p2") + " ORDER BY created_at DESC";
+        Tuple auditParams = anchor ? Tuple.of(householdNumber, isSystemAdmin(payload), TenantScope.anchorId(payload)) : Tuple.of(householdNumber, partnerCode);
 
         Future<JsonArray> auditFut = pool.preparedQuery(auditSql)
                 .execute(auditParams)
@@ -363,8 +374,8 @@ public class Household extends AbstractVerticle {
                 .recover(err -> Future.succeededFuture(new JsonArray()));
 
         String voucherSql = "SELECT voucher_code, amount, status, purpose, expires_at, redeemed_at, created_at FROM vouchers "
-                + "WHERE household_number=@p1" + (anchor ? "" : " AND partner_code=@p2") + " ORDER BY created_at DESC";
-        Tuple voucherParams = anchor ? Tuple.of(householdNumber) : Tuple.of(householdNumber, partnerCode);
+                + "WHERE household_number=@p1" + (anchor ? " AND (@p2=1 OR anchor_id=@p3)" : " AND organization_code=@p2") + " ORDER BY created_at DESC";
+        Tuple voucherParams = anchor ? Tuple.of(householdNumber, isSystemAdmin(payload), TenantScope.anchorId(payload)) : Tuple.of(householdNumber, partnerCode);
 
         Future<JsonArray> vouchersFut = pool.preparedQuery(voucherSql)
                 .execute(voucherParams)
@@ -409,9 +420,9 @@ public class Household extends AbstractVerticle {
         }
         boolean anchor = isAnchor(payload);
         String partnerCode = payload.getString("partnerCode", "");
-        String sql = "SELECT household_name, partner_code FROM households WHERE household_number=@p1"
-                + (anchor ? "" : " AND partner_code=@p2");
-        Tuple params = anchor ? Tuple.of(householdNumber) : Tuple.of(householdNumber, partnerCode);
+        String sql = "SELECT household_name, organization_code FROM households WHERE household_number=@p1"
+                + (anchor ? " AND (@p2=1 OR organization_code IN (SELECT organization_code FROM organizations WHERE anchor_id=@p3))" : " AND organization_code=@p2");
+        Tuple params = anchor ? Tuple.of(householdNumber, isSystemAdmin(payload), TenantScope.anchorId(payload)) : Tuple.of(householdNumber, partnerCode);
 
         pool.preparedQuery(sql)
                 .execute(params)
@@ -424,7 +435,7 @@ public class Household extends AbstractVerticle {
                     }
                     Row r = rows.iterator().next();
                     String name = Rows.str(r, "household_name");
-                    String org = Rows.str(r, "partner_code");
+                    String org = Rows.str(r, "organization_code");
 
                     pool.preparedQuery("SELECT TOP 1 photo_url FROM images WHERE beneficiary_id=@p1 AND status=1 ORDER BY created_at DESC")
                             .execute(Tuple.of(householdNumber))
@@ -480,7 +491,7 @@ public class Household extends AbstractVerticle {
         }
 
         String sql = "SELECT TOP 20 household_number, household_name, phone_number, id_number, boma_code FROM households "
-                + "WHERE status=1 AND partner_code=@p1 AND ("
+                + "WHERE status=1 AND organization_code=@p1 AND ("
                 + "(@p2 IS NOT NULL AND id_number=@p2) "
                 + "OR (@p3 IS NOT NULL AND phone_number=@p3) "
                 + "OR (@p4 IS NOT NULL AND household_name=@p4 AND (@p5 IS NULL OR boma_code=@p5))"
@@ -552,7 +563,7 @@ public class Household extends AbstractVerticle {
         // A plain anchor admin is only ever handed organisationCode values that belong to
         // their own anchor by GET_ORGANIZATIONS, but nothing stopped them (or a forged
         // request) from passing another anchor's code here -- the anchor_id join below
-        // closes that instead of trusting the partner_code filter on its own.
+        // closes that instead of trusting the organization_code filter on its own.
         String partnerCode = scopedPartnerCode(payload);
         Object anchorIdVal = payload.getValue("anchorId");
         Integer anchorId = anchorIdVal == null ? null : Integer.parseInt(anchorIdVal.toString());
@@ -578,15 +589,16 @@ public class Household extends AbstractVerticle {
         // Per-row "generated data" counts: how many vouchers this household has been
         // issued, and how many distinct payment cycles it appears in. Correlated
         // subqueries so a household with none still returns a 0 row (no join drops it).
-        // System admins (@p16=1) see every anchor's households; a plain anchor admin is
-        // joined against partners.anchor_id (@p17) so they can never see another
-        // anchor's data even if organisationCode is left blank or forged; org/supervisor
-        // sessions stay pinned to their own partner_code exactly as before.
+        // anchorId (@p17) is NULL for a system admin who hasn't chosen a target anchor
+        // (browse everything), the requested target anchor once EntryPoint has resolved
+        // one for them, or the caller's own anchor for an anchor admin -- either way,
+        // (@p17 IS NULL OR p.anchor_id=@p17) is the one rule that covers all three roles;
+        // org/supervisor sessions stay pinned to their own organization_code exactly as before.
         String sql = "SELECT h.*, "
                 + "(SELECT COUNT(*) FROM vouchers v WHERE v.household_number = h.household_number) AS voucher_count, "
                 + "(SELECT COUNT(DISTINCT pay.cycle) FROM payments pay WHERE pay.household_number = h.household_number) AS payment_cycle_count "
-                + "FROM households h JOIN partners p ON p.partner_id = h.partner_code "
-                + "WHERE (@p1 IS NULL OR h.partner_code=@p1) "
+                + "FROM households h JOIN organizations p ON p.organization_code = h.organization_code "
+                + "WHERE (@p1 IS NULL OR h.organization_code=@p1) "
                 + "AND (@p2 IS NULL OR h.household_name LIKE @p2 OR h.household_number LIKE @p2 OR h.id_number LIKE @p2) "
                 + "AND (@p3 IS NULL OR h.state_code=@p3) AND (@p4 IS NULL OR h.county_code=@p4) "
                 + "AND (@p5 IS NULL OR h.payam_code=@p5) AND (@p6 IS NULL OR h.boma_code=@p6) "
@@ -594,7 +606,7 @@ public class Household extends AbstractVerticle {
                 + "AND (@p9 IS NULL OR h.vulnerability_status=@p9) AND (@p10 IS NULL OR h.legal_status=@p10) "
                 + "AND (@p11 IS NULL OR h.created_at >= @p11) AND (@p12 IS NULL OR h.created_at <= @p12) "
                 + "AND (@p15 IS NULL OR h.review_status=@p15) "
-                + "AND (@p16 = 1 OR p.anchor_id=@p17) "
+                + "AND (@p17 IS NULL OR p.anchor_id=@p17) "
                 + "ORDER BY h.created_at DESC OFFSET @p13 ROWS FETCH NEXT @p14 ROWS ONLY";
 
         Tuple params = Tuple.of(partnerCode, search, stateCode, countyCode, locationCode, villageCode,
@@ -622,7 +634,7 @@ public class Household extends AbstractVerticle {
         return new JsonObject()
                 .put("householdNumber", Rows.str(r, "household_number"))
                 .put("householdName", Rows.str(r, "household_name"))
-                .put("organisationCode", Rows.str(r, "partner_code"))
+                .put("organisationCode", Rows.str(r, "organization_code"))
                 .put("beneficiaryType", Rows.str(r, "beneficiary_type"))
                 .put("age", Rows.intVal(r, "age"))
                 .put("gender", Rows.str(r, "gender"))
@@ -724,7 +736,7 @@ public class Household extends AbstractVerticle {
         }
         String householdNumber = Utilities.generateCode("HH");
 
-        String sql = "INSERT INTO households (supervisor_id, partner_code, household_number, beneficiary_type, "
+        String sql = "INSERT INTO households (officer_code, organization_code, household_number, beneficiary_type, "
                 + "household_name, age, marital_status, spouse_name, id_number, phone_number, gender, "
                 + "household_size, female_dependants, male_dependants, state_code, county_code, payam_code, boma_code, "
                 + "status, created_by, created_at, updated_at) "
@@ -750,7 +762,7 @@ public class Household extends AbstractVerticle {
 
     private void finishUpload(Message<Object> message, String partnerCode, Row village, String fileName,
             Object actorId, int totalRows, JsonArray created, JsonArray errors) {
-        String sql = "INSERT INTO household_upload_batches (partner_code, village_code, file_name, total_rows, "
+        String sql = "INSERT INTO household_upload_batches (organization_code, village_code, file_name, total_rows, "
                 + "success_count, failure_count, errors, created_by, created_at) "
                 + "VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,GETDATE())";
         pool.preparedQuery(sql)
@@ -777,7 +789,7 @@ public class Household extends AbstractVerticle {
         }
         String alternateNumber = Utilities.generateCode("ALT");
 
-        String sql = "INSERT INTO alternates (supervisor_id, household_number, partner_code, alternate_number, "
+        String sql = "INSERT INTO alternates (officer_code, household_number, organization_code, alternate_number, "
                 + "alternate_name, relationship, age, id_number, phone_number, gender, status, created_by, created_at) "
                 + "VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,@p12,GETDATE())";
 
@@ -810,14 +822,18 @@ public class Household extends AbstractVerticle {
     private void updateAlternate(Message<Object> message) {
         JsonObject payload = new JsonObject(message.body().toString());
         String alternateNumber = payload.getString("alternateNumber", "").trim();
-        String scopeClause = isAnchor(payload) ? "" : " AND partner_code=@p6";
+        String scopeClause = isAnchor(payload)
+                ? " AND (@p6=1 OR organization_code IN (SELECT organization_code FROM organizations WHERE anchor_id=@p7))"
+                : " AND organization_code=@p6";
 
         String sql = "UPDATE alternates SET alternate_name=@p1, relationship=@p2, phone_number=@p3, gender=@p4 "
                 + "WHERE alternate_number=@p5" + scopeClause;
         Tuple params = Tuple.of(
                 payload.getString("alternateName"), payload.getString("relationship"),
                 payload.getString("phoneNumber"), payload.getString("gender"), alternateNumber);
-        if (!isAnchor(payload)) {
+        if (isAnchor(payload)) {
+            params = params.addBoolean(isSystemAdmin(payload)).addInteger(TenantScope.anchorId(payload));
+        } else {
             params = params.addString(payload.getString("partnerCode", ""));
         }
 
@@ -839,8 +855,12 @@ public class Household extends AbstractVerticle {
         JsonObject payload = new JsonObject(message.body().toString());
         String alternateNumber = payload.getString("alternateNumber", "").trim();
 
-        String sql = "UPDATE alternates SET status=0 WHERE alternate_number=@p1" + (isAnchor(payload) ? "" : " AND partner_code=@p2");
-        Tuple params = isAnchor(payload) ? Tuple.of(alternateNumber) : Tuple.of(alternateNumber, payload.getString("partnerCode", ""));
+        String sql = "UPDATE alternates SET status=0 WHERE alternate_number=@p1" + (isAnchor(payload)
+                ? " AND (@p2=1 OR organization_code IN (SELECT organization_code FROM organizations WHERE anchor_id=@p3))"
+                : " AND organization_code=@p2");
+        Tuple params = isAnchor(payload)
+                ? Tuple.of(alternateNumber, isSystemAdmin(payload), TenantScope.anchorId(payload))
+                : Tuple.of(alternateNumber, payload.getString("partnerCode", ""));
 
         pool.preparedQuery(sql)
                 .execute(params)
@@ -865,8 +885,12 @@ public class Household extends AbstractVerticle {
         JsonObject payload = new JsonObject(message.body().toString());
         String householdNumber = payload.getString("householdNumber", "").trim();
 
-        String sql = "SELECT * FROM alternates WHERE household_number=@p1" + (isAnchor(payload) ? "" : " AND partner_code=@p2") + " ORDER BY alternate_rank";
-        Tuple params = isAnchor(payload) ? Tuple.of(householdNumber) : Tuple.of(householdNumber, payload.getString("partnerCode", ""));
+        String sql = "SELECT * FROM alternates WHERE household_number=@p1" + (isAnchor(payload)
+                ? " AND (@p2=1 OR organization_code IN (SELECT organization_code FROM organizations WHERE anchor_id=@p3))"
+                : " AND organization_code=@p2") + " ORDER BY alternate_rank";
+        Tuple params = isAnchor(payload)
+                ? Tuple.of(householdNumber, isSystemAdmin(payload), TenantScope.anchorId(payload))
+                : Tuple.of(householdNumber, payload.getString("partnerCode", ""));
 
         pool.preparedQuery(sql)
                 .execute(params)

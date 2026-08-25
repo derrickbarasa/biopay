@@ -141,8 +141,11 @@
    auto-generated at build time, so any newly-used icon needs its rule added
    here too or it silently renders no glyph (invisible icon buttons). */
 .mdi-account-multiple-check-outline::before { content: "\F11FE"; }
+.mdi-account-cancel-outline::before { content: "\F12E0"; }
+.mdi-account-check-outline::before { content: "\F0BE2"; }
 .mdi-camera-outline::before { content: "\F0D5D"; }
 .mdi-city-variant-outline::before { content: "\F0A37"; }
 .mdi-eye-outline::before { content: "\F06D0"; }
 .mdi-home-outline::before { content: "\F06A1"; }
 .mdi-map-marker-radius-outline::before { content: "\F12FC"; }
+.mdi-bank-plus::before { content: "\F0DB1"; }

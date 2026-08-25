@@ -78,10 +78,13 @@ async function handleSubmit() {
                   </v-alert>
                   <v-text-field
                     v-model="password" label="New password" prepend-inner-icon="mdi-lock-outline"
-                    :type="showPassword ? 'text' : 'password'" :append-inner-icon="showPassword ? 'mdi-eye-off' : 'mdi-eye'"
+                    :type="showPassword ? 'text' : 'password'"
                     :rules="[rules.required, rules.minLen]" hint="At least 8 characters" autocomplete="new-password"
-                    @click:append-inner="showPassword = !showPassword"
-                  />
+                  >
+                    <template #append-inner>
+                      <v-btn :icon="showPassword ? 'mdi-eye-off' : 'mdi-eye'" variant="text" density="compact" :aria-label="showPassword ? 'Hide password' : 'Show password'" @click="showPassword = !showPassword" />
+                    </template>
+                  </v-text-field>
                   <v-text-field
                     v-model="confirmPassword" label="Confirm new password" prepend-inner-icon="mdi-lock-check-outline"
                     :type="showPassword ? 'text' : 'password'" :rules="[rules.required]" class="mt-2" autocomplete="new-password"

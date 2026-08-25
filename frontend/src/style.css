@@ -28,12 +28,68 @@ body {
   font-family: 'Ubuntu', sans-serif;
 }
 
+:root {
+  --bp-radius-surface: 10px;
+  --bp-radius-control: 8px;
+}
+
 .v-application { font-family: 'Ubuntu', sans-serif !important; }
-.v-card { border-color: #e2e8f0 !important; box-shadow: 0 10px 28px -20px rgba(15, 118, 110, .35); }
-.v-data-table, .v-table { border-radius: 16px; overflow: hidden; font-size: .84rem; }
+.v-application .dashboard-main .v-card,
+.v-overlay[role='dialog'] .v-card,
+.v-application > .v-card { border-radius: var(--bp-radius-surface) !important; border-color: #e2e8f0 !important; box-shadow: 0 10px 28px -20px rgba(15, 118, 110, .35); }
+.v-application .dashboard-main .role-list,
+.v-application .dashboard-main .role-editor,
+.v-application .dashboard-main .permission-group,
+.v-application .dashboard-main .module-option,
+.v-application .dashboard-main .dashboard-empty { border-radius: var(--bp-radius-surface) !important; }
+.v-data-table, .v-table { border-radius: var(--bp-radius-surface); overflow: hidden; font-size: .84rem; }
 .v-data-table th, .v-table th { font-size: .72rem !important; }
-.v-btn { font-weight: 700; letter-spacing: 0; text-transform: none; }
+.v-btn { border-radius: var(--bp-radius-control) !important; font-weight: 700; letter-spacing: 0; text-transform: none; }
+.v-field { border-radius: var(--bp-radius-control) !important; }
+.v-alert { border-radius: var(--bp-radius-surface) !important; }
 .v-field--variant-outlined .v-field__outline { --v-field-border-opacity: .22; }
+
+/* Every dashboard dialog stays inside the viewport. Long forms scroll within
+   their content area while the title and actions remain fully visible. */
+.v-overlay[role='dialog'] .v-overlay__content {
+  width: calc(100vw - 24px);
+  max-height: calc(100dvh - 24px) !important;
+}
+.v-overlay[role='dialog'] .v-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100dvh - 24px);
+  overflow: hidden;
+}
+.dialog-close-button {
+  position: absolute !important;
+  z-index: 3;
+  top: 10px;
+  right: 10px;
+  background: #f1f5f9 !important;
+  color: #334155 !important;
+}
+.v-overlay[role='dialog'] .v-card-title { padding-right: 56px !important; }
+.v-overlay[role='dialog'] .v-btn--variant-text:not(.v-btn--icon) {
+  background-color: #e2e8f0;
+  color: #334155;
+}
+.v-overlay[role='dialog'] .v-btn--variant-outlined:not(.v-btn--icon) {
+  background-color: #f8fafc;
+}
+.v-overlay[role='dialog'] .v-card-text {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.v-overlay[role='dialog'] .v-card > form {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.v-overlay[role='dialog'] .v-card-title,
+.v-overlay[role='dialog'] .v-card-actions { flex: 0 0 auto; }
 
 /* Shared page-header title, tightened for a comfortable fit at 100% browser zoom. */
 .page-title {
@@ -54,8 +110,16 @@ body {
    (not ".v-overlay__content"), so that's what needs the offset. */
 @media (min-width: 960px) {
   .v-overlay[role='dialog'] {
+    box-sizing: border-box;
     padding-left: 216px;
   }
+}
+
+/* Compact desktop controls become full touch targets when the shell collapses
+   to its mobile layout. The visual density stays unchanged on pointer devices. */
+@media (max-width: 600px) {
+  .dashboard-main .v-btn { min-height: 44px; }
+  .dashboard-main .v-btn--icon { min-width: 44px; width: 44px; height: 44px; }
 }
 
 html {

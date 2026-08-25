@@ -36,6 +36,7 @@ const subscription = ref<SubscriptionStatus>({ status: 'NONE' })
 const renewing = ref(false)
 
 async function fetchSubscription() {
+  if (auth.isSystemAdmin || !auth.user?.anchorId) return
   try {
     const res = await dispatch<{ results: SubscriptionStatus }>('GET_SUBSCRIPTION')
     subscription.value = res.results ?? { status: 'NONE' }
@@ -60,8 +61,8 @@ async function renewSubscription() {
 
 // The Subscription page itself must stay reachable even when archived -- otherwise
 // there's no way to see invoices or reach the renew action that unlocks everything else.
-const isArchived = computed(() => subscription.value.status === 'ARCHIVED' && route.name !== 'subscription')
-const inGrace = computed(() => subscription.value.status === 'GRACE')
+const isArchived = computed(() => !auth.isSystemAdmin && !!auth.user?.anchorId && subscription.value.status === 'ARCHIVED' && route.name !== 'subscription')
+const inGrace = computed(() => !auth.isSystemAdmin && !!auth.user?.anchorId && subscription.value.status === 'GRACE')
 
 onMounted(fetchSubscription)
 
@@ -71,6 +72,9 @@ interface NavItem {
   to: string
   roles?: string[]
   module?: string
+  permission?: string
+  systemOnly?: boolean
+  anchorSubscription?: boolean
 }
 
 interface NavSection {
@@ -78,46 +82,51 @@ interface NavSection {
   items: NavItem[]
 }
 
-// Grouped navigation: Dashboard / Configs / Transfers / Settings, matching the
+// Grouped navigation: Dashboard / Configs / User management / Biodata / Settings, matching the
 // progress.md sidebar structure. Role + module gating is unchanged -- it is now
 // applied per-item within each section (see visibleSections below).
 const navSections: NavSection[] = [
   {
     title: '',
     items: [
-      { title: 'Dashboard', icon: 'mdi-view-dashboard-outline', to: '/app/dashboard' },
+      { title: 'Dashboard', icon: 'mdi-view-dashboard-outline', to: '/app/dashboard', permission: 'VIEW_REPORTS' },
     ],
   },
   {
     title: 'Configs',
     items: [
-      { title: 'Anchor', icon: 'mdi-bank-outline', to: '/app/anchors', roles: ['ANCHOR'] },
-      { title: 'Organizations', icon: 'mdi-domain', to: '/app/organizations', roles: ['ANCHOR'] },
-      { title: 'Users', icon: 'mdi-account-multiple-outline', to: '/app/users', roles: ['ANCHOR', 'ORGANISATION'] },
-      { title: 'Roles & Permissions', icon: 'mdi-shield-account-outline', to: '/app/roles', roles: ['ANCHOR'] },
-      { title: 'Officers', icon: 'mdi-account-tie', to: '/app/officers', roles: ['ANCHOR', 'ORGANISATION'] },
-      { title: 'Locations', icon: 'mdi-map-marker-radius', to: '/app/locations', roles: ['ANCHOR', 'ORGANISATION'] },
+      { title: 'Anchors', icon: 'mdi-bank-outline', to: '/app/anchors', roles: ['ANCHOR'], systemOnly: true },
+      { title: 'Organizations', icon: 'mdi-domain', to: '/app/organizations', roles: ['ANCHOR'], permission: 'ACCESS_ORGANISATIONS' },
+      { title: 'Locations', icon: 'mdi-map-marker-radius', to: '/app/locations', roles: ['ANCHOR', 'ORGANISATION'], permission: 'ACCESS_LOCATIONS' },
     ],
   },
   {
-    title: 'Transfers',
+    title: 'User Management',
     items: [
-      { title: 'Households', icon: 'mdi-home-group', to: '/app/households', roles: ['ANCHOR', 'ORGANISATION'], module: 'HOUSEHOLDS' },
-      { title: 'Payments', icon: 'mdi-cash-multiple', to: '/app/payments', roles: ['ANCHOR', 'ORGANISATION'], module: 'CASH_TRANSFERS' },
-      { title: 'Attendance', icon: 'mdi-calendar-check', to: '/app/attendance', roles: ['ANCHOR', 'ORGANISATION'] },
+      { title: 'Users', icon: 'mdi-account-multiple-outline', to: '/app/users', roles: ['ANCHOR', 'ORGANISATION'], permission: 'ACCESS_USERS' },
+      { title: 'Roles & Permissions', icon: 'mdi-shield-account-outline', to: '/app/roles', roles: ['ANCHOR'], permission: 'ACCESS_ROLES' },
+      { title: 'Field Officers', icon: 'mdi-account-tie', to: '/app/officers', roles: ['ANCHOR', 'ORGANISATION'], permission: 'ACCESS_SUPERVISORS' },
+    ],
+  },
+  {
+    title: 'Biodata',
+    items: [
+      { title: 'Households', icon: 'mdi-home-group', to: '/app/households', roles: ['ANCHOR', 'ORGANISATION'], module: 'HOUSEHOLDS', permission: 'ACCESS_HOUSEHOLDS' },
+      { title: 'Payments', icon: 'mdi-cash-multiple', to: '/app/payments', roles: ['ANCHOR', 'ORGANISATION'], module: 'CASH_TRANSFERS', permission: 'ACCESS_PAYMENTS' },
+      { title: 'Attendance', icon: 'mdi-calendar-check', to: '/app/attendance', roles: ['ANCHOR', 'ORGANISATION'], permission: 'ACCESS_ATTENDANCE' },
     ],
   },
   {
     title: 'Payment Generation',
     items: [
-      { title: 'Payment Cycles', icon: 'mdi-calendar-month-outline', to: '/app/payroll', roles: ['ANCHOR', 'ORGANISATION'], module: 'CASH_TRANSFERS' },
-      { title: 'Vouchers', icon: 'mdi-ticket-confirmation', to: '/app/vouchers', roles: ['ANCHOR', 'ORGANISATION'], module: 'VOUCHERS' },
+      { title: 'Payment Cycles', icon: 'mdi-calendar-month-outline', to: '/app/payroll', roles: ['ANCHOR', 'ORGANISATION'], module: 'CASH_TRANSFERS', permission: 'ACCESS_PAYMENT_CYCLES' },
+      { title: 'Vouchers', icon: 'mdi-ticket-confirmation', to: '/app/vouchers', roles: ['ANCHOR', 'ORGANISATION'], module: 'VOUCHERS', permission: 'ACCESS_VOUCHERS' },
     ],
   },
   {
     title: '',
     items: [
-      { title: 'Subscription', icon: 'mdi-credit-card-outline', to: '/app/subscription' },
+      { title: 'Subscription', icon: 'mdi-credit-card-outline', to: '/app/subscription', roles: ['ANCHOR'], anchorSubscription: true, permission: 'ACCESS_SUBSCRIPTION' },
     ],
   },
   {
@@ -129,8 +138,11 @@ const navSections: NavSection[] = [
 ]
 
 function itemVisible(item: NavItem): boolean {
-  return (!item.roles || (!!auth.role && item.roles.includes(auth.role)))
+  return (!item.roles || auth.isSystemAdmin || (!!auth.role && item.roles.includes(auth.role)))
     && (!item.module || auth.hasModule(item.module))
+    && (!item.permission || auth.can(item.permission))
+    && (!item.systemOnly || auth.isSystemAdmin)
+    && (!item.anchorSubscription || auth.isAnchorAdministrator || auth.isSystemAdmin)
 }
 
 // Only sections that still have at least one visible item are rendered, so a
@@ -144,6 +156,18 @@ const visibleSections = computed(() =>
 async function handleLogout() {
   await auth.logout()
   router.push('/login')
+}
+
+// Vuetify's built-in `v-list-item :to` click-to-navigate integration
+// intermittently swallows a click -- the native mousedown/mouseup/click
+// sequence fires correctly on the right element but no navigation follows,
+// so the drawer sat still until a second click. Driving navigation from our
+// own plain Vue @click handler (bound directly, not through Vuetify's
+// internal RouterLink wiring) makes the very first click reliable; `:to` is
+// kept only for the active-item styling and the semantic href.
+function onNavClick(event: MouseEvent | KeyboardEvent, to: string) {
+  event.preventDefault()
+  if (route.path !== to) router.push(to)
 }
 </script>
 
@@ -165,12 +189,14 @@ async function handleLogout() {
           :title="item.title"
           rounded="lg"
           color="primary"
+          :ripple="false"
+          @click="onNavClick($event, item.to)"
         />
       </template>
     </v-list>
 
     <template #append>
-      <v-divider />
+      <v-divider class="logout-divider" />
       <v-list nav density="comfortable">
         <v-list-item
           prepend-icon="mdi-logout"
@@ -184,7 +210,7 @@ async function handleLogout() {
   </v-navigation-drawer>
 
   <v-app-bar color="surface" elevation="0" border density="compact" class="app-bar">
-    <v-app-bar-nav-icon density="compact" @click="drawer = !drawer" />
+    <v-app-bar-nav-icon density="compact" aria-label="Toggle navigation" @click="drawer = !drawer" />
     <v-breadcrumbs :items="[{ title: $route.name?.toString() ?? '' }]" class="text-capitalize" density="compact" />
     <v-spacer />
     <v-chip class="role-chip mr-3 font-weight-bold" color="secondary" variant="tonal" size="small">{{ auth.roleLabel }}</v-chip>
@@ -199,7 +225,10 @@ async function handleLogout() {
         </v-btn>
       </template>
       <v-list density="compact">
-        <v-list-item to="/app/settings" prepend-icon="mdi-account" title="Profile & Settings" />
+        <v-list-item
+          to="/app/settings" prepend-icon="mdi-account" title="Profile & Settings" :ripple="false"
+          @click="onNavClick($event, '/app/settings')"
+        />
         <v-divider />
         <v-list-item prepend-icon="mdi-logout" title="Log out" @click="handleLogout" />
       </v-list>
@@ -210,6 +239,7 @@ async function handleLogout() {
     <v-container fluid class="pa-3 pa-md-5">
       <v-dialog v-model="showIdlePrompt" max-width="420" persistent>
         <v-card>
+          <dialog-close-button @close="confirmStillHere" />
           <v-card-title>Still there?</v-card-title>
           <v-card-text>
             You've been inactive for a while. For your security, you'll be signed out in 30 seconds
@@ -223,7 +253,7 @@ async function handleLogout() {
         </v-card>
       </v-dialog>
 
-      <!-- Grace period: subscription lapsed but still within the 7-day window. -->
+      <!-- Grace period: an anchor remains usable for four days after expiry. -->
       <v-alert
         v-if="inGrace"
         type="warning" variant="tonal" class="mb-4" border="start"
@@ -235,7 +265,7 @@ async function handleLogout() {
             You have {{ subscription.daysToArchive ?? 0 }} day(s) of grace left before data is archived.
           </div>
           <v-spacer />
-          <v-btn v-if="auth.isAnchor" color="warning" variant="flat" size="small" :loading="renewing" @click="renewSubscription">
+          <v-btn v-if="auth.isAnchorAdministrator" color="warning" variant="flat" size="small" :loading="renewing" @click="renewSubscription">
             Renew now
           </v-btn>
         </div>
@@ -247,17 +277,20 @@ async function handleLogout() {
           <v-icon icon="mdi-lock-clock" size="48" color="error" class="mb-3" />
           <h2 class="text-h6 font-weight-bold mb-2">Subscription expired</h2>
           <p class="text-body-2 text-medium-emphasis mb-4">
-            The 7-day grace period has ended and your data is archived. Renew the subscription
+            The 4-day grace period has ended and your data is archived. Renew the subscription
             to restore access.
           </p>
-          <v-btn v-if="auth.isAnchor" color="secondary" :loading="renewing" @click="renewSubscription">
+          <v-btn v-if="auth.isAnchorAdministrator" color="secondary" :loading="renewing" @click="renewSubscription">
             Renew subscription
           </v-btn>
           <p v-else class="text-caption text-medium-emphasis">
             Please contact your anchor administrator to renew.
           </p>
           <div class="mt-4 d-flex ga-2 justify-center">
-            <v-btn variant="text" size="small" prepend-icon="mdi-credit-card-outline" to="/app/subscription">View subscription</v-btn>
+            <v-btn
+              v-if="auth.isAnchorAdministrator" variant="text" size="small" prepend-icon="mdi-credit-card-outline"
+              to="/app/subscription" @click="onNavClick($event, '/app/subscription')"
+            >View subscription</v-btn>
             <v-btn variant="text" size="small" prepend-icon="mdi-logout" @click="handleLogout">Log out</v-btn>
           </div>
         </v-card>
@@ -280,6 +313,7 @@ async function handleLogout() {
 .app-drawer :deep(.v-list-item--active .v-list-item-title) { font-weight: 600; }
 .drawer-subheader { color: rgba(255, 255, 255, .68) !important; font-size: .64rem; letter-spacing: .08em; text-transform: uppercase; padding-inline-start: 18px !important; min-height: 28px !important; }
 .app-drawer :deep(.v-divider) { border-color: rgba(255, 255, 255, .18); }
+.app-drawer :deep(.logout-divider) { border-color: rgba(255, 255, 255, .42); opacity: 1; margin-top: 8px; }
 .app-bar { background: rgba(255, 255, 255, .94) !important; backdrop-filter: blur(12px); }
 .app-bar :deep(.v-breadcrumbs) { font-size: .82rem; padding-inline: 4px; }
 .dashboard-main { background: #f8fafc; min-height: 100vh; }

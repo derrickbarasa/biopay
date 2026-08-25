@@ -7,7 +7,7 @@ plugins {
 }
 
 val configuredApiBaseUrl = providers.gradleProperty("biopayApiBaseUrl")
-    .orElse("http://192.168.100.163:7730/biopay")
+    .orElse("http://192.168.0.106:7730/biopay")
     .get()
 
 android {

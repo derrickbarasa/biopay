@@ -13,6 +13,7 @@ import io.vertx.sqlclient.Tuple;
 import com.biopay.databases.Datasource;
 import com.biopay.utilities.Logging;
 import com.biopay.utilities.Rows;
+import com.biopay.utilities.TenantScope;
 
 /**
  * Per-anchor subscription lifecycle (010_subscriptions.sql, grace/notification columns added in
@@ -21,7 +22,7 @@ import com.biopay.utilities.Rows;
  * external billing gateway wired yet.
  *
  * <p>Status is always derived in SQL from {@code expires_at + grace_days} (ACTIVE / GRACE /
- * ARCHIVED, currently a 7-day grace window), so it can never fall out of date. The web dashboard
+ * ARCHIVED, currently a 4-day grace window), so it can never fall out of date. The web dashboard
  * reads it via {@code GET_SUBSCRIPTION} to show a grace-period banner and gate access once
  * ARCHIVED; hard server-side enforcement lives in {@code EntryPoint.dispatchGated}. {@link
  * #sendGraceReminders} is this backend's first scheduled job -- it emails each anchor once per
@@ -143,13 +144,13 @@ public class Subscription extends AbstractVerticle {
             replyError(message, "Only the system owner can view every anchor's subscription");
             return;
         }
-        String sql = "SELECT a.id AS anchor_id, a.anchor_code, a.name AS anchor_name, s.plan_code, s.expires_at, s.grace_days, "
+        String sql = "SELECT a.id AS anchor_id, a.anchor_code, a.anchor_name, s.plan_code, s.expires_at, s.grace_days, "
                 + "CASE WHEN s.expires_at IS NULL THEN 'NONE' "
                 + "     WHEN CAST(GETDATE() AS DATE) <= s.expires_at THEN 'ACTIVE' "
                 + "     WHEN CAST(GETDATE() AS DATE) <= DATEADD(DAY, s.grace_days, s.expires_at) THEN 'GRACE' "
                 + "     ELSE 'ARCHIVED' END AS status, "
                 + "DATEDIFF(DAY, CAST(GETDATE() AS DATE), s.expires_at) AS days_to_expiry "
-                + "FROM anchors a LEFT JOIN subscriptions s ON s.anchor_id = a.id ORDER BY a.name";
+                + "FROM users a LEFT JOIN subscriptions s ON s.anchor_id = a.id WHERE a.user_scope='ANCHOR' ORDER BY a.anchor_name";
         pool.query(sql).execute()
                 .onFailure(err -> onDbError(message, err))
                 .onSuccess(rows -> {
@@ -173,8 +174,8 @@ public class Subscription extends AbstractVerticle {
 
     private void renew(Message<Object> message) {
         JsonObject payload = new JsonObject(message.body().toString());
-        if (!"ANCHOR".equalsIgnoreCase(payload.getString("actorRole", ""))) {
-            replyError(message, "Only an anchor administrator can renew the subscription");
+        if (!TenantScope.managesOrganisations(payload)) {
+            replyError(message, "Only the system owner or an anchor administrator can renew the subscription");
             return;
         }
         Integer anchorId = anchorIdOf(payload);
@@ -201,7 +202,7 @@ public class Subscription extends AbstractVerticle {
                 + "  grace_notified_at = NULL "
                 + "  WHERE anchor_id=@p1; "
                 + "ELSE INSERT INTO subscriptions (anchor_id, plan_code, expires_at, grace_days, renewed_by, renewed_at, created_at) "
-                + "  VALUES (@p1, @p2, DATEADD(DAY, 30, CAST(GETDATE() AS DATE)), 7, @p3, GETDATE(), GETDATE());";
+                + "  VALUES (@p1, @p2, DATEADD(DAY, 30, CAST(GETDATE() AS DATE)), 4, @p3, GETDATE(), GETDATE());";
 
         pool.preparedQuery(sql)
                 .execute(Tuple.of(anchorId, planCode, String.valueOf(actorId)))
@@ -244,9 +245,9 @@ public class Subscription extends AbstractVerticle {
      *  (same fire-and-forget pattern as Auth/Officer emails). {@link #renew} clears
      *  grace_notified_at so a later lapse is emailed again, not just the first ever one. */
     private void sendGraceReminders() {
-        String sql = "SELECT s.anchor_id, a.name AS anchor_name, "
+        String sql = "SELECT s.anchor_id, a.anchor_name, "
                 + "DATEDIFF(DAY, CAST(GETDATE() AS DATE), DATEADD(DAY, s.grace_days, s.expires_at)) AS days_to_archive "
-                + "FROM subscriptions s JOIN anchors a ON a.id = s.anchor_id "
+                + "FROM subscriptions s JOIN users a ON a.id = s.anchor_id AND a.user_scope='ANCHOR' "
                 + "WHERE CAST(GETDATE() AS DATE) > s.expires_at "
                 + "  AND CAST(GETDATE() AS DATE) <= DATEADD(DAY, s.grace_days, s.expires_at) "
                 + "  AND s.grace_notified_at IS NULL";
@@ -325,8 +326,8 @@ public class Subscription extends AbstractVerticle {
             replyError(message, "invoiceNumber is required");
             return;
         }
-        pool.preparedQuery("SELECT i.*, a.name AS anchor_name FROM subscription_invoices i "
-                        + "JOIN anchors a ON a.id = i.anchor_id "
+        pool.preparedQuery("SELECT i.*, a.anchor_name FROM subscription_invoices i "
+                        + "JOIN users a ON a.id = i.anchor_id AND a.user_scope='ANCHOR' "
                         + "WHERE i.anchor_id=@p1 AND i.invoice_number=@p2")
                 .execute(Tuple.of(anchorId, invoiceNumber))
                 .onFailure(err -> onDbError(message, err))

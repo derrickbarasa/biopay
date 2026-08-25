@@ -12,13 +12,17 @@
 --
 -- Idempotent, no FK constraints, matching this database's convention.
 
-IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('partners') AND name = 'capital_city')
+-- OBJECT_ID(...) IS NOT NULL: skipped once migration 029 has renamed
+-- partners -> organizations (the column survives the rename) and once
+-- migration 030 has dropped anchors entirely (users.country/users.city,
+-- added directly by 030, are the anchor's country/city from then on).
+IF OBJECT_ID('partners') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('partners') AND name = 'capital_city')
     ALTER TABLE partners ADD capital_city VARCHAR(100) NULL;
 GO
 
-IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('anchors') AND name = 'country')
+IF OBJECT_ID('anchors') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('anchors') AND name = 'country')
     ALTER TABLE anchors ADD country VARCHAR(80) NULL;
 GO
-IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('anchors') AND name = 'city')
+IF OBJECT_ID('anchors') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('anchors') AND name = 'city')
     ALTER TABLE anchors ADD city VARCHAR(100) NULL;
 GO

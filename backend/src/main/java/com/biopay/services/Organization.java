@@ -14,9 +14,10 @@ import com.biopay.databases.Datasource;
 import com.biopay.utilities.Logging;
 import com.biopay.utilities.OrgModules;
 import com.biopay.utilities.Rows;
+import com.biopay.utilities.TenantScope;
 
 /**
- * Organisations (the existing {@code partners} table -- see the 001
+ * Organisations (the existing {@code organizations} table -- see the 001
  * migration note on naming). One processingCode per action, dispatched from
  * the JWT-protected {@code /biopay/api/v1/req} route; every handler here
  * re-checks {@code actorRole} because the route only proves who the caller
@@ -58,20 +59,29 @@ public class Organization extends AbstractVerticle {
     }
 
     private static boolean isAnchor(JsonObject payload) {
-        return "ANCHOR".equalsIgnoreCase(payload.getString("actorRole", ""));
+        return TenantScope.managesOrganisations(payload);
     }
 
     /** The one designated cross-anchor operator (admin@biopay.com) -- sees every anchor's
      *  organisations instead of being scoped to just their own. Orthogonal to actorRole:
      *  a system admin is still an ANCHOR-scope user for every permission check below. */
     private static boolean isSystemAdmin(JsonObject payload) {
-        return payload.getBoolean("systemAdmin", false);
+        return TenantScope.isSystemOwner(payload);
     }
 
     /** Vert.x's {@code JsonObject.getString(key, def)} only falls back to {@code def} when the
      *  key is entirely absent -- an explicit JSON null still comes back null. */
     private static String strOrEmpty(String s) {
         return s == null ? "" : s;
+    }
+
+    private Future<Boolean> canAccessOrganisation(JsonObject payload, String partnerId) {
+        if (isSystemAdmin(payload)) return Future.succeededFuture(true);
+        if (!isAnchor(payload)) return Future.succeededFuture(partnerId.equals(payload.getString("partnerCode", "")));
+        Integer anchorId = TenantScope.anchorId(payload);
+        if (anchorId == null) return Future.succeededFuture(false);
+        return pool.preparedQuery("SELECT 1 AS allowed FROM organizations WHERE organization_code=@p1 AND anchor_id=@p2")
+                .execute(Tuple.of(partnerId, anchorId)).map(rows -> rows.size() > 0);
     }
 
     // ---- CREATE_ORGANIZATION (anchor only) -------------------------------------
@@ -120,14 +130,19 @@ public class Organization extends AbstractVerticle {
         }
 
         String capitalCity = strOrEmpty(payload.getString("capitalCity")).trim();
+        final String selectedVerificationMethod = verificationMethod;
 
-        String sql = "INSERT INTO partners (partner_id, name, types, authorised_name, authorised_email, "
+        String sql = "INSERT INTO organizations (organization_code, name, types, authorised_name, authorised_email, "
                 + "authorised_contact, address, country, capital_city, verification_method, anchor_id, status, created_by, created_at, updated_at) "
                 + "VALUES (@p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10, @p11, @p12, @p13, GETDATE(), GETDATE())";
-        pool.preparedQuery(sql)
-                .execute(Tuple.of(partnerId, name, "1", authorisedName, authorisedEmail, authorisedContact,
-                        address, country.isEmpty() ? null : country, capitalCity.isEmpty() ? null : capitalCity, verificationMethod,
-                        Integer.parseInt(anchorIdVal.toString()), 1, payload.getValue("actorId")))
+        int targetAnchorId = Integer.parseInt(anchorIdVal.toString());
+        pool.preparedQuery("SELECT 1 AS found FROM users WHERE id=@p1 AND user_scope='ANCHOR' AND status=1")
+                .execute(Tuple.of(targetAnchorId))
+                .compose(anchorRows -> anchorRows.size() == 0
+                        ? Future.failedFuture("Selected anchor was not found or is inactive")
+                        : pool.preparedQuery(sql).execute(Tuple.of(partnerId, name, "1", authorisedName, authorisedEmail, authorisedContact,
+                                address, country.isEmpty() ? null : country, capitalCity.isEmpty() ? null : capitalCity, selectedVerificationMethod,
+                                targetAnchorId, 1, payload.getValue("actorId"))))
                 .onFailure(err -> onDbError(message, err))
                 .onSuccess(rows -> {
                     if (rows.rowCount() == 0) {
@@ -143,7 +158,7 @@ public class Organization extends AbstractVerticle {
 
     /** Replaces the full module set for an organisation (used on create and on UPDATE_ORGANIZATION_MODULES). */
     private Future<Void> saveModules(String partnerId, JsonArray modules) {
-        return pool.preparedQuery("DELETE FROM organisation_modules WHERE partner_code=@p1")
+        return pool.preparedQuery("DELETE FROM organisation_modules WHERE organization_code=@p1")
                 .execute(Tuple.of(partnerId))
                 .compose(v -> insertModulesFrom(partnerId, modules, 0))
                 .recover(err -> {
@@ -157,7 +172,7 @@ public class Organization extends AbstractVerticle {
             return Future.succeededFuture();
         }
         return pool.preparedQuery(
-                        "INSERT INTO organisation_modules (partner_code, module_code, enabled, created_at) "
+                        "INSERT INTO organisation_modules (organization_code, module_code, enabled, created_at) "
                                 + "VALUES (@p1, @p2, 1, GETDATE())")
                 .execute(Tuple.of(partnerId, String.valueOf(modules.getValue(index)).toUpperCase()))
                 .compose(v -> insertModulesFrom(partnerId, modules, index + 1));
@@ -168,16 +183,15 @@ public class Organization extends AbstractVerticle {
     private void getModules(Message<Object> message) {
         JsonObject payload = new JsonObject(message.body().toString());
         String partnerId = payload.getString("organisationCode", "").trim();
-        if (!isAnchor(payload) && !partnerId.equals(payload.getString("partnerCode", ""))) {
-            replyError(message, "Not authorised to view this organisation's modules");
-            return;
-        }
-        OrgModules.enabledForAsArray(pool, partnerId)
+        canAccessOrganisation(payload, partnerId)
                 .onFailure(err -> onDbError(message, err))
-                .onSuccess(modules -> reply(message, new JsonObject()
-                        .put("responseCode", "000")
-                        .put("responseMessage", "OK")
-                        .put("results", modules)));
+                .onSuccess(allowed -> {
+                    if (!allowed) { replyError(message, "Not authorised to view this organisation's modules"); return; }
+                    OrgModules.enabledForAsArray(pool, partnerId)
+                            .onFailure(err -> onDbError(message, err))
+                            .onSuccess(modules -> reply(message, new JsonObject()
+                                    .put("responseCode", "000").put("responseMessage", "OK").put("results", modules)));
+                });
     }
 
     // ---- UPDATE_ORGANIZATION_MODULES (anchor only) ---------------------------------
@@ -200,10 +214,12 @@ public class Organization extends AbstractVerticle {
                 return;
             }
         }
-        saveModules(partnerId, modules)
-                .onComplete(ar -> reply(message, new JsonObject()
-                        .put("responseCode", "000")
-                        .put("responseMessage", "Organisation modules updated")));
+        canAccessOrganisation(payload, partnerId).onFailure(err -> onDbError(message, err)).onSuccess(allowed -> {
+            if (!allowed) { replyError(message, "Organisation is outside your anchor"); return; }
+            saveModules(partnerId, modules)
+                    .onComplete(ar -> reply(message, new JsonObject()
+                            .put("responseCode", "000").put("responseMessage", "Organisation modules updated")));
+        });
     }
 
     // ---- UPDATE_ORGANIZATION (anchor only) --------------------------------------
@@ -228,9 +244,10 @@ public class Organization extends AbstractVerticle {
             return;
         }
 
-        String sql = "UPDATE partners SET name=@p1, authorised_name=@p2, authorised_email=@p3, "
+        String sql = "UPDATE organizations SET name=@p1, authorised_name=@p2, authorised_email=@p3, "
                 + "authorised_contact=@p4, address=@p5, country=@p6, capital_city=@p7, "
-                + "verification_method=COALESCE(NULLIF(@p8,''), verification_method), updated_at=GETDATE() WHERE partner_id=@p9";
+                + "verification_method=COALESCE(NULLIF(@p8,''), verification_method), updated_at=GETDATE() WHERE organization_code=@p9 "
+                + "AND (@p10=1 OR anchor_id=@p11)";
         pool.preparedQuery(sql)
                 .execute(Tuple.of(
                         payload.getString("name", "").trim(),
@@ -241,7 +258,7 @@ public class Organization extends AbstractVerticle {
                         strOrEmpty(payload.getString("country")).trim(),
                         strOrEmpty(payload.getString("capitalCity")).trim(),
                         verificationMethod,
-                        partnerId))
+                        partnerId, isSystemAdmin(payload), TenantScope.anchorId(payload)))
                 .onFailure(err -> onDbError(message, err))
                 .onSuccess(rows -> {
                     if (rows.rowCount() > 0) {
@@ -262,8 +279,8 @@ public class Organization extends AbstractVerticle {
         }
         String partnerId = payload.getString("organisationCode", "").trim();
 
-        pool.preparedQuery("UPDATE partners SET status=0, updated_at=GETDATE() WHERE partner_id=@p1")
-                .execute(Tuple.of(partnerId))
+        pool.preparedQuery("UPDATE organizations SET status=0, updated_at=GETDATE() WHERE organization_code=@p1 AND (@p2=1 OR anchor_id=@p3)")
+                .execute(Tuple.of(partnerId, isSystemAdmin(payload), TenantScope.anchorId(payload)))
                 .onFailure(err -> onDbError(message, err))
                 .onSuccess(rows -> {
                     if (rows.rowCount() > 0) {
@@ -289,8 +306,8 @@ public class Organization extends AbstractVerticle {
             return;
         }
 
-        pool.preparedQuery("UPDATE partners SET status=@p1, updated_at=GETDATE() WHERE partner_id=@p2")
-                .execute(Tuple.of(status, partnerId))
+        pool.preparedQuery("UPDATE organizations SET status=@p1, updated_at=GETDATE() WHERE organization_code=@p2 AND (@p3=1 OR anchor_id=@p4)")
+                .execute(Tuple.of(status, partnerId, isSystemAdmin(payload), TenantScope.anchorId(payload)))
                 .onFailure(err -> onDbError(message, err))
                 .onSuccess(rows -> {
                     if (rows.rowCount() > 0) {
@@ -307,16 +324,8 @@ public class Organization extends AbstractVerticle {
         JsonObject payload = new JsonObject(message.body().toString());
         String partnerId = payload.getString("organisationCode", "").trim();
 
-        // An organisation user may only ever look up their own organisation. A plain anchor
-        // admin is implicitly scoped to their own anchor's orgs by GET_ORGANIZATIONS already
-        // filtering the list they picked from; the system admin can look up any of them.
-        if (!isAnchor(payload) && !isSystemAdmin(payload) && !partnerId.equals(payload.getString("partnerCode", ""))) {
-            replyError(message, "Not authorised to view this organisation");
-            return;
-        }
-
-        pool.preparedQuery("SELECT * FROM partners WHERE partner_id=@p1")
-                .execute(Tuple.of(partnerId))
+        pool.preparedQuery("SELECT * FROM organizations WHERE organization_code=@p1 AND (@p2=1 OR anchor_id=@p3 OR organization_code=@p4)")
+                .execute(Tuple.of(partnerId, isSystemAdmin(payload), TenantScope.anchorId(payload), payload.getString("partnerCode", "")))
                 .onFailure(err -> onDbError(message, err))
                 .onSuccess(rows -> {
                     if (rows.size() == 0) {
@@ -339,16 +348,18 @@ public class Organization extends AbstractVerticle {
         Tuple params;
         if (isSystemAdmin(payload)) {
             Integer status = payload.getInteger("status");
-            sql = "SELECT * FROM partners WHERE (@p1 IS NULL OR status=@p1) ORDER BY created_at DESC";
-            params = Tuple.of(status);
+            Integer targetAnchorId = TenantScope.anchorId(payload);
+            sql = "SELECT p.*, a.anchor_name FROM organizations p JOIN users a ON a.id=p.anchor_id AND a.user_scope='ANCHOR' "
+                    + "WHERE (@p1 IS NULL OR p.status=@p1) AND (@p2 IS NULL OR p.anchor_id=@p2) ORDER BY a.anchor_name,p.name";
+            params = Tuple.of(status, targetAnchorId);
         } else if (isAnchor(payload)) {
             Object anchorId = payload.getValue("anchorId");
             Integer status = payload.getInteger("status");
-            sql = "SELECT * FROM partners WHERE (@p1 IS NULL OR anchor_id=@p1) AND (@p2 IS NULL OR status=@p2) ORDER BY created_at DESC";
+            sql = "SELECT p.*, a.anchor_name FROM organizations p JOIN users a ON a.id=p.anchor_id AND a.user_scope='ANCHOR' WHERE p.anchor_id=@p1 AND (@p2 IS NULL OR p.status=@p2) ORDER BY p.name";
             params = Tuple.of(anchorId, status);
         } else {
             String partnerCode = payload.getString("partnerCode", "");
-            sql = "SELECT * FROM partners WHERE partner_id=@p1";
+            sql = "SELECT p.*, a.anchor_name FROM organizations p JOIN users a ON a.id=p.anchor_id AND a.user_scope='ANCHOR' WHERE p.organization_code=@p1";
             params = Tuple.of(partnerCode);
         }
 
@@ -369,7 +380,7 @@ public class Organization extends AbstractVerticle {
 
     private static JsonObject summary(Row r) {
         return new JsonObject()
-                .put("organisationCode", Rows.str(r, "partner_id"))
+                .put("organisationCode", Rows.str(r, "organization_code"))
                 .put("name", Rows.str(r, "name"))
                 .put("authorisedName", Rows.str(r, "authorised_name"))
                 .put("authorisedEmail", Rows.str(r, "authorised_email"))
@@ -379,6 +390,7 @@ public class Organization extends AbstractVerticle {
                 .put("capitalCity", Rows.str(r, "capital_city"))
                 .put("verificationMethod", Rows.str(r, "verification_method"))
                 .put("anchorId", Rows.intVal(r, "anchor_id"))
+                .put("anchorName", Rows.str(r, "anchor_name"))
                 .put("status", Rows.intVal(r, "status"))
                 .put("createdAt", Rows.str(r, "created_at"))
                 .put("updatedAt", Rows.str(r, "updated_at"));

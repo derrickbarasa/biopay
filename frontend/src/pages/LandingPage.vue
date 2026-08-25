@@ -17,12 +17,9 @@ function trackScrollDir() {
 
 // Nav hides the instant the page moves and drops back in once scrolling settles.
 const navHidden = ref(false)
-let navHideTimer: ReturnType<typeof setTimeout> | null = null
-
 function handleNavScroll() {
-  if (window.scrollY > 8) navHidden.value = true
-  if (navHideTimer) clearTimeout(navHideTimer)
-  navHideTimer = setTimeout(() => { navHidden.value = false }, 260)
+  if (window.scrollY < 80 || scrollDir === 'up') navHidden.value = false
+  else navHidden.value = true
 }
 
 // Request-a-demo form. With no CRM/email endpoint on the backend, submitting opens
@@ -38,7 +35,7 @@ function submitDemo() {
   const body = encodeURIComponent(
     `Name: ${name}\nOrganisation: ${organisation}\nEmail: ${email}\n\n${message}`,
   )
-  window.location.href = `mailto:demo@biopay.app?subject=${subject}&body=${body}`
+  window.location.href = `mailto:${demoEmail}?subject=${subject}&body=${body}`
   demoSubmitted.value = true
 }
 
@@ -49,7 +46,7 @@ const heroSlides = [
   {
     icon: 'cash', tone: 'primary', eyebrow: 'Cash transfers',
     title: 'Cash assistance, delivered with certainty.',
-    copy: 'Generate a payment cycle, verify each recipient by fingerprint or face, and disburse — with a maker-checker approval trail from anchor to organisation.',
+    copy: 'Generate a payment cycle, verify each recipient by fingerprint or face, and disburse with a maker-checker approval trail from anchor to organisation.',
     image: '/hero/cash-transfer.webp',
   },
   {
@@ -60,19 +57,19 @@ const heroSlides = [
   },
   {
     icon: 'fingerprint', tone: 'primary', eyebrow: 'Biometric verification',
-    title: 'The right person gets paid — every single time.',
+    title: 'The right person gets paid. Every single time.',
     copy: 'A live fingerprint or face scan checked against the enrolled template at the moment of payment, even with no signal to check it against a server.',
     image: '/hero/biometric-verification.webp',
   },
   {
     icon: 'dedup', tone: 'accent', eyebrow: 'Deduplication',
-    title: 'One household, one record — no fraud.',
+    title: 'One household, one record. No fraud.',
     copy: 'Every new registration is screened against existing records for the same name, phone number and location before it is ever accepted.',
     image: '/hero/deduplication.webp',
   },
   {
-    icon: 'ai', tone: 'primary', eyebrow: 'An AI',
-    title: 'Agent that never stops watching.',
+    icon: 'ai', tone: 'primary', eyebrow: 'Continuous monitoring',
+    title: 'An AI agent that never stops watching.',
     copy: 'Registrations and disbursements are reviewed as they land, flagging the patterns a person reviewing thousands of rows would miss.',
     image: '/hero/ai-agent.webp',
   },
@@ -127,11 +124,11 @@ function closeMobileNav() {
 const howSteps = [
   {
     title: 'Register in the field', image: '/how-it-works/register-in-the-field.webp',
-    copy: 'A field officer captures the household offline: demographics, fingerprints, a photo, and the exact GPS location — down to village level.',
+    copy: 'A field officer captures the household offline: demographics, fingerprints, a photo, and the exact GPS location, down to village level.',
   },
   {
     title: 'Sync when signal returns', image: '/how-it-works/sync-when-signal-returns.webp',
-    copy: "Every record sits queued on the device until a connection appears, then uploads on its own — no officer has to remember to press sync.",
+    copy: "Every record stays queued on the device until a connection appears, then uploads on its own. No officer has to remember to press sync.",
   },
   {
     title: 'Verify at disbursement', image: '/how-it-works/verify-at-disbursement.webp',
@@ -200,6 +197,7 @@ const howTrackStyle = computed(() => ({
 // Contact email is configurable via VITE_CONTACT_EMAIL so it can be swapped
 // for a real inbox without a code change.
 const contactEmail = import.meta.env.VITE_CONTACT_EMAIL || 'info@biopay.com'
+const demoEmail = import.meta.env.VITE_DEMO_EMAIL || contactEmail
 
 onMounted(() => {
   const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -256,7 +254,7 @@ onMounted(() => {
   restartHeroTimer()
 
   howPaused.value = reduceMotion
-  howRafId = requestAnimationFrame(howTick)
+  if (!reduceMotion) howRafId = requestAnimationFrame(howTick)
   window.addEventListener('resize', onHowResize, { passive: true })
 })
 
@@ -266,7 +264,6 @@ onBeforeUnmount(() => {
   window.removeEventListener('scroll', trackScrollDir)
   window.removeEventListener('scroll', handleNavScroll)
   window.removeEventListener('resize', onHowResize)
-  if (navHideTimer) clearTimeout(navHideTimer)
   if (heroTimer) clearInterval(heroTimer)
   if (howRafId) cancelAnimationFrame(howRafId)
 })
@@ -274,6 +271,7 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="landing-root" ref="revealRoot">
+    <a class="skip-link" href="#main-content">Skip to main content</a>
     <header class="site-nav" :class="{ 'nav-hidden': navHidden && !mobileNavOpen }">
       <div class="wrap nav-row">
         <a class="brand" href="#top">
@@ -288,10 +286,16 @@ onBeforeUnmount(() => {
         <div class="nav-actions">
           <router-link class="nav-login" to="/login">Log in</router-link>
           <a class="btn btn-primary btn-nav" href="#demo">Request a demo</a>
-          <button class="nav-toggle" aria-label="Toggle navigation" @click="mobileNavOpen = !mobileNavOpen">☰</button>
+          <button
+            class="nav-toggle" aria-label="Toggle navigation" aria-controls="mobile-navigation"
+            :aria-expanded="mobileNavOpen" @click="mobileNavOpen = !mobileNavOpen"
+          >
+            <svg v-if="!mobileNavOpen" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16" /></svg>
+            <svg v-else width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
+          </button>
         </div>
       </div>
-      <nav v-if="mobileNavOpen" class="mobile-nav">
+      <nav v-if="mobileNavOpen" id="mobile-navigation" class="mobile-nav" aria-label="Mobile navigation">
         <a href="#mission" @click="closeMobileNav">Mission</a>
         <a href="#how" @click="closeMobileNav">How it works</a>
         <a href="#platform" @click="closeMobileNav">Platform</a>
@@ -301,7 +305,8 @@ onBeforeUnmount(() => {
       </nav>
     </header>
 
-    <main id="top">
+    <main id="main-content">
+      <div id="top"></div>
       <!-- HERO -->
       <section class="hero hero-visual">
         <div
@@ -381,7 +386,6 @@ onBeforeUnmount(() => {
       <section class="mission" id="mission">
         <div class="wrap">
           <div>
-            <div class="kicker-line"><span class="eyebrow">Why it exists</span></div>
             <h2>Aid reaches whoever's in line. It should reach whoever it's for.</h2>
           </div>
           <div class="mission-body">
@@ -391,8 +395,8 @@ onBeforeUnmount(() => {
               claimed by anyone standing at the front of it.
             </p>
             <p>
-              <strong>BioPay ties every registration to the beneficiary's own body</strong> — a
-              fingerprint or a face — captured once in the field, checked again at the exact moment
+              <strong>BioPay ties every registration to the beneficiary's own body</strong>, using a
+              fingerprint or face captured once in the field and checked again at the exact moment
               they're paid. No connectivity required to capture it, no way for someone else to stand
               in for them at disbursement.
             </p>
@@ -400,7 +404,7 @@ onBeforeUnmount(() => {
               The structure mirrors how these programmes are actually run: an
               <strong>anchor</strong> (an organisation or lead financial partner) oversees one or
               more <strong>organisations/programmes</strong> (the NGOs actually running them),
-              whose <strong>field officers</strong> do the registering and paying — down to the
+              whose <strong>field officers</strong> do the registering and paying, down to the
               village, location, county and state the household lives in.
             </p>
           </div>
@@ -410,14 +414,16 @@ onBeforeUnmount(() => {
       <!-- HOW IT WORKS -->
       <section id="how">
         <div class="wrap">
-          <span class="eyebrow">The cycle</span>
-          <h2 style="margin-top: 0.6rem">From registration to reconciled payment</h2>
+          <h2 class="section-title">From registration to reconciled payment</h2>
 
           <div class="how-carousel reveal">
             <div class="how-carousel-viewport">
               <div class="how-carousel-track" :style="howTrackStyle">
-                <div v-for="(step, index) in howTrackItems" :key="`${step.title}-${index}`" class="how-card">
-                  <img class="how-card-image" :src="step.image" :alt="step.title" loading="lazy" decoding="async" />
+                <div
+                  v-for="(step, index) in howTrackItems" :key="`${step.title}-${index}`" class="how-card"
+                  :aria-hidden="index < howSteps.length || index >= howSteps.length * 2"
+                >
+                  <img class="how-card-image" :src="step.image" :alt="step.title" width="1402" height="1122" loading="lazy" decoding="async" />
                   <div class="how-card-scrim"></div>
                   <div class="how-card-copy">
                     <span class="how-card-num">{{ String((index % howSteps.length) + 1).padStart(2, '0') }}</span>
@@ -451,8 +457,7 @@ onBeforeUnmount(() => {
       <!-- PLATFORM / FEATURES -->
       <section id="platform">
         <div class="wrap">
-          <span class="eyebrow">Platform</span>
-          <h2 style="margin-top: 0.6rem; max-width: 20ch">Built for the field first, the office second</h2>
+          <h2 class="section-title narrow">Built for the field first, the office second</h2>
 
           <div class="feature-grid">
             <div class="feature feature-card-reveal">
@@ -467,7 +472,7 @@ onBeforeUnmount(() => {
               <span class="feature-tag">Mobile · offline</span>
               <h4>Works with no signal at all</h4>
               <p>Registration, fingerprint enrolment, photos and attendance all write to the
-                device first. A background sync picks them up the moment a connection appears —
+                device first. A background sync picks them up the moment a connection appears.
                 the officer never waits on a spinner in the field.</p>
               <div class="feature-foot">→ queued locally, uploaded automatically</div>
             </div>
@@ -482,7 +487,7 @@ onBeforeUnmount(() => {
               <span class="feature-tag">Fraud prevention</span>
               <h4>Deduplication checker</h4>
               <p>Every new registration is screened against the existing record for the same
-                name, phone number and location before it's accepted — catching the same
+                name, phone number and location before it's accepted, catching the same
                 household enrolled twice under two names.</p>
               <div class="mini-widget">
                 <div class="row"><span>Candidate match</span><span class="match">94%</span></div>
@@ -501,7 +506,7 @@ onBeforeUnmount(() => {
               <span class="feature-tag">Location</span>
               <h4>GPS on every capture</h4>
               <p>Registrations and payments are tagged with the device's GPS or network
-                location — whichever fix is freshest — so a payment's location is never just a
+                location, using whichever fix is freshest, so a payment's location is never just a
                 claim.</p>
               <div class="feature-foot num">4.8517°N, 31.5825°E</div>
             </div>
@@ -517,7 +522,7 @@ onBeforeUnmount(() => {
               </div>
               <span class="feature-tag">Verification</span>
               <h4>Fingerprint payment</h4>
-              <p>A live scan checked against the enrolled template at the point of payment — the
+              <p>A live scan is checked against the enrolled template at the point of payment. It uses the
                 same verification standard used for national ID and banking KYC, brought to the
                 last mile.</p>
             </div>
@@ -533,8 +538,8 @@ onBeforeUnmount(() => {
               </div>
               <span class="feature-tag">Verification</span>
               <h4>Face recognition payment</h4>
-              <p>Where a fingerprint scanner isn't practical — older beneficiaries, manual
-                labour, injury — a face match against the enrolment photo confirms identity
+              <p>Where a fingerprint scanner isn't practical due to age, manual labour or injury,
+                a face match against the enrolment photo confirms identity
                 instead.</p>
             </div>
 
@@ -548,7 +553,7 @@ onBeforeUnmount(() => {
               <span class="feature-tag">Attendance</span>
               <h4>Event and activity attendance</h4>
               <p>Clock beneficiaries in and out of a maternity workshop, an immunisation drive
-                or a cash-for-work day the same way a payment is verified — biometric, GPS- and
+                or a cash-for-work day the same way a payment is verified: biometric, GPS- and
                 time-stamped, with no paper sign-in sheet to lose.</p>
               <div class="feature-foot">→ workshops · immunisation · cash-for-work</div>
             </div>
@@ -563,7 +568,7 @@ onBeforeUnmount(() => {
               <span class="feature-tag">Vouchers</span>
               <h4>Voucher redemption</h4>
               <p>Print or issue a biometric-verified voucher a household redeems for food,
-                goods or services at a partner vendor — every issue, redemption and void stays
+                goods or services at a partner vendor. Every issue, redemption and void stays
                 on one traceable ledger, not a paper stub.</p>
             </div>
 
@@ -578,7 +583,7 @@ onBeforeUnmount(() => {
               <h4>Simple per-anchor subscription</h4>
               <p>One subscription per anchor covers every organisation under it. A grace period
                 gives time to renew before access pauses, renewal is a click for an anchor
-                admin, and pricing is set per your agreement — not listed here.</p>
+                admin, and pricing is set per your agreement rather than listed here.</p>
             </div>
 
             <div class="feature feature-card-reveal">
@@ -594,7 +599,7 @@ onBeforeUnmount(() => {
                 patterns a person reviewing thousands of rows would miss.</p>
               <div class="mini-widget">
                 <div class="ai-line"><span class="ai-dot"></span><span>3 registrations shared
-                  one GPS point in 24h — flagged for review before disbursement.</span></div>
+                  one GPS point in 24h, flagged for review before disbursement.</span></div>
               </div>
             </div>
           </div>
@@ -604,8 +609,7 @@ onBeforeUnmount(() => {
       <!-- SHOWCASE -->
       <section id="showcase">
         <div class="wrap">
-          <span class="eyebrow">Product</span>
-          <h2 style="margin-top: 0.6rem">One dashboard for oversight, one app for the field</h2>
+          <h2 class="section-title">One dashboard for oversight, one app for the field</h2>
 
           <div class="showcase-grid">
             <div>
@@ -616,9 +620,9 @@ onBeforeUnmount(() => {
                     <div class="item active">Dashboard</div>
                     <div class="item">Organizations</div>
                     <div class="item">Households</div>
-                    <div class="item">Officers</div>
+                    <div class="item">Supervisors</div>
                     <div class="item">Payments</div>
-                    <div class="item">Payroll</div>
+                    <div class="item">Payment cycles</div>
                     <div class="item">Vouchers</div>
                     <div class="item">Settings</div>
                   </div>
@@ -643,7 +647,7 @@ onBeforeUnmount(() => {
                         </div>
                       </div>
                       <div class="dmetric">
-                        <div class="dmetric-copy"><span class="lbl">Active officers</span><span class="num">2</span><span class="sub">Field officers enabled</span></div>
+                        <div class="dmetric-copy"><span class="lbl">Active supervisors</span><span class="num">2</span><span class="sub">Field supervisors enabled</span></div>
                         <div class="dmetric-icon blue">
                           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v6c0 5-3 7.5-7 9-4-1.5-7-4-7-9V6z" /><path d="M9 12l2 2 4-4.5" /></svg>
                         </div>
@@ -662,7 +666,7 @@ onBeforeUnmount(() => {
                   </div>
                 </div>
               </div>
-              <p class="showcase-caption">The web dashboard — for anchors and organisations to register, disburse and reconcile.</p>
+              <p class="showcase-caption">The web dashboard for anchors and organisations to register, disburse and reconcile.</p>
             </div>
 
             <div>
@@ -688,7 +692,7 @@ onBeforeUnmount(() => {
                   </div>
                 </div>
               </div>
-              <p class="showcase-caption">The field agent app — offline-first, built to run all day on one battery.</p>
+              <p class="showcase-caption">The field agent app is offline-first and built to run all day on one battery.</p>
             </div>
           </div>
         </div>
@@ -698,8 +702,7 @@ onBeforeUnmount(() => {
       <section id="demo">
         <div class="wrap demo-grid">
           <div class="demo-copy">
-            <span class="eyebrow">Request a demo</span>
-            <h2 style="margin-top: 0.6rem">See BioPay against your own programme</h2>
+            <h2 class="section-title">See BioPay against your own programme</h2>
             <p style="max-width: 46ch; color: var(--color-text-muted); margin-top: 0.9rem">
               Tell us about your anchor, your organisations, and how many households you're
               registering this cycle. We'll walk you through registration, biometric verification
@@ -713,21 +716,23 @@ onBeforeUnmount(() => {
           </div>
 
           <div class="demo-card">
-            <div v-if="demoSubmitted" class="demo-thanks">
-              <div class="demo-check">✓</div>
+            <div v-if="demoSubmitted" class="demo-thanks" role="status" aria-live="polite">
+              <div class="demo-check" aria-hidden="true">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4 4L19 7" /></svg>
+              </div>
               <h4>Thanks, {{ demo.name }}.</h4>
               <p>Your email app should have opened with your request ready to send. If it didn't,
-                email us at <a href="mailto:demo@biopay.app">demo@biopay.app</a>.</p>
+                email us at <a :href="`mailto:${demoEmail}`">{{ demoEmail }}</a>.</p>
             </div>
             <form v-else class="demo-form" @submit.prevent="submitDemo">
               <label>Full name
-                <input v-model="demo.name" type="text" required placeholder="Your name" />
+                <input v-model="demo.name" type="text" required placeholder="Your name" autocomplete="name" />
               </label>
               <label>Organisation
-                <input v-model="demo.organisation" type="text" placeholder="Anchor or organisation" />
+                <input v-model="demo.organisation" type="text" placeholder="Anchor or organisation" autocomplete="organization" />
               </label>
               <label>Work email
-                <input v-model="demo.email" type="email" required placeholder="you@organisation.org" />
+                <input v-model="demo.email" type="email" required placeholder="you@organisation.org" autocomplete="email" />
               </label>
               <label>What would you like to see?
                 <textarea v-model="demo.message" rows="3" placeholder="Tell us about your programme"></textarea>
@@ -839,6 +844,22 @@ onBeforeUnmount(() => {
 
 .landing-root * { box-sizing: border-box; }
 
+.landing-root .skip-link {
+  position: fixed;
+  top: 10px;
+  left: 12px;
+  z-index: 100;
+  padding: .7rem 1rem;
+  border-radius: 8px;
+  background: var(--color-text);
+  color: #fff;
+  font-weight: 700;
+  text-decoration: none;
+  transform: translateY(-160%);
+  transition: transform 160ms ease-out;
+}
+.landing-root .skip-link:focus { transform: translateY(0); }
+
 :global(html) {
   scroll-behavior: smooth;
   scroll-padding-top: 6rem;
@@ -857,6 +878,8 @@ onBeforeUnmount(() => {
   text-wrap: balance;
   letter-spacing: -0.01em;
 }
+.landing-root .section-title { font-size: var(--step-h2); max-width: 28ch; }
+.landing-root .section-title.narrow { max-width: 20ch; }
 .landing-root p { margin: 0; }
 .landing-root a { color: inherit; }
 
@@ -930,7 +953,7 @@ onBeforeUnmount(() => {
 .landing-root .btn:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 3px; }
 .landing-root .btn-primary {
   background: var(--color-accent);
-  color: #fff;
+  color: #1A1200;
   box-shadow: 0 1px 0 rgba(0, 0, 0, 0.08);
 }
 .landing-root .btn-primary:hover { background: var(--color-accent-deep); transform: translateY(-1px); box-shadow: 0 6px 16px -6px var(--shadow-color); }
@@ -1006,10 +1029,14 @@ onBeforeUnmount(() => {
 .landing-root .nav-links { display: flex; align-items: center; gap: var(--space-4); font-size: 0.92rem; }
 .landing-root .nav-links a { text-decoration: none; color: var(--color-text-muted); }
 .landing-root .nav-links a:hover { color: var(--color-text); }
+.landing-root .nav-links a:focus-visible,
+.landing-root .nav-login:focus-visible,
+.landing-root .brand:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 5px; border-radius: 4px; }
 .landing-root .nav-actions { display: flex; align-items: center; gap: var(--space-3); }
 .landing-root .nav-login { font-size: 0.9rem; text-decoration: none; color: var(--color-text-muted); }
 .landing-root .nav-login:hover { color: var(--color-text); }
-.landing-root .nav-toggle { display: none; background: none; border: 1px solid var(--color-line); border-radius: var(--radius-tag); padding: 0.4rem 0.6rem; }
+.landing-root .nav-toggle { display: none; align-items: center; justify-content: center; width: 44px; height: 44px; background: none; color: var(--color-text); border: 1px solid var(--color-line); border-radius: 10px; padding: 0; }
+.landing-root .nav-toggle:focus-visible { outline: 3px solid var(--color-primary); outline-offset: 2px; }
 @media (max-width: 860px) {
   .landing-root .nav-links { display: none; }
   .landing-root .nav-toggle { display: inline-flex; }
@@ -1021,17 +1048,19 @@ onBeforeUnmount(() => {
   .landing-root .nav-actions { gap: var(--space-1); }
   .landing-root .nav-actions .btn { padding: 0.75em 1em; font-size: 0.84rem; }
 }
-.landing-root .mobile-nav { display: none; flex-direction: column; align-items: flex-start; gap: 0; padding: 0 1.25rem 1rem; }
+.landing-root .mobile-nav { display: none; flex-direction: column; align-items: stretch; gap: 0; padding: .55rem 1.25rem 1rem; border-top: 1px solid var(--color-line); background: var(--color-bg); box-shadow: 0 20px 34px -28px var(--shadow-color); }
 @media (max-width: 860px) {
   .landing-root .mobile-nav { display: flex; }
 }
-.landing-root .mobile-nav a { padding: 0.5rem 0; text-decoration: none; color: var(--color-text-muted); }
+.landing-root .mobile-nav a { min-height: 44px; display: flex; align-items: center; padding: 0.65rem .35rem; border-bottom: 1px solid var(--color-line); text-decoration: none; color: var(--color-text-muted); font-weight: 600; }
+.landing-root .mobile-nav a:last-child { border-bottom: 0; }
+.landing-root .mobile-nav a:focus-visible { outline: 2px solid var(--color-primary); outline-offset: -2px; }
 
 /* Hero -- full-bleed photo carousel. Backgrounds come from heroSlides[].image
    (frontend/public/hero/) at 1402x1122; cover keeps the section filled edge to
    edge with no gaps or seams (some crop on one axis is inherent to a full-bleed
    background -- the scrim keeps the text side readable regardless of photo). */
-.landing-root .hero-visual { position: relative; isolation: isolate; overflow: hidden; min-height: 420px; display: flex; flex-direction: column; justify-content: center; border-top: none; border-bottom: 0; }
+.landing-root .hero-visual { position: relative; isolation: isolate; overflow: hidden; min-height: 420px; display: flex; flex-direction: column; justify-content: center; border-top: none; border-bottom: 0; padding: clamp(1.6rem, 4vh, 3.1rem) 0; }
 .landing-root .hero-image, .landing-root .hero-scrim { position: absolute; inset: 0; }
 .landing-root .hero-image { opacity: 0; background-size: cover; background-position: right center; background-color: var(--color-primary-deep); filter: saturate(1.05) contrast(1.02); transform: scale(1.03); transition: opacity 900ms ease, transform 7s ease; z-index: -2; }
 .landing-root .hero-image.active { opacity: 1; transform: scale(1); }
@@ -1047,7 +1076,7 @@ onBeforeUnmount(() => {
 .landing-root .hero-visual .wrap { position: relative; z-index: 1; width: 100%; }
 .landing-root .hero-copy { max-width: 34rem; }
 
-.landing-root .hero-slide { min-height: 13rem; }
+.landing-root .hero-slide { min-height: clamp(9rem, 30vh, 13rem); }
 .landing-root .hero-fade-enter-active { transition: opacity 420ms ease, transform 420ms cubic-bezier(0.16, 1, 0.3, 1); }
 .landing-root .hero-fade-leave-active { transition: opacity 260ms ease, transform 260ms ease; }
 .landing-root .hero-fade-enter-from { opacity: 0; transform: translateY(14px); }
@@ -1057,22 +1086,36 @@ onBeforeUnmount(() => {
   margin-bottom: var(--space-2); background: rgba(255, 255, 255, .16); color: #fff;
 }
 .landing-root .hero-slide-icon.accent { background: rgba(251, 191, 36, .22); color: #fde68a; }
-.landing-root .hero h1 { font-size: var(--step-h1); margin-top: var(--space-3); max-width: 15ch; color: #fff; }
-.landing-root .hero .lede { max-width: 46ch; font-size: var(--step-body-lg); color: rgba(255, 255, 255, .87); margin-top: var(--space-3); }
+.landing-root .hero h1 { font-size: var(--step-h1); margin-top: clamp(0.6rem, 2vh, var(--space-3)); max-width: 15ch; color: #fff; }
+.landing-root .hero .lede { max-width: 46ch; font-size: var(--step-body-lg); color: rgba(255, 255, 255, .87); margin-top: clamp(0.6rem, 2vh, var(--space-3)); }
 .landing-root .hero-visual .eyebrow { color: #fde68a; }
-.landing-root .hero-ctas { display: flex; gap: var(--space-2); margin-top: var(--space-4); flex-wrap: wrap; }
+.landing-root .hero-ctas { display: flex; gap: var(--space-2); margin-top: clamp(0.9rem, 3vh, var(--space-4)); flex-wrap: wrap; }
 .landing-root .hero-visual .btn-ghost { color: #fff; border-color: rgba(255, 255, 255, .55); }
 .landing-root .hero-visual .btn-ghost:hover { background: rgba(255, 255, 255, .12); border-color: #fff; }
-.landing-root .hero-dots { display: flex; gap: 9px; margin-top: var(--space-4); }
-.landing-root .hero-dots button { position: relative; width: 42px; height: 4px; padding: 0; border: 0; border-radius: 99px; background: rgba(255, 255, 255, .32); cursor: pointer; overflow: hidden; transition: background .2s ease; }
-.landing-root .hero-dots button:hover { background: rgba(255, 255, 255, .5); }
-.landing-root .hero-dot-fill { position: absolute; inset: 0; border-radius: inherit; background: #fbbf24; transform: scaleX(0); transform-origin: left center; animation-name: hero-dot-fill; animation-timing-function: linear; animation-fill-mode: forwards; will-change: transform; }
+.landing-root .hero-dots { display: flex; gap: 9px; margin-top: clamp(0.5rem, 2vh, var(--space-4)); }
+.landing-root .hero-dots button { position: relative; width: 44px; height: 36px; padding: 0; border: 0; background: transparent; cursor: pointer; overflow: hidden; }
+.landing-root .hero-dots button::before { content: ''; position: absolute; inset: 16px 0; border-radius: 99px; background: rgba(255, 255, 255, .32); transition: background .2s ease; }
+.landing-root .hero-dots button:hover::before { background: rgba(255, 255, 255, .5); }
+.landing-root .hero-dots button:focus-visible,
+.landing-root .hero-arrow:focus-visible { outline: 3px solid #fde68a; outline-offset: 3px; }
+.landing-root .hero-dot-fill { position: absolute; inset: 16px 0; border-radius: 99px; background: #fbbf24; transform: scaleX(0); transform-origin: left center; animation-name: hero-dot-fill; animation-timing-function: linear; animation-fill-mode: forwards; will-change: transform; }
 @keyframes hero-dot-fill { from { transform: scaleX(0); } to { transform: scaleX(1); } }
-.landing-root .hero-facts { display: flex; gap: var(--space-4); margin-top: var(--space-4); flex-wrap: wrap; }
+.landing-root .hero-facts { display: flex; gap: var(--space-4); margin-top: clamp(0.9rem, 3vh, var(--space-4)); flex-wrap: wrap; }
 .landing-root .hero-fact { font-size: 0.85rem; color: rgba(255, 255, 255, .78); display: flex; align-items: baseline; gap: 0.4em; }
 .landing-root .hero-fact strong { font-family: var(--font-mono); color: #fff; font-size: 0.95rem; }
 
 @media (max-width: 960px) { .landing-root .hero-visual { min-height: 440px; } }
+/* Short viewports (small laptop screens, or Windows display scaling above
+   100% shrinking the effective CSS viewport): shrink the headline/lede so the
+   whole hero -- including the trust-facts row -- fits without the bottom row
+   landing mid-cut at the fold. Width-based sizing alone can't react to this;
+   only viewport height tells us the fold is close. */
+@media (max-height: 700px) and (min-width: 600px) {
+  .landing-root .hero h1 { font-size: clamp(1.9rem, 1.3rem + 1.8vw, 2.6rem); max-width: 22ch; }
+  .landing-root .hero .lede { font-size: 0.96rem; max-width: 58ch; }
+  .landing-root .hero-slide-icon { width: 34px; height: 34px; margin-bottom: 0.4rem; }
+  .landing-root .hero-fact { font-size: 0.78rem; }
+}
 @media (prefers-reduced-motion: reduce) {
   .landing-root .hero-image,
   .landing-root .hero-slide,
@@ -1105,6 +1148,9 @@ onBeforeUnmount(() => {
 .landing-root .hero-arrow.next { right: 20px; }
 @media (max-width: 780px) {
   .landing-root .hero-arrow { display: none; }
+  .landing-root .hero-image { background-position: 62% center; }
+  .landing-root .hero-scrim { background: linear-gradient(90deg, rgba(3, 12, 11, .9) 0%, rgba(3, 12, 11, .72) 72%, rgba(3, 12, 11, .42) 100%); }
+  .landing-root .hero-copy { max-width: min(34rem, 92%); }
 }
 
 /* Mission */
@@ -1183,8 +1229,8 @@ onBeforeUnmount(() => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
   border: 1px solid var(--color-line);
   border-radius: 999px;
   background: var(--color-surface);
@@ -1294,7 +1340,7 @@ onBeforeUnmount(() => {
 .landing-root .dmetric-copy .sub { font-size: 0.62rem; color: var(--color-text-muted); margin-top: 0.1rem; }
 .landing-root .dmetric-icon { flex-shrink: 0; width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; }
 .landing-root .dmetric-icon.teal { background: var(--color-primary-soft); color: var(--color-primary-deep); }
-.landing-root .dmetric-icon.blue { background: #dbeafe; color: #2563eb; }
+.landing-root .dmetric-icon.blue { background: #dcfce7; color: #15803d; }
 .landing-root .dmetric-icon.amber { background: var(--color-accent-soft); color: var(--color-accent-deep); }
 .landing-root .dash-chart-card { border: 1px solid var(--color-line); border-radius: 10px; padding: 0.7rem 0.8rem 0.5rem; margin-top: 0.6rem; }
 .landing-root .chart-title { font-size: 0.72rem; font-weight: 600; color: var(--color-text); }
@@ -1346,6 +1392,7 @@ onBeforeUnmount(() => {
   background: var(--color-bg); border: 1px solid var(--color-line); border-radius: 8px; padding: 0.7em 0.85em; width: 100%; resize: vertical;
 }
 .landing-root .demo-form input:focus, .landing-root .demo-form textarea:focus { outline: 2px solid var(--color-primary); outline-offset: 1px; border-color: var(--color-primary); }
+.landing-root .demo-form input::placeholder, .landing-root .demo-form textarea::placeholder { color: #64748b; opacity: 1; }
 .landing-root .demo-submit { justify-content: center; margin-top: 0.2rem; }
 .landing-root .demo-thanks { text-align: center; padding: var(--space-3) 0; }
 .landing-root .demo-thanks h4 { font-size: 1.2rem; margin-bottom: 0.4rem; }
@@ -1362,17 +1409,23 @@ onBeforeUnmount(() => {
 .landing-root footer {
   padding: var(--space-5) 0 var(--space-4);
   background: var(--color-accent);
-  color: #FFFFFF;
+  color: #1A1200;
 }
 .landing-root .foot-grid { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--space-4); flex-wrap: wrap; }
 .landing-root .foot-brand .brand { margin-bottom: 0.5rem; }
-.landing-root .foot-brand p { color: #FFFFFF; opacity: 0.88; font-size: 0.85rem; max-width: 34ch; }
+.landing-root .foot-brand p { color: #1A1200; opacity: 0.82; font-size: 0.85rem; max-width: 38ch; }
 .landing-root .foot-links { display: flex; gap: var(--space-5); flex-wrap: wrap; }
-.landing-root .foot-col h5 { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: #FFFFFF; opacity: 0.8; margin-bottom: 0.6rem; }
-.landing-root .foot-col a { display: block; font-size: 0.88rem; text-decoration: none; color: #FFFFFF; opacity: 0.92; margin-bottom: 0.5rem; transition: color 150ms ease, transform 150ms ease; }
-.landing-root .foot-col a:hover { color: #1A1200; transform: translateX(3px); }
-.landing-root .foot-col a:focus-visible { outline: 2px solid #FFFFFF; outline-offset: 3px; }
-.landing-root .foot-bottom { margin-top: var(--space-5); padding-top: var(--space-3); border-top: 1px solid rgba(255, 255, 255, 0.32); display: flex; justify-content: space-between; font-size: 0.78rem; color: #FFFFFF; opacity: 0.85; flex-wrap: wrap; gap: 0.5rem; }
+.landing-root .foot-col h5 { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: #1A1200; opacity: 0.72; margin-bottom: 0.6rem; }
+.landing-root .foot-col a { display: block; font-size: 0.88rem; text-decoration: none; color: #1A1200; opacity: 0.88; margin-bottom: 0.5rem; transition: opacity 150ms ease, transform 150ms ease; }
+.landing-root .foot-col a:hover { opacity: 1; transform: translateX(3px); }
+.landing-root .foot-col a:focus-visible { outline: 2px solid #1A1200; outline-offset: 3px; }
+.landing-root .foot-bottom { margin-top: var(--space-5); padding-top: var(--space-3); border-top: 1px solid rgba(26, 18, 0, 0.24); display: flex; justify-content: space-between; font-size: 0.78rem; color: #1A1200; opacity: 0.78; flex-wrap: wrap; gap: 0.5rem; }
+
+@media (max-width: 640px) {
+  .landing-root .foot-grid { display: grid; grid-template-columns: 1fr; }
+  .landing-root .foot-links { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); width: 100%; }
+  .landing-root .foot-col:last-child { grid-column: 1 / -1; }
+}
 
 /* Reveal-on-scroll */
 .landing-root .reveal { opacity: 0; transform: translateY(14px); transition: opacity 0.6s ease, transform 0.6s ease; }

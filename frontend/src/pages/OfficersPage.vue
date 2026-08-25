@@ -3,6 +3,8 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { dispatch } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
+import { useConfirm } from '@/composables/useConfirm'
+import { useAnchorScope } from '@/composables/useAnchorScope'
 
 interface Officer {
   id: number
@@ -26,6 +28,8 @@ interface OfficerLocation { stateCode?: string; countyCode?: string; payamCode?:
 
 const auth = useAuthStore()
 const toast = useToast()
+const { confirmAction } = useConfirm()
+const { anchors, selectedAnchorId, anchorGateActive, anchorChosen } = useAnchorScope()
 const loading = ref(true)
 const officers = ref<Officer[]>([])
 const tableSearch = ref('')
@@ -42,6 +46,12 @@ const villages = ref<GeoNode[]>([])
 const geoLoading = ref(true)
 
 const filters = ref({ organisationCode: null as string | null, active: null as string | null })
+
+const scopeReady = computed(() => {
+  if (auth.isSystemAdmin) return anchorChosen.value
+  if (auth.isAnchorAdministrator) return !!filters.value.organisationCode
+  return true
+})
 
 const headers = [
   { title: 'Name', key: 'name' },
@@ -62,9 +72,11 @@ const locationsForCounty = (countyCode: string) => countyCode ? locations.value.
 const villagesForLocation = (locationCode: string) => locationCode ? villages.value.filter((v) => v.locationCode === locationCode) : villages.value
 
 async function load() {
+  if (!scopeReady.value) { officers.value = []; return }
   loading.value = true
   try {
     const res = await dispatch<{ results: Officer[] }>('GET_OFFICERS', {
+      targetAnchorId: auth.isSystemAdmin ? selectedAnchorId.value : undefined,
       organisationCode: filters.value.organisationCode ?? undefined,
       active: filters.value.active ?? undefined,
     })
@@ -78,6 +90,7 @@ async function load() {
 
 watch(() => filters.value.organisationCode, load)
 watch(() => filters.value.active, load)
+watch(selectedAnchorId, () => { filters.value.organisationCode = null; loadOrganizations(); load() })
 
 function clearFilters() {
   filters.value = { organisationCode: null, active: null }
@@ -104,17 +117,22 @@ async function loadGeo() {
   }
 }
 
-onMounted(async () => {
+async function loadOrganizations() {
+  if (!(auth.isAnchorAdministrator || (auth.isSystemAdmin && selectedAnchorId.value))) return
+  try {
+    const res = await dispatch<{ results: typeof organizations.value }>('GET_ORGANIZATIONS', {
+      targetAnchorId: auth.isSystemAdmin ? selectedAnchorId.value : undefined,
+    })
+    organizations.value = res.results
+  } catch {
+    // Filter dropdown just stays empty; the list itself still loaded above.
+  }
+}
+
+onMounted(() => {
   load()
   loadGeo()
-  if (auth.isAnchor) {
-    try {
-      const res = await dispatch<{ results: typeof organizations.value }>('GET_ORGANIZATIONS')
-      organizations.value = res.results
-    } catch {
-      // Filter dropdown just stays empty; the list itself still loaded above.
-    }
-  }
+  loadOrganizations()
 })
 
 function openCreate() {
@@ -130,6 +148,10 @@ function openEdit(officer: Officer) {
 }
 
 async function save() {
+  if (!form.value.firstName.trim() || !form.value.lastName.trim() || !/.+@.+\..+/.test(form.value.email)) {
+    toast.error('Enter the officer\'s first name, last name and a valid email address')
+    return
+  }
   if (auth.isAnchor && !editing.value && !form.value.organisationCode) {
     toast.error('Select the organisation this officer belongs to')
     return
@@ -152,13 +174,21 @@ async function save() {
   }
 }
 
-async function remove(officer: Officer) {
+async function setOfficerActive(officer: Officer, active: boolean) {
+  if (!await confirmAction({
+    title: `${active ? 'Activate' : 'Deactivate'} officer?`,
+    message: active
+      ? `${officer.firstName} ${officer.lastName} will regain access to the field app.`
+      : `${officer.firstName} ${officer.lastName} will no longer be able to sign in to the field app.`,
+    confirmLabel: active ? 'Activate' : 'Deactivate',
+    color: active ? 'secondary' : 'warning',
+  })) return
   try {
-    await dispatch('DELETE_OFFICER', { email: officer.email })
-    toast.success('Officer deactivated')
+    await dispatch('TOGGLE_OFFICER_STATUS', { email: officer.email, active: active ? 1 : 0 })
+    toast.success(active ? 'Officer activated' : 'Officer deactivated')
     await load()
   } catch (err) {
-    toast.error(err instanceof Error ? err.message : 'Delete failed')
+    toast.error(err instanceof Error ? err.message : `Failed to ${active ? 'activate' : 'deactivate'} officer`)
   }
 }
 
@@ -215,13 +245,28 @@ async function assignLocation() {
   <div>
     <div class="d-flex align-center justify-space-between mb-4">
       <h1 class="page-title">Field Officers</h1>
-      <v-btn color="secondary" prepend-icon="mdi-account-plus" @click="openCreate">Register Officer</v-btn>
+      <v-btn v-if="scopeReady && auth.can('ACCESS_SUPERVISORS')" color="secondary" prepend-icon="mdi-account-plus" @click="openCreate">Register Field Officer</v-btn>
     </div>
 
+    <v-select
+      v-if="anchorGateActive" v-model="selectedAnchorId" :items="anchors" item-title="name" item-value="id"
+      label="Choose anchor" variant="outlined" class="mb-4" style="max-width: 420px"
+      prepend-inner-icon="mdi-bank-outline"
+    />
+    <v-select
+      v-else-if="auth.isAnchorAdministrator" v-model="filters.organisationCode" :items="organizations" item-title="name" item-value="organisationCode"
+      label="Choose organisation" variant="outlined" class="mb-4" style="max-width: 420px"
+      prepend-inner-icon="mdi-domain"
+    />
+    <v-alert v-if="!scopeReady" type="info" variant="tonal" class="mb-4">
+      {{ auth.isSystemAdmin && !anchorChosen ? 'Choose an anchor to see its field officers.' : 'Choose an organisation to see its field officers.' }}
+    </v-alert>
+
+    <template v-if="scopeReady">
     <v-card variant="flat" border>
       <v-card-text>
         <v-row dense align="center">
-          <v-col v-if="auth.isAnchor" cols="12" sm="4" md="3">
+          <v-col v-if="auth.isSystemAdmin" cols="12" sm="4" md="3">
             <v-select v-model="filters.organisationCode" :items="organizations" item-title="name" item-value="organisationCode" label="Organisation" clearable hide-details density="compact" />
           </v-col>
           <v-col cols="12" sm="4" md="3">
@@ -244,12 +289,19 @@ async function assignLocation() {
           </v-chip>
         </template>
         <template #item.actions="{ item }">
-          <v-btn icon="mdi-pencil" variant="text" size="small" :aria-label="`Edit ${item.firstName} ${item.lastName}`" @click="openEdit(item)" />
-          <v-btn icon="mdi-map-marker-outline" variant="text" size="small" :aria-label="`Assign locations to ${item.firstName} ${item.lastName}`" @click="openAssignLocations(item)" />
-          <v-btn icon="mdi-delete" variant="text" size="small" color="error" :aria-label="`Remove officer ${item.firstName} ${item.lastName}`" @click="remove(item)" />
+          <v-btn v-if="auth.can('ACCESS_SUPERVISORS')" icon="mdi-pencil" variant="text" size="small" :aria-label="`Edit ${item.firstName} ${item.lastName}`" @click="openEdit(item)" />
+          <v-btn v-if="auth.can('ACCESS_SUPERVISORS')" icon="mdi-map-marker-outline" variant="text" size="small" :aria-label="`Assign locations to ${item.firstName} ${item.lastName}`" @click="openAssignLocations(item)" />
+          <v-btn
+            v-if="auth.can('ACCESS_SUPERVISORS')"
+            :icon="item.active === '1' ? 'mdi-account-cancel-outline' : 'mdi-account-check-outline'"
+            variant="text" size="small" :color="item.active === '1' ? 'error' : 'success'"
+            :aria-label="`${item.active === '1' ? 'Deactivate' : 'Activate'} ${item.firstName} ${item.lastName}`"
+            @click="setOfficerActive(item, item.active !== '1')"
+          />
         </template>
       </v-data-table>
     </v-card>
+    </template>
 
     <v-dialog v-model="dialog" max-width="560">
       <v-card class="officer-editor">
@@ -258,13 +310,13 @@ async function assignLocation() {
             <div class="editor-title"><v-icon icon="mdi-account-tie" size="20" /> {{ editing ? 'Edit Officer' : 'Register Field Officer' }}</div>
             <p>{{ editing ? 'Update this officer\'s profile.' : 'Create a field officer account and assign their organisation.' }}</p>
           </div>
-          <v-btn icon="mdi-close" variant="text" size="small" aria-label="Close officer form" @click="dialog = false" />
+          <dialog-close-button @close="dialog = false" />
         </div>
         <v-form @submit.prevent="save">
           <div class="field-grid">
-            <v-text-field v-model="form.firstName" label="First name" density="compact" />
-            <v-text-field v-model="form.lastName" label="Last name" density="compact" />
-            <v-text-field v-model="form.email" label="Email" type="email" :disabled="editing" density="compact" />
+            <v-text-field v-model="form.firstName" label="First name" density="compact" required />
+            <v-text-field v-model="form.lastName" label="Last name" density="compact" required />
+            <v-text-field v-model="form.email" label="Email" type="email" :disabled="editing" density="compact" required />
             <v-select
               v-if="auth.isAnchor && !editing"
               v-model="form.organisationCode" :items="organizations" item-title="name" item-value="organisationCode"
@@ -284,6 +336,7 @@ async function assignLocation() {
 
     <v-dialog v-model="locationDialog" max-width="560">
       <v-card v-if="locationTarget">
+        <dialog-close-button @close="locationDialog = false" />
         <v-card-title>Assign locations — {{ locationTarget.firstName }} {{ locationTarget.lastName }}</v-card-title>
         <v-card-text>
           <p class="text-caption text-medium-emphasis mb-3">

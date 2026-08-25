@@ -3,6 +3,8 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { dispatch } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
+import { useConfirm } from '@/composables/useConfirm'
+import { useAnchorScope } from '@/composables/useAnchorScope'
 
 interface PaymentRow {
   id: number
@@ -18,6 +20,8 @@ interface PaymentRow {
 
 const auth = useAuthStore()
 const toast = useToast()
+const { confirmAction } = useConfirm()
+const { anchors, selectedAnchorId, anchorGateActive, anchorChosen } = useAnchorScope()
 const loading = ref(true)
 const payments = ref<PaymentRow[]>([])
 const tableSearch = ref('')
@@ -27,6 +31,15 @@ const statusFilter = ref<number | null>(null)
 const organisationFilter = ref<string | null>(null)
 const dateFromFilter = ref<string | null>(null)
 const dateToFilter = ref<string | null>(null)
+
+// Anchor Administrators must choose an organisation before this page shows
+// anything; the System Owner must choose an anchor first (may optionally
+// narrow further with the organisation filter below).
+const scopeReady = computed(() => {
+  if (auth.isSystemAdmin) return anchorChosen.value
+  if (auth.isAnchorAdministrator) return !!organisationFilter.value
+  return true
+})
 
 const headers = [
   { title: 'Household', key: 'householdName' },
@@ -62,17 +75,22 @@ const paidAmountShare = computed(() => {
 })
 
 async function load() {
+  if (!scopeReady.value) { payments.value = []; summary.value = {}; return }
   loading.value = true
   try {
     const [p, s] = await Promise.all([
       dispatch<{ results: PaymentRow[] }>('GET_PAYMENTS', {
         pageSize: 100,
+        targetAnchorId: auth.isSystemAdmin ? selectedAnchorId.value : undefined,
         status: statusFilter.value ?? undefined,
         organisationCode: organisationFilter.value ?? undefined,
         dateFrom: dateFromFilter.value ?? undefined,
         dateTo: dateToFilter.value ?? undefined,
       }),
-      dispatch<{ results: Record<string, number> }>('PAYMENT_SUMMARY'),
+      dispatch<{ results: Record<string, number> }>('PAYMENT_SUMMARY', {
+        targetAnchorId: auth.isSystemAdmin ? selectedAnchorId.value : undefined,
+        organisationCode: organisationFilter.value ?? undefined,
+      }),
     ])
     payments.value = p.results
     summary.value = s.results
@@ -92,16 +110,25 @@ function clearFilters() {
   dateToFilter.value = null
 }
 
-onMounted(async () => {
-  load()
-  if (auth.isAnchor) {
-    try {
-      const res = await dispatch<{ results: typeof organizations.value }>('GET_ORGANIZATIONS')
-      organizations.value = res.results
-    } catch {
-      // Filter dropdown just stays empty; the list itself still loaded above.
-    }
+async function loadOrganizations() {
+  if (!auth.isAnchorAdministrator && !(auth.isSystemAdmin && selectedAnchorId.value)) { organizations.value = []; return }
+  try {
+    const res = await dispatch<{ results: typeof organizations.value }>('GET_ORGANIZATIONS', {
+      targetAnchorId: auth.isSystemAdmin ? selectedAnchorId.value : undefined,
+    })
+    organizations.value = res.results
+  } catch {
+    // Filter dropdown just stays empty; the list itself still loaded above.
   }
+}
+
+// System Owner picking a different anchor resets whatever organisation was
+// selected under the previous one, then reloads both lists.
+watch(selectedAnchorId, () => { organisationFilter.value = null; loadOrganizations(); load() })
+
+onMounted(() => {
+  load()
+  loadOrganizations()
 })
 
 function exportCsv() {
@@ -123,6 +150,12 @@ function exportCsv() {
 }
 
 async function markPaid(row: PaymentRow) {
+  if (!await confirmAction({
+    title: 'Mark payment as paid?',
+    message: `Confirm that ${row.householdName} received this payment. This changes the programme ledger.`,
+    confirmLabel: 'Mark as paid',
+    color: 'secondary',
+  })) return
   try {
     await dispatch('UPDATE_PAYMENT_STATUS', { id: row.id, status: 1 })
     toast.success('Payment marked as paid')
@@ -133,6 +166,12 @@ async function markPaid(row: PaymentRow) {
 }
 
 async function remove(row: PaymentRow) {
+  if (!await confirmAction({
+    title: 'Delete payment?',
+    message: `The payment record for ${row.householdName} will be removed. This action cannot be undone.`,
+    confirmLabel: 'Delete payment',
+    color: 'error',
+  })) return
   try {
     await dispatch('DELETE_PAYMENT', { id: row.id })
     toast.success('Payment deleted')
@@ -147,9 +186,24 @@ async function remove(row: PaymentRow) {
   <div>
     <div class="d-flex align-center justify-space-between mb-4">
       <h1 class="text-h5 font-weight-bold">Payments</h1>
-      <v-btn color="secondary" prepend-icon="mdi-download" @click="exportCsv">Export CSV</v-btn>
+      <v-btn v-if="scopeReady && auth.can('DOWNLOAD_REPORTS')" color="secondary" prepend-icon="mdi-download" @click="exportCsv">Export CSV</v-btn>
     </div>
 
+    <v-select
+      v-if="anchorGateActive" v-model="selectedAnchorId" :items="anchors" item-title="name" item-value="id"
+      label="Choose anchor" variant="outlined" class="mb-4" style="max-width: 420px"
+      prepend-inner-icon="mdi-bank-outline"
+    />
+    <v-select
+      v-else-if="auth.isAnchorAdministrator" v-model="organisationFilter" :items="organizations" item-title="name" item-value="organisationCode"
+      label="Choose organisation" variant="outlined" class="mb-4" style="max-width: 420px"
+      prepend-inner-icon="mdi-domain"
+    />
+    <v-alert v-if="!scopeReady" type="info" variant="tonal" class="mb-4">
+      {{ auth.isSystemAdmin && !anchorChosen ? 'Choose an anchor to see its payments.' : 'Choose an organisation to see its payments.' }}
+    </v-alert>
+
+    <template v-if="scopeReady">
     <v-row class="mb-2">
       <v-col cols="12" sm="4">
         <v-card class="pa-4 summary-card" variant="flat" border>
@@ -204,7 +258,7 @@ async function remove(row: PaymentRow) {
     <v-card variant="flat" border>
       <v-card-text>
         <v-row dense align="center">
-          <v-col v-if="auth.isAnchor" cols="12" sm="4" md="3">
+          <v-col v-if="auth.isSystemAdmin" cols="12" sm="4" md="3">
             <v-select v-model="organisationFilter" :items="organizations" item-title="name" item-value="organisationCode" label="Organisation" clearable hide-details density="compact" />
           </v-col>
           <v-col cols="6" sm="4" md="2">
@@ -237,17 +291,18 @@ async function remove(row: PaymentRow) {
         </template>
         <template #item.createdAt="{ item }">{{ item.createdAt ? new Date(item.createdAt).toLocaleDateString() : '-' }}</template>
         <template #item.actions="{ item }">
-          <v-btn
-            v-if="item.status !== 1" icon="mdi-check-circle-outline" variant="text" size="small" color="success"
+          <v-btn v-if="auth.can('ACCESS_PAYMENTS') && item.status !== 1"
+            icon="mdi-check-circle-outline" variant="text" size="small" color="success"
             :aria-label="`Mark payment to ${item.householdName} as paid`" @click="markPaid(item)"
           />
-          <v-btn
-            v-if="item.status !== 1" icon="mdi-delete" variant="text" size="small" color="error"
+          <v-btn v-if="auth.can('ACCESS_PAYMENTS') && item.status !== 1"
+            icon="mdi-delete" variant="text" size="small" color="error"
             :aria-label="`Delete payment to ${item.householdName}`" @click="remove(item)"
           />
         </template>
       </v-data-table>
     </v-card>
+    </template>
   </div>
 </template>
 

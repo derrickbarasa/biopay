@@ -1,5 +1,7 @@
 package com.biopay.utilities;
 
+import io.vertx.core.Future;
+import io.vertx.mssqlclient.MSSQLPool;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Random;
@@ -57,5 +59,18 @@ public class Utilities {
         String datePart = new SimpleDateFormat("yyyyMMdd").format(new Date());
         String randPart = UUID.randomUUID().toString().replace("-", "").substring(0, 6).toUpperCase();
         return prefix + "-" + datePart + "-" + randPart;
+    }
+
+    /** Next sequential anchor code, e.g. "ANC001", "ANC002" -- an anchor's own
+     *  identity now lives on its Anchor Administrator's row in `users`
+     *  (anchor_code), not in a separate anchors table. */
+    public static Future<String> nextAnchorCode(MSSQLPool pool) {
+        return pool.query("SELECT MAX(TRY_CAST(SUBSTRING(anchor_code, 4, 10) AS INT)) AS mx FROM users WHERE anchor_code LIKE 'ANC%'")
+                .execute()
+                .map(rows -> {
+                    Integer max = rows.size() == 0 ? null : rows.iterator().next().getInteger("mx");
+                    int next = (max == null ? 0 : max) + 1;
+                    return String.format("ANC%03d", next);
+                });
     }
 }

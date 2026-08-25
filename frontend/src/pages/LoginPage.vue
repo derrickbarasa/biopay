@@ -60,6 +60,9 @@ async function handleSubmit() {
         <!-- Right: login form (white) -->
         <section class="form-side">
           <div class="form-wrap">
+            <router-link to="/" class="auth-brand" aria-label="BioPay home">
+              <img src="/biopay_logo_horizontal.svg" alt="BioPay" />
+            </router-link>
             <div class="form-head">
               <h2 class="form-title">Welcome back</h2>
               <p class="form-subtitle">Sign in to your BioPay dashboard.</p>
@@ -72,20 +75,24 @@ async function handleSubmit() {
               <v-text-field
                 v-model="email"
                 label="Email"
-                prepend-inner-icon="mdi-email-outline"
                 :rules="[rules.required, rules.email]"
                 autocomplete="username"
               />
               <v-text-field
                 v-model="password"
                 label="Password"
-                prepend-inner-icon="mdi-lock-outline"
                 :type="showPassword ? 'text' : 'password'"
-                :append-inner-icon="showPassword ? 'mdi-eye-off' : 'mdi-eye'"
                 :rules="[rules.required]"
                 autocomplete="current-password"
-                @click:append-inner="showPassword = !showPassword"
-              />
+              >
+                <template #append-inner>
+                  <v-btn
+                    :icon="showPassword ? 'mdi-eye-off' : 'mdi-eye'" variant="text" density="compact"
+                    :aria-label="showPassword ? 'Hide password' : 'Show password'"
+                    @click="showPassword = !showPassword"
+                  />
+                </template>
+              </v-text-field>
               <div class="d-flex justify-end mb-2">
                 <router-link to="/forgot-password" class="text-caption text-decoration-none link">Forgot password?</router-link>
               </div>
@@ -117,34 +124,42 @@ async function handleSubmit() {
 .split > * { min-width: 0; }
 @media (max-width: 900px) { .split { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); } }
 
-/* ---- Brand side -- the supplied BioPay feature graphic, shown as-is ---- */
+/* ---- Brand side -- the supplied BioPay feature graphic, full-bleed ---- */
 .brand-side {
   position: relative;
   background: #050b1a;
   color: #fff;
-  padding: clamp(1.35rem, 3.2vh, 2.25rem) clamp(1.75rem, 3.2vw, 3rem);
-  display: flex;
-  flex-direction: column;
+  overflow: hidden;
 }
-@media (max-width: 900px) { .brand-side { padding: 1rem 1.25rem 1.15rem; min-height: 0; } }
 .brand-back {
-  display: inline-flex; align-items: center; color: rgba(255,255,255,.85);
+  position: absolute;
+  top: clamp(1rem, 3vh, 1.75rem);
+  left: clamp(1.25rem, 3vw, 2rem);
+  z-index: 2;
+  display: inline-flex; align-items: center; color: rgba(255,255,255,.92);
   text-decoration: none; font-size: .875rem; font-weight: 500;
-  flex-shrink: 0;
+  padding: .4rem .85rem .4rem .6rem;
+  border-radius: 999px;
+  background: rgba(5, 11, 26, .55);
+  backdrop-filter: blur(6px);
 }
-.brand-back:hover { color: #fff; }
+.brand-back:hover { color: #fff; background: rgba(5, 11, 26, .74); }
 .brand-graphic {
-  flex: 1;
+  position: absolute;
+  inset: 0;
   width: 100%;
-  min-height: 0;
-  object-fit: contain;
-  margin-top: clamp(.75rem, 2vh, 1.5rem);
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
 }
 @media (max-width: 900px) { .brand-graphic { display: none; } }
 
 /* ---- Form side (white) ---- */
 .form-side { width: 100%; min-height: 0; overflow-y: auto; overflow-x: hidden; background: #fff; display: flex; align-items: center; justify-content: center; padding: clamp(1.25rem, 4vh, 2.5rem) 1.5rem; }
 .form-wrap { width: 100%; min-width: 0; max-width: 400px; }
+.auth-brand { display: inline-flex; margin-bottom: 2.5rem; border-radius: 6px; }
+.auth-brand img { display: block; width: 158px; height: auto; }
+.auth-brand:focus-visible { outline: 3px solid #0d9488; outline-offset: 4px; }
 .form-wrap :deep(.v-input) { max-width: 100%; }
 .form-head { margin-bottom: 1.75rem; }
 .form-title { font-size: 1.6rem; font-weight: 700; color: #0f172a; margin: 0 0 .3rem; letter-spacing: -.01em; }
@@ -157,8 +172,9 @@ async function handleSubmit() {
 .btn-accent { background-color: #f59e0b !important; }
 .btn-accent:hover { background-color: #ea580c !important; }
 
-@media (min-width: 901px) and (max-height: 720px) {
-  .brand-side { padding-top: 1.1rem; padding-bottom: 1.1rem; }
+@media (max-width: 900px) {
+  .brand-side { display: flex; align-items: center; padding: .85rem 1.25rem; }
+  .brand-back { position: static; background: none; backdrop-filter: none; padding: 0; }
 }
 
 @media (max-width: 900px) {
@@ -166,6 +182,7 @@ async function handleSubmit() {
   .brand-back { font-size: .78rem; }
   .form-side { padding: 1rem 1.25rem; }
   .form-head { margin-bottom: 1.1rem; }
+  .auth-brand { margin-bottom: 1.6rem; }
   .form-title { font-size: 1.45rem; }
 }
 

@@ -28,7 +28,7 @@ import com.biopay.utilities.Utilities;
 /**
  * Login / session lifecycle for anchors, organisations (a single merged
  * portal -- the caller no longer says which one, it's read off the users
- * row) and supervisors (still separate; the officer app authenticates
+ * row) and field_officers (still separate; the officer app authenticates
  * against {@code LOGIN_SUPERVISOR} directly and isn't part of the OTP flow
  * below). A successful anchor/organisation password check doesn't issue a
  * session yet -- it issues a short-lived "pending" JWT (purpose=
@@ -128,7 +128,7 @@ public class Auth extends AbstractVerticle {
     /** ANCHOR sessions implicitly have every module; ORGANISATION/SUPERVISOR sessions get
      *  their organisation's enabled set, letting the frontend gate nav/actions right after login. */
     private Future<JsonArray> enabledModulesFor(String scope, String partnerCode) {
-        if ("ANCHOR".equalsIgnoreCase(scope)) {
+        if ("ANCHOR".equalsIgnoreCase(scope) || "SYSTEM".equalsIgnoreCase(scope)) {
             JsonArray arr = new JsonArray();
             OrgModules.ALL.forEach(arr::add);
             return Future.succeededFuture(arr);
@@ -147,7 +147,7 @@ public class Auth extends AbstractVerticle {
         if (partnerCode == null || partnerCode.isEmpty()) {
             return Future.succeededFuture("BIOMETRIC");
         }
-        return pool.preparedQuery("SELECT verification_method FROM partners WHERE partner_id=@p1")
+        return pool.preparedQuery("SELECT verification_method FROM organizations WHERE organization_code=@p1")
                 .execute(Tuple.of(partnerCode))
                 .map(rows -> {
                     if (rows.size() == 0) return "BIOMETRIC";
@@ -198,7 +198,7 @@ public class Auth extends AbstractVerticle {
                     }
 
                     Integer anchorId = intOr(r, "anchor_id", null);
-                    String partnerCode = "ORGANISATION".equalsIgnoreCase(scope) ? Rows.str(r, "partner_code") : null;
+                    String partnerCode = "ORGANISATION".equalsIgnoreCase(scope) ? Rows.str(r, "organization_code") : null;
                     boolean totpEnabled = Boolean.TRUE.equals(r.getBoolean("totp_enabled"));
                     if (otpRequired()) {
                         startOtpChallenge(message, id, scope, anchorId, partnerCode, email, totpEnabled);
@@ -339,7 +339,7 @@ public class Auth extends AbstractVerticle {
                     Row r = rows.iterator().next();
                     String scope = Rows.str(r, "user_scope");
                     Integer anchorId = intOr(r, "anchor_id", null);
-                    String partnerCode = "ORGANISATION".equalsIgnoreCase(scope) ? Rows.str(r, "partner_code") : null;
+                    String partnerCode = "ORGANISATION".equalsIgnoreCase(scope) ? Rows.str(r, "organization_code") : null;
                     String email = Rows.str(r, "email");
                     boolean systemAdmin = Boolean.TRUE.equals(r.getBoolean("is_system_admin"));
 
@@ -410,26 +410,23 @@ public class Auth extends AbstractVerticle {
 
     private void createAnchorAccount(Message<Object> message, String name, String authorisedName, String email,
             String phone, String address, String password, String ip) {
-        String anchorCode = Utilities.generateCode("ANC");
         String passwordHash = Passwords.hash(password);
         String displayName = authorisedName.isEmpty() ? name : authorisedName;
 
-        pool.withTransaction(connection -> connection.preparedQuery(
-                        "INSERT INTO anchors (anchor_code, name, authorised_name, authorised_email, authorised_contact, "
-                                + "address, status, created_by, created_at) OUTPUT INSERTED.id "
-                                + "VALUES (@p1,@p2,@p3,@p4,@p5,@p6,1,@p7,GETDATE())")
-                .execute(Tuple.of(anchorCode, name, authorisedName, email, phone, address, "SIGNUP"))
+        // An anchor is its Anchor Administrator's own row in `users` -- signup creates one
+        // row, self-referencing anchor_id to its own id, instead of a separate anchors row.
+        Utilities.nextAnchorCode(pool).compose(anchorCode -> pool.withTransaction(connection -> connection.preparedQuery(
+                        "INSERT INTO users (email, username, password, first_name, other_names, "
+                                + "role_id, active, status, user_scope, anchor_code, anchor_name, phone, address, created_at, updated_at) "
+                                + "OUTPUT INSERTED.id "
+                                + "VALUES (@p1, @p1, @p2, @p3, '', "
+                                + "(SELECT TOP 1 id FROM roles WHERE role_name='Anchor Administrator' AND status=1), "
+                                + "1, 1, 'ANCHOR', @p4, @p5, @p6, @p7, GETDATE(), GETDATE())")
+                .execute(Tuple.of(email, passwordHash, displayName, anchorCode, name, phone, address))
                 .map(rows -> intOr(rows.iterator().next(), "id", 0))
-                .compose(anchorId -> connection.preparedQuery(
-                                "INSERT INTO users (partner_code, email, username, password, first_name, other_names, "
-                                        + "role_id, active, status, anchor_id, user_scope, created_at, updated_at) OUTPUT INSERTED.id "
-                                        + "VALUES (NULL, @p1, @p1, @p2, @p3, '', "
-                                        + "(SELECT TOP 1 id FROM roles WHERE role_name='Anchor Administrator' AND status=1), "
-                                        + "1, 1, @p4, 'ANCHOR', GETDATE(), GETDATE())")
-                        .execute(Tuple.of(email, passwordHash, displayName, anchorId))
-                        .map(rows -> new JsonObject()
-                                .put("anchorId", anchorId)
-                                .put("userId", intOr(rows.iterator().next(), "id", 0)))))
+                .compose(userId -> connection.preparedQuery("UPDATE users SET anchor_id=id WHERE id=@p1")
+                        .execute(Tuple.of(userId))
+                        .map(r -> new JsonObject().put("anchorId", userId).put("userId", userId)))))
                 .onFailure(err -> onDbError(message, err))
                 .onSuccess(ids -> {
                     int userId = ids.getInteger("userId");
@@ -464,7 +461,7 @@ public class Auth extends AbstractVerticle {
         int actorId = Integer.parseInt(actorIdVal.toString());
         boolean supervisor = "SUPERVISOR".equalsIgnoreCase(actorRole);
         String sql = supervisor
-                ? "UPDATE supervisors SET firstname=@p1, lastname=@p2 WHERE id=@p3"
+                ? "UPDATE field_officers SET firstname=@p1, lastname=@p2 WHERE id=@p3"
                 : "UPDATE users SET first_name=@p1, other_names=@p2, updated_at=GETDATE() WHERE id=@p3";
 
         pool.preparedQuery(sql)
@@ -570,7 +567,7 @@ public class Auth extends AbstractVerticle {
                 });
     }
 
-    // ---- LOGIN_SUPERVISOR (supervisors table -- Android app only, no OTP step) ------
+    // ---- LOGIN_SUPERVISOR (field_officers table -- Android app only, no OTP step) ------
 
     private void loginSupervisor(Message<Object> message) {
         JsonObject payload = new JsonObject(message.body().toString());
@@ -583,7 +580,7 @@ public class Auth extends AbstractVerticle {
             return;
         }
 
-        pool.preparedQuery("SELECT * FROM supervisors WHERE LOWER(email) = @p1")
+        pool.preparedQuery("SELECT * FROM field_officers WHERE LOWER(email) = @p1")
                 .execute(Tuple.of(email))
                 .onFailure(err -> onDbError(message, err))
                 .onSuccess(rows -> {
@@ -609,7 +606,7 @@ public class Auth extends AbstractVerticle {
                     }
 
                     Integer anchorId = intOr(r, "anchor_id", null);
-                    String partnerCode = Rows.str(r, "partner_code");
+                    String partnerCode = Rows.str(r, "organization_code");
 
                     JsonObject claims = new JsonObject()
                             .put("sub", id)
@@ -706,7 +703,7 @@ public class Auth extends AbstractVerticle {
 
     private Future<JsonObject> reloadClaims(String subjectType, int subjectId) {
         if ("SUPERVISOR".equalsIgnoreCase(subjectType)) {
-            return pool.preparedQuery("SELECT * FROM supervisors WHERE id = @p1")
+            return pool.preparedQuery("SELECT * FROM field_officers WHERE id = @p1")
                     .execute(Tuple.of(subjectId))
                     .map(rows -> {
                         if (rows.size() == 0) {
@@ -717,7 +714,7 @@ public class Auth extends AbstractVerticle {
                                 .put("sub", subjectId)
                                 .put("role", "SUPERVISOR")
                                 .put("anchorId", intOr(r, "anchor_id", null))
-                                .put("partnerCode", Rows.str(r, "partner_code"))
+                                .put("partnerCode", Rows.str(r, "organization_code"))
                                 .put("email", Rows.str(r, "email"));
                     });
         }
@@ -733,7 +730,7 @@ public class Auth extends AbstractVerticle {
                             .put("sub", subjectId)
                             .put("role", scope)
                             .put("anchorId", intOr(r, "anchor_id", null))
-                            .put("partnerCode", "ORGANISATION".equalsIgnoreCase(scope) ? Rows.str(r, "partner_code") : null)
+                            .put("partnerCode", "ORGANISATION".equalsIgnoreCase(scope) ? Rows.str(r, "organization_code") : null)
                             .put("email", Rows.str(r, "email"))
                             .put("systemAdmin", Boolean.TRUE.equals(r.getBoolean("is_system_admin")));
                 });
@@ -771,7 +768,7 @@ public class Auth extends AbstractVerticle {
         }
         int actorId = Integer.parseInt(actorIdVal.toString());
         boolean isSupervisor = "SUPERVISOR".equalsIgnoreCase(actorRole);
-        String table = isSupervisor ? "supervisors" : "users";
+        String table = isSupervisor ? "field_officers" : "users";
 
         pool.preparedQuery("SELECT password FROM " + table + " WHERE id=@p1")
                 .execute(Tuple.of(actorId))
@@ -804,7 +801,7 @@ public class Auth extends AbstractVerticle {
         int actorId = Integer.parseInt(actorIdVal.toString());
 
         if ("SUPERVISOR".equalsIgnoreCase(actorRole)) {
-            pool.preparedQuery("SELECT * FROM supervisors WHERE id=@p1")
+            pool.preparedQuery("SELECT * FROM field_officers WHERE id=@p1")
                     .execute(Tuple.of(actorId))
                     .onFailure(err -> onDbError(message, err))
                     .onSuccess(rows -> {
@@ -813,7 +810,7 @@ public class Auth extends AbstractVerticle {
                             return;
                         }
                         Row r = rows.iterator().next();
-                        String partnerCode = Rows.str(r, "partner_code");
+                        String partnerCode = Rows.str(r, "organization_code");
                         enabledModulesFor("SUPERVISOR", partnerCode).onComplete(modulesAr -> reply(message, new JsonObject()
                                 .put("responseCode", "000")
                                 .put("responseMessage", "OK")
@@ -840,7 +837,7 @@ public class Auth extends AbstractVerticle {
                     }
                     Row r = rows.iterator().next();
                     String scope = Rows.str(r, "user_scope");
-                    String partnerCode = "ORGANISATION".equalsIgnoreCase(scope) ? Rows.str(r, "partner_code") : null;
+                    String partnerCode = "ORGANISATION".equalsIgnoreCase(scope) ? Rows.str(r, "organization_code") : null;
                     Future<JsonArray> permsF = getPermissions(intOr(r, "role_id", null));
                     Future<JsonArray> modulesF = enabledModulesFor(scope, partnerCode);
                     Future.all(permsF, modulesF).onComplete(cf -> reply(message, new JsonObject()
@@ -1013,7 +1010,7 @@ public class Auth extends AbstractVerticle {
     /** Best-effort audit write -- never blocks or fails the caller's flow. */
     private void audit(Integer actorId, Integer anchorId, String actorType, String partnerCode,
             String action, String ip, JsonObject details) {
-        String sql = "INSERT INTO audit_logs (actor_type, actor_id, anchor_id, partner_code, action, details, ip_address, created_at) "
+        String sql = "INSERT INTO audit_logs (actor_type, actor_id, anchor_id, organization_code, action, details, ip_address, created_at) "
                 + "VALUES (@p1, @p2, @p3, @p4, @p5, @p6, @p7, GETDATE())";
         pool.preparedQuery(sql)
                 .execute(Tuple.of(actorType, actorId, anchorId, partnerCode, action, details.encode(), ip))

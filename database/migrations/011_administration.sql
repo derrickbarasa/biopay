@@ -13,7 +13,7 @@ GO
 IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('roles') AND name = 'anchor_id')
     ALTER TABLE roles ADD anchor_id INT NULL;
 GO
-IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('roles') AND name = 'partner_code')
+IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('roles') AND name IN ('partner_code', 'organization_code'))
     ALTER TABLE roles ADD partner_code VARCHAR(20) NULL;
 GO
 IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('roles') AND name = 'role_scope')

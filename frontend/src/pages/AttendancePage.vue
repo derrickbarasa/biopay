@@ -3,6 +3,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { dispatch } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
+import { useAnchorScope } from '@/composables/useAnchorScope'
 
 interface AttendanceRow {
   householdNumber: string
@@ -19,6 +20,7 @@ interface AttendanceRow {
 
 const auth = useAuthStore()
 const toast = useToast()
+const { anchors, selectedAnchorId, anchorGateActive, anchorChosen } = useAnchorScope()
 const loading = ref(true)
 const records = ref<AttendanceRow[]>([])
 const tableSearch = ref('')
@@ -26,6 +28,12 @@ const organizations = ref<{ organisationCode: string; name: string }[]>([])
 const dateFilter = ref<string | null>(null)
 const clockFilter = ref<string | null>(null)
 const organisationFilter = ref<string | null>(null)
+
+const scopeReady = computed(() => {
+  if (auth.isSystemAdmin) return anchorChosen.value
+  if (auth.isAnchorAdministrator) return !!organisationFilter.value
+  return true
+})
 
 const headers = [
   { title: 'Household', key: 'householdNumber' },
@@ -46,9 +54,11 @@ const orgNameByCode = computed(() => new Map(organizations.value.map((o) => [o.o
 function orgName(code?: string) { return (code && orgNameByCode.value.get(code)) || code || '—' }
 
 async function load() {
+  if (!scopeReady.value) { records.value = []; return }
   loading.value = true
   try {
     const r = await dispatch<{ results: AttendanceRow[] }>('GET_ATTENDANCE', {
+      targetAnchorId: auth.isSystemAdmin ? selectedAnchorId.value : undefined,
       attendanceDate: dateFilter.value ?? undefined,
       clock: clockFilter.value ?? undefined,
       organisationCode: organisationFilter.value ?? undefined,
@@ -62,6 +72,7 @@ async function load() {
 }
 
 watch([dateFilter, clockFilter, organisationFilter], load)
+watch(selectedAnchorId, () => { organisationFilter.value = null; loadOrganizations(); load() })
 
 function clearFilters() {
   dateFilter.value = null
@@ -69,16 +80,21 @@ function clearFilters() {
   organisationFilter.value = null
 }
 
-onMounted(async () => {
-  load()
-  if (auth.isAnchor) {
-    try {
-      const res = await dispatch<{ results: typeof organizations.value }>('GET_ORGANIZATIONS')
-      organizations.value = res.results
-    } catch {
-      // Filter dropdown just stays empty; the list itself still loaded above.
-    }
+async function loadOrganizations() {
+  if (!(auth.isAnchorAdministrator || (auth.isSystemAdmin && selectedAnchorId.value))) return
+  try {
+    const res = await dispatch<{ results: typeof organizations.value }>('GET_ORGANIZATIONS', {
+      targetAnchorId: auth.isSystemAdmin ? selectedAnchorId.value : undefined,
+    })
+    organizations.value = res.results
+  } catch {
+    // Filter dropdown just stays empty; the list itself still loaded above.
   }
+}
+
+onMounted(() => {
+  load()
+  loadOrganizations()
 })
 
 function exportCsv() {
@@ -104,9 +120,24 @@ function exportCsv() {
   <div>
     <div class="d-flex align-center justify-space-between mb-4">
       <h1 class="text-h5 font-weight-bold">Attendance</h1>
-      <v-btn color="secondary" prepend-icon="mdi-download" @click="exportCsv">Export CSV</v-btn>
+      <v-btn v-if="scopeReady && auth.can('DOWNLOAD_REPORTS')" color="secondary" prepend-icon="mdi-download" @click="exportCsv">Export CSV</v-btn>
     </div>
 
+    <v-select
+      v-if="anchorGateActive" v-model="selectedAnchorId" :items="anchors" item-title="name" item-value="id"
+      label="Choose anchor" variant="outlined" class="mb-4" style="max-width: 420px"
+      prepend-inner-icon="mdi-bank-outline"
+    />
+    <v-select
+      v-else-if="auth.isAnchorAdministrator" v-model="organisationFilter" :items="organizations" item-title="name" item-value="organisationCode"
+      label="Choose organisation" variant="outlined" class="mb-4" style="max-width: 420px"
+      prepend-inner-icon="mdi-domain"
+    />
+    <v-alert v-if="!scopeReady" type="info" variant="tonal" class="mb-4">
+      {{ auth.isSystemAdmin && !anchorChosen ? 'Choose an anchor to see attendance records.' : 'Choose an organisation to see attendance records.' }}
+    </v-alert>
+
+    <template v-if="scopeReady">
     <v-row class="mb-2">
       <v-col cols="12" sm="4">
         <v-card class="pa-4" variant="flat" border>
@@ -131,7 +162,7 @@ function exportCsv() {
     <v-card variant="flat" border>
       <v-card-text>
         <v-row dense align="center">
-          <v-col v-if="auth.isAnchor" cols="12" sm="4" md="3">
+          <v-col v-if="auth.isSystemAdmin" cols="12" sm="4" md="3">
             <v-select v-model="organisationFilter" :items="organizations" item-title="name" item-value="organisationCode" label="Organisation" clearable hide-details density="compact" />
           </v-col>
           <v-col cols="6" sm="4" md="2">
@@ -173,5 +204,6 @@ function exportCsv() {
         </template>
       </v-data-table>
     </v-card>
+    </template>
   </div>
 </template>

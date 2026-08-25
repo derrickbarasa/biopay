@@ -35,6 +35,7 @@ export type ProcessingCode =
   | 'TOTP_DISABLE'
   // administration
   | 'GET_ANCHORS'
+  | 'CREATE_ANCHOR'
   | 'UPDATE_ANCHOR'
   | 'GET_USERS'
   | 'GET_USER'
@@ -56,6 +57,7 @@ export type ProcessingCode =
   | 'CREATE_OFFICER'
   | 'UPDATE_OFFICER'
   | 'DELETE_OFFICER'
+  | 'TOGGLE_OFFICER_STATUS'
   | 'ASSIGN_OFFICER_LOCATION'
   | 'GET_OFFICER'
   | 'GET_OFFICERS'

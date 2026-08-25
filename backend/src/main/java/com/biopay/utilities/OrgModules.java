@@ -32,7 +32,7 @@ public final class OrgModules {
 
     /** All module codes enabled for the given organisation. */
     public static Future<Set<String>> enabledFor(MSSQLPool pool, String partnerCode) {
-        return pool.preparedQuery("SELECT module_code FROM organisation_modules WHERE partner_code=@p1 AND enabled=1")
+        return pool.preparedQuery("SELECT module_code FROM organisation_modules WHERE organization_code=@p1 AND enabled=1")
                 .execute(Tuple.of(partnerCode))
                 .map(rows -> {
                     Set<String> set = new java.util.HashSet<>();
@@ -54,7 +54,7 @@ public final class OrgModules {
 
     /** Whether a single module is enabled for the organisation -- used to guard module-gated writes. */
     public static Future<Boolean> isEnabled(MSSQLPool pool, String partnerCode, String moduleCode) {
-        return pool.preparedQuery("SELECT 1 AS v FROM organisation_modules WHERE partner_code=@p1 AND module_code=@p2 AND enabled=1")
+        return pool.preparedQuery("SELECT 1 AS v FROM organisation_modules WHERE organization_code=@p1 AND module_code=@p2 AND enabled=1")
                 .execute(Tuple.of(partnerCode, moduleCode))
                 .map(rows -> rows.size() > 0)
                 .recover(err -> Future.succeededFuture(false));

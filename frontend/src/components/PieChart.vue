@@ -10,7 +10,7 @@ const thickness = 26
 const center = size / 2
 const hoverIndex = ref<number | null>(null)
 
-const palette = computed(() => props.colors ?? ['#0D9488', '#F59E0B', '#2563EB', '#0F766E', '#EA580C', '#94A3B8'])
+const palette = computed(() => props.colors ?? ['#0D9488', '#F59E0B', '#16A34A', '#0F766E', '#EA580C', '#94A3B8'])
 const total = computed(() => props.data.reduce((sum, d) => sum + d.value, 0) || 0)
 
 function polar(angle: number, r: number) {

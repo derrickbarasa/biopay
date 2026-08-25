@@ -15,10 +15,12 @@
 -- currency/rate is instead set explicitly by the maker at generation time.
 -- Nullable/defaulted so every pre-existing row stays valid. Safe to re-run.
 
-IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('payroll_cycles') AND name = 'currency')
+-- OBJECT_ID('payroll_cycles') IS NOT NULL: skipped once migration 029 has
+-- renamed payroll_cycles -> payment_cycles (the columns survive the rename).
+IF OBJECT_ID('payroll_cycles') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('payroll_cycles') AND name = 'currency')
     ALTER TABLE payroll_cycles ADD currency VARCHAR(10) NOT NULL DEFAULT 'USD';
 GO
-IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('payroll_cycles') AND name = 'exchange_rate')
+IF OBJECT_ID('payroll_cycles') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('payroll_cycles') AND name = 'exchange_rate')
     ALTER TABLE payroll_cycles ADD exchange_rate DECIMAL(18,6) NOT NULL DEFAULT 1;
 GO
 

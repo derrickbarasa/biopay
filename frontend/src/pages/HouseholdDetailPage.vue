@@ -59,7 +59,7 @@ const payments = ref<PaymentEvent[]>([])
 const events = ref<AuditEvent[]>([])
 const vouchers = ref<VoucherEvent[]>([])
 // Object URLs for photos fetched (with the auth header) through apiClient as blobs --
-// a plain <img src> can't reach the JWT-protected /files route.
+// a plain image URL can't reach the JWT-protected /files route.
 const photoUrls = ref<string[]>([])
 // Same blob-fetch pattern, keyed by alternateNumber, for each alternate's own gallery.
 const alternatePhotoUrls = ref<Record<string, string[]>>({})
@@ -158,7 +158,9 @@ async function load() {
   try {
     const [h, alts, hist] = await Promise.all([
       dispatch<{ results: any[] }>('GET_HOUSEHOLD', { householdNumber: householdNumber.value }),
-      dispatch<{ results: Alternate[] }>('GET_ALTERNATES', { householdNumber: householdNumber.value }),
+      auth.can('ACCESS_ALTERNATES')
+        ? dispatch<{ results: Alternate[] }>('GET_ALTERNATES', { householdNumber: householdNumber.value })
+        : Promise.resolve({ results: [] as Alternate[] }),
       dispatch<{ results: { payments: PaymentEvent[]; events: AuditEvent[]; vouchers: VoucherEvent[] } }>(
         'GET_HOUSEHOLD_HISTORY', { householdNumber: householdNumber.value },
       ),
@@ -235,7 +237,7 @@ async function printVoucher() {
     const qr = v.qr ? `<img class="qr" src="${v.qr}" alt="Household QR code" />` : ''
     w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Payment Voucher - ${escapeHtml(v.householdNumber)}</title>
       <style>
-        * { box-sizing: border-box; font-family: Arial, Helvetica, sans-serif; }
+        * { box-sizing: border-box; font-family: "Segoe UI", sans-serif; }
         body { margin: 0; padding: 32px; color: #0f172a; }
         .voucher { max-width: 620px; margin: 0 auto; border: 2px solid #0d9488; border-radius: 14px; padding: 28px; }
         .head { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 1px solid #e2e8f0; padding-bottom: 14px; margin-bottom: 20px; }
@@ -390,7 +392,7 @@ onMounted(() => { load(); loadNameLookups() })
       </div>
       <v-spacer />
       <v-btn
-        v-if="detail"
+        v-if="detail && auth.can('ACCESS_VOUCHERS')"
         color="primary"
         variant="tonal"
         prepend-icon="mdi-printer"
@@ -433,12 +435,12 @@ onMounted(() => { load(); loadNameLookups() })
           </v-card-text>
         </v-card>
 
-        <v-card variant="flat" border>
+        <v-card v-if="auth.can('ACCESS_ALTERNATES')" variant="flat" border>
           <v-card-title class="text-subtitle-1 font-weight-bold d-flex align-center">
             Alternates ({{ alternates.length }})
             <v-spacer />
             <v-btn
-              v-if="alternates.length"
+              v-if="alternates.length && auth.can('DOWNLOAD_REPORTS')"
               size="small"
               variant="text"
               prepend-icon="mdi-download"
@@ -447,7 +449,7 @@ onMounted(() => { load(); loadNameLookups() })
             >
               Export
             </v-btn>
-            <v-btn
+            <v-btn v-if="auth.can('ACCESS_ALTERNATES')"
               size="small"
               color="secondary"
               prepend-icon="mdi-account-plus-outline"
@@ -596,8 +598,8 @@ onMounted(() => { load(); loadNameLookups() })
         <v-card-title class="d-flex align-center">
           Add alternate
           <v-spacer />
-          <v-btn icon="mdi-close" variant="text" size="small" @click="addAltDialog = false" />
         </v-card-title>
+        <dialog-close-button @close="addAltDialog = false" />
         <v-divider />
         <v-card-text class="d-flex flex-column ga-3 pt-4">
           <v-text-field v-model="altForm.alternateName" label="Full name" hide-details density="compact" />

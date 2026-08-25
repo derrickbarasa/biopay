@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useToast } from '@/composables/useToast'
 import { routeNavigating } from '@/composables/useRouteProgress'
+import ConfirmDialog from '@/components/ConfirmDialog.vue'
 
 const { state } = useToast()
 </script>
@@ -15,6 +16,7 @@ const { state } = useToast()
       class="route-progress"
     />
     <router-view />
+    <ConfirmDialog />
     <v-snackbar v-model="state.show" :color="state.color" location="top right" timeout="4000">
       {{ state.message }}
     </v-snackbar>

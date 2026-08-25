@@ -2,11 +2,17 @@
 import { computed, ref, useId } from 'vue'
 
 interface Point { label: string; value: number }
-const props = defineProps<{ data: Point[]; color?: string; valuePrefix?: string }>()
+const props = defineProps<{
+  data: Point[]
+  color?: string
+  valuePrefix?: string
+  ariaLabel?: string
+  showValues?: boolean
+}>()
 
 const width = 640
 const height = 240
-const padding = { top: 14, right: 16, bottom: 30, left: 44 }
+const padding = { top: 26, right: 16, bottom: 34, left: 44 }
 const hoverIndex = ref<number | null>(null)
 const gradientId = `line-fill-${useId()}`
 
@@ -75,7 +81,13 @@ const areaPath = computed(() => {
 
 <template>
   <div class="chart-wrap">
-    <svg :viewBox="`0 0 ${width} ${height}`" class="w-100" role="img" aria-label="Line chart">
+    <svg
+      :viewBox="`0 0 ${width} ${height}`"
+      class="chart-svg"
+      role="img"
+      :aria-label="ariaLabel ?? 'Line chart'"
+      preserveAspectRatio="xMidYMid meet"
+    >
       <defs>
         <linearGradient :id="gradientId" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" :stop-color="stroke" stop-opacity=".22" />
@@ -95,9 +107,20 @@ const areaPath = computed(() => {
       <path :d="areaPath" :fill="`url(#${gradientId})`" stroke="none" />
       <path :d="linePath" fill="none" :stroke="stroke" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
 
-      <g v-for="(p, i) in points" :key="i">
-        <rect :x="p.x - (innerW / Math.max(points.length - 1, 1)) / 2" :y="padding.top" :width="innerW / Math.max(points.length, 1)" :height="innerH" fill="transparent" @mouseenter="hoverIndex = i" @mouseleave="hoverIndex = null" />
+      <g
+        v-for="(p, i) in points"
+        :key="i"
+        tabindex="0"
+        class="chart-point"
+        @mouseenter="hoverIndex = i"
+        @mouseleave="hoverIndex = null"
+        @focus="hoverIndex = i"
+        @blur="hoverIndex = null"
+      >
+        <title>{{ p.label }}: {{ valuePrefix }}{{ p.value.toLocaleString() }}</title>
+        <rect :x="p.x - (innerW / Math.max(points.length - 1, 1)) / 2" :y="padding.top" :width="innerW / Math.max(points.length, 1)" :height="innerH" fill="transparent" />
         <circle :cx="p.x" :cy="p.y" :r="hoverIndex === i ? 5 : 3.5" :fill="stroke" stroke="#fff" stroke-width="1.5" style="pointer-events: none;" />
+        <text v-if="showValues" :x="p.x" :y="Math.max(p.y - 10, 14)" text-anchor="middle" class="value-label">{{ p.value.toLocaleString() }}</text>
         <text :x="p.x" :y="height - 10" text-anchor="middle" class="axis-label">{{ p.label }}</text>
       </g>
 
@@ -111,7 +134,10 @@ const areaPath = computed(() => {
     <div
       v-if="hoverIndex !== null"
       class="tooltip"
-      :style="{ left: points[hoverIndex].x + 'px', top: points[hoverIndex].y + 'px' }"
+      :style="{
+        left: `${(points[hoverIndex].x / width) * 100}%`,
+        top: `${(points[hoverIndex].y / height) * 100}%`,
+      }"
     >
       <strong>{{ valuePrefix }}{{ points[hoverIndex].value.toLocaleString() }}</strong>
       <div class="tooltip-label">{{ points[hoverIndex].label }}</div>
@@ -120,9 +146,13 @@ const areaPath = computed(() => {
 </template>
 
 <style scoped>
-.chart-wrap { position: relative; }
+.chart-wrap { position: relative; width: 100%; }
+.chart-svg { display: block; width: 100%; height: auto; overflow: visible; }
 .tick-label { font-size: 10px; fill: #94a3b8; font-variant-numeric: tabular-nums; }
 .axis-label { font-size: 10px; fill: #64748b; }
+.value-label { font-size: 11px; font-weight: 700; fill: #334155; font-variant-numeric: tabular-nums; }
+.chart-point { outline: none; }
+.chart-point:focus circle { stroke: #0f172a; stroke-width: 2.5; }
 .tooltip {
   position: absolute;
   transform: translate(-50%, -128%);

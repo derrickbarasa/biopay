@@ -18,6 +18,7 @@ import com.biopay.utilities.FaceEmbedding;
 import com.biopay.utilities.Logging;
 import com.biopay.utilities.Rows;
 import com.biopay.utilities.Utilities;
+import com.biopay.utilities.TenantScope;
 
 /**
  * Everything the Android field app talks to after logging in: enrolling and
@@ -73,7 +74,7 @@ public class Biometric extends AbstractVerticle {
     }
 
     private static boolean isAnchor(JsonObject payload) {
-        return "ANCHOR".equalsIgnoreCase(payload.getString("actorRole", ""));
+        return TenantScope.managesOrganisations(payload);
     }
 
     /** Mobile SUPERVISOR sessions (the normal caller here) carry partnerCode directly on the
@@ -104,7 +105,7 @@ public class Biometric extends AbstractVerticle {
         }
         String householdNumber = payload.getString("householdNumber", Utilities.generateCode("HH"));
 
-        String sql = "INSERT INTO households (supervisor_id, partner_code, household_number, household_name, age, "
+        String sql = "INSERT INTO households (officer_code, organization_code, household_number, household_name, age, "
                 + "gender, phone_number, household_size, boma_code, latitude, longitude, duplicate, duplicate_number, "
                 + "matching_score, registration_method, status, created_by, created_at, updated_at, stored_at) "
                 + "VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,@p12,@p13,@p14,@p15,1,@p16,GETDATE(),GETDATE(),GETDATE())";
@@ -138,7 +139,7 @@ public class Biometric extends AbstractVerticle {
         }
         String alternateNumber = payload.getString("alternateNumber", Utilities.generateCode("ALT"));
 
-        String sql = "INSERT INTO alternates (supervisor_id, household_number, partner_code, alternate_number, "
+        String sql = "INSERT INTO alternates (officer_code, household_number, organization_code, alternate_number, "
                 + "alternate_name, relationship, age, phone_number, gender, duplicate, duplicate_number, matching_score, "
                 + "registration_method, status, created_by, created_at, stored_at) "
                 + "VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,@p12,@p13,1,@p14,GETDATE(),GETDATE())";
@@ -182,8 +183,8 @@ public class Biometric extends AbstractVerticle {
             return;
         }
 
-        String sql = "INSERT INTO fingerprints (supervisor_id, beneficiary_type, beneficiary_id, fingerprint_number, "
-                + "uuid, fingerprint, partner_code, status, created_by, created_at, stored_at) "
+        String sql = "INSERT INTO fingerprints (officer_code, beneficiary_type, beneficiary_id, fingerprint_number, "
+                + "uuid, fingerprint, organization_code, status, created_by, created_at, stored_at) "
                 + "VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,1,@p8,GETDATE(),GETDATE())";
         pool.preparedQuery(sql)
                 .execute(Tuple.of(String.valueOf(payload.getValue("actorId")), beneficiaryType, beneficiaryId,
@@ -217,8 +218,8 @@ public class Biometric extends AbstractVerticle {
         }
 
         String sql = householdHint == null
-                ? "SELECT * FROM fingerprints WHERE partner_code=@p1 AND status=1"
-                : "SELECT * FROM fingerprints f WHERE f.partner_code=@p1 AND f.status=1 AND ("
+                ? "SELECT * FROM fingerprints WHERE organization_code=@p1 AND status=1"
+                : "SELECT * FROM fingerprints f WHERE f.organization_code=@p1 AND f.status=1 AND ("
                         + "f.beneficiary_id=@p2 OR f.beneficiary_id IN (SELECT alternate_number FROM alternates WHERE household_number=@p2))";
         Tuple params = householdHint == null ? Tuple.of(partnerCode) : Tuple.of(partnerCode, householdHint);
 
@@ -261,7 +262,7 @@ public class Biometric extends AbstractVerticle {
         JsonObject payload = new JsonObject(message.body().toString());
         String partnerCode = partnerCodeOf(payload);
 
-        pool.preparedQuery("SELECT * FROM fingerprints WHERE partner_code=@p1 AND status=1")
+        pool.preparedQuery("SELECT * FROM fingerprints WHERE organization_code=@p1 AND status=1")
                 .execute(Tuple.of(partnerCode))
                 .onFailure(err -> onDbError(message, err))
                 .onSuccess(rows -> {
@@ -315,8 +316,8 @@ public class Biometric extends AbstractVerticle {
         }
 
         String sql = "IF NOT EXISTS (SELECT 1 FROM faces WHERE uuid=@p1) "
-                + "INSERT INTO faces (supervisor_id, beneficiary_type, beneficiary_id, uuid, embedding, "
-                + "embedding_dimensions, model_version, quality_score, partner_code, status, created_by, created_at, stored_at) "
+                + "INSERT INTO faces (officer_code, beneficiary_type, beneficiary_id, uuid, embedding, "
+                + "embedding_dimensions, model_version, quality_score, organization_code, status, created_by, created_at, stored_at) "
                 + "VALUES (@p2,@p3,@p4,@p1,@p5,@p6,@p7,@p8,@p9,1,@p10,GETDATE(),GETDATE())";
         pool.preparedQuery(sql)
                 .execute(Tuple.from(java.util.Arrays.asList(uuid, String.valueOf(payload.getValue("actorId")),
@@ -334,7 +335,7 @@ public class Biometric extends AbstractVerticle {
             replyError(message, "This action requires a supervisor session");
             return;
         }
-        pool.preparedQuery("SELECT * FROM faces WHERE partner_code=@p1 AND status=1")
+        pool.preparedQuery("SELECT * FROM faces WHERE organization_code=@p1 AND status=1")
                 .execute(Tuple.of(partnerCode))
                 .onFailure(err -> onDbError(message, err))
                 .onSuccess(rows -> reply(message, new JsonObject().put("responseCode", "000")
@@ -387,7 +388,7 @@ public class Biometric extends AbstractVerticle {
             return;
         }
 
-        String sql = "INSERT INTO images (supervisor_id, beneficiary_type, beneficiary_id, photo_url, partner_code, "
+        String sql = "INSERT INTO images (officer_code, beneficiary_type, beneficiary_id, photo_url, organization_code, "
                 + "status, created_by, created_at, stored_at) "
                 + "VALUES (@p1,@p2,@p3,@p4,@p5,1,@p6,GETDATE(),GETDATE())";
         pool.preparedQuery(sql)
@@ -406,7 +407,7 @@ public class Biometric extends AbstractVerticle {
         JsonObject payload = new JsonObject(message.body().toString());
         String partnerCode = partnerCodeOf(payload);
 
-        pool.preparedQuery("SELECT * FROM images WHERE partner_code=@p1 AND status=1")
+        pool.preparedQuery("SELECT * FROM images WHERE organization_code=@p1 AND status=1")
                 .execute(Tuple.of(partnerCode))
                 .onFailure(err -> onDbError(message, err))
                 .onSuccess(rows -> reply(message, new JsonObject()
@@ -432,7 +433,7 @@ public class Biometric extends AbstractVerticle {
         JsonObject payload = new JsonObject(message.body().toString());
         String partnerCode = partnerCodeOf(payload);
 
-        pool.preparedQuery("SELECT * FROM payments WHERE partner_code=@p1 ORDER BY created_at DESC")
+        pool.preparedQuery("SELECT * FROM payments WHERE organization_code=@p1 ORDER BY created_at DESC")
                 .execute(Tuple.of(partnerCode))
                 .onFailure(err -> onDbError(message, err))
                 .onSuccess(rows -> {
@@ -470,7 +471,7 @@ public class Biometric extends AbstractVerticle {
         Object anchorIdVal = payload.getValue("anchorId");
         // Exactly one of fingerprintUuid/faceUuid is populated per call, matching whichever method
         // PaymentVerificationActivity actually verified the beneficiary with (see 017_payments_matched_face.sql).
-        String sql = "INSERT INTO payments (supervisor_id, household_number, partner_code, anchor_id, amount, "
+        String sql = "INSERT INTO payments (officer_code, household_number, organization_code, anchor_id, amount, "
                 + "matched_fp, matched_face_uuid, latitude, longitude, uuid, status, approved, created_by, created_at) "
                 + "VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,1,1,@p11,GETDATE())";
 
@@ -515,8 +516,8 @@ public class Biometric extends AbstractVerticle {
         }
 
         Object anchorIdVal = payload.getValue("anchorId");
-        String sql = "INSERT INTO attendances (supervisor_id, household_number, beneficiary_type, beneficiary_id, "
-                + "matched_fp, uuid, clock, time, attendance_date, work_code, latitude, longitude, partner_code, "
+        String sql = "INSERT INTO attendances (officer_code, household_number, beneficiary_type, beneficiary_id, "
+                + "matched_fp, uuid, clock, time, attendance_date, work_code, latitude, longitude, organization_code, "
                 + "anchor_id, status, created_by, created_at) "
                 + "VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,GETDATE(),CAST(GETDATE() AS DATE),@p8,@p9,@p10,@p11,@p12,1,@p13,GETDATE())";
 
@@ -542,25 +543,27 @@ public class Biometric extends AbstractVerticle {
 
     private void getAttendance(Message<Object> message) {
         JsonObject payload = new JsonObject(message.body().toString());
-        boolean isAnchor = "ANCHOR".equalsIgnoreCase(payload.getString("actorRole", ""));
+        boolean isAnchor = isAnchor(payload);
         String date = payload.getString("attendanceDate", null);
         String clock = payload.getString("clock", null);
 
         String sql;
         Tuple params;
         if (isAnchor) {
-            // Anchor sessions carry no partner_code (see Auth#loginUser) -- scope by anchor_id
+            // Anchor sessions carry no organization_code (see Auth#loginUser) -- scope by anchor_id
             // instead, same pattern as Payment/Dashboard, with organisationCode narrowing further.
-            // The system admin (@p1 IS NULL) sees every anchor's attendance.
+            // anchorId is NULL for a system admin with no target anchor chosen (sees every
+            // anchor's attendance), the requested target anchor once chosen, or the caller's
+            // own anchor for an anchor admin.
             Object anchorIdVal = payload.getValue("anchorId");
-            Integer anchorId = isSystemAdmin(payload) || anchorIdVal == null ? null : Integer.parseInt(anchorIdVal.toString());
+            Integer anchorId = anchorIdVal == null ? null : Integer.parseInt(anchorIdVal.toString());
             String organisationFilter = payload.getString("organisationCode", null);
-            sql = "SELECT * FROM attendances WHERE (@p1 IS NULL OR anchor_id=@p1) AND (@p2 IS NULL OR partner_code=@p2) "
+            sql = "SELECT * FROM attendances WHERE (@p1 IS NULL OR anchor_id=@p1) AND (@p2 IS NULL OR organization_code=@p2) "
                     + "AND (@p3 IS NULL OR attendance_date=@p3) AND (@p4 IS NULL OR clock=@p4) ORDER BY time DESC";
             params = Tuple.of(anchorId, organisationFilter, date, clock);
         } else {
             String partnerCode = partnerCodeOf(payload);
-            sql = "SELECT * FROM attendances WHERE partner_code=@p1 "
+            sql = "SELECT * FROM attendances WHERE organization_code=@p1 "
                     + "AND (@p2 IS NULL OR attendance_date=@p2) AND (@p3 IS NULL OR clock=@p3) ORDER BY time DESC";
             params = Tuple.of(partnerCode, date, clock);
         }
@@ -579,7 +582,7 @@ public class Biometric extends AbstractVerticle {
                                 .put("time", Rows.str(r, "time"))
                                 .put("attendanceDate", Rows.str(r, "attendance_date"))
                                 .put("workCode", Rows.str(r, "work_code"))
-                                .put("organisationCode", Rows.str(r, "partner_code"))
+                                .put("organisationCode", Rows.str(r, "organization_code"))
                                 .put("latitude", Rows.str(r, "latitude"))
                                 .put("longitude", Rows.str(r, "longitude")));
                     }
@@ -597,7 +600,7 @@ public class Biometric extends AbstractVerticle {
             return;
         }
 
-        Future<JsonArray> households = pool.preparedQuery("SELECT * FROM households WHERE partner_code=@p1 AND status=1")
+        Future<JsonArray> households = pool.preparedQuery("SELECT * FROM households WHERE organization_code=@p1 AND status=1")
                 .execute(Tuple.of(partnerCode))
                 .map(rows -> {
                     JsonArray arr = new JsonArray();
@@ -609,7 +612,7 @@ public class Biometric extends AbstractVerticle {
                     }
                     return arr;
                 });
-        Future<JsonArray> alternates = pool.preparedQuery("SELECT * FROM alternates WHERE partner_code=@p1 AND status=1")
+        Future<JsonArray> alternates = pool.preparedQuery("SELECT * FROM alternates WHERE organization_code=@p1 AND status=1")
                 .execute(Tuple.of(partnerCode))
                 .map(rows -> {
                     JsonArray arr = new JsonArray();
@@ -621,7 +624,7 @@ public class Biometric extends AbstractVerticle {
                     }
                     return arr;
                 });
-        Future<JsonArray> fingerprints = pool.preparedQuery("SELECT * FROM fingerprints WHERE partner_code=@p1 AND status=1")
+        Future<JsonArray> fingerprints = pool.preparedQuery("SELECT * FROM fingerprints WHERE organization_code=@p1 AND status=1")
                 .execute(Tuple.of(partnerCode))
                 .map(rows -> {
                     JsonArray arr = new JsonArray();
@@ -638,10 +641,10 @@ public class Biometric extends AbstractVerticle {
                     }
                     return arr;
                 });
-        Future<JsonArray> images = pool.preparedQuery("SELECT * FROM images WHERE partner_code=@p1 AND status=1")
+        Future<JsonArray> images = pool.preparedQuery("SELECT * FROM images WHERE organization_code=@p1 AND status=1")
                 .execute(Tuple.of(partnerCode))
                 .map(Biometric::imagesArray);
-        Future<JsonArray> payments = pool.preparedQuery("SELECT * FROM payments WHERE partner_code=@p1 ORDER BY created_at DESC")
+        Future<JsonArray> payments = pool.preparedQuery("SELECT * FROM payments WHERE organization_code=@p1 ORDER BY created_at DESC")
                 .execute(Tuple.of(partnerCode))
                 .map(rows -> {
                     JsonArray arr = new JsonArray();
@@ -654,7 +657,7 @@ public class Biometric extends AbstractVerticle {
                     }
                     return arr;
                 });
-        Future<JsonArray> faces = pool.preparedQuery("SELECT * FROM faces WHERE partner_code=@p1 AND status=1")
+        Future<JsonArray> faces = pool.preparedQuery("SELECT * FROM faces WHERE organization_code=@p1 AND status=1")
                 .execute(Tuple.of(partnerCode))
                 .map(Biometric::facesArray);
 
@@ -677,7 +680,7 @@ public class Biometric extends AbstractVerticle {
     private void audit(JsonObject payload, String action, String entityType, String entityId, JsonObject details) {
         Object actorId = payload.getValue("actorId");
         Object anchorId = payload.getValue("anchorId");
-        String sql = "INSERT INTO audit_logs (actor_type, actor_id, anchor_id, partner_code, action, entity_type, entity_id, details, created_at) "
+        String sql = "INSERT INTO audit_logs (actor_type, actor_id, anchor_id, organization_code, action, entity_type, entity_id, details, created_at) "
                 + "VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,GETDATE())";
         pool.preparedQuery(sql)
                 .execute(Tuple.of("SUPERVISOR", actorId == null ? null : Integer.parseInt(actorId.toString()),

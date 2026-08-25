@@ -13,6 +13,7 @@ import com.biopay.databases.Datasource;
 import com.biopay.utilities.Logging;
 import com.biopay.utilities.OrgModules;
 import com.biopay.utilities.Rows;
+import com.biopay.utilities.TenantScope;
 import com.biopay.utilities.Utilities;
 
 /**
@@ -60,7 +61,7 @@ public class Voucher extends AbstractVerticle {
     }
 
     private static boolean isAnchor(JsonObject payload) {
-        return "ANCHOR".equalsIgnoreCase(payload.getString("actorRole", ""));
+        return TenantScope.managesOrganisations(payload);
     }
 
     /** organisationCode requested by the caller, constrained to their own scope unless anchor. */
@@ -78,7 +79,11 @@ public class Voucher extends AbstractVerticle {
 
     /** The one designated cross-anchor operator (admin@biopay.com). */
     private static boolean isSystemAdmin(JsonObject payload) {
-        return payload.getBoolean("systemAdmin", false);
+        return TenantScope.isSystemOwner(payload);
+    }
+
+    private static String blankToNull(String value) {
+        return value == null || value.trim().isEmpty() ? null : value.trim();
     }
 
     // ---- CREATE_VOUCHER (issue a single voucher) -----------------------------------
@@ -102,16 +107,17 @@ public class Voucher extends AbstractVerticle {
                         return;
                     }
                     insertVoucher(message, partnerCode, anchorIdOf(payload), householdNumber, amount,
-                            payload.getString("purpose"), payload.getString("expiresAt"), payload.getValue("actorId"));
+                            blankToNull(payload.getString("purpose")), blankToNull(payload.getString("expiresAt")), payload.getValue("actorId"));
                 });
     }
 
     private void insertVoucher(Message<Object> message, String partnerCode, Integer anchorId, String householdNumber,
             Double amount, String purpose, String expiresAt, Object actorId) {
         String voucherCode = Utilities.generateCode("VCH");
-        String sql = "INSERT INTO vouchers (voucher_code, household_number, partner_code, anchor_id, amount, purpose, "
+        String sql = "INSERT INTO vouchers (voucher_code, household_number, organization_code, anchor_id, amount, purpose, "
                 + "status, expires_at, created_by, created_at) "
-                + "VALUES (@p1, @p2, @p3, @p4, @p5, @p6, 'ISSUED', @p7, @p8, GETDATE())";
+                + "SELECT @p1, h.household_number, @p3, @p4, @p5, @p6, 'ISSUED', @p7, @p8, GETDATE() "
+                + "FROM households h WHERE h.household_number=@p2 AND h.organization_code=@p3 AND h.status=1";
         pool.preparedQuery(sql)
                 .execute(Tuple.of(voucherCode, householdNumber, partnerCode, anchorId, amount, purpose,
                         expiresAt, String.valueOf(actorId)))
@@ -135,8 +141,8 @@ public class Voucher extends AbstractVerticle {
         String partnerCode = isAnchor(payload) ? payload.getString("organisationCode", "") : payload.getString("partnerCode", "");
         Integer anchorId = anchorIdOf(payload);
         JsonArray rows = payload.getJsonArray("rows", new JsonArray());
-        String purpose = payload.getString("purpose");
-        String expiresAt = payload.getString("expiresAt");
+        String purpose = blankToNull(payload.getString("purpose"));
+        String expiresAt = blankToNull(payload.getString("expiresAt"));
         Object actorId = payload.getValue("actorId");
 
         if (partnerCode == null || partnerCode.isEmpty() || rows.isEmpty()) {
@@ -183,9 +189,10 @@ public class Voucher extends AbstractVerticle {
         }
 
         String voucherCode = Utilities.generateCode("VCH");
-        String sql = "INSERT INTO vouchers (voucher_code, household_number, partner_code, anchor_id, amount, purpose, "
+        String sql = "INSERT INTO vouchers (voucher_code, household_number, organization_code, anchor_id, amount, purpose, "
                 + "status, expires_at, created_by, created_at) "
-                + "VALUES (@p1, @p2, @p3, @p4, @p5, @p6, 'ISSUED', @p7, @p8, GETDATE())";
+                + "SELECT @p1, h.household_number, @p3, @p4, @p5, @p6, 'ISSUED', @p7, @p8, GETDATE() "
+                + "FROM households h WHERE h.household_number=@p2 AND h.organization_code=@p3 AND h.status=1";
         pool.preparedQuery(sql)
                 .execute(Tuple.of(voucherCode, householdNumber, partnerCode, anchorId, amount, purpose, expiresAt, String.valueOf(actorId)))
                 .onComplete(ar -> {
@@ -198,7 +205,7 @@ public class Voucher extends AbstractVerticle {
                 });
     }
 
-    // ---- GET_VOUCHERS (filters: status, householdNumber, page) --------------------
+    // ---- GET_VOUCHERS (filters: status, householdName, page) ----------------------
 
     private void retrieveAll(Message<Object> message) {
         JsonObject payload = new JsonObject(message.body().toString());
@@ -206,7 +213,7 @@ public class Voucher extends AbstractVerticle {
         String partnerCode = scopedPartnerCode(payload);
         Integer anchorId = anchorIdOf(payload);
         String status = payload.getString("status", null);
-        String householdNumber = payload.getString("householdNumber", null);
+        String householdName = blankToNull(payload.getString("householdName"));
         int page = Math.max(payload.getInteger("page", 1), 1);
         int pageSize = Math.min(Math.max(payload.getInteger("pageSize", 25), 1), 200);
         int offset = (page - 1) * pageSize;
@@ -216,16 +223,16 @@ public class Voucher extends AbstractVerticle {
         // resolves village name from this code via GET_VILLAGES, the same convention already
         // used for organisation/village names elsewhere (VouchersPage/HouseholdsPage orgName()/
         // villageName()). LEFT JOIN so a voucher survives even if its household was hard-deleted.
-        String sql = "SELECT v.*, hh.boma_code AS village_code FROM vouchers v "
-                + "JOIN partners p ON p.partner_id = v.partner_code "
+        String sql = "SELECT v.*, hh.household_name, hh.boma_code AS village_code FROM vouchers v "
+                + "JOIN organizations p ON p.organization_code = v.organization_code "
                 + "LEFT JOIN households hh ON hh.household_number = v.household_number "
-                + "WHERE (@p1 IS NULL OR v.partner_code=@p1) "
-                + "AND (@p2 IS NULL OR v.status=@p2) AND (@p3 IS NULL OR v.household_number=@p3) "
-                + "AND (@p6 = 1 OR p.anchor_id=@p7) "
+                + "WHERE (@p1 IS NULL OR v.organization_code=@p1) "
+                + "AND (@p2 IS NULL OR v.status=@p2) AND (@p3 IS NULL OR hh.household_name LIKE '%' + @p3 + '%') "
+                + "AND (@p7 IS NULL OR p.anchor_id=@p7) "
                 + "ORDER BY v.created_at DESC OFFSET @p4 ROWS FETCH NEXT @p5 ROWS ONLY";
 
         pool.preparedQuery(sql)
-                .execute(Tuple.of(partnerCode, status, householdNumber, offset, pageSize)
+                .execute(Tuple.of(partnerCode, status, householdName, offset, pageSize)
                         .addBoolean(systemAdmin).addInteger(anchorId))
                 .onFailure(err -> onDbError(message, err))
                 .onSuccess(rows -> {
@@ -247,10 +254,10 @@ public class Voucher extends AbstractVerticle {
     private void getOne(Message<Object> message) {
         JsonObject payload = new JsonObject(message.body().toString());
         String voucherCode = payload.getString("voucherCode", "").trim();
-        String scopeClause = isAnchor(payload) ? "" : " AND partner_code=@p2";
+        String scopeClause = isAnchor(payload) ? " AND (@p2=1 OR anchor_id=@p3)" : " AND organization_code=@p2";
 
         pool.preparedQuery("SELECT * FROM vouchers WHERE voucher_code=@p1" + scopeClause)
-                .execute(isAnchor(payload) ? Tuple.of(voucherCode) : Tuple.of(voucherCode, payload.getString("partnerCode", "")))
+                .execute(isAnchor(payload) ? Tuple.of(voucherCode, isSystemAdmin(payload), anchorIdOf(payload)) : Tuple.of(voucherCode, payload.getString("partnerCode", "")))
                 .onFailure(err -> onDbError(message, err))
                 .onSuccess(rows -> {
                     if (rows.size() == 0) {
@@ -273,10 +280,10 @@ public class Voucher extends AbstractVerticle {
             replyError(message, "voucherCode is required");
             return;
         }
-        String scopeClause = isAnchor(payload) ? "" : " AND partner_code=@p2";
+        String scopeClause = isAnchor(payload) ? " AND (@p2=1 OR anchor_id=@p3)" : " AND organization_code=@p2";
         String sql = "UPDATE vouchers SET status='VOID' WHERE voucher_code=@p1 AND status='ISSUED'" + scopeClause;
         pool.preparedQuery(sql)
-                .execute(isAnchor(payload) ? Tuple.of(voucherCode) : Tuple.of(voucherCode, payload.getString("partnerCode", "")))
+                .execute(isAnchor(payload) ? Tuple.of(voucherCode, isSystemAdmin(payload), anchorIdOf(payload)) : Tuple.of(voucherCode, payload.getString("partnerCode", "")))
                 .onFailure(err -> onDbError(message, err))
                 .onSuccess(rows -> {
                     if (rows.rowCount() > 0) {
@@ -302,7 +309,7 @@ public class Voucher extends AbstractVerticle {
             replyError(message, "A successful fingerprint verification is required for mobile redemption");
             return;
         }
-        String scopeClause = isAnchor(payload) ? "" : " AND partner_code=@p6";
+        String scopeClause = isAnchor(payload) ? " AND (@p6=1 OR anchor_id=@p7)" : " AND organization_code=@p6";
         Object actorId = payload.getValue("actorId");
 
         String sql = "UPDATE vouchers SET status='REDEEMED', redeemed_by_officer_id=@p1, redeemed_at=GETDATE(), "
@@ -311,7 +318,9 @@ public class Voucher extends AbstractVerticle {
                 + " AND (expires_at IS NULL OR expires_at >= GETDATE())";
         Tuple params = Tuple.of(actorId, payload.getString("matchedFingerprint"), payload.getString("latitude"),
                 payload.getString("longitude"), voucherCode);
-        if (!isAnchor(payload)) {
+        if (isAnchor(payload)) {
+            params = params.addBoolean(isSystemAdmin(payload)).addInteger(anchorIdOf(payload));
+        } else {
             params = params.addString(payload.getString("partnerCode", ""));
         }
 
@@ -335,7 +344,7 @@ public class Voucher extends AbstractVerticle {
             replyError(message, "Only a field officer can sync vouchers");
             return;
         }
-        pool.preparedQuery("SELECT * FROM vouchers WHERE partner_code=@p1 AND status='ISSUED' "
+        pool.preparedQuery("SELECT * FROM vouchers WHERE organization_code=@p1 AND status='ISSUED' "
                         + "AND (expires_at IS NULL OR expires_at>=GETDATE()) ORDER BY created_at DESC")
                 .execute(Tuple.of(payload.getString("partnerCode", "")))
                 .onFailure(err -> onDbError(message, err))
@@ -361,8 +370,8 @@ public class Voucher extends AbstractVerticle {
                 + "SUM(CASE WHEN v.status='REDEEMED' THEN 1 ELSE 0 END) AS redeemedCount, "
                 + "ISNULL(SUM(CASE WHEN v.status='REDEEMED' THEN v.amount ELSE 0 END), 0) AS redeemedAmount, "
                 + "SUM(CASE WHEN v.status='VOID' THEN 1 ELSE 0 END) AS voidCount "
-                + "FROM vouchers v JOIN partners p ON p.partner_id = v.partner_code "
-                + "WHERE (@p1 IS NULL OR v.partner_code=@p1) AND (@p2 = 1 OR p.anchor_id=@p3)";
+                + "FROM vouchers v JOIN organizations p ON p.organization_code = v.organization_code "
+                + "WHERE (@p1 IS NULL OR v.organization_code=@p1) AND (@p3 IS NULL OR p.anchor_id=@p3)";
 
         pool.preparedQuery(sql)
                 .execute(Tuple.of(partnerCode).addBoolean(systemAdmin).addInteger(anchorId))
@@ -394,7 +403,8 @@ public class Voucher extends AbstractVerticle {
         return new JsonObject()
                 .put("voucherCode", Rows.str(r, "voucher_code"))
                 .put("householdNumber", Rows.str(r, "household_number"))
-                .put("organisationCode", Rows.str(r, "partner_code"))
+                .put("householdName", strSafe(r, "household_name"))
+                .put("organisationCode", Rows.str(r, "organization_code"))
                 .put("villageCode", strSafe(r, "village_code"))
                 .put("amount", Rows.dbl(r, "amount"))
                 .put("purpose", Rows.str(r, "purpose"))

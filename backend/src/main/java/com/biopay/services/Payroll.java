@@ -15,6 +15,7 @@ import java.util.List;
 import com.biopay.databases.Datasource;
 import com.biopay.utilities.Logging;
 import com.biopay.utilities.Rows;
+import com.biopay.utilities.TenantScope;
 import com.biopay.utilities.Utilities;
 
 /**
@@ -63,12 +64,12 @@ public class Payroll extends AbstractVerticle {
     }
 
     private static boolean isAnchor(JsonObject payload) {
-        return "ANCHOR".equalsIgnoreCase(payload.getString("actorRole", ""));
+        return TenantScope.managesOrganisations(payload);
     }
 
     /** The one designated cross-anchor operator (admin@biopay.com). */
     private static boolean isSystemAdmin(JsonObject payload) {
-        return payload.getBoolean("systemAdmin", false);
+        return TenantScope.isSystemOwner(payload);
     }
 
     private static int actorId(JsonObject payload) {
@@ -158,7 +159,7 @@ public class Payroll extends AbstractVerticle {
                                 // a mid-way failure here must not leave a cycle with zero (or
                                 // partial) line items sitting in PENDING_APPROVAL.
                                 pool.withTransaction(client -> {
-                                    String sql = "INSERT INTO payroll_cycles (cycle_code, partner_code, anchor_id, period_start, period_end, "
+                                    String sql = "INSERT INTO payment_cycles (cycle_code, organization_code, anchor_id, period_start, period_end, "
                                             + "amount_per_household, household_count, total_amount, currency, exchange_rate, status, maker_id, maker_at, "
                                             + "otp_verified, created_by, created_at) "
                                             + "OUTPUT INSERTED.id "
@@ -200,7 +201,7 @@ public class Payroll extends AbstractVerticle {
     }
 
     private Future<Integer> countActiveHouseholds(String partnerCode, List<String> householdNumbers) {
-        String sql = "SELECT COUNT(*) AS cnt FROM households WHERE partner_code=@p1 AND status=1 AND household_number IN ("
+        String sql = "SELECT COUNT(*) AS cnt FROM households WHERE organization_code=@p1 AND status=1 AND household_number IN ("
                 + inClause(2, householdNumbers.size()) + ")";
         Tuple params = Tuple.of(partnerCode);
         for (String hn : householdNumbers) {
@@ -218,12 +219,12 @@ public class Payroll extends AbstractVerticle {
         // unique index, so every row here needs its own value; NEWID() supplies a fresh one per
         // row within the single INSERT...SELECT (a bound Tuple parameter would repeat the same
         // value for all rows and collide after the first).
-        String sql = "INSERT INTO payments (household_number, household_name, gender, boma_code, partner_code, anchor_id, "
-                + "payroll_cycle_id, cycle, payment_cycle, date_from, date_to, amount, status, approved, uuid, currency, exchange_rate, "
+        String sql = "INSERT INTO payments (household_number, household_name, gender, boma_code, organization_code, anchor_id, "
+                + "payment_cycle_id, cycle, payment_cycle, date_from, date_to, amount, status, approved, uuid, currency, exchange_rate, "
                 + "created_by, created_at) "
                 + "SELECT household_number, household_name, gender, boma_code, @p1, @p2, "
                 + "@p3, @p4, @p4, @p5, @p6, @p7, 0, 0, CONVERT(VARCHAR(50), NEWID()), @p9, @p10, @p8, GETDATE() "
-                + "FROM households WHERE partner_code=@p1 AND status=1 AND household_number IN ("
+                + "FROM households WHERE organization_code=@p1 AND status=1 AND household_number IN ("
                 + inClause(11, householdNumbers.size()) + ")";
         Object anchorId = anchorIdVal == null ? null : Integer.parseInt(anchorIdVal.toString());
         Tuple params = Tuple.of(partnerCode, anchorId, cycleId, cycleCode, periodStart, periodEnd, amount, makerId, currency, exchangeRate);
@@ -250,8 +251,8 @@ public class Payroll extends AbstractVerticle {
             return;
         }
 
-        pool.preparedQuery("SELECT * FROM payroll_cycles WHERE cycle_code=@p1")
-                .execute(Tuple.of(cycleCode))
+        pool.preparedQuery("SELECT * FROM payment_cycles WHERE cycle_code=@p1 AND (@p2=1 OR anchor_id=@p3)")
+                .execute(Tuple.of(cycleCode, isSystemAdmin(payload), TenantScope.anchorId(payload)))
                 .onFailure(err -> onDbError(message, err))
                 .onSuccess(rows -> {
                     if (rows.size() == 0) {
@@ -276,12 +277,12 @@ public class Payroll extends AbstractVerticle {
                                     replyError(message, "Invalid or expired verification code");
                                     return;
                                 }
-                                pool.preparedQuery("UPDATE payroll_cycles SET status='APPROVED', checker_id=@p1, checker_at=GETDATE(), "
+                                pool.preparedQuery("UPDATE payment_cycles SET status='APPROVED', checker_id=@p1, checker_at=GETDATE(), "
                                                 + "updated_at=GETDATE() WHERE cycle_code=@p2")
                                         .execute(Tuple.of(actorId(payload), cycleCode))
                                         .compose(u -> pool.preparedQuery(
                                                         "UPDATE payments SET approved=1, approved_by=@p1, approved_at=GETDATE() "
-                                                                + "WHERE payroll_cycle_id=@p2 AND rejected=0")
+                                                                + "WHERE payment_cycle_id=@p2 AND rejected=0")
                                                 .execute(Tuple.of(actorId(payload), Rows.intVal(r, "id"))))
                                         .onFailure(err -> onDbError(message, err))
                                         .onSuccess(u -> reply(message, new JsonObject()
@@ -302,9 +303,10 @@ public class Payroll extends AbstractVerticle {
         String cycleCode = payload.getString("cycleCode", "").trim();
         String reason = payload.getString("reason", "").trim();
 
-        pool.preparedQuery("UPDATE payroll_cycles SET status='REJECTED', checker_id=@p1, checker_at=GETDATE(), "
-                        + "rejection_reason=@p2, updated_at=GETDATE() WHERE cycle_code=@p3 AND status='PENDING_APPROVAL'")
-                .execute(Tuple.of(actorId(payload), reason, cycleCode))
+        pool.preparedQuery("UPDATE payment_cycles SET status='REJECTED', checker_id=@p1, checker_at=GETDATE(), "
+                        + "rejection_reason=@p2, updated_at=GETDATE() WHERE cycle_code=@p3 AND status='PENDING_APPROVAL' "
+                        + "AND (@p4=1 OR anchor_id=@p5)")
+                .execute(Tuple.of(actorId(payload), reason, cycleCode, isSystemAdmin(payload), TenantScope.anchorId(payload)))
                 .onFailure(err -> onDbError(message, err))
                 .onSuccess(rows -> {
                     if (rows.rowCount() > 0) {
@@ -333,8 +335,10 @@ public class Payroll extends AbstractVerticle {
             return;
         }
 
-        pool.preparedQuery("SELECT id, maker_id FROM payroll_cycles WHERE cycle_code=@p1 AND status='PENDING_APPROVAL'")
-                .execute(Tuple.of(cycleCode))
+        pool.preparedQuery("SELECT id, maker_id FROM payment_cycles WHERE cycle_code=@p1 AND status='PENDING_APPROVAL' "
+                        + "AND (@p2=1 OR (@p3=1 AND anchor_id=@p4) OR organization_code=@p5)")
+                .execute(Tuple.of(cycleCode, isSystemAdmin(payload), TenantScope.isAnchorAdministrator(payload),
+                        TenantScope.anchorId(payload), payload.getString("partnerCode", "")))
                 .onFailure(err -> onDbError(message, err))
                 .onSuccess(rows -> {
                     if (rows.size() == 0) {
@@ -353,7 +357,7 @@ public class Payroll extends AbstractVerticle {
                     }
                     int cycleId = Rows.intVal(cycleRow, "id");
                     String sql = "UPDATE payments SET rejected=1, rejected_by=@p1, rejected_at=GETDATE(), rejection_reason=@p2, "
-                            + "updated_at=GETDATE() WHERE payroll_cycle_id=@p3 AND rejected=0 AND id IN ("
+                            + "updated_at=GETDATE() WHERE payment_cycle_id=@p3 AND rejected=0 AND id IN ("
                             + inClause(4, paymentIds.size()) + ")";
                     Tuple params = Tuple.of(actorId(payload), reason, cycleId);
                     for (Integer id : paymentIds) {
@@ -379,8 +383,8 @@ public class Payroll extends AbstractVerticle {
         }
         String cycleCode = payload.getString("cycleCode", "").trim();
 
-        pool.preparedQuery("SELECT id FROM payroll_cycles WHERE cycle_code=@p1 AND status='APPROVED'")
-                .execute(Tuple.of(cycleCode))
+        pool.preparedQuery("SELECT id FROM payment_cycles WHERE cycle_code=@p1 AND status='APPROVED' AND (@p2=1 OR anchor_id=@p3)")
+                .execute(Tuple.of(cycleCode, isSystemAdmin(payload), TenantScope.anchorId(payload)))
                 .onFailure(err -> onDbError(message, err))
                 .onSuccess(rows -> {
                     if (rows.size() == 0) {
@@ -388,9 +392,9 @@ public class Payroll extends AbstractVerticle {
                         return;
                     }
                     int cycleId = Rows.intVal(rows.iterator().next(), "id");
-                    pool.preparedQuery("UPDATE payroll_cycles SET status='DISBURSED', disbursed_at=GETDATE(), updated_at=GETDATE() WHERE id=@p1")
+                    pool.preparedQuery("UPDATE payment_cycles SET status='DISBURSED', disbursed_at=GETDATE(), updated_at=GETDATE() WHERE id=@p1")
                             .execute(Tuple.of(cycleId))
-                            .compose(u -> pool.preparedQuery("UPDATE payments SET status=1 WHERE payroll_cycle_id=@p1 AND rejected=0")
+                            .compose(u -> pool.preparedQuery("UPDATE payments SET status=1 WHERE payment_cycle_id=@p1 AND rejected=0")
                                     .execute(Tuple.of(cycleId)))
                             .onFailure(err -> onDbError(message, err))
                             .onSuccess(u -> reply(message, new JsonObject()
@@ -404,10 +408,10 @@ public class Payroll extends AbstractVerticle {
     private void delete(Message<Object> message) {
         JsonObject payload = new JsonObject(message.body().toString());
         String cycleCode = payload.getString("cycleCode", "").trim();
-        String scopeClause = isAnchor(payload) ? "" : " AND partner_code=@p3";
+        String scopeClause = isAnchor(payload) ? " AND (@p2=1 OR anchor_id=@p3)" : " AND organization_code=@p2";
 
-        pool.preparedQuery("SELECT id FROM payroll_cycles WHERE cycle_code=@p1 AND status IN ('DRAFT','PENDING_APPROVAL')" + scopeClause)
-                .execute(isAnchor(payload) ? Tuple.of(cycleCode, 0) : Tuple.of(cycleCode, 0, payload.getString("partnerCode", "")))
+        pool.preparedQuery("SELECT id FROM payment_cycles WHERE cycle_code=@p1 AND status IN ('DRAFT','PENDING_APPROVAL')" + scopeClause)
+                .execute(isAnchor(payload) ? Tuple.of(cycleCode, isSystemAdmin(payload), TenantScope.anchorId(payload)) : Tuple.of(cycleCode, payload.getString("partnerCode", "")))
                 .onFailure(err -> onDbError(message, err))
                 .onSuccess(rows -> {
                     if (rows.size() == 0) {
@@ -415,9 +419,9 @@ public class Payroll extends AbstractVerticle {
                         return;
                     }
                     int cycleId = Rows.intVal(rows.iterator().next(), "id");
-                    pool.preparedQuery("DELETE FROM payments WHERE payroll_cycle_id=@p1")
+                    pool.preparedQuery("DELETE FROM payments WHERE payment_cycle_id=@p1")
                             .execute(Tuple.of(cycleId))
-                            .compose(d -> pool.preparedQuery("DELETE FROM payroll_cycles WHERE id=@p1").execute(Tuple.of(cycleId)))
+                            .compose(d -> pool.preparedQuery("DELETE FROM payment_cycles WHERE id=@p1").execute(Tuple.of(cycleId)))
                             .onFailure(err -> onDbError(message, err))
                             .onSuccess(d -> reply(message, new JsonObject()
                                     .put("responseCode", "000")
@@ -430,10 +434,10 @@ public class Payroll extends AbstractVerticle {
     private void getOne(Message<Object> message) {
         JsonObject payload = new JsonObject(message.body().toString());
         String cycleCode = payload.getString("cycleCode", "").trim();
-        String scopeClause = isAnchor(payload) ? "" : " AND partner_code=@p2";
+        String scopeClause = isAnchor(payload) ? " AND (@p2=1 OR anchor_id=@p3)" : " AND organization_code=@p2";
 
-        pool.preparedQuery("SELECT * FROM payroll_cycles WHERE cycle_code=@p1" + scopeClause)
-                .execute(isAnchor(payload) ? Tuple.of(cycleCode) : Tuple.of(cycleCode, payload.getString("partnerCode", "")))
+        pool.preparedQuery("SELECT * FROM payment_cycles WHERE cycle_code=@p1" + scopeClause)
+                .execute(isAnchor(payload) ? Tuple.of(cycleCode, isSystemAdmin(payload), TenantScope.anchorId(payload)) : Tuple.of(cycleCode, payload.getString("partnerCode", "")))
                 .onFailure(err -> onDbError(message, err))
                 .onSuccess(rows -> {
                     if (rows.size() == 0) {
@@ -444,7 +448,7 @@ public class Payroll extends AbstractVerticle {
                     int cycleId = Rows.intVal(cycleRow, "id");
                     // Line items for the "view more" panel and the approval dialog's
                     // per-row reject checkboxes -- both read off this same array.
-                    pool.preparedQuery("SELECT * FROM payments WHERE payroll_cycle_id=@p1 ORDER BY household_name")
+                    pool.preparedQuery("SELECT * FROM payments WHERE payment_cycle_id=@p1 ORDER BY household_name")
                             .execute(Tuple.of(cycleId))
                             .onFailure(err -> onDbError(message, err))
                             .onSuccess(paymentRows -> {
@@ -468,10 +472,12 @@ public class Payroll extends AbstractVerticle {
         Object anchorIdVal = payload.getValue("anchorId");
         Integer anchorId = anchorIdVal == null ? null : Integer.parseInt(anchorIdVal.toString());
 
-        // payroll_cycles already carries anchor_id directly, so a plain anchor admin is
-        // scoped to it with no join needed; the system admin (@p3=1) sees every anchor.
-        String sql = "SELECT * FROM payroll_cycles WHERE (@p1 IS NULL OR partner_code=@p1) AND (@p2 IS NULL OR status=@p2) "
-                + "AND (@p3 = 1 OR anchor_id=@p4) ORDER BY created_at DESC";
+        // payment_cycles already carries anchor_id directly, so a plain anchor admin is
+        // scoped to it with no join needed. @p4 is NULL for a system admin with no target
+        // anchor chosen (browse everything), the requested target anchor once chosen, or
+        // the caller's own anchor for an anchor admin.
+        String sql = "SELECT * FROM payment_cycles WHERE (@p1 IS NULL OR organization_code=@p1) AND (@p2 IS NULL OR status=@p2) "
+                + "AND (@p4 IS NULL OR anchor_id=@p4) ORDER BY created_at DESC";
         String partnerCode = isAnchor(payload) ? payload.getString("organisationCode", null) : payload.getString("partnerCode", "");
 
         pool.preparedQuery(sql)
@@ -495,7 +501,7 @@ public class Payroll extends AbstractVerticle {
         Double totalAmount = Rows.dbl(r, "total_amount");
         return new JsonObject()
                 .put("cycleCode", Rows.str(r, "cycle_code"))
-                .put("organisationCode", Rows.str(r, "partner_code"))
+                .put("organisationCode", Rows.str(r, "organization_code"))
                 .put("anchorId", Rows.intVal(r, "anchor_id"))
                 .put("periodStart", Rows.str(r, "period_start"))
                 .put("periodEnd", Rows.str(r, "period_end"))

@@ -1,4 +1,4 @@
-export type UserRole = 'ANCHOR' | 'ORGANISATION' | 'SUPERVISOR'
+export type UserRole = 'SYSTEM' | 'ANCHOR' | 'ORGANISATION' | 'SUPERVISOR'
 
 /** Mirrors com.biopay.utilities.OrgModules -- the modules an organisation can be
  *  registered with, chosen at CREATE_ORGANIZATION and editable via UPDATE_ORGANIZATION_MODULES. */
@@ -30,8 +30,7 @@ export interface SessionUser {
   permissions?: string[]
   enabledModules?: OrgModule[]
   totpEnabled?: boolean
-  /** The one designated cross-anchor operator (admin@biopay.com) -- sees every anchor's
-   *  organisations/households/payments instead of being scoped to just their own. */
+  /** Platform-wide System Owner. This identity has no anchor or organisation membership. */
   systemAdmin?: boolean
 }
 

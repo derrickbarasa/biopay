@@ -13,10 +13,12 @@
 --
 -- Idempotent, no FK constraints, matching this database's convention.
 
-IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('partners') AND name = 'country')
+-- OBJECT_ID('partners') IS NOT NULL: skipped once migration 029 has renamed
+-- partners -> organizations (the columns survive the rename).
+IF OBJECT_ID('partners') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('partners') AND name = 'country')
     ALTER TABLE partners ADD country VARCHAR(80) NULL;
 GO
-IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('partners') AND name = 'verification_method')
+IF OBJECT_ID('partners') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('partners') AND name = 'verification_method')
     ALTER TABLE partners ADD verification_method VARCHAR(20) NOT NULL DEFAULT 'BIOMETRIC';
 GO
 

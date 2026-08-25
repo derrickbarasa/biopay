@@ -4,6 +4,8 @@ import { useRouter } from 'vue-router'
 import { dispatch } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
+import { useConfirm } from '@/composables/useConfirm'
+import { useAnchorScope } from '@/composables/useAnchorScope'
 import { downloadCsv, parseCsv, toCsv } from '@/utils/csv'
 import BarChart from '@/components/BarChart.vue'
 import LineChart from '@/components/LineChart.vue'
@@ -40,9 +42,22 @@ interface GeoNode {
 
 const auth = useAuthStore()
 const toast = useToast()
+const { confirmAction } = useConfirm()
 const router = useRouter()
+const { anchors, selectedAnchorId, anchorGateActive, anchorChosen } = useAnchorScope()
 const loading = ref(true)
 const households = ref<HouseholdRow[]>([])
+
+// Anchor Administrators must choose an organisation before this page shows
+// anything (the hierarchy: System Owner -> Anchor -> Organisation); the
+// System Owner must choose an anchor first (same anchor-picker pattern as
+// Organizations/Roles/Subscription), then may optionally narrow further to
+// one organisation via the existing filter below.
+const scopeReady = computed(() => {
+  if (auth.isSystemAdmin) return anchorChosen.value
+  if (auth.isAnchorAdministrator) return !!filters.value.organisationCode
+  return true
+})
 const dialog = ref(false)
 const saving = ref(false)
 
@@ -132,6 +147,9 @@ const ageBreakdown = computed(() => {
   return buckets
 })
 
+const ageChartData = computed(() => ageBreakdown.value.slice(0, 5))
+const unknownAgeCount = computed(() => ageBreakdown.value[5]?.value ?? 0)
+
 // "By status" now reflects the review workflow (pending/checked/approved/rejected)
 // rather than the active/inactive account flag, per the current product ask.
 const statusBreakdown = computed(() => REVIEW_STATUSES.map((s) => ({
@@ -165,7 +183,8 @@ async function loadGeo() {
       dispatch<{ results: GeoNode[] }>('GET_LOCATIONS'),
       dispatch<{ results: GeoNode[] }>('GET_VILLAGES'),
     ]
-    if (auth.isAnchor) requests.push(dispatch<{ results: typeof organizations.value }>('GET_ORGANIZATIONS'))
+    if (auth.isAnchorAdministrator || (auth.isSystemAdmin && selectedAnchorId.value))
+      requests.push(dispatch<{ results: typeof organizations.value }>('GET_ORGANIZATIONS', { targetAnchorId: auth.isSystemAdmin ? selectedAnchorId.value : undefined }))
     const [s, c, l, v, o] = await Promise.all(requests)
     states.value = s.results
     counties.value = c.results
@@ -178,10 +197,12 @@ async function loadGeo() {
 }
 
 async function load() {
+  if (!scopeReady.value) { households.value = []; return }
   loading.value = true
   try {
     const res = await dispatch<{ results: HouseholdRow[] }>('GET_HOUSEHOLDS', {
       pageSize: 100,
+      targetAnchorId: auth.isSystemAdmin ? selectedAnchorId.value : undefined,
       organisationCode: filters.value.organisationCode ?? undefined,
       stateCode: filters.value.stateCode ?? undefined,
       countyCode: filters.value.countyCode ?? undefined,
@@ -217,6 +238,11 @@ watch(() => filters.value.status, load)
 watch(() => filters.value.reviewStatus, load)
 watch(() => filters.value.dateFrom, load)
 watch(() => filters.value.dateTo, load)
+
+// System Owner picking a different anchor resets whatever organisation was
+// selected under the previous one, then reloads both the organisation list
+// and the (now re-scoped) household list.
+watch(selectedAnchorId, () => { filters.value.organisationCode = null; loadGeo(); load() })
 
 function clearFilters() {
   filters.value = { organisationCode: null, stateCode: null, countyCode: null, locationCode: null, villageCode: null, gender: null, status: null, vulnerabilityStatus: '', legalStatus: '', reviewStatus: null, dateFrom: null, dateTo: null, search: '' }
@@ -311,6 +337,12 @@ function viewDetail(row: HouseholdRow) {
 }
 
 async function remove(row: HouseholdRow) {
+  if (!await confirmAction({
+    title: 'Delete household?',
+    message: `${row.householdName} (${row.householdNumber}) will be removed from programme records. This action cannot be undone.`,
+    confirmLabel: 'Delete household',
+    color: 'error',
+  })) return
   try {
     await dispatch('DELETE_HOUSEHOLD', { householdNumber: row.householdNumber })
     toast.success('Household deleted')
@@ -445,13 +477,28 @@ async function submitBulk() {
   <div>
     <div class="d-flex align-center justify-space-between mb-4">
       <h1 class="page-title">Households</h1>
-      <div class="d-flex ga-2">
-        <v-btn variant="outlined" prepend-icon="mdi-download" @click="exportCsv">Export CSV</v-btn>
-        <v-btn variant="outlined" prepend-icon="mdi-file-upload" @click="openBulk">Import CSV</v-btn>
-        <v-btn color="secondary" prepend-icon="mdi-home-plus" @click="openCreate">Add Household</v-btn>
+      <div v-if="scopeReady" class="d-flex ga-2">
+        <v-btn v-if="auth.can('DOWNLOAD_REPORTS')" variant="outlined" prepend-icon="mdi-download" @click="exportCsv">Export CSV</v-btn>
+        <v-btn v-if="auth.can('ACCESS_HOUSEHOLDS')" variant="outlined" prepend-icon="mdi-file-upload" @click="openBulk">Import CSV</v-btn>
+        <v-btn v-if="auth.can('ACCESS_HOUSEHOLDS')" color="secondary" prepend-icon="mdi-home-plus" @click="openCreate">Add Household</v-btn>
       </div>
     </div>
 
+    <v-select
+      v-if="anchorGateActive" v-model="selectedAnchorId" :items="anchors" item-title="name" item-value="id"
+      label="Choose anchor" variant="outlined" class="mb-4" style="max-width: 420px"
+      prepend-inner-icon="mdi-bank-outline"
+    />
+    <v-select
+      v-else-if="auth.isAnchorAdministrator" v-model="filters.organisationCode" :items="organizations" item-title="name" item-value="organisationCode"
+      label="Choose organisation" variant="outlined" class="mb-4" style="max-width: 420px"
+      prepend-inner-icon="mdi-domain"
+    />
+    <v-alert v-if="!scopeReady" type="info" variant="tonal" class="mb-4">
+      {{ auth.isSystemAdmin && !anchorChosen ? 'Choose an anchor to see its households.' : 'Choose an organisation to see its households.' }}
+    </v-alert>
+
+    <template v-if="scopeReady">
     <h2 class="section-heading mb-2">Household breakdown</h2>
     <div class="breakdown-grid mb-4">
       <v-card class="breakdown-card" variant="flat" border>
@@ -460,7 +507,18 @@ async function submitBulk() {
       </v-card>
       <v-card class="breakdown-card" variant="flat" border>
         <v-card-title class="breakdown-title">By age group</v-card-title>
-        <v-card-text class="breakdown-body"><LineChart :data="ageBreakdown" color="#0F766E" /></v-card-text>
+        <v-card-text class="breakdown-body age-breakdown-body">
+          <LineChart
+            :data="ageChartData"
+            color="#0F766E"
+            aria-label="Household heads by age group"
+            show-values
+          />
+          <div v-if="unknownAgeCount" class="age-data-note">
+            <v-icon icon="mdi-information-outline" size="16" />
+            {{ unknownAgeCount.toLocaleString() }} {{ unknownAgeCount === 1 ? 'household has' : 'households have' }} no age recorded
+          </div>
+        </v-card-text>
       </v-card>
       <v-card class="breakdown-card" variant="flat" border>
         <v-card-title class="breakdown-title">By status</v-card-title>
@@ -468,7 +526,7 @@ async function submitBulk() {
       </v-card>
       <v-card class="breakdown-card" variant="flat" border>
         <v-card-title class="breakdown-title">By vulnerability status</v-card-title>
-        <v-card-text class="breakdown-body"><BarChart :data="vulnerabilityBreakdown" color="#2563EB" /></v-card-text>
+        <v-card-text class="breakdown-body"><BarChart :data="vulnerabilityBreakdown" color="#16A34A" /></v-card-text>
       </v-card>
       <v-card class="breakdown-card" variant="flat" border>
         <v-card-title class="breakdown-title">By legal status</v-card-title>
@@ -479,7 +537,7 @@ async function submitBulk() {
     <v-card variant="flat" border>
       <v-card-text>
         <v-row dense align="center">
-          <v-col v-if="auth.isAnchor" cols="12" sm="6" md="3">
+          <v-col v-if="auth.isSystemAdmin" cols="12" sm="6" md="3">
             <v-select v-model="filters.organisationCode" :items="organizations" item-title="name" item-value="organisationCode" label="Organisation" clearable hide-details density="compact" />
           </v-col>
           <v-col cols="6" sm="3" md="2">
@@ -564,14 +622,16 @@ async function submitBulk() {
         </template>
         <template #item.actions="{ item }">
           <v-btn icon="mdi-eye" variant="text" size="small" :aria-label="`View household ${item.householdName}`" @click="viewDetail(item)" />
-          <v-btn icon="mdi-clipboard-check-outline" variant="text" size="small" :aria-label="`Review household ${item.householdName}`" @click="openReview(item)" />
-          <v-btn icon="mdi-delete" variant="text" size="small" color="error" :aria-label="`Delete household ${item.householdName}`" @click="remove(item)" />
+          <v-btn v-if="auth.can('ACCESS_HOUSEHOLDS')" icon="mdi-clipboard-check-outline" variant="text" size="small" :aria-label="`Review household ${item.householdName}`" @click="openReview(item)" />
+          <v-btn v-if="auth.can('ACCESS_HOUSEHOLDS')" icon="mdi-delete" variant="text" size="small" color="error" :aria-label="`Delete household ${item.householdName}`" @click="remove(item)" />
         </template>
       </v-data-table>
     </v-card>
+    </template>
 
     <v-dialog v-model="reviewDialog" max-width="440">
       <v-card v-if="reviewTarget">
+        <dialog-close-button @close="reviewDialog = false" />
         <v-card-title>Review {{ reviewTarget.householdName }}</v-card-title>
         <v-card-text>
           <v-select v-model="reviewForm.reviewStatus" :items="REVIEW_STATUSES" label="Review status" />
@@ -591,6 +651,7 @@ async function submitBulk() {
 
     <v-dialog v-model="dialog" max-width="560">
       <v-card>
+        <dialog-close-button @close="dialog = false" />
         <v-card-title>Add Household</v-card-title>
         <v-card-text>
           <v-text-field v-model="form.householdName" label="Head of household name" />
@@ -640,6 +701,7 @@ async function submitBulk() {
 
     <v-dialog v-model="bulkDialog" max-width="640">
       <v-card>
+        <dialog-close-button @close="bulkDialog = false" />
         <v-card-title>Import Households from CSV</v-card-title>
         <v-card-text>
           <v-alert type="info" variant="tonal" density="compact" class="mb-3">
@@ -696,8 +758,8 @@ async function submitBulk() {
 .breakdown-card {
   display: flex;
   flex-direction: column;
-  height: 264px;
-  overflow: hidden;
+  min-height: 300px;
+  overflow: visible;
 }
 .breakdown-title {
   flex: none;
@@ -712,17 +774,31 @@ async function submitBulk() {
   display: flex;
   align-items: center;
   padding: 4px 16px 14px !important;
-  overflow: hidden;
+  min-height: 0;
+  overflow: visible;
 }
 .breakdown-body > :deep(.chart-wrap),
 .breakdown-body > :deep(.pie-wrap) {
   width: 100%;
+}
+.age-breakdown-body { flex-direction: column; justify-content: center; }
+.age-data-note {
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 2px;
+  color: #166534;
+  font-size: .75rem;
+  line-height: 1.35;
+  text-align: center;
 }
 @media (max-width: 900px) {
   .breakdown-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 600px) {
   .breakdown-grid { grid-template-columns: 1fr; }
-  .breakdown-card { height: auto; }
+  .breakdown-card { min-height: 280px; }
 }
 </style>

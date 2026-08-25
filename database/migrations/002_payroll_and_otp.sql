@@ -5,7 +5,10 @@
 -- approve them. payments.payroll_cycle_id (added in 001) links individual
 -- payment line items back to the cycle that produced them.
 
-IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'payroll_cycles')
+-- The extra OBJECT_ID check skips this once migration 029 has renamed
+-- payroll_cycles -> payment_cycles, so a replay doesn't resurrect an empty
+-- table under the old name.
+IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'payroll_cycles') AND OBJECT_ID('payment_cycles') IS NULL
 BEGIN
     CREATE TABLE payroll_cycles (
         id                    INT IDENTITY(1,1) PRIMARY KEY,

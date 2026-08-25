@@ -11,12 +11,14 @@ import io.vertx.core.eventbus.DeliveryOptions;
 import io.vertx.core.eventbus.EventBus;
 import io.vertx.core.http.HttpServerResponse;
 import io.vertx.core.json.JsonObject;
+import io.vertx.sqlclient.Tuple;
 import io.vertx.ext.auth.jwt.JWTAuth;
 import io.vertx.ext.web.Router;
 import io.vertx.ext.web.handler.CorsHandler;
 import io.vertx.ext.web.handler.JWTAuthHandler;
 import java.util.Arrays;
 import java.util.Set;
+import java.util.HashSet;
 import com.biopay.databases.Datasource;
 import com.biopay.services.Auth;
 import com.biopay.services.Administration;
@@ -33,6 +35,7 @@ import com.biopay.services.Subscription;
 import com.biopay.services.Voucher;
 import com.biopay.utilities.JwtSupport;
 import com.biopay.utilities.Logging;
+import com.biopay.utilities.PermissionPolicy;
 
 /**
  * HTTP surface for biopay. Deliberately just two routes:
@@ -196,12 +199,16 @@ public class EntryPoint extends AbstractVerticle {
                 try {
                     String body = bodyHandler.toString().trim();
                     JsonObject data = body.isEmpty() ? new JsonObject() : new JsonObject(body);
+                    boolean systemOwner = Boolean.TRUE.equals(principal.getValue("systemAdmin"));
+                    Object sessionAnchorId = principal.getValue("anchorId");
+                    Object requestedAnchorId = data.getValue("targetAnchorId");
                     data.put("ipAddress", remoteAddress);
                     data.put("actorId", principal.getValue("sub"));
                     data.put("actorRole", principal.getString("role"));
-                    data.put("anchorId", principal.getValue("anchorId"));
+                    data.put("sessionAnchorId", sessionAnchorId);
+                    data.put("anchorId", systemOwner && requestedAnchorId != null ? requestedAnchorId : sessionAnchorId);
                     data.put("partnerCode", principal.getValue("partnerCode"));
-                    data.put("systemAdmin", Boolean.TRUE.equals(principal.getValue("systemAdmin")));
+                    data.put("systemAdmin", systemOwner);
 
                     String processingCode = data.getString("processingCode", "").trim();
                     if (processingCode.isEmpty()) {
@@ -209,7 +216,7 @@ public class EntryPoint extends AbstractVerticle {
                         return;
                     }
 
-                    dispatchGated(eventBus, processingCode, data, response);
+                    authorizeAndDispatch(eventBus, processingCode, data, response);
                 } catch (Exception ex) {
                     response.end(badRequest("Error occurred: " + ex.getMessage()).toString());
                 }
@@ -225,13 +232,34 @@ public class EntryPoint extends AbstractVerticle {
                 rtc.response().setStatusCode(400).end();
                 return;
             }
-            try {
-                byte[] bytes = com.biopay.utilities.FileStore.read(filename);
-                String contentType = filename.toLowerCase().endsWith(".png") ? "image/png" : "image/jpeg";
-                rtc.response().putHeader("Content-Type", contentType).end(io.vertx.core.buffer.Buffer.buffer(bytes));
-            } catch (Exception ex) {
-                rtc.response().setStatusCode(404).end();
-            }
+            JsonObject principal = rtc.user().principal();
+            boolean systemOwner = Boolean.TRUE.equals(principal.getValue("systemAdmin"));
+            String role = principal.getString("role", "");
+            Object anchorValue = principal.getValue("anchorId");
+            Integer anchorId = anchorValue == null ? null : Integer.parseInt(anchorValue.toString());
+            String partnerCode = principal.getString("partnerCode");
+            String scopeSql = "SELECT TOP 1 1 AS allowed FROM images i "
+                    + "LEFT JOIN organizations p ON p.organization_code=i.organization_code "
+                    + "WHERE i.photo_url=@p1 AND (@p2=1 OR "
+                    + "(@p3='ANCHOR' AND p.anchor_id=@p4) OR "
+                    + "(@p3<>'ANCHOR' AND i.organization_code=@p5))";
+            Datasource.pool().preparedQuery(scopeSql)
+                    .execute(Tuple.of(filename, systemOwner, role, anchorId, partnerCode))
+                    .onFailure(error -> rtc.response().setStatusCode(503).end())
+                    .onSuccess(rows -> {
+                        if (rows.size() == 0) {
+                            rtc.response().setStatusCode(404).end();
+                            return;
+                        }
+                        try {
+                            byte[] bytes = com.biopay.utilities.FileStore.read(filename);
+                            String contentType = filename.toLowerCase().endsWith(".png") ? "image/png" : "image/jpeg";
+                            rtc.response().putHeader("Content-Type", contentType)
+                                    .end(io.vertx.core.buffer.Buffer.buffer(bytes));
+                        } catch (Exception ex) {
+                            rtc.response().setStatusCode(404).end();
+                        }
+                    });
         });
 
         int port = Integer.parseInt(dotenv.get("SYSTEM_PORT", "7730"));
@@ -248,6 +276,80 @@ public class EntryPoint extends AbstractVerticle {
         });
     }
 
+    private static void authorizeAndDispatch(EventBus eventBus, String processingCode, JsonObject data,
+            HttpServerResponse response) {
+        String actorRole = data.getString("actorRole", "");
+        String requestedOrganisation = data.getString("organisationCode", "");
+        if (!data.getBoolean("systemAdmin", false) && !requestedOrganisation.isBlank()
+                && !"CREATE_ORGANIZATION".equals(processingCode)) {
+            if ("ORGANISATION".equalsIgnoreCase(actorRole)
+                    && !requestedOrganisation.equals(data.getString("partnerCode", ""))) {
+                tenantForbidden(response);
+                return;
+            }
+            if ("ANCHOR".equalsIgnoreCase(actorRole)) {
+                Object anchorId = data.getValue("anchorId");
+                if (anchorId == null) { tenantForbidden(response); return; }
+                Datasource.pool().preparedQuery("SELECT 1 AS allowed FROM organizations WHERE organization_code=@p1 AND anchor_id=@p2")
+                        .execute(Tuple.of(requestedOrganisation, Integer.parseInt(anchorId.toString())))
+                        .onFailure(error -> response.setStatusCode(503).end(new JsonObject()
+                                .put("responseCode", "503").put("responseMessage", "Unable to verify tenant scope").toString()))
+                        .onSuccess(rows -> {
+                            if (rows.size() == 0) tenantForbidden(response);
+                            else authorizePermissionsAndDispatch(eventBus, processingCode, data, response);
+                        });
+                return;
+            }
+        }
+        authorizePermissionsAndDispatch(eventBus, processingCode, data, response);
+    }
+
+    private static void authorizePermissionsAndDispatch(EventBus eventBus, String processingCode, JsonObject data,
+            HttpServerResponse response) {
+        Set<String> requiredPermissions = PermissionPolicy.requiredPermissions(processingCode, data);
+        if (requiredPermissions.isEmpty() || data.getBoolean("systemAdmin", false)
+                || "SUPERVISOR".equalsIgnoreCase(data.getString("actorRole", ""))) {
+            dispatchGated(eventBus, processingCode, data, response);
+            return;
+        }
+
+        Object actorId = data.getValue("actorId");
+        if (actorId == null) {
+            forbidden(response, requiredPermissions);
+            return;
+        }
+        String sql = "SELECT p.permission_name FROM users u "
+                + "JOIN role_permissions rp ON rp.role_id=u.role_id AND rp.status=1 "
+                + "JOIN permissions p ON p.id=rp.permission_id "
+                + "WHERE u.id=@p1 AND u.active=1 AND u.status=1";
+        Datasource.pool().preparedQuery(sql).execute(Tuple.of(Integer.parseInt(actorId.toString())))
+                .onFailure(error -> response.setStatusCode(503).end(new JsonObject()
+                        .put("responseCode", "503")
+                        .put("responseMessage", "Unable to verify role permissions")
+                        .toString()))
+                .onSuccess(rows -> {
+                    Set<String> granted = new HashSet<>();
+                    rows.forEach(row -> granted.add(row.getString("permission_name")));
+                    if (requiredPermissions.stream().noneMatch(granted::contains)) forbidden(response, requiredPermissions);
+                    else dispatchGated(eventBus, processingCode, data, response);
+                });
+    }
+
+    private static void tenantForbidden(HttpServerResponse response) {
+        response.setStatusCode(403).end(new JsonObject()
+                .put("responseCode", "403")
+                .put("responseMessage", "The selected organisation is outside your assigned anchor")
+                .toString());
+    }
+
+    private static void forbidden(HttpServerResponse response, Set<String> requiredPermissions) {
+        response.setStatusCode(403).end(new JsonObject()
+                .put("responseCode", "403")
+                .put("responseMessage", "Your role does not allow this action")
+                .put("requiredPermission", requiredPermissions.iterator().next())
+                .toString());
+    }
+
     /**
      * Subscription gate in front of {@link #dispatch}: when the caller's anchor is
      * ARCHIVED (grace period exhausted), every data operation is refused with a 402
@@ -258,7 +360,7 @@ public class EntryPoint extends AbstractVerticle {
      */
     private static void dispatchGated(EventBus eventBus, String processingCode, JsonObject data,
             HttpServerResponse response) {
-        if (SUBSCRIPTION_EXEMPT_CODES.contains(processingCode)) {
+        if (SUBSCRIPTION_EXEMPT_CODES.contains(processingCode) || data.getBoolean("systemAdmin", false)) {
             dispatch(eventBus, processingCode, data, response);
             return;
         }

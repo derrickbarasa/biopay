@@ -10,6 +10,9 @@ const toast = useToast()
 const oldPassword = ref('')
 const newPassword = ref('')
 const confirmPassword = ref('')
+const showOldPassword = ref(false)
+const showNewPassword = ref(false)
+const showConfirmPassword = ref(false)
 const saving = ref(false)
 const savingProfile = ref(false)
 const profileFirstName = ref(auth.user?.firstName ?? '')
@@ -77,6 +80,7 @@ const qrCode = ref('')
 const secret = ref('')
 const confirmCode = ref('')
 const disablePassword = ref('')
+const showDisablePassword = ref(false)
 
 async function startEnroll() {
   enrolling.value = true
@@ -190,9 +194,39 @@ async function confirmDisable() {
         <v-card variant="flat" border class="pa-4">
           <v-card-title class="pl-0">Change Password</v-card-title>
           <v-card-text class="pl-0">
-            <v-text-field v-model="oldPassword" label="Current password" type="password" />
-            <v-text-field v-model="newPassword" label="New password" type="password" hint="At least 8 characters" persistent-hint />
-            <v-text-field v-model="confirmPassword" label="Confirm new password" type="password" class="mt-2" />
+            <v-text-field v-model="oldPassword" label="Current password" :type="showOldPassword ? 'text' : 'password'" autocomplete="current-password">
+              <template #append-inner>
+                <v-btn
+                  :icon="showOldPassword ? 'mdi-eye-off' : 'mdi-eye'" variant="text" density="compact"
+                  :aria-label="showOldPassword ? 'Hide password' : 'Show password'"
+                  @click="showOldPassword = !showOldPassword"
+                />
+              </template>
+            </v-text-field>
+            <v-text-field
+              v-model="newPassword" label="New password" :type="showNewPassword ? 'text' : 'password'"
+              hint="At least 8 characters" persistent-hint autocomplete="new-password"
+            >
+              <template #append-inner>
+                <v-btn
+                  :icon="showNewPassword ? 'mdi-eye-off' : 'mdi-eye'" variant="text" density="compact"
+                  :aria-label="showNewPassword ? 'Hide password' : 'Show password'"
+                  @click="showNewPassword = !showNewPassword"
+                />
+              </template>
+            </v-text-field>
+            <v-text-field
+              v-model="confirmPassword" label="Confirm new password" :type="showConfirmPassword ? 'text' : 'password'"
+              class="mt-2" autocomplete="new-password"
+            >
+              <template #append-inner>
+                <v-btn
+                  :icon="showConfirmPassword ? 'mdi-eye-off' : 'mdi-eye'" variant="text" density="compact"
+                  :aria-label="showConfirmPassword ? 'Hide password' : 'Show password'"
+                  @click="showConfirmPassword = !showConfirmPassword"
+                />
+              </template>
+            </v-text-field>
             <v-btn color="secondary" class="mt-4" :loading="saving" @click="changePassword">Update Password</v-btn>
           </v-card-text>
         </v-card>
@@ -201,6 +235,7 @@ async function confirmDisable() {
 
     <v-dialog v-model="enrollDialog" max-width="420">
       <v-card>
+        <dialog-close-button @close="enrollDialog = false" />
         <v-card-title>Enable Authenticator App</v-card-title>
         <v-card-text>
           <p class="text-body-2 mb-3">Scan this QR code with Google Authenticator, Authy or a similar app.</p>
@@ -224,10 +259,19 @@ async function confirmDisable() {
 
     <v-dialog v-model="disableDialog" max-width="420">
       <v-card>
+        <dialog-close-button @close="disableDialog = false" />
         <v-card-title>Disable Authenticator App</v-card-title>
         <v-card-text>
           <p class="text-body-2 mb-3">Enter your current password to confirm.</p>
-          <v-text-field v-model="disablePassword" label="Current password" type="password" autofocus />
+          <v-text-field v-model="disablePassword" label="Current password" :type="showDisablePassword ? 'text' : 'password'" autofocus autocomplete="current-password">
+            <template #append-inner>
+              <v-btn
+                :icon="showDisablePassword ? 'mdi-eye-off' : 'mdi-eye'" variant="text" density="compact"
+                :aria-label="showDisablePassword ? 'Hide password' : 'Show password'"
+                @click="showDisablePassword = !showDisablePassword"
+              />
+            </template>
+          </v-text-field>
         </v-card-text>
         <v-card-actions>
           <v-spacer />
