@@ -85,7 +85,7 @@ async function handleSubmit() {
                 {{ errorMessage }}
               </v-alert>
 
-              <v-text-field v-model="form.name" label="Anchor / organisation name" :rules="[rules.required]" />
+              <v-text-field v-model="form.name" label="Anchor name" :rules="[rules.required]" />
               <v-text-field v-model="form.authorisedName" label="Your name (authorised contact)" />
               <v-text-field v-model="form.email" label="Email" :rules="[rules.required, rules.email]" autocomplete="username" />
               <v-text-field v-model="form.phone" label="Phone (optional)" />

@@ -408,7 +408,7 @@ public class Auth extends AbstractVerticle {
         String password = payload.getString("password", "");
 
         if (name.isEmpty() || email.isEmpty() || password.length() < 8) {
-            replyError(message, "Organisation name, email and a password of at least 8 characters are required");
+            replyError(message, "Anchor name, email and a password of at least 8 characters are required");
             return;
         }
 
