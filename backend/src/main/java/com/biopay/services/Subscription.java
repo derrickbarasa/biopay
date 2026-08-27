@@ -136,12 +136,12 @@ public class Subscription extends AbstractVerticle {
                 });
     }
 
-    // ---- GET_ALL_SUBSCRIPTIONS (system owner only -- every anchor, cross-tenant) -----
+    // ---- GET_ALL_SUBSCRIPTIONS (super admin only -- every anchor, cross-tenant) -----
 
     private void getAllSubscriptions(Message<Object> message) {
         JsonObject payload = new JsonObject(message.body().toString());
         if (!payload.getBoolean("systemAdmin", false)) {
-            replyError(message, "Only the system owner can view every anchor's subscription");
+            replyError(message, "Only the super admin can view every anchor's subscription");
             return;
         }
         String sql = "SELECT a.id AS anchor_id, a.anchor_code, a.anchor_name, s.plan_code, s.expires_at, s.grace_days, "
@@ -175,7 +175,7 @@ public class Subscription extends AbstractVerticle {
     private void renew(Message<Object> message) {
         JsonObject payload = new JsonObject(message.body().toString());
         if (!TenantScope.managesOrganisations(payload)) {
-            replyError(message, "Only the system owner or an anchor administrator can renew the subscription");
+            replyError(message, "Only the super admin or an anchor administrator can renew the subscription");
             return;
         }
         Integer anchorId = anchorIdOf(payload);

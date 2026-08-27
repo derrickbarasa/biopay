@@ -37,6 +37,7 @@ export type ProcessingCode =
   | 'GET_ANCHORS'
   | 'CREATE_ANCHOR'
   | 'UPDATE_ANCHOR'
+  | 'TOGGLE_ANCHOR_STATUS'
   | 'GET_USERS'
   | 'GET_USER'
   | 'CREATE_USER'
@@ -44,8 +45,10 @@ export type ProcessingCode =
   | 'TOGGLE_USER_STATUS'
   | 'GET_ROLES'
   | 'SAVE_ROLE'
+  | 'DELETE_ROLE'
   | 'GET_PERMISSIONS'
   | 'CREATE_PERMISSION'
+  | 'DELETE_PERMISSION'
   // organizations
   | 'CREATE_ORGANIZATION'
   | 'UPDATE_ORGANIZATION'

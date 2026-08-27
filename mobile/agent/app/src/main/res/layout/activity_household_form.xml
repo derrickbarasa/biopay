@@ -164,7 +164,8 @@
                 app:cardBackgroundColor="@color/bp_surface"
                 app:cardCornerRadius="14dp"
                 app:cardElevation="1dp"
-                app:strokeWidth="0dp">
+                app:strokeWidth="1dp"
+                app:strokeColor="@color/bp_outline_variant">
                 <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="8dp">
                     <com.google.android.material.checkbox.MaterialCheckBox android:id="@+id/cbDisabledMembers" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="52dp" android:text="@string/field_has_disabled_members" />
                     <com.google.android.material.checkbox.MaterialCheckBox android:id="@+id/cbLiteracy" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="52dp" android:text="@string/field_literate" />

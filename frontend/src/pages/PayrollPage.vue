@@ -53,7 +53,7 @@ const CURRENCIES = ['USD', 'SSP', 'KES', 'UGX', 'ETB', 'EUR', 'GBP']
 const loading = ref(true)
 const cycles = ref<Cycle[]>([])
 const tableSearch = ref('')
-const organizations = ref<{ organisationCode: string; name: string }[]>([])
+const organizations = ref<{ organisationCode: string; name: string; anchorId?: number }[]>([])
 const statusFilter = ref<string | null>(null)
 const organisationFilter = ref<string | null>(null)
 
@@ -99,7 +99,7 @@ function clearFilters() {
 }
 
 async function loadOrganizations() {
-  if (!auth.isAnchorAdministrator && !(auth.isSystemAdmin && selectedAnchorId.value)) { organizations.value = []; return }
+  if (!auth.isAnchorAdministrator && !auth.isSystemAdmin) { organizations.value = []; return }
   try {
     const res = await dispatch<{ results: typeof organizations.value }>('GET_ORGANIZATIONS', {
       targetAnchorId: auth.isSystemAdmin ? selectedAnchorId.value : undefined,
@@ -110,7 +110,7 @@ async function loadOrganizations() {
   }
 }
 
-// System Owner picking a different anchor resets whatever organisation was
+// Super Admin picking a different anchor resets whatever organisation was
 // selected under the previous one, then reloads both lists.
 watch(selectedAnchorId, () => { organisationFilter.value = null; loadOrganizations(); load() })
 
@@ -125,6 +125,9 @@ const statusColor: Record<string, string> = {
 
 const orgNameByCode = computed(() => new Map(organizations.value.map((o) => [o.organisationCode, o.name])))
 function orgName(code?: string) { return (code && orgNameByCode.value.get(code)) || code || '—' }
+function targetAnchorForOrg(code?: string | null) {
+  return auth.isSystemAdmin ? organizations.value.find((organization) => organization.organisationCode === code)?.anchorId : undefined
+}
 function fmtAmount(v?: number | null) { return (v ?? 0).toLocaleString() }
 
 async function removeCycle(cycle: Cycle) {
@@ -267,7 +270,7 @@ async function sendGenerateOtp() {
 async function confirmGenerate() {
   generating.value = true
   try {
-    await dispatch('GENERATE_PAYROLL', { ...genForm.value, targetAnchorId: auth.isSystemAdmin ? selectedAnchorId.value : undefined })
+    await dispatch('GENERATE_PAYROLL', { ...genForm.value, organisationCode: genForm.value.organisationCode || undefined, targetAnchorId: targetAnchorForOrg(genForm.value.organisationCode) })
     toast.success('Payroll cycle generated and pending approval')
     wizard.value = false
     await load()
@@ -463,25 +466,18 @@ function itemStatusColor(item: PaymentLine) {
       <v-btn v-if="scopeReady && auth.can('ACCESS_PAYMENT_CYCLES')" color="secondary" prepend-icon="mdi-calendar-month-outline" @click="openWizard">Generate Payment Cycle</v-btn>
     </div>
 
-    <v-select
-      v-if="anchorGateActive" v-model="selectedAnchorId" :items="anchors" item-title="name" item-value="id"
-      label="Choose anchor" variant="outlined" class="mb-4" style="max-width: 420px"
-      prepend-inner-icon="mdi-bank-outline"
-    />
-    <v-select
-      v-else-if="auth.isAnchorAdministrator" v-model="organisationFilter" :items="organizations" item-title="name" item-value="organisationCode"
-      label="Choose organisation" variant="outlined" class="mb-4" style="max-width: 420px"
-      prepend-inner-icon="mdi-domain"
-    />
     <v-alert v-if="auth.isSystemAdmin ? !anchorChosen : (auth.isAnchorAdministrator && !organisationFilter)" type="info" variant="tonal" class="mb-4">
-      {{ auth.isSystemAdmin ? 'Showing payment cycles across every anchor. Choose one above to narrow the list.' : 'Showing payment cycles across every organisation. Choose one above to narrow the list.' }}
+      {{ auth.isSystemAdmin ? 'Showing payment cycles across every anchor. Choose one in the filters below to narrow the list.' : 'Showing payment cycles across every organisation. Choose one in the filters below to narrow the list.' }}
     </v-alert>
 
     <template v-if="scopeReady">
     <v-card variant="flat" border>
       <v-card-text>
         <v-row dense align="center">
-          <v-col v-if="auth.isSystemAdmin" cols="12" sm="4" md="3">
+          <v-col v-if="anchorGateActive" cols="12" sm="4" md="3">
+            <v-select v-model="selectedAnchorId" :items="anchors" item-title="name" item-value="id" label="Anchor" clearable hide-details density="compact" prepend-inner-icon="mdi-bank-outline" />
+          </v-col>
+          <v-col v-if="auth.isSystemAdmin || auth.isAnchorAdministrator" cols="12" sm="4" md="3">
             <v-select v-model="organisationFilter" :items="organizations" item-title="name" item-value="organisationCode" label="Organisation" clearable hide-details density="compact" />
           </v-col>
           <v-col cols="6" sm="4" md="3">

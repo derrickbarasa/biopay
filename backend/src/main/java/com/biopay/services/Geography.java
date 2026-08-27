@@ -83,7 +83,7 @@ public class Geography extends AbstractVerticle {
 
     private static boolean canManage(JsonObject payload) {
         String role = payload.getString("actorRole", "");
-        return "ANCHOR".equalsIgnoreCase(role) || "ORGANISATION".equalsIgnoreCase(role);
+        return "SYSTEM".equalsIgnoreCase(role) || "ANCHOR".equalsIgnoreCase(role) || "ORGANISATION".equalsIgnoreCase(role);
     }
 
     private static Integer anchorIdOf(JsonObject payload) {
@@ -367,7 +367,7 @@ public class Geography extends AbstractVerticle {
     private void list(Message<Object> message, String table, String codeColumn, String filterColumn, String filterField) {
         JsonObject payload = new JsonObject(message.body().toString());
         // Same "show everything, then filter" rule every other browse endpoint follows: a
-        // System Owner who hasn't picked a target anchor sees geography across all of them
+        // Super Admin who hasn't picked a target anchor sees geography across all of them
         // instead of an error; an Anchor Administrator always has their own anchorId from
         // the JWT, so this never affects that role.
         Integer anchorId = anchorIdOf(payload);
@@ -386,7 +386,8 @@ public class Geography extends AbstractVerticle {
                     for (Row r : rows) {
                         JsonObject obj = new JsonObject()
                                 .put("code", Rows.str(r, codeColumn))
-                                .put("name", Rows.str(r, "name"));
+                                .put("name", Rows.str(r, "name"))
+                                .put("anchorId", Rows.intVal(r, "anchor_id"));
                         if (hasColumn(table, "state_code")) obj.put("stateCode", Rows.str(r, "state_code"));
                         if (hasColumn(table, "county_code")) obj.put("countyCode", Rows.str(r, "county_code"));
                         if (hasColumn(table, "location_code")) obj.put("locationCode", Rows.str(r, "location_code"));

@@ -93,7 +93,6 @@ public class Organization extends AbstractVerticle {
             return;
         }
 
-        String partnerId = payload.getString("organisationCode", "").trim();
         String name = payload.getString("name", "").trim();
         String authorisedName = payload.getString("authorisedName", "").trim();
         String authorisedEmail = payload.getString("authorisedEmail", "").trim();
@@ -110,8 +109,8 @@ public class Organization extends AbstractVerticle {
         Object anchorIdVal = payload.getValue("anchorId");
         JsonArray modules = payload.getJsonArray("modules", new JsonArray());
 
-        if (partnerId.isEmpty() || name.isEmpty() || anchorIdVal == null) {
-            replyError(message, "organisationCode and name are required");
+        if (name.isEmpty() || anchorIdVal == null) {
+            replyError(message, "name and anchor are required");
             return;
         }
         if (!"BIOMETRIC".equals(verificationMethod) && !"FACIAL".equals(verificationMethod) && !"BOTH".equals(verificationMethod)) {
@@ -138,21 +137,30 @@ public class Organization extends AbstractVerticle {
         int targetAnchorId = Integer.parseInt(anchorIdVal.toString());
         pool.preparedQuery("SELECT 1 AS found FROM users WHERE id=@p1 AND user_scope='ANCHOR' AND status=1")
                 .execute(Tuple.of(targetAnchorId))
-                .compose(anchorRows -> anchorRows.size() == 0
-                        ? Future.failedFuture("Selected anchor was not found or is inactive")
-                        : pool.preparedQuery(sql).execute(Tuple.of(partnerId, name, "1", authorisedName, authorisedEmail, authorisedContact,
-                                address, country.isEmpty() ? null : country, capitalCity.isEmpty() ? null : capitalCity, selectedVerificationMethod,
-                                targetAnchorId, 1, payload.getValue("actorId"))))
                 .onFailure(err -> onDbError(message, err))
-                .onSuccess(rows -> {
-                    if (rows.rowCount() == 0) {
-                        replyError(message, "Failed to create organisation. Code may already exist");
+                .onSuccess(anchorRows -> {
+                    if (anchorRows.size() == 0) {
+                        replyError(message, "Selected anchor was not found or is inactive");
                         return;
                     }
-                    saveModules(partnerId, modules)
-                            .onComplete(ar -> reply(message, new JsonObject()
-                                    .put("responseCode", "000")
-                                    .put("responseMessage", "Organisation created successfully")));
+                    com.biopay.utilities.Utilities.nextOrganizationCode(pool)
+                            .onFailure(err -> onDbError(message, err))
+                            .onSuccess(partnerId -> pool.preparedQuery(sql)
+                                    .execute(Tuple.of(partnerId, name, "1", authorisedName, authorisedEmail, authorisedContact,
+                                            address, country.isEmpty() ? null : country, capitalCity.isEmpty() ? null : capitalCity, selectedVerificationMethod,
+                                            targetAnchorId, 1, payload.getValue("actorId")))
+                                    .onFailure(err -> onDbError(message, err))
+                                    .onSuccess(rows -> {
+                                        if (rows.rowCount() == 0) {
+                                            replyError(message, "Failed to create organisation");
+                                            return;
+                                        }
+                                        saveModules(partnerId, modules)
+                                                .onComplete(ar -> reply(message, new JsonObject()
+                                                        .put("responseCode", "000")
+                                                        .put("responseMessage", "Organisation created successfully")
+                                                        .put("organisationCode", partnerId)));
+                                    }));
                 });
     }
 

@@ -30,7 +30,7 @@ export interface SessionUser {
   permissions?: string[]
   enabledModules?: OrgModule[]
   totpEnabled?: boolean
-  /** Platform-wide System Owner. This identity has no anchor or organisation membership. */
+  /** Platform-wide Super Admin. This identity has no anchor or organisation membership. */
   systemAdmin?: boolean
 }
 

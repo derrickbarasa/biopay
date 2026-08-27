@@ -10,26 +10,41 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.biopay.agent.R;
+import com.biopay.agent.data.DatabaseHelper;
+import com.biopay.agent.data.FaceDao;
+import com.biopay.agent.data.FingerprintDao;
 import com.biopay.agent.data.HouseholdDao;
+import com.biopay.agent.data.PaymentDao;
 import com.biopay.agent.ui.BaseActivity;
+import com.google.android.material.chip.ChipGroup;
 
+import java.util.ArrayList;
 import java.util.List;
 
-/** Searchable list of locally-registered households (dca's HouseholdActivity, which nca lacked). */
+/** Searchable, filterable list of locally-registered households. */
 public class HouseholdListActivity extends BaseActivity {
 
     private HouseholdDao householdDao;
+    private FingerprintDao fingerprintDao;
+    private FaceDao faceDao;
+    private PaymentDao paymentDao;
     private HouseholdListAdapter adapter;
+    private String currentQuery;
+    private int checkedFilterId = R.id.chipAll;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_household_list);
-        setupBackToolbar(R.id.toolbar);
+        setupMainNavigation(R.id.bottomNavigation, R.id.navHouseholds);
+        setupScanFab(R.id.fabScan);
 
         householdDao = new HouseholdDao(this);
+        fingerprintDao = new FingerprintDao(this);
+        faceDao = new FaceDao(this);
+        paymentDao = new PaymentDao(this);
         adapter = new HouseholdListAdapter(household ->
-                startActivity(HouseholdFormActivity.editIntent(this, household.householdNumber)));
+                startActivity(HouseholdDetailActivity.intent(this, household.householdNumber)));
 
         RecyclerView recyclerView = findViewById(R.id.recyclerHouseholds);
         recyclerView.setLayoutManager(new LinearLayoutManager(this));
@@ -39,15 +54,22 @@ public class HouseholdListActivity extends BaseActivity {
         searchView.setOnQueryTextListener(new SearchView.OnQueryTextListener() {
             @Override
             public boolean onQueryTextSubmit(String query) {
-                loadHouseholds(query);
+                currentQuery = query;
+                loadHouseholds();
                 return true;
             }
 
             @Override
             public boolean onQueryTextChange(String newText) {
-                loadHouseholds(newText);
+                currentQuery = newText;
+                loadHouseholds();
                 return true;
             }
+        });
+
+        ((ChipGroup) findViewById(R.id.chipGroupFilter)).setOnCheckedStateChangeListener((group, checkedIds) -> {
+            checkedFilterId = checkedIds.isEmpty() ? R.id.chipAll : checkedIds.get(0);
+            loadHouseholds();
         });
 
         findViewById(R.id.btnAddHousehold).setOnClickListener(v ->
@@ -57,15 +79,38 @@ public class HouseholdListActivity extends BaseActivity {
     @Override
     protected void onResume() {
         super.onResume();
-        loadHouseholds(null);
+        loadHouseholds();
     }
 
-    private void loadHouseholds(String query) {
-        List<HouseholdDao.Household> households = householdDao.search(query);
-        adapter.submitList(households);
+    private void loadHouseholds() {
+        List<HouseholdDao.Household> matches = householdDao.search(currentQuery);
+        List<HouseholdDao.Household> filtered = applyStatusFilter(matches);
+        adapter.submitList(filtered);
         ((TextView) findViewById(R.id.tvListSummary)).setText(
-                getString(R.string.household_list_summary, households.size()));
-        findViewById(R.id.emptyState).setVisibility(households.isEmpty() ? View.VISIBLE : View.GONE);
-        findViewById(R.id.recyclerHouseholds).setVisibility(households.isEmpty() ? View.GONE : View.VISIBLE);
+                getString(R.string.household_list_summary, filtered.size()));
+        findViewById(R.id.emptyState).setVisibility(filtered.isEmpty() ? View.VISIBLE : View.GONE);
+        findViewById(R.id.recyclerHouseholds).setVisibility(filtered.isEmpty() ? View.GONE : View.VISIBLE);
+    }
+
+    private List<HouseholdDao.Household> applyStatusFilter(List<HouseholdDao.Household> households) {
+        if (checkedFilterId == R.id.chipAll) {
+            return households;
+        }
+        List<HouseholdDao.Household> filtered = new ArrayList<>();
+        for (HouseholdDao.Household household : households) {
+            if (checkedFilterId == R.id.chipPendingSync) {
+                if (household.syncStatus != DatabaseHelper.SYNC_SYNCED) {
+                    filtered.add(household);
+                }
+                continue;
+            }
+            HouseholdStatus status = HouseholdStatus.compute(household, fingerprintDao, faceDao, paymentDao);
+            if ((checkedFilterId == R.id.chipIncomplete && status == HouseholdStatus.INCOMPLETE)
+                    || (checkedFilterId == R.id.chipReady && status == HouseholdStatus.READY)
+                    || (checkedFilterId == R.id.chipPaid && status == HouseholdStatus.PAID)) {
+                filtered.add(household);
+            }
+        }
+        return filtered;
     }
 }

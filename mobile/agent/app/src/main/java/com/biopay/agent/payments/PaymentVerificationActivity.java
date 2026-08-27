@@ -2,42 +2,28 @@ package com.biopay.agent.payments;
 
 import android.content.Context;
 import android.content.Intent;
-import android.location.Location;
 import android.os.Bundle;
-import android.util.Log;
-import android.view.LayoutInflater;
-import android.view.View;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
-import androidx.appcompat.app.AlertDialog;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.biopay.agent.R;
 import com.biopay.agent.attendance.Beneficiary;
-import com.biopay.agent.biometric.BiometricDevice;
-import com.biopay.agent.biometric.BiometricDeviceException;
-import com.biopay.agent.biometric.BiometricDeviceFactory;
-import com.biopay.agent.biometric.VerifyCallback;
 import com.biopay.agent.data.AlternateDao;
 import com.biopay.agent.data.FaceDao;
 import com.biopay.agent.data.FingerprintDao;
 import com.biopay.agent.data.HouseholdDao;
-import com.biopay.agent.data.PaymentDao;
 import com.biopay.agent.face.FaceCaptureActivity;
 import com.biopay.agent.face.FaceMatchConfig;
 import com.biopay.agent.face.FaceMatcher;
 import com.biopay.agent.face.FaceRecognitionEngine;
 import com.biopay.agent.face.FaceRecognitionException;
 import com.biopay.agent.face.MlKitFaceRecognitionEngine;
-import com.biopay.agent.location.LocationHelper;
-import com.biopay.agent.session.SessionManager;
-import com.biopay.agent.sync.SyncScheduler;
 import com.biopay.agent.ui.BaseActivity;
-import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 import org.json.JSONArray;
 
@@ -47,26 +33,18 @@ import java.io.IOException;
 import java.text.NumberFormat;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.UUID;
 
 /**
- * Verifies whichever household member shows up to collect a pending field payment -- by
- * fingerprint and/or face, whichever that specific person actually has enrolled (see {@link
- * #buildBeneficiaries}) -- then records the disbursement via {@link PaymentDao#recordFieldPayment}.
- *
- * <p>This is the first real caller of {@code RECORD_FIELD_PAYMENT} from the mobile app: the
- * backend endpoint and {@code PaymentDao.recordFieldPayment} both existed fully implemented with
- * no UI ever calling them (progress.md's original plan even named this exact screen,
- * "PaymentVerificationActivity", years before it was actually built). The fingerprint path
- * mirrors {@code AttendanceBeneficiariesActivity}'s already-proven verify loop; the face path is
- * this app's first live face verification against a stored embedding -- until today only face
- * capture/enrollment existed. Face remains an explicitly unvalidated prototype (see {@link
- * MlKitFaceRecognitionEngine}'s javadoc) -- shown with the same accuracy warning used at capture
- * time, not hidden here just because money is involved.
+ * Picks which household member is collecting a pending field payment -- by whichever method
+ * (fingerprint and/or face) that specific person actually has enrolled (see
+ * {@link #buildBeneficiaries}) -- then hands off to the redesigned verify -> disburse -> review
+ * -> success wizard ({@link FingerprintVerifyActivity} / face match here -> {@link
+ * VerifySuccessActivity} -> {@link DisbursementActivity} -> {@link DisbursementReviewActivity}).
+ * This screen itself is unchanged from before the redesign -- it's the destination of each
+ * row's tap that changed, from an inline dialog/immediate-record to that full flow.
  */
 public class PaymentVerificationActivity extends BaseActivity {
 
-    private static final String TAG = "PaymentVerification";
     private static final String EXTRA_HOUSEHOLD_NUMBER = "household_number";
     private static final String EXTRA_AMOUNT = "amount";
 
@@ -81,13 +59,23 @@ public class PaymentVerificationActivity extends BaseActivity {
     private AlternateDao alternateDao;
     private FingerprintDao fingerprintDao;
     private FaceDao faceDao;
-    private PaymentDao paymentDao;
-    private SessionManager sessionManager;
 
     private String householdNumber;
     private String householdName;
     private double amount;
     private Beneficiary pendingFaceBeneficiary;
+    private Beneficiary pendingFingerprintBeneficiary;
+
+    private final ActivityResultLauncher<Intent> fingerprintVerifyLauncher =
+            registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {
+                if (result.getResultCode() != RESULT_OK || result.getData() == null) return;
+                String matchedUuid = result.getData().getStringExtra(FingerprintVerifyActivity.EXTRA_RESULT_MATCHED_UUID);
+                Beneficiary beneficiary = pendingFingerprintBeneficiary;
+                pendingFingerprintBeneficiary = null;
+                if (beneficiary != null && matchedUuid != null) {
+                    proceedToSuccess(beneficiary, getString(R.string.verify_method_fingerprint_label), matchedUuid, null);
+                }
+            });
 
     private final ActivityResultLauncher<Intent> faceCaptureLauncher =
             registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {
@@ -108,8 +96,6 @@ public class PaymentVerificationActivity extends BaseActivity {
         alternateDao = new AlternateDao(this);
         fingerprintDao = new FingerprintDao(this);
         faceDao = new FaceDao(this);
-        paymentDao = new PaymentDao(this);
-        sessionManager = new SessionManager(this);
 
         householdNumber = getIntent().getStringExtra(EXTRA_HOUSEHOLD_NUMBER);
         amount = getIntent().getDoubleExtra(EXTRA_AMOUNT, 0);
@@ -122,7 +108,11 @@ public class PaymentVerificationActivity extends BaseActivity {
                 getString(R.string.payment_amount, NumberFormat.getNumberInstance().format(amount)));
 
         PaymentBeneficiaryAdapter adapter = new PaymentBeneficiaryAdapter(new PaymentBeneficiaryAdapter.OnVerifyListener() {
-            @Override public void onVerifyFingerprint(Beneficiary beneficiary) { startFingerprintVerify(beneficiary); }
+            @Override public void onVerifyFingerprint(Beneficiary beneficiary) {
+                pendingFingerprintBeneficiary = beneficiary;
+                fingerprintVerifyLauncher.launch(FingerprintVerifyActivity.intentFor(
+                        PaymentVerificationActivity.this, householdNumber, beneficiary.beneficiaryId, beneficiary.name, beneficiary.subtitle));
+            }
             @Override public void onVerifyFace(Beneficiary beneficiary) { startFaceCapture(beneficiary); }
         });
         RecyclerView recyclerView = findViewById(R.id.recyclerBeneficiaries);
@@ -158,75 +148,7 @@ public class PaymentVerificationActivity extends BaseActivity {
         return new PaymentBeneficiaryAdapter.Row(beneficiary, hasFingerprint, hasFace);
     }
 
-    // ---- Fingerprint verify (exact pattern proven in AttendanceBeneficiariesActivity) -----
-
-    private void startFingerprintVerify(Beneficiary beneficiary) {
-        List<FingerprintDao.StoredTemplate> templates = fingerprintDao.templatesWithUuidForBeneficiary(beneficiary.beneficiaryId);
-        if (templates.isEmpty()) {
-            Toast.makeText(this, R.string.attendance_no_enrolled_fingerprint, Toast.LENGTH_SHORT).show();
-            return;
-        }
-        BiometricDevice device = BiometricDeviceFactory.create();
-        try {
-            device.open(this, null);
-        } catch (BiometricDeviceException ex) {
-            Toast.makeText(this, R.string.attendance_verify_error, Toast.LENGTH_SHORT).show();
-            return;
-        } catch (Throwable ex) {
-            // See PersonCaptureActivity's matching fix -- a missing/mismatched vendor native
-            // library throws an unchecked UnsatisfiedLinkError, not the checked exception open()
-            // declares; caught broadly here for the same reason.
-            Log.e(TAG, "BiometricDevice.open() failed unexpectedly", ex);
-            Toast.makeText(this, R.string.attendance_verify_error, Toast.LENGTH_SHORT).show();
-            return;
-        }
-
-        View content = LayoutInflater.from(this).inflate(R.layout.dialog_verify_progress, null);
-        TextView progress = content.findViewById(R.id.tvVerifyProgress);
-        AlertDialog dialog = new MaterialAlertDialogBuilder(this)
-                .setTitle(R.string.payment_verify_title)
-                .setView(content)
-                .setCancelable(false)
-                .setNegativeButton(R.string.attendance_cancel, (d, which) -> {
-                    device.cancelLiveAcquisition();
-                    device.close();
-                })
-                .create();
-        dialog.show();
-        com.biopay.agent.session.SessionTimeoutManager.keepAlive(dialog);
-        attemptFingerprintVerify(device, templates, 0, progress, dialog, beneficiary);
-    }
-
-    private void attemptFingerprintVerify(BiometricDevice device, List<FingerprintDao.StoredTemplate> templates,
-            int index, TextView progress, AlertDialog dialog, Beneficiary beneficiary) {
-        if (index >= templates.size()) {
-            device.close();
-            dialog.dismiss();
-            Toast.makeText(this, R.string.attendance_no_match, Toast.LENGTH_SHORT).show();
-            return;
-        }
-        device.startVerify(templates.get(index).template, new VerifyCallback() {
-            @Override public void onProgress(String message) { progress.setText(message); }
-
-            @Override public void onMatched(int score) {
-                device.close();
-                dialog.dismiss();
-                recordPayment(beneficiary, templates.get(index).uuid, null);
-            }
-
-            @Override public void onNoMatch() {
-                attemptFingerprintVerify(device, templates, index + 1, progress, dialog, beneficiary);
-            }
-
-            @Override public void onError(int code, String message) {
-                device.close();
-                dialog.dismiss();
-                Toast.makeText(PaymentVerificationActivity.this, R.string.attendance_verify_error, Toast.LENGTH_SHORT).show();
-            }
-        });
-    }
-
-    // ---- Face verify (first live face verification anywhere in the app -- see class javadoc) --
+    // ---- Face verify (first live face verification anywhere in the app) --------------------
 
     private void startFaceCapture(Beneficiary beneficiary) {
         pendingFaceBeneficiary = beneficiary;
@@ -251,7 +173,9 @@ public class PaymentVerificationActivity extends BaseActivity {
                 FaceDao.FaceRecord finalMatched = matched;
                 runOnUiThread(() -> {
                     if (finalMatched != null) {
-                        recordPayment(beneficiary, null, finalMatched.uuid);
+                        new com.biopay.agent.data.VerificationEventDao(this)
+                                .record(householdNumber, beneficiary.beneficiaryId, beneficiary.name, "Face");
+                        proceedToSuccess(beneficiary, getString(R.string.settings_face_title), null, finalMatched.uuid);
                     } else {
                         Toast.makeText(this, R.string.payment_verify_no_face_match, Toast.LENGTH_SHORT).show();
                     }
@@ -288,18 +212,15 @@ public class PaymentVerificationActivity extends BaseActivity {
         return bytes;
     }
 
-    // ---- Record the disbursement ------------------------------------------------------------
+    // ---- Hand off to the shared success screen, then Disbursement --------------------------
 
-    private void recordPayment(Beneficiary beneficiary, String matchedFingerprintUuid, String matchedFaceUuid) {
-        Location location = LocationHelper.getLastKnownLocation(this);
-        String latitude = location == null ? null : String.valueOf(location.getLatitude());
-        String longitude = location == null ? null : String.valueOf(location.getLongitude());
-
-        paymentDao.recordFieldPayment(String.valueOf(sessionManager.getUserId()), sessionManager.getPartnerCode(),
-                householdNumber, householdName, amount, matchedFingerprintUuid, matchedFaceUuid,
-                latitude, longitude, UUID.randomUUID().toString());
-        Toast.makeText(this, R.string.payment_verify_recorded, Toast.LENGTH_LONG).show();
-        SyncScheduler.triggerNow(this);
-        finish();
+    private void proceedToSuccess(Beneficiary beneficiary, String methodLabel, String matchedFingerprintUuid, String matchedFaceUuid) {
+        Intent disbursement = DisbursementActivity.intentFor(this, householdNumber, householdName, amount,
+                beneficiary.name, methodLabel, matchedFingerprintUuid, matchedFaceUuid);
+        Intent success = VerifySuccessActivity.intentFor(this, VerifySuccessActivity.MODE_VERIFICATION,
+                getString(R.string.verify_success_title), beneficiary.name + " · " + householdName,
+                new String[]{getString(R.string.verify_success_verified_using, methodLabel)}, new String[]{""},
+                getString(R.string.verify_success_continue), disbursement);
+        startActivity(success);
     }
 }

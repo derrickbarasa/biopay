@@ -44,7 +44,7 @@ const invoices = ref<Invoice[]>([])
 const renewing = ref(false)
 const downloadingReceipt = ref<string | null>(null)
 
-// The system owner can see every anchor's subscription, not just their own.
+// The super admin can see every anchor's subscription, not just their own.
 const allSubscriptions = ref<AnchorSubscription[]>([])
 const loadingAll = ref(false)
 const selectedAnchorId = ref<number | null>(null)
@@ -54,7 +54,7 @@ const subscriptionScope = computed(() => auth.isSystemAdmin ? { targetAnchorId: 
  *  the anchors this system already operates across (see the org/anchor Country picker). */
 const CURRENCIES = ['USD', 'KES', 'UGX', 'SSP', 'ETB', 'TZS', 'RWF', 'NGN', 'XAF', 'GBP', 'EUR']
 
-const renewForm = ref({ amount: null as number | null, currency: 'USD' })
+const renewForm = ref({ amount: null as number | null, currency: 'USD', anchorId: null as number | null })
 const renewDialog = ref(false)
 
 const statusColor: Record<string, string> = { ACTIVE: 'success', GRACE: 'warning', ARCHIVED: 'error', NONE: 'grey' }
@@ -129,21 +129,27 @@ onMounted(async () => {
 watch(selectedAnchorId, () => { void load() })
 
 function openRenew() {
-  renewForm.value = { amount: null, currency: 'USD' }
+  renewForm.value = { amount: null, currency: 'USD', anchorId: selectedAnchorId.value }
   renewDialog.value = true
 }
 
 async function confirmRenew() {
+  if (auth.isSystemAdmin && !renewForm.value.anchorId) {
+    toast.error('Choose an anchor to renew')
+    return
+  }
   renewing.value = true
   try {
     await dispatch('RENEW_SUBSCRIPTION', {
-      ...subscriptionScope.value,
+      targetAnchorId: auth.isSystemAdmin ? renewForm.value.anchorId : undefined,
       amount: renewForm.value.amount ?? undefined,
       currency: renewForm.value.amount != null ? renewForm.value.currency : undefined,
     })
+    if (auth.isSystemAdmin) selectedAnchorId.value = renewForm.value.anchorId
     toast.success('Subscription renewed')
     renewDialog.value = false
     await load()
+    await loadAllSubscriptions()
   } catch (err) {
     toast.error(err instanceof Error ? err.message : 'Renewal failed')
   } finally {
@@ -222,21 +228,17 @@ const statusHeadline = computed(() => {
         <h1 class="text-h5 font-weight-bold">Subscription</h1>
         <p class="text-body-2 text-medium-emphasis mt-1">Manage your anchor's subscription, and view payment history and receipts.</p>
       </div>
-      <v-btn v-if="auth.isAnchor && auth.can('ACCESS_SUBSCRIPTION') && (!auth.isSystemAdmin || selectedAnchorId)" color="secondary" prepend-icon="mdi-autorenew" :loading="renewing" @click="openRenew">
+      <v-btn v-if="auth.isAnchor && auth.can('ACCESS_SUBSCRIPTION')" color="secondary" prepend-icon="mdi-autorenew" :loading="renewing" @click="openRenew">
         Renew subscription
       </v-btn>
     </div>
 
     <v-select
       v-if="auth.isSystemAdmin" v-model="selectedAnchorId" :items="allSubscriptions"
-      item-title="anchorName" item-value="anchorId" label="Manage subscription for anchor"
+      item-title="anchorName" item-value="anchorId" label="Filter by anchor"
       variant="outlined" class="mb-4" style="max-width: 460px"
-      hint="Choose the anchor before viewing invoices or recording a renewal." persistent-hint
+      clearable hint="View-only filter, to open one anchor's invoice history below. Renewals choose their anchor in the dialog." persistent-hint
     />
-
-    <v-alert v-if="auth.isSystemAdmin && !selectedAnchorId" type="info" variant="tonal" class="mb-5">
-      Choose an anchor to open its subscription dashboard. The overview below remains system-wide.
-    </v-alert>
 
     <v-progress-linear v-if="loading" indeterminate color="primary" class="mb-4" />
 
@@ -260,7 +262,7 @@ const statusHeadline = computed(() => {
     </v-card>
 
     <v-card v-if="auth.isSystemAdmin" variant="flat" border class="mb-5">
-      <v-card-title class="text-subtitle-1 font-weight-bold">All anchors (system owner view)</v-card-title>
+      <v-card-title class="text-subtitle-1 font-weight-bold">All anchors (super admin view)</v-card-title>
       <v-data-table :headers="allSubsHeaders" :items="allSubscriptions" :loading="loadingAll">
         <template #item.status="{ item }">
           <v-chip size="small" :color="statusColor[item.status] ?? 'grey'" variant="tonal">{{ item.status }}</v-chip>
@@ -304,6 +306,7 @@ const statusHeadline = computed(() => {
             Extends access by one month from the later of today or the current expiry. Recording an amount here is
             optional and only for your own payment records — it does not charge anything.
           </p>
+          <v-select v-if="auth.isSystemAdmin" v-model="renewForm.anchorId" :items="allSubscriptions" item-title="anchorName" item-value="anchorId" label="Anchor" density="compact" class="mb-2" />
           <v-row dense>
             <v-col cols="7"><v-text-field v-model.number="renewForm.amount" label="Amount paid (optional)" type="number" density="compact" /></v-col>
             <v-col cols="5"><v-select v-model="renewForm.currency" :items="CURRENCIES" label="Currency" density="compact" /></v-col>

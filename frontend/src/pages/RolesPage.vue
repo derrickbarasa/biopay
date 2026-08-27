@@ -23,20 +23,27 @@ const anchors = ref<Anchor[]>([])
 const selectedAnchorId = ref<number | null>(null)
 const selected = ref<number | null>(null)
 const permissionSearch = ref('')
-const form = reactive({ roleId: null as number | null, name: '', description: '', scope: 'ORGANISATION', permissionIds: [] as number[] })
+const form = reactive({ roleId: null as number | null, name: '', description: '', scope: 'ORGANISATION', permissionIds: [] as number[], anchorId: null as number | null })
 const newPermission = reactive({ name: '', displayName: '', groupKey: 'REPORTS', description: '' })
 
 const assignablePermissions = computed(() => permissions.value.filter((permission) => !isLegacyPermission(permission.name)))
 const selectedRole = computed(() => roles.value.find((role) => role.id === selected.value))
 const anchorNameById = computed(() => new Map(anchors.value.map((a) => [a.id, a.name])))
 function roleAnchorName(role: Role) { return role.anchorId != null ? anchorNameById.value.get(role.anchorId) ?? null : null }
-const isBuiltInRole = computed(() => !!selectedRole.value?.builtIn)
-// Creating a brand-new tenant role needs a target anchor chosen first (a role has to belong
-// to some anchor); editing an existing one never does -- the System Owner manages every role
-// and permission by definition and can save changes to any anchor's role without narrowing
-// the page down to that one tenant first.
-const canSave = computed(() => auth.can('ACCESS_ROLES') && (!auth.isSystemAdmin || !!selectedAnchorId.value || form.roleId !== null) && !isBuiltInRole.value)
-const isUnlimitedRole = computed(() => !!selectedRole.value?.systemRole)
+// The Super Admin has full system access, so no role or permission is locked to them -- these
+// built-in-role locks only ever apply to an Anchor Administrator managing their own tenant's roles.
+const isBuiltInRole = computed(() => !auth.isSystemAdmin && !!selectedRole.value?.builtIn)
+const isUnlimitedRole = computed(() => !auth.isSystemAdmin && !!selectedRole.value?.systemRole)
+// The Super Admin role's scope has nowhere sensible to move to (there is no picker option for
+// "System"), so its scope field alone stays fixed even though everything else about the role
+// -- name, description, permissions -- opens up for the Super Admin like any other role.
+const isFixedScopeRole = computed(() => selectedRole.value?.scope === 'SYSTEM')
+// Creating a brand-new tenant role needs a target anchor -- chosen right here in the editor,
+// not as a page-wide precondition -- since a role has to belong to some anchor. Editing an
+// existing one never does: an Anchor Administrator's own anchor is always known from their
+// session, and the Super Admin can save changes to any anchor's role without narrowing the
+// page down to that one tenant first.
+const canSave = computed(() => auth.can('ACCESS_ROLES') && (!auth.isSystemAdmin || form.roleId !== null || !!form.anchorId) && !isBuiltInRole.value)
 const selectedPermissionCount = computed(() => form.permissionIds.filter((id) => assignablePermissions.value.some((permission) => permission.id === id)).length)
 const allPermissionsSelected = computed(() => assignablePermissions.value.length > 0 && selectedPermissionCount.value === assignablePermissions.value.length)
 
@@ -101,13 +108,14 @@ function edit(role: Role) {
     description: role.description ?? '',
     scope: role.scope,
     permissionIds: permissions.value.filter((permission) => role.permissions.includes(permission.name) && !isLegacyPermission(permission.name)).map((permission) => permission.id),
+    anchorId: role.anchorId ?? null,
   })
   permissionSearch.value = ''
 }
 
 function createRole() {
   selected.value = null
-  Object.assign(form, { roleId: null, name: '', description: '', scope: 'ORGANISATION', permissionIds: [] })
+  Object.assign(form, { roleId: null, name: '', description: '', scope: 'ORGANISATION', permissionIds: [], anchorId: selectedAnchorId.value })
   permissionSearch.value = ''
 }
 
@@ -120,16 +128,50 @@ async function save() {
     toast.error('Select at least one permission for this role')
     return
   }
+  if (auth.isSystemAdmin && form.roleId === null && !form.anchorId) {
+    toast.error('Choose an anchor for this role')
+    return
+  }
   saving.value = true
   try {
     const wasNew = form.roleId === null
-    await dispatch('SAVE_ROLE', { ...form, targetAnchorId: auth.isSystemAdmin ? selectedAnchorId.value : undefined })
+    await dispatch('SAVE_ROLE', { ...form, targetAnchorId: auth.isSystemAdmin && wasNew ? form.anchorId : undefined })
     toast.success(wasNew ? 'Role created' : 'Role permissions updated')
     await load()
   } catch (error) {
     toast.error(error instanceof Error ? error.message : 'Unable to save role')
   } finally {
     saving.value = false
+  }
+}
+
+const deleting = ref(false)
+const deleteRoleDialog = ref(false)
+
+async function confirmDeleteRole() {
+  if (form.roleId === null) return
+  deleting.value = true
+  try {
+    await dispatch('DELETE_ROLE', { roleId: form.roleId, targetAnchorId: auth.isSystemAdmin ? selectedAnchorId.value : undefined })
+    toast.success('Role deleted')
+    deleteRoleDialog.value = false
+    createRole()
+    await load()
+  } catch (error) {
+    toast.error(error instanceof Error ? error.message : 'Unable to delete role')
+  } finally {
+    deleting.value = false
+  }
+}
+
+async function deletePermission(permission: Permission) {
+  if (!confirm(`Delete the "${permission.displayName || permission.name}" permission? Any role that has it will lose it.`)) return
+  try {
+    await dispatch('DELETE_PERMISSION', { permissionId: permission.id })
+    toast.success('Permission deleted')
+    await load(selected.value)
+  } catch (error) {
+    toast.error(error instanceof Error ? error.message : 'Unable to delete permission')
   }
 }
 
@@ -174,11 +216,11 @@ watch(selectedAnchorId, () => { selected.value = null; void load() })
           <h1>Roles &amp; permissions</h1>
           <v-chip size="small" variant="tonal" color="success">{{ auth.isSystemAdmin ? 'System policy control' : 'Anchor policy control' }}</v-chip>
         </div>
-        <p>{{ auth.isSystemAdmin ? 'Your System Owner access is permanent. Every anchor\'s roles are shown below -- choose one to focus on just that tenant, or create a new role for it.' : 'Create a role, then choose exactly what people with that role can view or change.' }}</p>
+        <p>{{ auth.isSystemAdmin ? 'Your Super Admin access is permanent. Every anchor\'s roles are shown below -- choose one to focus on just that tenant, or create a new role for it.' : 'Create a role, then choose exactly what people with that role can view or change.' }}</p>
       </div>
       <div class="head-actions">
         <v-btn v-if="auth.isSystemAdmin" variant="outlined" prepend-icon="mdi-shield-plus-outline" @click="openCreatePermission">Create permission</v-btn>
-        <v-btn v-if="auth.can('ACCESS_ROLES')" color="secondary" prepend-icon="mdi-plus" :disabled="auth.isSystemAdmin && !selectedAnchorId" @click="createRole">Create role</v-btn>
+        <v-btn v-if="auth.can('ACCESS_ROLES')" color="secondary" prepend-icon="mdi-plus" @click="createRole">Create role</v-btn>
       </div>
     </header>
 
@@ -204,14 +246,15 @@ watch(selectedAnchorId, () => { selected.value = null; void load() })
         <div class="editor-head">
           <div>
             <h2>{{ form.roleId === null ? 'Create a role' : `Edit ${selectedRole?.name ?? 'role'}` }}</h2>
-            <p>{{ isUnlimitedRole ? 'Permanent platform access. This System Owner role cannot be reduced, reassigned, or changed.' : form.roleId === null ? 'Name the role and assign only the access it needs.' : isBuiltInRole ? 'This built-in tenant administrator role is locked to its defined scope.' : 'Changes apply to every user assigned to this role.' }}</p>
+            <p>{{ isUnlimitedRole ? 'Permanent platform access. This Super Admin role cannot be reduced, reassigned, or changed.' : form.roleId === null ? 'Name the role and assign only the access it needs.' : isBuiltInRole ? 'This built-in tenant administrator role is locked to its defined scope.' : 'Changes apply to every user assigned to this role.' }}</p>
           </div>
           <div class="selection-total" aria-live="polite"><strong>{{ selectedPermissionCount }}</strong><span>selected</span></div>
         </div>
 
         <div class="role-fields">
+          <v-select v-if="auth.isSystemAdmin && form.roleId === null" v-model="form.anchorId" :items="anchors" item-title="name" item-value="id" label="Anchor" variant="outlined" density="compact" class="wide" />
           <v-text-field v-model="form.name" label="Role name" variant="outlined" density="compact" required :disabled="isBuiltInRole" />
-          <v-select v-model="form.scope" :items="[{ title: 'Organisation', value: 'ORGANISATION' }, { title: 'Anchor', value: 'ANCHOR' }]" label="Access scope" variant="outlined" density="compact" :disabled="isBuiltInRole" />
+          <v-select v-model="form.scope" :items="[{ title: 'Organisation', value: 'ORGANISATION' }, { title: 'Anchor', value: 'ANCHOR' }, { title: 'System', value: 'SYSTEM' }]" label="Access scope" variant="outlined" density="compact" :disabled="isBuiltInRole || isFixedScopeRole" />
           <v-textarea v-model="form.description" label="Description" variant="outlined" rows="2" density="compact" class="wide" :disabled="isBuiltInRole" />
         </div>
 
@@ -237,6 +280,11 @@ watch(selectedAnchorId, () => { selected.value = null; void load() })
               <label v-for="item in group.items" :key="item.permission.id" :class="{ selected: form.permissionIds.includes(item.permission.id) }">
                 <v-checkbox-btn v-model="form.permissionIds" :value="item.permission.id" :disabled="isBuiltInRole" color="primary" />
                 <span><strong>{{ item.actionLabel }}</strong><small>{{ item.permission.description }}</small></span>
+                <v-btn
+                  v-if="auth.isSystemAdmin && !item.permission.systemDefined"
+                  icon="mdi-trash-can-outline" size="x-small" variant="text" color="error"
+                  :title="`Delete ${item.actionLabel}`" @click.stop.prevent="deletePermission(item.permission)"
+                />
               </label>
             </div>
           </section>
@@ -244,7 +292,8 @@ watch(selectedAnchorId, () => { selected.value = null; void load() })
         </div>
 
         <div class="editor-actions">
-          <p v-if="!canSave">{{ isUnlimitedRole ? 'System Owner access is enforced by the platform and cannot be changed.' : isBuiltInRole ? 'Built-in tenant administrator permissions are managed by BioPay policy.' : auth.isSystemAdmin && !selectedAnchorId ? 'Choose an anchor before creating a new role for it.' : 'Your role can view roles but cannot change them.' }}</p>
+          <p v-if="!canSave">{{ isUnlimitedRole ? 'Super Admin access is enforced by the platform and cannot be changed.' : isBuiltInRole ? 'Built-in tenant administrator permissions are managed by BioPay policy.' : auth.isSystemAdmin && form.roleId === null && !form.anchorId ? 'Choose an anchor for this role.' : 'Your role can view roles but cannot change them.' }}</p>
+          <v-btn v-if="canSave && form.roleId !== null" variant="outlined" color="error" prepend-icon="mdi-trash-can-outline" @click="deleteRoleDialog = true">Delete role</v-btn>
           <v-btn color="secondary" :loading="saving" :disabled="!canSave" prepend-icon="mdi-content-save-outline" @click="save">{{ form.roleId === null ? 'Create role' : 'Save permissions' }}</v-btn>
         </div>
       </main>
@@ -265,6 +314,19 @@ watch(selectedAnchorId, () => { selected.value = null; void load() })
           <v-spacer />
           <v-btn variant="text" @click="permissionDialog = false">Cancel</v-btn>
           <v-btn color="secondary" :loading="creatingPermission" @click="createPermission">Create permission</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <v-dialog v-model="deleteRoleDialog" max-width="440">
+      <v-card>
+        <dialog-close-button @close="deleteRoleDialog = false" />
+        <v-card-title>Delete "{{ selectedRole?.name }}"?</v-card-title>
+        <v-card-text>This cannot be undone. Roles still assigned to a user can't be deleted -- reassign them first.</v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" @click="deleteRoleDialog = false">Cancel</v-btn>
+          <v-btn color="error" :loading="deleting" @click="confirmDeleteRole">Delete role</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>

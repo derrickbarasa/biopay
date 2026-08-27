@@ -84,6 +84,17 @@ public class Household extends AbstractVerticle {
         return payload.getString("partnerCode", "");
     }
 
+    /** Resolves organisationCode's real anchor server-side rather than trusting whatever
+     *  anchorId the client sent -- fails if the organisation doesn't exist or (for an Anchor
+     *  Administrator) isn't inside their own anchor. The Super Admin may target any anchor. */
+    private Future<Integer> resolveOrgAnchorId(JsonObject payload, String organisationCode) {
+        return pool.preparedQuery("SELECT anchor_id FROM organizations WHERE organization_code=@p1 AND (@p2=1 OR anchor_id=@p3)")
+                .execute(Tuple.of(organisationCode, isSystemAdmin(payload), TenantScope.anchorId(payload)))
+                .compose(rows -> rows.size() == 0
+                        ? Future.failedFuture("Organisation is outside your anchor")
+                        : Future.succeededFuture(Rows.intVal(rows.iterator().next(), "anchor_id")));
+    }
+
     // ---- CREATE_HOUSEHOLD --------------------------------------------------------
 
     private void create(Message<Object> message) {
@@ -686,8 +697,6 @@ public class Household extends AbstractVerticle {
         String partnerCode = isAnchor(payload) ? payload.getString("organisationCode", "") : payload.getString("partnerCode", "");
         String villageCode = payload.getString("villageCode", "").trim();
         JsonArray rows = payload.getJsonArray("rows", new JsonArray());
-        Object anchorIdVal = payload.getValue("anchorId");
-        Integer anchorId = anchorIdVal == null ? null : Integer.parseInt(anchorIdVal.toString());
 
         if (partnerCode == null || partnerCode.isEmpty() || villageCode.isEmpty() || rows.isEmpty()) {
             replyError(message, "organisationCode, villageCode and at least one row are required");
@@ -705,8 +714,10 @@ public class Household extends AbstractVerticle {
                         replyError(message, "Household registration is not enabled for this organisation");
                         return;
                     }
-                    pool.preparedQuery("SELECT * FROM geo_villages WHERE anchor_id=@p1 AND village_code=@p2 AND status=1")
-                            .execute(Tuple.of(anchorId, villageCode))
+                    resolveOrgAnchorId(payload, partnerCode)
+                            .onFailure(err -> replyError(message, err.getMessage()))
+                            .onSuccess(resolvedAnchorId -> pool.preparedQuery("SELECT * FROM geo_villages WHERE anchor_id=@p1 AND village_code=@p2 AND status=1")
+                            .execute(Tuple.of(resolvedAnchorId, villageCode))
                             .onFailure(err -> onDbError(message, err))
                             .onSuccess(villageRows -> {
                                 if (villageRows.size() == 0) {
@@ -716,7 +727,7 @@ public class Household extends AbstractVerticle {
                                 Row village = villageRows.iterator().next();
                                 processUploadRow(message, rows, 0, partnerCode, village, payload.getValue("actorId"),
                                         payload.getString("fileName"), new JsonArray(), new JsonArray());
-                            });
+                            }));
                 });
     }
 

@@ -72,7 +72,7 @@ public class SettingsActivity extends BaseActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_settings);
-        setupMainNavigation(R.id.bottomNavigation, R.id.navSettings);
+        setupBackToolbar(R.id.toolbar);
 
         sessionManager = new SessionManager(this);
         syncAlertsManager = new SyncAlertsManager(this);

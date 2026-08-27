@@ -10,9 +10,7 @@
     <com.google.android.material.appbar.MaterialToolbar
         android:id="@+id/toolbar"
         style="@style/BioPay.Toolbar"
-        android:title="@string/household_title"
-        app:navigationIcon="@drawable/ic_arrow_back"
-        app:navigationIconTint="@color/bp_text_primary" />
+        android:title="@string/household_title" />
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -33,6 +31,57 @@
             android:background="@drawable/bg_icon_container"
             android:iconifiedByDefault="false"
             android:queryHint="@string/household_search_hint" />
+
+        <HorizontalScrollView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:scrollbars="none">
+
+        <com.google.android.material.chip.ChipGroup
+            android:id="@+id/chipGroupFilter"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            app:singleLine="true"
+            app:singleSelection="true">
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/chipAll"
+                style="@style/Widget.Material3.Chip.Filter"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:checked="true"
+                android:text="@string/household_filter_all" />
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/chipIncomplete"
+                style="@style/Widget.Material3.Chip.Filter"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/household_filter_incomplete" />
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/chipReady"
+                style="@style/Widget.Material3.Chip.Filter"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/household_filter_ready" />
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/chipPaid"
+                style="@style/Widget.Material3.Chip.Filter"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/household_filter_paid" />
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/chipPendingSync"
+                style="@style/Widget.Material3.Chip.Filter"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/household_filter_pending_sync" />
+        </com.google.android.material.chip.ChipGroup>
+        </HorizontalScrollView>
 
         <TextView
             android:id="@+id/tvListSummary"
@@ -84,14 +133,19 @@
                 android:gravity="center"
                 android:text="@string/household_empty_body" />
         </LinearLayout>
+
+        <com.google.android.material.floatingactionbutton.FloatingActionButton
+            android:id="@+id/btnAddHousehold"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom|end"
+            android:layout_margin="16dp"
+            android:contentDescription="@string/household_add"
+            android:src="@drawable/ic_add"
+            app:backgroundTint="@color/bp_secondary"
+            app:shapeAppearanceOverlay="@style/ShapeAppearanceOverlay.BioPay.Circle"
+            app:tint="@color/bp_on_primary" />
     </FrameLayout>
 
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/btnAddHousehold"
-        style="@style/BioPay.PrimaryButton"
-        android:layout_marginStart="16dp"
-        android:layout_marginEnd="16dp"
-        android:layout_marginBottom="16dp"
-        android:text="@string/household_add"
-        app:icon="@drawable/ic_add" />
+    <include layout="@layout/partial_bottom_nav_bar" />
 </LinearLayout>

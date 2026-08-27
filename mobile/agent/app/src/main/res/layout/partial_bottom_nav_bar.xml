@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Shared bottom navigation chrome: 4 destination bar plus a centered, elevated Scan action.
+     Included at the bottom of every top-level tab screen (Home/Households/Activity/More).
+     CoordinatorLayout plus layout_anchor is used specifically because it draws/positions an
+     anchored child relative to its anchor deterministically. A plain FrameLayout with a
+     negative margin overlap left the FAB's overlapping half hidden behind the nav bar
+     regardless of elevation and bringChildToFront (Material's FAB elevation handling did not
+     cooperate), so do not simplify this back to a FrameLayout without re-verifying on-device. -->
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:clipChildren="false"
+    android:clipToPadding="false">
+
+    <com.google.android.material.bottomnavigation.BottomNavigationView
+        android:id="@+id/bottomNavigation"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@color/bp_surface"
+        android:minHeight="72dp"
+        app:itemIconTint="@color/navigation_item_color"
+        app:itemTextColor="@color/navigation_item_color"
+        app:labelVisibilityMode="labeled"
+        app:menu="@menu/main_navigation" />
+
+    <com.google.android.material.floatingactionbutton.FloatingActionButton
+        android:id="@+id/fabScan"
+        android:layout_width="56dp"
+        android:layout_height="56dp"
+        android:layout_marginBottom="20dp"
+        android:contentDescription="@string/scan_action_title"
+        android:src="@drawable/ic_fingerprint"
+        app:backgroundTint="@color/bp_primary"
+        app:elevation="6dp"
+        app:fabCustomSize="56dp"
+        app:layout_anchor="@id/bottomNavigation"
+        app:layout_anchorGravity="top|center_horizontal"
+        app:maxImageSize="26dp"
+        app:shapeAppearanceOverlay="@style/ShapeAppearanceOverlay.BioPay.Circle"
+        app:tint="@color/bp_on_primary" />
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

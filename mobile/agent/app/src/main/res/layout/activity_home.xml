@@ -138,7 +138,8 @@
             app:cardBackgroundColor="@color/bp_surface"
             app:cardCornerRadius="18dp"
             app:cardElevation="1dp"
-            app:strokeWidth="0dp">
+            app:strokeWidth="1dp"
+            app:strokeColor="@color/bp_outline_variant">
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -327,7 +328,6 @@
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
-        <!-- Field tasks -->
         <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -335,194 +335,8 @@
             app:cardBackgroundColor="@color/bp_surface"
             app:cardCornerRadius="18dp"
             app:cardElevation="1dp"
-            app:strokeWidth="0dp">
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:paddingTop="16dp"
-                android:paddingBottom="6dp">
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal"
-                    android:paddingStart="16dp"
-                    android:paddingEnd="16dp"
-                    android:paddingBottom="8dp">
-                    <FrameLayout
-                        android:layout_width="36dp"
-                        android:layout_height="36dp"
-                        android:background="@drawable/bg_badge_teal">
-                        <ImageView
-                            android:layout_width="18dp"
-                            android:layout_height="18dp"
-                            android:layout_gravity="center"
-                            android:contentDescription="@null"
-                            android:src="@drawable/ic_attendance"
-                            app:tint="@color/bp_primary" />
-                    </FrameLayout>
-                    <TextView
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="10dp"
-                        android:layout_weight="1"
-                        android:text="@string/home_tasks"
-                        android:textColor="@color/bp_text_primary"
-                        android:textSize="16sp"
-                        android:textStyle="bold" />
-                </LinearLayout>
-
-                <include layout="@layout/row_field_task_households" />
-                <include layout="@layout/row_field_task_attendance" />
-                <include layout="@layout/row_field_task_vouchers" />
-                <include layout="@layout/row_field_task_alternates" />
-                <include layout="@layout/row_field_task_payments" />
-                <include layout="@layout/row_field_task_reports" />
-            </LinearLayout>
-        </com.google.android.material.card.MaterialCardView>
-
-        <!-- Quick actions -->
-        <com.google.android.material.card.MaterialCardView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            app:cardBackgroundColor="@color/bp_surface_variant"
-            app:cardCornerRadius="18dp"
-            app:cardElevation="0dp"
-            app:strokeWidth="0dp">
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:paddingTop="18dp"
-                android:paddingBottom="18dp">
-
-                <LinearLayout
-                    android:id="@+id/btnQuickScanQr"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:background="?attr/selectableItemBackground"
-                    android:clickable="true"
-                    android:focusable="true"
-                    android:gravity="center_horizontal"
-                    android:orientation="vertical"
-                    android:paddingTop="4dp"
-                    android:paddingBottom="4dp">
-                    <ImageView
-                        android:layout_width="24dp"
-                        android:layout_height="24dp"
-                        android:contentDescription="@null"
-                        android:src="@drawable/ic_qr_scan"
-                        app:tint="@color/bp_primary" />
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="8dp"
-                        android:gravity="center"
-                        android:text="@string/home_quick_scan_qr"
-                        android:textColor="@color/bp_text_primary"
-                        android:textSize="12sp" />
-                </LinearLayout>
-
-                <LinearLayout
-                    android:id="@+id/btnQuickVerifyIdentity"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:background="?attr/selectableItemBackground"
-                    android:clickable="true"
-                    android:focusable="true"
-                    android:gravity="center_horizontal"
-                    android:orientation="vertical"
-                    android:paddingTop="4dp"
-                    android:paddingBottom="4dp">
-                    <ImageView
-                        android:layout_width="24dp"
-                        android:layout_height="24dp"
-                        android:contentDescription="@null"
-                        android:src="@drawable/ic_fingerprint"
-                        app:tint="@color/bp_primary" />
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="8dp"
-                        android:gravity="center"
-                        android:text="@string/home_quick_verify_identity"
-                        android:textColor="@color/bp_text_primary"
-                        android:textSize="12sp" />
-                </LinearLayout>
-
-                <LinearLayout
-                    android:id="@+id/btnQuickMyLocation"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:background="?attr/selectableItemBackground"
-                    android:clickable="true"
-                    android:focusable="true"
-                    android:gravity="center_horizontal"
-                    android:orientation="vertical"
-                    android:paddingTop="4dp"
-                    android:paddingBottom="4dp">
-                    <ImageView
-                        android:layout_width="24dp"
-                        android:layout_height="24dp"
-                        android:contentDescription="@null"
-                        android:src="@drawable/ic_location_pin"
-                        app:tint="@color/bp_primary" />
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="8dp"
-                        android:gravity="center"
-                        android:text="@string/home_quick_my_location"
-                        android:textColor="@color/bp_text_primary"
-                        android:textSize="12sp" />
-                </LinearLayout>
-
-                <LinearLayout
-                    android:id="@+id/btnQuickSyncHistory"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:background="?attr/selectableItemBackground"
-                    android:clickable="true"
-                    android:focusable="true"
-                    android:gravity="center_horizontal"
-                    android:orientation="vertical"
-                    android:paddingTop="4dp"
-                    android:paddingBottom="4dp">
-                    <ImageView
-                        android:layout_width="24dp"
-                        android:layout_height="24dp"
-                        android:contentDescription="@null"
-                        android:src="@drawable/ic_reports"
-                        app:tint="@color/bp_primary" />
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="8dp"
-                        android:gravity="center"
-                        android:text="@string/home_quick_sync_history"
-                        android:textColor="@color/bp_text_primary"
-                        android:textSize="12sp" />
-                </LinearLayout>
-            </LinearLayout>
-        </com.google.android.material.card.MaterialCardView>
-
-        <com.google.android.material.card.MaterialCardView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            app:cardBackgroundColor="@color/bp_surface"
-            app:cardCornerRadius="18dp"
-            app:cardElevation="1dp"
-            app:strokeWidth="0dp">
+            app:strokeWidth="1dp"
+            app:strokeColor="@color/bp_outline_variant">
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -549,14 +363,5 @@
     </LinearLayout>
     </androidx.core.widget.NestedScrollView>
 
-    <com.google.android.material.bottomnavigation.BottomNavigationView
-        android:id="@+id/bottomNavigation"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:background="@color/bp_surface"
-        android:minHeight="72dp"
-        app:itemIconTint="@color/navigation_item_color"
-        app:itemTextColor="@color/navigation_item_color"
-        app:labelVisibilityMode="labeled"
-        app:menu="@menu/main_navigation" />
+    <include layout="@layout/partial_bottom_nav_bar" />
 </LinearLayout>

@@ -279,7 +279,12 @@ public class EntryPoint extends AbstractVerticle {
     private static void authorizeAndDispatch(EventBus eventBus, String processingCode, JsonObject data,
             HttpServerResponse response) {
         String actorRole = data.getString("actorRole", "");
-        String requestedOrganisation = data.getString("organisationCode", "");
+        // getString(key, def) only substitutes def when the key is entirely absent -- an explicit
+        // JSON null (e.g. a cleared Vuetify select, or a form field never shown for the caller's
+        // role) still comes back null and would NPE on isBlank() below, so this can't skip the
+        // strOrEmpty-style guard the rest of the codebase applies to every other optional field.
+        String requestedOrganisationRaw = data.getString("organisationCode");
+        String requestedOrganisation = requestedOrganisationRaw == null ? "" : requestedOrganisationRaw;
         if (!data.getBoolean("systemAdmin", false) && !requestedOrganisation.isBlank()
                 && !"CREATE_ORGANIZATION".equals(processingCode)) {
             if ("ORGANISATION".equalsIgnoreCase(actorRole)

@@ -14,10 +14,13 @@ import androidx.core.view.WindowInsetsCompat;
 import com.google.android.material.appbar.MaterialToolbar;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
 import com.biopay.agent.R;
+import com.biopay.agent.feed.ActivityFeedActivity;
 import com.biopay.agent.home.HomeActivity;
+import com.biopay.agent.households.HouseholdListActivity;
+import com.biopay.agent.more.MoreActivity;
+import com.biopay.agent.scan.ScanBottomSheetFragment;
 import com.biopay.agent.session.SessionManager;
 import com.biopay.agent.session.SessionTimeoutManager;
-import com.biopay.agent.settings.SettingsActivity;
 
 import android.content.Intent;
 
@@ -87,12 +90,31 @@ public abstract class BaseActivity extends AppCompatActivity {
             if (targetId == selectedItemId) {
                 return true;
             }
-            Class<?> destination = targetId == R.id.navSettings ? SettingsActivity.class : HomeActivity.class;
+            Class<?> destination;
+            if (targetId == R.id.navHouseholds) {
+                destination = HouseholdListActivity.class;
+            } else if (targetId == R.id.navActivityFeed) {
+                destination = ActivityFeedActivity.class;
+            } else if (targetId == R.id.navMore) {
+                destination = MoreActivity.class;
+            } else {
+                destination = HomeActivity.class;
+            }
             Intent intent = new Intent(this, destination)
                     .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
             startActivity(intent);
             overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out);
             return true;
         });
+    }
+
+    /** Wires the floating center action shared by every bottom-nav tab screen to the Scan sheet. */
+    protected void setupScanFab(int fabId) {
+        View fab = findViewById(fabId);
+        if (fab == null) {
+            return;
+        }
+        fab.setOnClickListener(v ->
+                new ScanBottomSheetFragment().show(getSupportFragmentManager(), "scan"));
     }
 }

@@ -2,7 +2,7 @@ package com.biopay.utilities;
 
 import io.vertx.core.json.JsonObject;
 
-/** Shared interpretation of the System Owner -> Anchor -> Organisation hierarchy. */
+/** Shared interpretation of the Super Admin -> Anchor -> Organisation hierarchy. */
 public final class TenantScope {
     private TenantScope() {}
 

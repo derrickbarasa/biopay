@@ -12,8 +12,11 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.biopay.agent.R;
 import com.biopay.agent.data.DatabaseHelper;
+import com.biopay.agent.data.FaceDao;
+import com.biopay.agent.data.FingerprintDao;
 import com.biopay.agent.data.GeoDao;
 import com.biopay.agent.data.HouseholdDao;
+import com.biopay.agent.data.PaymentDao;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -27,6 +30,9 @@ public class HouseholdListAdapter extends RecyclerView.Adapter<HouseholdListAdap
     private final List<HouseholdDao.Household> households = new ArrayList<>();
     private final OnHouseholdClickListener listener;
     private GeoDao geoDao;
+    private FingerprintDao fingerprintDao;
+    private FaceDao faceDao;
+    private PaymentDao paymentDao;
 
     public HouseholdListAdapter(OnHouseholdClickListener listener) {
         this.listener = listener;
@@ -51,6 +57,9 @@ public class HouseholdListAdapter extends RecyclerView.Adapter<HouseholdListAdap
         Context context = holder.itemView.getContext();
         if (geoDao == null) {
             geoDao = new GeoDao(context);
+            fingerprintDao = new FingerprintDao(context);
+            faceDao = new FaceDao(context);
+            paymentDao = new PaymentDao(context);
         }
         holder.tvName.setText(household.householdName);
         // The stored value may be a synced village code (picker) or a manually-typed village name
@@ -65,7 +74,33 @@ public class HouseholdListAdapter extends RecyclerView.Adapter<HouseholdListAdap
         holder.tvSyncStatus.setTextColor(ContextCompat.getColor(context, synced ? R.color.bp_success : R.color.bp_secondary));
         holder.tvSyncStatus.setBackgroundResource(
                 synced ? R.drawable.bg_status_success : R.drawable.bg_status_warning);
+
+        HouseholdStatus status = HouseholdStatus.compute(household, fingerprintDao, faceDao, paymentDao);
+        bindStatusChip(holder.tvStatus, status);
+
         holder.itemView.setOnClickListener(v -> listener.onHouseholdClick(household));
+    }
+
+    static void bindStatusChip(TextView chip, HouseholdStatus status) {
+        Context context = chip.getContext();
+        switch (status) {
+            case PAID:
+                chip.setText(R.string.household_status_paid);
+                chip.setTextColor(ContextCompat.getColor(context, R.color.bp_success));
+                chip.setBackgroundResource(R.drawable.bg_status_success);
+                break;
+            case READY:
+                chip.setText(R.string.household_status_ready);
+                chip.setTextColor(ContextCompat.getColor(context, R.color.bp_primary));
+                chip.setBackgroundResource(R.drawable.bg_status_info);
+                break;
+            case INCOMPLETE:
+            default:
+                chip.setText(R.string.household_status_incomplete);
+                chip.setTextColor(ContextCompat.getColor(context, R.color.bp_text_secondary));
+                chip.setBackgroundResource(R.drawable.bg_status_neutral);
+                break;
+        }
     }
 
     @Override
@@ -76,12 +111,14 @@ public class HouseholdListAdapter extends RecyclerView.Adapter<HouseholdListAdap
     static class ViewHolder extends RecyclerView.ViewHolder {
         final TextView tvName;
         final TextView tvSubtitle;
+        final TextView tvStatus;
         final TextView tvSyncStatus;
 
         ViewHolder(@NonNull View itemView) {
             super(itemView);
             tvName = itemView.findViewById(R.id.tvName);
             tvSubtitle = itemView.findViewById(R.id.tvSubtitle);
+            tvStatus = itemView.findViewById(R.id.tvStatus);
             tvSyncStatus = itemView.findViewById(R.id.tvSyncStatus);
         }
     }

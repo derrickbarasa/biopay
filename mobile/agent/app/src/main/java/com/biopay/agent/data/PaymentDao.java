@@ -28,10 +28,12 @@ public class PaymentDao {
     }
 
     /** Exactly one of matchedFingerprintUuid/matchedFaceUuid should be non-null -- whichever
-     *  method PaymentVerificationActivity actually verified the beneficiary with. */
+     *  method verified the beneficiary. interventionType (Cash/Voucher/Food/In-kind) is
+     *  local-only -- RECORD_FIELD_PAYMENT has no matching backend column yet, see DatabaseHelper's
+     *  version-7 upgrade note -- it shows on the on-device receipt but doesn't sync. */
     public long recordFieldPayment(String supervisorId, String partnerCode, String householdNumber,
             String householdName, double amount, String matchedFingerprintUuid, String matchedFaceUuid,
-            String latitude, String longitude, String uuid) {
+            String latitude, String longitude, String uuid, String interventionType) {
         ContentValues values = new ContentValues();
         values.put("supervisor_id", supervisorId);
         values.put("partner_code", partnerCode);
@@ -43,6 +45,7 @@ public class PaymentDao {
         values.put("latitude", latitude);
         values.put("longitude", longitude);
         values.put("uuid", uuid);
+        values.put("intervention_type", interventionType);
         values.put("status", STATUS_PAID);
         values.put("sync_status", DatabaseHelper.SYNC_PENDING);
         return dbHelper.getWritableDatabase().insert("payments", null, values);
@@ -87,6 +90,16 @@ public class PaymentDao {
             }
         }
         return results;
+    }
+
+    /** Backs the households list's "Paid" status chip -- has any payment for this household
+     * actually been marked paid, regardless of which cycle/session recorded it. */
+    public boolean hasPaidPayment(String householdNumber) {
+        try (Cursor cursor = dbHelper.getReadableDatabase().query("payments", new String[]{"COUNT(*)"},
+                "household_number=? AND status=?",
+                new String[]{householdNumber, String.valueOf(STATUS_PAID)}, null, null, null)) {
+            return cursor.moveToFirst() && cursor.getInt(0) > 0;
+        }
     }
 
     public int countByStatus(int status) {

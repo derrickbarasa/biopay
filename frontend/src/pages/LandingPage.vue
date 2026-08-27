@@ -7,6 +7,7 @@ let observer: IntersectionObserver | null = null
 let featureObserver: IntersectionObserver | null = null
 let scrollDir: 'up' | 'down' = 'down'
 let lastScrollY = 0
+let navRevealTimer: ReturnType<typeof setTimeout> | null = null
 
 function trackScrollDir() {
   const y = window.scrollY
@@ -18,8 +19,17 @@ function trackScrollDir() {
 // Nav hides the instant the page moves and drops back in once scrolling settles.
 const navHidden = ref(false)
 function handleNavScroll() {
-  if (window.scrollY < 80 || scrollDir === 'up') navHidden.value = false
-  else navHidden.value = true
+  if (mobileNavOpen.value) {
+    navHidden.value = false
+    return
+  }
+
+  navHidden.value = true
+  if (navRevealTimer) clearTimeout(navRevealTimer)
+  navRevealTimer = setTimeout(() => {
+    navHidden.value = false
+    navRevealTimer = null
+  }, 140)
 }
 
 // Request-a-demo form. With no CRM/email endpoint on the backend, submitting opens
@@ -40,8 +50,8 @@ function submitDemo() {
 }
 
 // Hero carousel -- five value props, each with a full-bleed background photo.
-// Project-owned carousel images live in frontend/public/hero/ (landscape,
-// 1800px+ wide works well as background-size:cover).
+// Project-owned carousel images live in frontend/public/hero/. Their complete
+// compositions are kept visible in the hero rather than cropped to full bleed.
 const heroSlides = [
   {
     icon: 'cash', tone: 'primary', eyebrow: 'Cash transfers',
@@ -264,6 +274,7 @@ onBeforeUnmount(() => {
   window.removeEventListener('scroll', trackScrollDir)
   window.removeEventListener('scroll', handleNavScroll)
   window.removeEventListener('resize', onHowResize)
+  if (navRevealTimer) clearTimeout(navRevealTimer)
   if (heroTimer) clearInterval(heroTimer)
   if (howRafId) cancelAnimationFrame(howRafId)
 })
@@ -309,6 +320,11 @@ onBeforeUnmount(() => {
       <div id="top"></div>
       <!-- HERO -->
       <section class="hero hero-visual">
+        <div
+          v-for="(slide, index) in heroSlides" :key="`${slide.eyebrow}-colour`"
+          class="hero-colorwash" :class="{ active: index === activeHero }" aria-hidden="true"
+          :style="loadedHero.has(index) ? { backgroundImage: `url(${slide.image})` } : {}"
+        />
         <div
           v-for="(slide, index) in heroSlides" :key="slide.eyebrow"
           class="hero-image" :class="{ active: index === activeHero }"
@@ -457,151 +473,76 @@ onBeforeUnmount(() => {
       <!-- PLATFORM / FEATURES -->
       <section id="platform">
         <div class="wrap">
-          <h2 class="section-title narrow">Built for the field first, the office second</h2>
+          <header class="platform-heading reveal">
+            <h2 class="section-title">Built for the field first, the office second</h2>
+            <p>Capture the work where it happens, then give programme teams a complete record to manage and reconcile.</p>
+          </header>
 
-          <div class="feature-grid">
-            <div class="feature feature-card-reveal">
-              <div class="feature-icon">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" style="stroke: var(--color-primary)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-                  <rect x="6" y="2.5" width="12" height="19" rx="2.4" />
-                  <path d="M10 18.5h4" />
-                  <path d="M4 9l2.5 2.5L4 14" />
-                  <path d="M20 9l-2.5 2.5L20 14" />
-                </svg>
+          <div class="platform-layout">
+            <article class="platform-offline feature-card-reveal">
+              <div class="platform-offline-heading">
+                <span class="platform-symbol"><i class="mdi mdi-wifi-off"></i></span>
+                <div>
+                  <h3>Keep working without a connection</h3>
+                  <p>Registration, biometric verification and payment records remain available on the field device until connectivity returns.</p>
+                </div>
               </div>
-              <span class="feature-tag">Mobile · offline</span>
-              <h4>Works with no signal at all</h4>
-              <p>Registration, fingerprint enrolment, photos and attendance all write to the
-                device first. A background sync picks them up the moment a connection appears.
-                the officer never waits on a spinner in the field.</p>
-              <div class="feature-foot">→ queued locally, uploaded automatically</div>
-            </div>
 
-            <div class="feature feature-card-reveal">
-              <div class="feature-icon accent">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" style="stroke: var(--color-accent-deep)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-                  <circle cx="9.5" cy="12" r="6.5" />
-                  <circle cx="14.5" cy="12" r="6.5" />
-                </svg>
+              <div class="platform-flow" aria-label="Offline workflow: capture, verify, then sync">
+                <div><i class="mdi mdi-account-plus-outline"></i><b>Capture</b><span>Save the field record</span></div>
+                <i class="mdi mdi-chevron-right platform-flow-arrow" aria-hidden="true"></i>
+                <div><i class="mdi mdi-fingerprint"></i><b>Verify</b><span>Confirm the beneficiary</span></div>
+                <i class="mdi mdi-chevron-right platform-flow-arrow" aria-hidden="true"></i>
+                <div><i class="mdi mdi-cloud-upload"></i><b>Sync</b><span>Upload when online</span></div>
               </div>
-              <span class="feature-tag">Fraud prevention</span>
-              <h4>Deduplication checker</h4>
-              <p>Every new registration is screened against the existing record for the same
-                name, phone number and location before it's accepted, catching the same
-                household enrolled twice under two names.</p>
-              <div class="mini-widget">
-                <div class="row"><span>Candidate match</span><span class="match">94%</span></div>
-                <div class="row"><span>Same phone number</span><span>Yes</span></div>
-                <div class="row"><span>Distance apart</span><span>40 m</span></div>
-              </div>
-            </div>
 
-            <div class="feature feature-card-reveal">
-              <div class="feature-icon">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" style="stroke: var(--color-primary)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M12 21s7-6.4 7-12a7 7 0 1 0-14 0c0 5.6 7 12 7 12z" />
-                  <circle cx="12" cy="9" r="2.4" />
-                </svg>
+              <div class="platform-offline-note">
+                <i class="mdi mdi-shield-check-outline"></i>
+                <span><b>Nothing is lost between visits.</b> Records stay encrypted on the device and sync automatically.</span>
               </div>
-              <span class="feature-tag">Location</span>
-              <h4>GPS on every capture</h4>
-              <p>Registrations and payments are tagged with the device's GPS or network
-                location, using whichever fix is freshest, so a payment's location is never just a
-                claim.</p>
-              <div class="feature-foot num">4.8517°N, 31.5825°E</div>
-            </div>
+            </article>
 
-            <div class="feature feature-card-reveal">
-              <div class="feature-icon">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" style="stroke: var(--color-primary)" stroke-width="1.6" stroke-linecap="round">
-                  <path d="M12 3a7 7 0 0 1 7 7c0 3.5-1 6-1 8.5" />
-                  <path d="M12 3a7 7 0 0 0-7 7c0 2 .3 3.6.8 5" />
-                  <path d="M9 20c1.2-2 1.5-4.5 1.5-7A4.5 4.5 0 0 1 15 8.5c1 0 2 .3 2.7 1" />
-                  <path d="M6.5 17c.8-1.7 1-3.8 1-6a4.5 4.5 0 0 1 4-4.5" />
-                </svg>
-              </div>
-              <span class="feature-tag">Verification</span>
-              <h4>Fingerprint payment</h4>
-              <p>A live scan is checked against the enrolled template at the point of payment. It uses the
-                same verification standard used for national ID and banking KYC, brought to the
-                last mile.</p>
-            </div>
+            <div class="platform-groups">
+              <article class="platform-group feature-card-reveal">
+                <header>
+                  <span class="platform-symbol"><i class="mdi mdi-account-check-outline"></i></span>
+                  <div><h3>Identity and presence</h3><p>Prove who was served and where the activity took place.</p></div>
+                </header>
+                <div class="platform-points">
+                  <div><i class="mdi mdi-fingerprint"></i><p><b>Fingerprint or face verification</b><span>Match a person against their enrolment at payment.</span></p></div>
+                  <div><i class="mdi mdi-map-marker-radius-outline"></i><p><b>Location on every capture</b><span>Attach the freshest available device or network location.</span></p></div>
+                </div>
+              </article>
 
-            <div class="feature feature-card-reveal">
-              <div class="feature-icon accent">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" style="stroke: var(--color-accent-deep)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M4 8V6a2 2 0 0 1 2-2h2" /><path d="M16 4h2a2 2 0 0 1 2 2v2" />
-                  <path d="M20 16v2a2 2 0 0 1-2 2h-2" /><path d="M8 20H6a2 2 0 0 1-2-2v-2" />
-                  <circle cx="9" cy="10" r="1" /><circle cx="15" cy="10" r="1" />
-                  <path d="M9 15c.8.7 1.9 1 3 1s2.2-.3 3-1" />
-                </svg>
-              </div>
-              <span class="feature-tag">Verification</span>
-              <h4>Face recognition payment</h4>
-              <p>Where a fingerprint scanner isn't practical due to age, manual labour or injury,
-                a face match against the enrolment photo confirms identity
-                instead.</p>
-            </div>
+              <article class="platform-group feature-card-reveal">
+                <header>
+                  <span class="platform-symbol accent"><i class="mdi mdi-clipboard-check-outline"></i></span>
+                  <div><h3>Field operations</h3><p>Use the same beneficiary record across programme activity.</p></div>
+                </header>
+                <div class="platform-points">
+                  <div><i class="mdi mdi-calendar-check"></i><p><b>Event attendance</b><span>Record workshops, immunisation drives and cash-for-work.</span></p></div>
+                  <div><i class="mdi mdi-ticket-confirmation-outline"></i><p><b>Voucher redemption</b><span>Issue once, redeem once, and keep the event traceable.</span></p></div>
+                </div>
+              </article>
 
-            <div class="feature feature-card-reveal">
-              <div class="feature-icon">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" style="stroke: var(--color-primary)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-                  <rect x="3" y="4" width="18" height="16" rx="2" /><path d="M3 9h18" />
-                  <path d="M8 14.5l2 2 4-4.5" />
-                </svg>
-              </div>
-              <span class="feature-tag">Attendance</span>
-              <h4>Event and activity attendance</h4>
-              <p>Clock beneficiaries in and out of a maternity workshop, an immunisation drive
-                or a cash-for-work day the same way a payment is verified: biometric, GPS- and
-                time-stamped, with no paper sign-in sheet to lose.</p>
-              <div class="feature-foot">→ workshops · immunisation · cash-for-work</div>
+              <article class="platform-group feature-card-reveal">
+                <header>
+                  <span class="platform-symbol"><i class="mdi mdi-chart-line"></i></span>
+                  <div><h3>Programme oversight</h3><p>Give authorised teams one accountable operating record.</p></div>
+                </header>
+                <div class="platform-points">
+                  <div><i class="mdi mdi-eye-outline"></i><p><b>Continuous review</b><span>Surface duplicate registrations and unusual activity for review.</span></p></div>
+                  <div><i class="mdi mdi-domain"></i><p><b>Per-anchor management</b><span>Manage organisations, access and subscription from one place.</span></p></div>
+                </div>
+              </article>
             </div>
+          </div>
 
-            <div class="feature feature-card-reveal">
-              <div class="feature-icon accent">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" style="stroke: var(--color-accent-deep)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M4 8a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v1.5a2 2 0 0 0 0 5V16a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-1.5a2 2 0 0 0 0-5V8z" />
-                  <path d="M14 6.5v11" stroke-dasharray="2 2.4" />
-                </svg>
-              </div>
-              <span class="feature-tag">Vouchers</span>
-              <h4>Voucher redemption</h4>
-              <p>Print or issue a biometric-verified voucher a household redeems for food,
-                goods or services at a partner vendor. Every issue, redemption and void stays
-                on one traceable ledger, not a paper stub.</p>
-            </div>
-
-            <div class="feature feature-card-reveal">
-              <div class="feature-icon">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" style="stroke: var(--color-primary)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-                  <rect x="3" y="3.5" width="18" height="17" rx="2.4" />
-                  <path d="M8 8.5h8M8 12.5h8M8 16.5h5" />
-                </svg>
-              </div>
-              <span class="feature-tag">Subscription</span>
-              <h4>Simple per-anchor subscription</h4>
-              <p>One subscription per anchor covers every organisation under it. A grace period
-                gives time to renew before access pauses, renewal is a click for an anchor
-                admin, and pricing is set per your agreement rather than listed here.</p>
-            </div>
-
-            <div class="feature feature-card-reveal">
-              <div class="feature-icon">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" style="stroke: var(--color-primary)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M12 3v2.4M12 18.6V21M3 12h2.4M18.6 12H21M5.6 5.6l1.7 1.7M16.7 16.7l1.7 1.7M5.6 18.4l1.7-1.7M16.7 7.3l1.7-1.7" />
-                  <circle cx="12" cy="12" r="3.6" />
-                </svg>
-              </div>
-              <span class="feature-tag">Intelligence</span>
-              <h4>AI agent, watching the ledger</h4>
-              <p>An agent reviews registrations and disbursements as they land, flagging the
-                patterns a person reviewing thousands of rows would miss.</p>
-              <div class="mini-widget">
-                <div class="ai-line"><span class="ai-dot"></span><span>3 registrations shared
-                  one GPS point in 24h, flagged for review before disbursement.</span></div>
-              </div>
-            </div>
+          <div class="platform-assurance reveal">
+            <span><i class="mdi mdi-lock-outline"></i> Encrypted records</span>
+            <span><i class="mdi mdi-shield-key-outline"></i> Role-based access</span>
+            <span><i class="mdi mdi-history"></i> Time-stamped audit trail</span>
+            <span><i class="mdi mdi-check-circle-outline"></i> Accountable by default</span>
           </div>
         </div>
       </section>
@@ -609,91 +550,149 @@ onBeforeUnmount(() => {
       <!-- SHOWCASE -->
       <section id="showcase">
         <div class="wrap">
-          <h2 class="section-title">One dashboard for oversight, one app for the field</h2>
+          <div class="showcase-heading">
+            <h2 class="section-title">One dashboard for oversight, one app for the field</h2>
+          </div>
 
-          <div class="showcase-grid">
-            <div>
-              <div class="dash reveal">
-                <div class="dash-top"><span class="dash-dot"></span><span class="dash-dot"></span><span class="dash-dot"></span>&nbsp;dashboard.biopay.app/dashboard</div>
-                <div class="dash-body">
-                  <div class="dash-nav">
-                    <div class="item active">Dashboard</div>
-                    <div class="item">Organizations</div>
-                    <div class="item">Households</div>
-                    <div class="item">Supervisors</div>
-                    <div class="item">Payments</div>
-                    <div class="item">Payment cycles</div>
-                    <div class="item">Vouchers</div>
-                    <div class="item">Settings</div>
-                  </div>
-                  <div class="dash-main">
-                    <div class="dash-metric-grid">
-                      <div class="dmetric">
-                        <div class="dmetric-copy"><span class="lbl">Organizations</span><span class="num">2</span><span class="sub">Active programmes</span></div>
-                        <div class="dmetric-icon teal">
-                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21V9l8-5 8 5v12" /><path d="M9 21v-6h6v6" /><path d="M4 21h16" /></svg>
-                        </div>
-                      </div>
-                      <div class="dmetric">
-                        <div class="dmetric-copy"><span class="lbl">Households</span><span class="num">5</span><span class="sub">Approved records</span></div>
-                        <div class="dmetric-icon blue">
-                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-7 9 7" /><path d="M5 10v10h14V10" /><path d="M9 20v-6h6v6" /></svg>
-                        </div>
-                      </div>
-                      <div class="dmetric">
-                        <div class="dmetric-copy"><span class="lbl">Value disbursed</span><span class="num">USD 2.4M</span><span class="sub">Cash + vouchers</span></div>
-                        <div class="dmetric-icon amber">
-                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="13" rx="2" /><path d="M3 10h18" /><circle cx="16" cy="14.5" r="1.4" /></svg>
-                        </div>
-                      </div>
-                      <div class="dmetric">
-                        <div class="dmetric-copy"><span class="lbl">Active supervisors</span><span class="num">2</span><span class="sub">Field supervisors enabled</span></div>
-                        <div class="dmetric-icon blue">
-                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v6c0 5-3 7.5-7 9-4-1.5-7-4-7-9V6z" /><path d="M9 12l2 2 4-4.5" /></svg>
-                        </div>
-                      </div>
+          <div class="product-stage">
+            <figure class="product-view product-view-dashboard reveal">
+              <div
+                class="product-frame dashboard-frame"
+                role="img"
+                aria-label="Representative BioPay web dashboard based on the current product interface"
+              >
+                <div class="preview-web-shell" aria-hidden="true">
+                  <aside class="preview-web-nav">
+                    <img src="/biopay_logo_horizontal_light.svg" alt="" />
+                    <div class="preview-nav-item active"><i class="mdi mdi-view-dashboard-outline"></i>Dashboard</div>
+                    <small>Configs</small>
+                    <div class="preview-nav-item"><i class="mdi mdi-domain"></i>Organizations</div>
+                    <div class="preview-nav-item"><i class="mdi mdi-map-marker-radius"></i>Locations</div>
+                    <small>User management</small>
+                    <div class="preview-nav-item"><i class="mdi mdi-account-multiple-outline"></i>Users</div>
+                    <div class="preview-nav-item"><i class="mdi mdi-account-tie"></i>Field officers</div>
+                    <small>Biodata</small>
+                    <div class="preview-nav-item"><i class="mdi mdi-home-group"></i>Households</div>
+                    <div class="preview-nav-item"><i class="mdi mdi-cash-multiple"></i>Payments</div>
+                    <div class="preview-nav-item"><i class="mdi mdi-calendar-check"></i>Attendance</div>
+                    <small>Payment generation</small>
+                    <div class="preview-nav-item"><i class="mdi mdi-calendar-month-outline"></i>Payment cycles</div>
+                    <div class="preview-nav-item"><i class="mdi mdi-ticket-confirmation-outline"></i>Vouchers</div>
+                  </aside>
+
+                  <div class="preview-web-app">
+                    <div class="preview-web-toolbar">
+                      <span><i class="mdi mdi-menu"></i> Dashboard</span>
+                      <div><b>Illustrative preview · Anchor administrator</b><span class="preview-avatar">AO</span></div>
                     </div>
-                    <div class="dash-chart-card">
-                      <span class="chart-title">Household registration trend</span>
-                      <div class="dash-chart">
-                        <div class="bar" style="--h: 38%"><span class="v">2</span></div>
-                        <div class="bar" style="--h: 58%"><span class="v">3</span></div>
-                        <div class="bar" style="--h: 74%"><span class="v">4</span></div>
-                        <div class="bar" style="--h: 91%"><span class="v">5</span></div>
-                        <div class="bar" style="--h: 100%"><span class="v">6</span></div>
+                    <div class="preview-web-content">
+                      <div class="preview-web-heading">
+                        <div>
+                          <img src="/biopay_logo_horizontal.svg" alt="" />
+                          <strong>Welcome back, Amina</strong>
+                          <span>Track programme activity and keep every disbursement accountable.</span>
+                        </div>
+                        <div class="preview-web-actions"><span>Refresh</span><b>Generate payment cycle</b></div>
+                      </div>
+
+                      <div class="preview-metric-grid">
+                        <div class="preview-metric"><span>Organizations</span><strong>12</strong><small>Active programmes</small><i class="mdi mdi-domain"></i></div>
+                        <div class="preview-metric green"><span>Households</span><strong>4,286</strong><small>Approved records</small><i class="mdi mdi-home-group"></i></div>
+                        <div class="preview-metric amber"><span>Total value disbursed</span><strong>USD 840K</strong><small>Cash + vouchers</small><i class="mdi mdi-cash-multiple"></i></div>
+                        <div class="preview-metric"><span>Active officers</span><strong>38</strong><small>Currently enabled</small><i class="mdi mdi-account-tie"></i></div>
+                        <div class="preview-metric"><span>Fingerprints</span><strong>6,914</strong><small>Ready to verify</small><i class="mdi mdi-fingerprint"></i></div>
+                        <div class="preview-metric amber"><span>Pending approvals</span><strong>3</strong><small>Awaiting a checker</small><i class="mdi mdi-timer-sand"></i></div>
+                      </div>
+
+                      <div class="preview-analytics">
+                        <div class="preview-chart-card">
+                          <strong>Payment volume over time</strong>
+                          <svg viewBox="0 0 360 100" preserveAspectRatio="none">
+                            <path class="chart-gridline" d="M0 20H360M0 50H360M0 80H360" />
+                            <path class="chart-area" d="M0 78 55 64 110 70 165 42 220 51 275 29 330 36 360 18V100H0Z" />
+                            <path class="chart-line" d="M0 78 55 64 110 70 165 42 220 51 275 29 330 36 360 18" />
+                          </svg>
+                        </div>
+                        <div class="preview-chart-card">
+                          <strong>Household registration trend</strong>
+                          <svg viewBox="0 0 250 100" preserveAspectRatio="none">
+                            <path class="chart-gridline" d="M0 20H250M0 50H250M0 80H250" />
+                            <path class="chart-line green-line" d="M0 83 42 72 84 66 126 48 168 55 210 31 250 22" />
+                          </svg>
+                        </div>
+                      </div>
+
+                      <div class="preview-activity">
+                        <strong>Recent activity</strong>
+                        <div><span>HH-2026-0412 · Hope Programme</span><b>USD 120</b><em>Paid</em></div>
+                        <div><span>HH-2026-0408 · Community Fund</span><b>USD 75</b><em>Paid</em></div>
                       </div>
                     </div>
                   </div>
                 </div>
               </div>
-              <p class="showcase-caption">The web dashboard for anchors and organisations to register, disburse and reconcile.</p>
-            </div>
+              <figcaption>
+                <span>Web dashboard</span>
+                The web dashboard for anchors and organisations to register, disburse and reconcile.
+              </figcaption>
+            </figure>
 
-            <div>
-              <div class="phone reveal">
-                <div class="phone-screen">
-                  <div class="phone-head">
-                    <div class="welcome">Welcome, John Doe</div>
-                    <div class="org">PARTNER · 1002 <span class="sync-pill">Synced</span></div>
+            <figure class="product-view product-view-mobile reveal">
+              <div
+                class="product-frame mobile-frame"
+                role="img"
+                aria-label="Representative BioPay Android field workspace based on the current app interface"
+              >
+                <div class="preview-phone" aria-hidden="true">
+                  <div class="preview-phone-status"><b>9:41</b><span>● ◔ ▰</span></div>
+                  <div class="preview-phone-scroll">
+                    <section class="preview-phone-hero">
+                      <div class="preview-phone-brand"><img src="/favicon.svg" alt="" /><b>BioPay field workspace</b><i class="mdi mdi-bell-outline"></i></div>
+                      <h3>Hello, Amina</h3>
+                      <p>HOPE-RELIEF-01 · illustrative preview</p>
+                      <div class="preview-sync"><i class="mdi mdi-sync"></i> All local records are synced</div>
+                      <div class="preview-phone-buttons"><b><i class="mdi mdi-account-plus-outline"></i> Register household</b><span><i class="mdi mdi-sync"></i> Sync now</span></div>
+                    </section>
+
+                    <section class="preview-phone-card preview-summary">
+                      <header><b><i class="mdi mdi-chart-box-outline"></i> Operational summary</b><span>View all ›</span></header>
+                      <div class="preview-phone-kpis">
+                        <div><i class="mdi mdi-home-group"></i><strong>318</strong><span>Households</span></div>
+                        <div class="amber"><i class="mdi mdi-sync"></i><strong>6</strong><span>Pending sync</span></div>
+                        <div class="green"><i class="mdi mdi-cash-check"></i><strong>204</strong><span>Paid</span></div>
+                        <div class="orange"><i class="mdi mdi-cash-clock"></i><strong>12</strong><span>Payment pending</span></div>
+                      </div>
+                    </section>
+
+                    <section class="preview-phone-card preview-tasks">
+                      <header><b><i class="mdi mdi-calendar-check"></i> Field tasks</b></header>
+                      <div><i class="mdi mdi-home-group"></i><p><b>Households</b><span>View and manage registered households</span></p><em>›</em></div>
+                      <div><i class="mdi mdi-calendar-check"></i><p><b>Attendance</b><span>Capture event and activity attendance</span></p><em>›</em></div>
+                      <div><i class="mdi mdi-ticket-confirmation-outline"></i><p><b>Vouchers</b><span>Scan and redeem beneficiary vouchers</span></p><em>›</em></div>
+                      <div><i class="mdi mdi-cash-multiple"></i><p><b>Payments</b><span>Review paid and pending disbursements</span></p><em>›</em></div>
+                    </section>
+
+                    <section class="preview-quick-actions">
+                      <div><i class="mdi mdi-qrcode-scan"></i><span>Scan QR</span></div>
+                      <div><i class="mdi mdi-fingerprint"></i><span>Verify identity</span></div>
+                      <div><i class="mdi mdi-map-marker-radius"></i><span>My location</span></div>
+                      <div><i class="mdi mdi-history"></i><span>Sync history</span></div>
+                    </section>
                   </div>
-                  <div class="phone-kpis">
-                    <div class="phone-kpi">Households<b class="num">318</b></div>
-                    <div class="phone-kpi">Pending sync<b class="num">6</b></div>
-                    <div class="phone-kpi">Paid<b class="num">204</b></div>
-                    <div class="phone-kpi">Pending pay<b class="num">12</b></div>
-                  </div>
-                  <div class="phone-menu">
-                    <div class="phone-btn">Register household</div>
-                    <div class="phone-btn alt">Sync now</div>
-                    <div class="phone-btn outline">Attendance</div>
-                    <div class="phone-btn outline">Payments</div>
-                    <div class="phone-btn outline">Vouchers</div>
-                    <div class="phone-btn outline">Reports</div>
-                  </div>
+                  <nav class="preview-phone-nav">
+                    <div class="active"><i class="mdi mdi-home-outline"></i><span>Home</span></div>
+                    <div><i class="mdi mdi-home-group"></i><span>Households</span></div>
+                    <b><i class="mdi mdi-fingerprint"></i></b>
+                    <div><i class="mdi mdi-bell-outline"></i><span>Activity</span></div>
+                    <div><i class="mdi mdi-dots-horizontal"></i><span>More</span></div>
+                  </nav>
                 </div>
               </div>
-              <p class="showcase-caption">The field agent app is offline-first and built to run all day on one battery.</p>
-            </div>
+              <figcaption>
+                <span>Field agent app</span>
+                The field agent app is offline-first and built to run all day on one battery.
+              </figcaption>
+            </figure>
           </div>
         </div>
       </section>
@@ -826,7 +825,7 @@ onBeforeUnmount(() => {
   --radius-tag: 3px;
   --radius-card: 14px;
   --max-width: 1180px;
-  --nav-height: 62px;
+  --nav-height: 52px;
 
   display: block;
   width: 100%;
@@ -957,7 +956,7 @@ onBeforeUnmount(() => {
   box-shadow: 0 1px 0 rgba(0, 0, 0, 0.08);
 }
 .landing-root .btn-primary:hover { background: var(--color-accent-deep); transform: translateY(-1px); box-shadow: 0 6px 16px -6px var(--shadow-color); }
-.landing-root .btn-nav { padding: 0.68em 1.15em; font-size: 0.9rem; }
+.landing-root .btn-nav { padding: 0.55em 1.05em; font-size: 0.86rem; }
 .landing-root .btn-ghost {
   background: transparent;
   color: var(--color-text);
@@ -997,9 +996,8 @@ onBeforeUnmount(() => {
 }
 @media (prefers-reduced-motion: reduce) {
   .landing-root .site-nav { transition: none; }
-  .landing-root .site-nav.nav-hidden { transform: none; opacity: 1; pointer-events: auto; }
 }
-.landing-root .nav-row { min-height: var(--nav-height); display: flex; align-items: center; justify-content: space-between; padding: 0.45rem 0; }
+.landing-root .nav-row { height: var(--nav-height); display: flex; align-items: center; justify-content: space-between; padding-top: 0; padding-bottom: 0; }
 /* main content sits below the now-fixed nav */
 .landing-root main { padding-top: var(--nav-height); }
 .landing-root .brand {
@@ -1012,7 +1010,7 @@ onBeforeUnmount(() => {
   text-decoration: none;
   color: var(--color-text);
 }
-.landing-root .brand-logo { display: block; width: 164px; height: auto; }
+.landing-root .brand-logo { display: block; width: 145px; height: auto; }
 .landing-root .brand-mark {
   width: 30px;
   height: 30px;
@@ -1035,15 +1033,15 @@ onBeforeUnmount(() => {
 .landing-root .nav-actions { display: flex; align-items: center; gap: var(--space-3); }
 .landing-root .nav-login { font-size: 0.9rem; text-decoration: none; color: var(--color-text-muted); }
 .landing-root .nav-login:hover { color: var(--color-text); }
-.landing-root .nav-toggle { display: none; align-items: center; justify-content: center; width: 44px; height: 44px; background: none; color: var(--color-text); border: 1px solid var(--color-line); border-radius: 10px; padding: 0; }
+.landing-root .nav-toggle { display: none; align-items: center; justify-content: center; width: 38px; height: 38px; background: none; color: var(--color-text); border: 1px solid var(--color-line); border-radius: 10px; padding: 0; }
 .landing-root .nav-toggle:focus-visible { outline: 3px solid var(--color-primary); outline-offset: 2px; }
 @media (max-width: 860px) {
   .landing-root .nav-links { display: none; }
   .landing-root .nav-toggle { display: inline-flex; }
 }
 @media (max-width: 480px) {
-  .landing-root { --nav-height: 58px; }
-  .landing-root .brand-logo { width: 138px; }
+  .landing-root { --nav-height: 50px; }
+  .landing-root .brand-logo { width: 128px; }
   .landing-root .nav-login { display: none; }
   .landing-root .nav-actions { gap: var(--space-1); }
   .landing-root .nav-actions .btn { padding: 0.75em 1em; font-size: 0.84rem; }
@@ -1056,13 +1054,41 @@ onBeforeUnmount(() => {
 .landing-root .mobile-nav a:last-child { border-bottom: 0; }
 .landing-root .mobile-nav a:focus-visible { outline: 2px solid var(--color-primary); outline-offset: -2px; }
 
-/* Hero -- full-bleed photo carousel. Backgrounds come from heroSlides[].image
-   (frontend/public/hero/) at 1402x1122; cover keeps the section filled edge to
-   edge with no gaps or seams (some crop on one axis is inherent to a full-bleed
-   background -- the scrim keeps the text side readable regardless of photo). */
-.landing-root .hero-visual { position: relative; isolation: isolate; overflow: hidden; min-height: 420px; display: flex; flex-direction: column; justify-content: center; border-top: none; border-bottom: 0; padding: clamp(1.6rem, 4vh, 3.1rem) 0; }
-.landing-root .hero-image, .landing-root .hero-scrim { position: absolute; inset: 0; }
-.landing-root .hero-image { opacity: 0; background-size: cover; background-position: right center; background-color: var(--color-primary-deep); filter: saturate(1.05) contrast(1.02); transform: scale(1.03); transition: opacity 900ms ease, transform 7s ease; z-index: -2; }
+/* Hero artwork is close to square, so it is fitted inside the first screen
+   instead of being enlarged and cropped like a conventional full-bleed photo. */
+.landing-root .hero-visual { position: relative; isolation: isolate; overflow: hidden; height: min(560px, calc(100svh - var(--nav-height))); min-height: min(500px, calc(100svh - var(--nav-height))); display: flex; flex-direction: column; justify-content: center; border-top: none; border-bottom: 0; padding: clamp(1.6rem, 4vh, 3.1rem) 0; background: var(--color-primary-deep); }
+.landing-root .hero-colorwash {
+  position: absolute;
+  inset: -8%;
+  z-index: -3;
+  opacity: 0;
+  background-position: center;
+  background-size: cover;
+  filter: blur(40px) saturate(.86) brightness(.48);
+  transform: scale(1.08);
+  transition: opacity 900ms ease;
+}
+.landing-root .hero-colorwash.active { opacity: 1; }
+.landing-root .hero-scrim { position: absolute; inset: 0; }
+.landing-root .hero-image {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: auto;
+  aspect-ratio: 1402 / 1122;
+  opacity: 0;
+  background-size: 100% 100%;
+  background-position: center;
+  background-repeat: no-repeat;
+  -webkit-mask-image: linear-gradient(90deg, transparent 0%, rgba(0, 0, 0, .05) 7%, rgba(0, 0, 0, .18) 16%, rgba(0, 0, 0, .42) 26%, rgba(0, 0, 0, .72) 34%, #000 44%);
+  mask-image: linear-gradient(90deg, transparent 0%, rgba(0, 0, 0, .05) 7%, rgba(0, 0, 0, .18) 16%, rgba(0, 0, 0, .42) 26%, rgba(0, 0, 0, .72) 34%, #000 44%);
+  filter: saturate(1.05) contrast(1.02);
+  transform: scale(1.015);
+  transform-origin: right center;
+  transition: opacity 900ms ease, transform 7s ease;
+  z-index: -2;
+}
 .landing-root .hero-image.active { opacity: 1; transform: scale(1); }
 /* Neutral dark-to-clear scrim (not a colour wash) so the photo reads true on the
    right; it clears by ~58% of the width so the subject isn't hidden behind text
@@ -1070,7 +1096,7 @@ onBeforeUnmount(() => {
 .landing-root .hero-scrim {
   z-index: -1;
   background:
-    linear-gradient(90deg, rgba(3, 12, 11, .86) 0%, rgba(3, 12, 11, .66) 30%, rgba(3, 12, 11, .28) 50%, rgba(3, 12, 11, 0) 62%),
+    linear-gradient(90deg, rgba(3, 12, 11, .76) 0%, rgba(3, 12, 11, .56) 30%, rgba(3, 12, 11, .22) 45%, rgba(3, 12, 11, 0) 57%),
     linear-gradient(0deg, rgba(3, 12, 11, .35) 0%, rgba(3, 12, 11, 0) 22%);
 }
 .landing-root .hero-visual .wrap { position: relative; z-index: 1; width: 100%; }
@@ -1104,7 +1130,7 @@ onBeforeUnmount(() => {
 .landing-root .hero-fact { font-size: 0.85rem; color: rgba(255, 255, 255, .78); display: flex; align-items: baseline; gap: 0.4em; }
 .landing-root .hero-fact strong { font-family: var(--font-mono); color: #fff; font-size: 0.95rem; }
 
-@media (max-width: 960px) { .landing-root .hero-visual { min-height: 440px; } }
+@media (max-width: 960px) { .landing-root .hero-visual { height: min(520px, calc(100svh - var(--nav-height))); min-height: min(480px, calc(100svh - var(--nav-height))); } }
 /* Short viewports (small laptop screens, or Windows display scaling above
    100% shrinking the effective CSS viewport): shrink the headline/lede so the
    whole hero -- including the trust-facts row -- fits without the bottom row
@@ -1117,6 +1143,7 @@ onBeforeUnmount(() => {
   .landing-root .hero-fact { font-size: 0.78rem; }
 }
 @media (prefers-reduced-motion: reduce) {
+  .landing-root .hero-colorwash,
   .landing-root .hero-image,
   .landing-root .hero-slide,
   .landing-root .hero-fade-enter-active,
@@ -1148,7 +1175,16 @@ onBeforeUnmount(() => {
 .landing-root .hero-arrow.next { right: 20px; }
 @media (max-width: 780px) {
   .landing-root .hero-arrow { display: none; }
-  .landing-root .hero-image { background-position: 62% center; }
+  .landing-root .hero-image {
+    inset: 0;
+    width: auto;
+    aspect-ratio: auto;
+    background-size: 100% auto;
+    background-position: center;
+    -webkit-mask-image: linear-gradient(180deg, transparent 0%, #000 14%, #000 86%, transparent 100%);
+    mask-image: linear-gradient(180deg, transparent 0%, #000 14%, #000 86%, transparent 100%);
+    transform-origin: center;
+  }
   .landing-root .hero-scrim { background: linear-gradient(90deg, rgba(3, 12, 11, .9) 0%, rgba(3, 12, 11, .72) 72%, rgba(3, 12, 11, .42) 100%); }
   .landing-root .hero-copy { max-width: min(34rem, 92%); }
 }
@@ -1247,128 +1283,376 @@ onBeforeUnmount(() => {
   .landing-root .how-card { width: 240px; height: 340px; }
 }
 
-/* Feature grid */
-.landing-root .feature-grid {
+/* Platform — one field workflow, followed by the capabilities it supports. */
+.landing-root #platform { background: #fbfcfb; }
+.landing-root .platform-heading {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 1px;
-  background: var(--color-line);
-  border: 1px solid var(--color-line);
-  margin-top: var(--space-5);
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  align-items: end;
+  gap: var(--space-5);
+  margin-bottom: var(--space-5);
 }
-@media (max-width: 860px) { .landing-root .feature-grid { grid-template-columns: 1fr 1fr; } }
-@media (max-width: 560px) { .landing-root .feature-grid { grid-template-columns: 1fr; } }
-.landing-root .feature {
-  position: relative;
-  z-index: 0;
-  background: var(--color-surface);
-  padding: var(--space-4);
+.landing-root .platform-heading .section-title { max-width: 18ch; }
+.landing-root .platform-heading p {
+  max-width: 52ch;
+  color: var(--color-text-muted);
+  font-size: var(--step-body-lg);
+}
+.landing-root .platform-layout {
+  display: grid;
+  grid-template-columns: minmax(300px, 0.86fr) minmax(0, 1.45fr);
+  gap: clamp(2rem, 5vw, 4.5rem);
+  align-items: stretch;
+}
+.landing-root .platform-offline {
+  min-height: 520px;
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
-  min-height: 190px;
-  transition: transform 220ms cubic-bezier(0.16, 1, 0.3, 1),
-    box-shadow 220ms cubic-bezier(0.16, 1, 0.3, 1),
-    background-color 180ms ease,
-    opacity 550ms ease,
-    translate 550ms cubic-bezier(0.16, 1, 0.3, 1);
+  padding: clamp(1.5rem, 3vw, 2.25rem);
+  border-radius: var(--radius-card);
+  background: var(--color-primary-deep);
+  color: #fff;
+  box-shadow: 0 30px 60px -36px rgba(2, 31, 27, .88);
+  transition: opacity 550ms ease, translate 550ms cubic-bezier(0.16, 1, 0.3, 1);
 }
-.landing-root .feature-icon { width: 42px; height: 42px; border-radius: 10px; background: var(--color-primary-soft); display: grid; place-items: center; margin-bottom: 0.2rem; }
-.landing-root .feature-icon.accent { background: var(--color-accent-soft); }
-.landing-root .feature-tag { font-family: var(--font-mono); font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--color-text-muted); }
-.landing-root .feature h4 { font-size: 1.05rem; }
-.landing-root .feature p { color: var(--color-text-muted); font-size: 0.9rem; flex: 1; }
-.landing-root .feature-foot { font-family: var(--font-mono); font-size: 0.75rem; color: var(--color-primary); margin-top: auto; }
+.landing-root .platform-offline-heading { display: flex; align-items: flex-start; gap: var(--space-3); }
+.landing-root .platform-symbol {
+  width: 42px;
+  height: 42px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border-radius: 11px;
+  background: #e5f4f1;
+  color: var(--color-primary);
+  font-size: 1.35rem;
+}
+.landing-root .platform-symbol.accent { background: #fff1dd; color: #d86400; }
+.landing-root .platform-offline .platform-symbol { background: rgba(255,255,255,.12); color: #fff; }
+.landing-root .platform-offline h3 { max-width: 17ch; color: #fff; font-size: var(--step-h3); }
+.landing-root .platform-offline-heading p { margin-top: .75rem; color: rgba(255,255,255,.76); }
+.landing-root .platform-flow {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr auto 1fr;
+  align-items: center;
+  gap: .45rem;
+  margin: auto 0;
+  padding: var(--space-4) 0;
+}
+.landing-root .platform-flow > div { min-width: 0; display: grid; justify-items: center; gap: .28rem; text-align: center; }
+.landing-root .platform-flow > div > i { font-size: 1.65rem; color: #6ee7c5; }
+.landing-root .platform-flow b { font-size: .82rem; color: #fff; }
+.landing-root .platform-flow span { max-width: 12ch; color: rgba(255,255,255,.58); font-size: .68rem; line-height: 1.35; }
+.landing-root .platform-flow-arrow { color: rgba(255,255,255,.32); }
+.landing-root .platform-offline-note {
+  display: flex;
+  align-items: flex-start;
+  gap: .8rem;
+  padding-top: var(--space-3);
+  border-top: 1px solid rgba(255,255,255,.17);
+  color: rgba(255,255,255,.72);
+  font-size: .8rem;
+}
+.landing-root .platform-offline-note > i { flex: 0 0 auto; color: #6ee7c5; font-size: 1.3rem; }
+.landing-root .platform-offline-note b { color: #fff; }
+.landing-root .platform-groups { display: grid; align-content: stretch; }
+.landing-root .platform-group {
+  display: grid;
+  grid-template-columns: minmax(175px, .78fr) minmax(0, 1.22fr);
+  gap: clamp(1.2rem, 3vw, 2.5rem);
+  padding: clamp(1.15rem, 2.2vw, 1.7rem) 0;
+  border-top: 1px solid var(--color-line);
+  transition: opacity 550ms ease, translate 550ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.landing-root .platform-group:last-child { border-bottom: 1px solid var(--color-line); }
+.landing-root .platform-group header { display: flex; align-items: flex-start; gap: .85rem; }
+.landing-root .platform-group h3 { font-size: 1.05rem; }
+.landing-root .platform-group header p { margin-top: .35rem; color: var(--color-text-muted); font-size: .78rem; line-height: 1.45; }
+.landing-root .platform-points { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); }
+.landing-root .platform-points > div { display: flex; align-items: flex-start; gap: .7rem; min-width: 0; }
+.landing-root .platform-points > div > i { flex: 0 0 auto; margin-top: .05rem; color: var(--color-primary); font-size: 1.3rem; }
+.landing-root .platform-points p { display: grid; gap: .28rem; }
+.landing-root .platform-points b { font-size: .83rem; line-height: 1.35; }
+.landing-root .platform-points span { color: var(--color-text-muted); font-size: .76rem; line-height: 1.48; }
+.landing-root .platform-assurance {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+  padding: 1rem 0;
+  border-top: 1px solid var(--color-line);
+  color: var(--color-text-muted);
+  font-size: .76rem;
+  font-weight: 600;
+}
+.landing-root .platform-assurance span { display: inline-flex; align-items: center; gap: .5rem; }
+.landing-root .platform-assurance i { color: var(--color-primary); font-size: 1.15rem; }
 
-@media (hover: hover) and (pointer: fine) {
-  .landing-root .feature:hover {
-    z-index: 2;
-    transform: translateY(-4px);
-    background: var(--color-surface);
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.06);
+@media (max-width: 980px) {
+  .landing-root .platform-heading { grid-template-columns: 1fr; gap: var(--space-3); }
+  .landing-root .platform-layout { grid-template-columns: 1fr; gap: var(--space-4); }
+  .landing-root .platform-offline { min-height: 390px; }
+}
+@media (max-width: 700px) {
+  .landing-root .platform-group { grid-template-columns: 1fr; gap: var(--space-3); }
+  .landing-root .platform-points { gap: var(--space-3); }
+  .landing-root .platform-assurance { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 480px) {
+  .landing-root .platform-offline { min-height: auto; }
+  .landing-root .platform-flow { margin: 1rem 0; padding: .65rem 0; grid-template-columns: 1fr; justify-items: stretch; gap: .65rem; }
+  .landing-root .platform-flow > div { grid-template-columns: 28px 54px 1fr; justify-items: start; align-items: center; text-align: left; }
+  .landing-root .platform-flow span { max-width: none; }
+  .landing-root .platform-flow-arrow { display: none; }
+  .landing-root .platform-points { grid-template-columns: 1fr; }
+  .landing-root .platform-assurance { grid-template-columns: 1fr; }
+}
+
+/* Product showcase */
+.landing-root #showcase { background: var(--color-bg); }
+.landing-root .showcase-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: var(--space-5);
+}
+.landing-root .product-stage {
+  --product-preview-height: clamp(360px, 32vw, 460px);
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(190px, 0.9fr);
+  align-items: start;
+  gap: clamp(2rem, 4vw, 4rem);
+  width: min(100%, 1080px);
+  margin: var(--space-5) auto 0;
+  background: transparent;
+}
+.landing-root .product-view {
+  min-width: 0;
+  margin: 0;
+}
+.landing-root .product-view-dashboard { width: 100%; }
+.landing-root .product-frame {
+  overflow: hidden;
+  background: #f5f8f7;
+  box-shadow: 0 30px 70px -34px rgba(2, 23, 20, 0.72);
+}
+.landing-root .dashboard-frame {
+  height: var(--product-preview-height);
+  border-radius: 12px;
+  color: #17201e;
+  font-size: clamp(5px, 0.55vw, 8px);
+}
+.landing-root .product-view-mobile {
+  position: static;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.landing-root .mobile-frame {
+  width: min(100%, 230px);
+  height: var(--product-preview-height);
+  border: 7px solid #111716;
+  border-radius: 34px;
+  box-shadow: 0 34px 72px -28px rgba(2, 23, 20, 0.82);
+}
+
+/* The web preview mirrors DefaultLayout.vue and DashboardPage.vue. */
+.landing-root .preview-web-shell {
+  display: grid;
+  grid-template-columns: 18% minmax(0, 1fr);
+  width: 100%;
+  height: 100%;
+  background: #f6f8f7;
+  line-height: 1.25;
+}
+.landing-root .preview-web-nav {
+  min-width: 0;
+  padding: 1.8em 1.1em;
+  background: #075f54;
+  color: rgba(255, 255, 255, 0.82);
+}
+.landing-root .preview-web-nav > img { width: 78%; margin: 0 auto 2.2em; display: block; }
+.landing-root .preview-web-nav small {
+  display: block;
+  margin: 1.6em 0 0.5em 0.8em;
+  color: rgba(255, 255, 255, 0.48);
+  font-size: 0.78em;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+.landing-root .preview-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 0.7em;
+  min-height: 2.45em;
+  padding: 0.55em 0.75em;
+  border-radius: 7px;
+  white-space: nowrap;
+}
+.landing-root .preview-nav-item i { width: 1.2em; font-size: 1.2em; }
+.landing-root .preview-nav-item.active { background: #0d9488; color: #fff; font-weight: 700; }
+.landing-root .preview-web-app { min-width: 0; background: #f8faf9; }
+.landing-root .preview-web-toolbar {
+  height: 7.5%;
+  min-height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 2em;
+  background: #fff;
+  color: #52615d;
+  box-shadow: 0 4px 12px -10px rgba(2, 23, 20, 0.55);
+}
+.landing-root .preview-web-toolbar > span { display: flex; align-items: center; gap: 0.8em; font-weight: 700; }
+.landing-root .preview-web-toolbar > div { display: flex; align-items: center; gap: 1em; }
+.landing-root .preview-web-toolbar b { color: #a94c00; font-size: 0.88em; }
+.landing-root .preview-avatar { width: 2.5em; height: 2.5em; border-radius: 50%; display: grid; place-items: center; background: #006b5b; color: #fff; font-weight: 700; }
+.landing-root .preview-web-content { padding: 1.7em 2em 2em; }
+.landing-root .preview-web-heading { display: flex; justify-content: space-between; align-items: start; gap: 1.5em; }
+.landing-root .preview-web-heading > div:first-child { display: grid; }
+.landing-root .preview-web-heading img { width: 9.5em; margin-bottom: 0.8em; }
+.landing-root .preview-web-heading strong { color: #0f172a; font-size: 1.65em; letter-spacing: -0.02em; }
+.landing-root .preview-web-heading span { margin-top: 0.35em; color: #64748b; }
+.landing-root .preview-web-actions { display: flex; align-items: center; gap: 0.65em; white-space: nowrap; }
+.landing-root .preview-web-actions span,
+.landing-root .preview-web-actions b { padding: 0.7em 1em; border-radius: 6px; }
+.landing-root .preview-web-actions span { color: #0f766e; }
+.landing-root .preview-web-actions b { background: #e87918; color: #fff; font-size: 1em; }
+.landing-root .preview-metric-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1em; margin-top: 1.5em; }
+.landing-root .preview-metric {
+  position: relative;
+  min-height: 8.9em;
+  overflow: hidden;
+  display: grid;
+  align-content: center;
+  padding: 1.3em 5.2em 1.3em 1.4em;
+  border: 1px solid #dfe7e4;
+  border-radius: 10px;
+  background: #fff;
+}
+.landing-root .preview-metric > span { overflow: hidden; color: #64748b; font-size: 0.82em; font-weight: 700; letter-spacing: 0.04em; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
+.landing-root .preview-metric strong { margin-top: 0.3em; color: #0f172a; font-size: 1.75em; letter-spacing: -0.02em; }
+.landing-root .preview-metric small { margin-top: 0.3em; color: #64748b; font-size: 0.8em; }
+.landing-root .preview-metric > i {
+  position: absolute;
+  top: 50%;
+  right: 1.1em;
+  width: 3.4em;
+  height: 3.4em;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: #d8f3ec;
+  color: #006b5b;
+  font-size: 1.25em;
+  transform: translateY(-50%);
+}
+.landing-root .preview-metric.green > i { background: #d7f5e3; color: #18794e; }
+.landing-root .preview-metric.amber > i { background: #ffe2c3; color: #a94c00; }
+.landing-root .preview-analytics { display: grid; grid-template-columns: 1.45fr 1fr; gap: 1em; margin-top: 1em; }
+.landing-root .preview-chart-card { min-width: 0; padding: 1.15em 1.3em 0.8em; border: 1px solid #dfe7e4; border-radius: 10px; background: #fff; }
+.landing-root .preview-chart-card > strong { color: #0f172a; font-size: 1.05em; }
+.landing-root .preview-chart-card svg { display: block; width: 100%; height: 9em; margin-top: 0.7em; overflow: visible; }
+.landing-root .chart-gridline { fill: none; stroke: #e7eeeb; stroke-width: 1; }
+.landing-root .chart-area { fill: rgba(13, 148, 136, 0.13); stroke: none; }
+.landing-root .chart-line { fill: none; stroke: #0d9488; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.landing-root .green-line { stroke: #18794e; }
+.landing-root .preview-activity { margin-top: 1em; padding: 1.1em 1.3em; border: 1px solid #dfe7e4; border-radius: 10px; background: #fff; }
+.landing-root .preview-activity > strong { display: block; margin-bottom: 0.65em; color: #0f172a; font-size: 1.05em; }
+.landing-root .preview-activity > div { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 1.2em; padding: 0.45em 0; border-top: 1px solid #edf1ef; color: #52615d; }
+.landing-root .preview-activity b { color: #17201e; }
+.landing-root .preview-activity em { padding: 0.25em 0.65em; border-radius: 999px; background: #d7f5e3; color: #18794e; font-style: normal; font-weight: 700; }
+
+/* The phone preview mirrors activity_home.xml, including its offline state,
+   field-task hierarchy and anchored fingerprint action. */
+.landing-root .preview-phone { height: 100%; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; background: #f5f8f7; color: #17201e; font-size: clamp(5.8px, 0.52vw, 7.5px); line-height: 1.25; }
+.landing-root .preview-phone-status { display: flex; justify-content: space-between; padding: 1.2em 2.5em 0.8em; background: #006b5b; color: #fff; }
+.landing-root .preview-phone-scroll { min-height: 0; overflow: hidden; padding: 1.4em; }
+.landing-root .preview-phone-hero { padding: 2em; border-radius: 15px; background: #006b5b; color: #fff; }
+.landing-root .preview-phone-brand { display: flex; align-items: center; gap: 0.9em; }
+.landing-root .preview-phone-brand img { width: 3.5em; height: 3.5em; }
+.landing-root .preview-phone-brand b { flex: 1; font-size: 1.2em; }
+.landing-root .preview-phone-brand i { font-size: 2em; }
+.landing-root .preview-phone-hero h3 { margin-top: 1.2em; color: #fff; font-size: 2.6em; letter-spacing: -0.02em; }
+.landing-root .preview-phone-hero p { margin-top: 0.25em; color: rgba(255, 255, 255, 0.8); font-size: 1.1em; }
+.landing-root .preview-sync { display: flex; gap: 0.6em; align-items: center; margin-top: 1.1em; font-size: 1.05em; }
+.landing-root .preview-phone-buttons { display: grid; grid-template-columns: 1.45fr 1fr; gap: 0.8em; margin-top: 1.5em; }
+.landing-root .preview-phone-buttons b,
+.landing-root .preview-phone-buttons span { display: flex; align-items: center; justify-content: center; gap: 0.55em; min-height: 3.7em; border-radius: 999px; }
+.landing-root .preview-phone-buttons b { background: #fff; color: #004d42; }
+.landing-root .preview-phone-buttons span { border: 1px solid rgba(255, 255, 255, 0.78); color: #fff; font-weight: 700; }
+.landing-root .preview-phone-card { margin-top: 1.35em; padding: 1.4em; border-radius: 14px; background: #fff; box-shadow: 0 8px 20px -18px rgba(23, 32, 30, 0.7); }
+.landing-root .preview-phone-card header { display: flex; align-items: center; justify-content: space-between; }
+.landing-root .preview-phone-card header b { display: flex; align-items: center; gap: 0.6em; font-size: 1.25em; }
+.landing-root .preview-phone-card header b i { color: #006b5b; font-size: 1.4em; }
+.landing-root .preview-phone-card header > span { color: #006b5b; font-weight: 700; }
+.landing-root .preview-phone-kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.4em; margin-top: 1.3em; }
+.landing-root .preview-phone-kpis > div { display: grid; justify-items: center; text-align: center; }
+.landing-root .preview-phone-kpis i { width: 3em; height: 3em; border-radius: 50%; display: grid; place-items: center; background: #d8f3ec; color: #006b5b; font-size: 1.3em; }
+.landing-root .preview-phone-kpis strong { margin-top: 0.55em; font-size: 1.7em; }
+.landing-root .preview-phone-kpis span { color: #52615d; font-size: 0.85em; }
+.landing-root .preview-phone-kpis .amber i { background: #fff1d6; color: #a65300; }
+.landing-root .preview-phone-kpis .green i { background: #d7f5e3; color: #18794e; }
+.landing-root .preview-phone-kpis .orange i { background: #ffe2c3; color: #a94c00; }
+.landing-root .preview-tasks { padding-bottom: 0.6em; }
+.landing-root .preview-tasks > div { display: grid; grid-template-columns: auto 1fr auto; gap: 1em; align-items: center; padding: 1em 0; border-top: 1px solid #e7eeeb; }
+.landing-root .preview-tasks > div:first-of-type { margin-top: 0.8em; }
+.landing-root .preview-tasks > div > i { width: 2.8em; height: 2.8em; border-radius: 50%; display: grid; place-items: center; background: #d8f3ec; color: #006b5b; font-size: 1.3em; }
+.landing-root .preview-tasks p { display: grid; min-width: 0; }
+.landing-root .preview-tasks p b { font-size: 1.05em; }
+.landing-root .preview-tasks p span { margin-top: 0.2em; overflow: hidden; color: #52615d; font-size: 0.86em; text-overflow: ellipsis; white-space: nowrap; }
+.landing-root .preview-tasks em { color: #71807b; font-size: 1.7em; font-style: normal; }
+.landing-root .preview-quick-actions { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.3em; margin-top: 1.35em; padding: 1.35em 0.5em; border-radius: 14px; background: #e7eeeb; }
+.landing-root .preview-quick-actions > div { display: grid; justify-items: center; gap: 0.55em; text-align: center; }
+.landing-root .preview-quick-actions i { color: #006b5b; font-size: 1.75em; }
+.landing-root .preview-quick-actions span { font-size: 0.78em; }
+.landing-root .preview-phone-nav { position: relative; min-height: 7em; display: grid; grid-template-columns: repeat(5, 1fr); align-items: center; padding: 0.8em 0.7em 0.55em; background: #fff; box-shadow: 0 -8px 20px -18px rgba(23, 32, 30, 0.8); }
+.landing-root .preview-phone-nav > div { display: grid; justify-items: center; gap: 0.3em; color: #52615d; }
+.landing-root .preview-phone-nav > div i { font-size: 1.8em; }
+.landing-root .preview-phone-nav > div span { font-size: 0.78em; }
+.landing-root .preview-phone-nav > div.active { color: #006b5b; font-weight: 700; }
+.landing-root .preview-phone-nav > b { width: 5.2em; height: 5.2em; margin: -3em auto 0; border-radius: 50%; display: grid; place-items: center; background: #006b5b; color: #fff; box-shadow: 0 12px 22px -12px rgba(0, 77, 66, 0.8); }
+.landing-root .preview-phone-nav > b i { font-size: 2.2em; }
+.landing-root .product-view figcaption {
+  max-width: 58ch;
+  margin-top: 1rem;
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+  line-height: 1.55;
+  text-align: left;
+}
+.landing-root .product-view figcaption span {
+  display: block;
+  margin-bottom: 0.25rem;
+  color: var(--color-text);
+  font-weight: 700;
+}
+.landing-root .product-view-mobile figcaption { width: min(100%, 230px); max-width: none; }
+
+@media (max-width: 900px) {
+  .landing-root .showcase-heading { align-items: start; flex-direction: column; gap: var(--space-2); }
+  .landing-root .product-stage {
+    grid-template-columns: 1fr;
+    gap: var(--space-5);
+    width: min(100%, 720px);
   }
-  .landing-root .feature:hover .feature-icon {
-    transform: translateY(-2px);
+  .landing-root .dashboard-frame { height: auto; aspect-ratio: 1.7; }
+  .landing-root .mobile-frame,
+  .landing-root .product-view-mobile figcaption { width: min(62%, 230px); }
+  .landing-root .mobile-frame { height: auto; aspect-ratio: 0.52; }
+}
+
+@media (max-width: 700px) {
+  .landing-root .product-view-dashboard,
+  .landing-root .product-view-mobile {
+    width: 100%;
   }
-  .landing-root .feature:active { transform: translateY(-2px); }
-}
-
-.landing-root .feature-icon {
-  transition: transform 220ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 220ms ease;
-}
-
-.landing-root .mini-widget { border: 1px solid var(--color-line); border-radius: 10px; padding: var(--space-3); background: var(--color-surface-2); font-size: 0.82rem; transition: transform 180ms ease, box-shadow 180ms ease; }
-.landing-root .mini-widget .row { display: flex; justify-content: space-between; margin-top: 0.35em; }
-.landing-root .mini-widget .row span:last-child { font-family: var(--font-mono); }
-.landing-root .mini-widget .match { color: var(--color-danger); font-weight: 700; font-family: var(--font-mono); }
-.landing-root .ai-line { display: flex; gap: 0.6em; align-items: flex-start; }
-.landing-root .ai-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--color-accent); margin-top: 6px; flex-shrink: 0; }
-
-@media (hover: hover) and (pointer: fine) {
-  .landing-root .mini-widget:hover,
-  .landing-root .dmetric:hover,
-  .landing-root .phone-kpi:hover {
-    transform: translateY(-3px);
-    box-shadow: 0 12px 24px -20px var(--shadow-color);
-  }
-}
-
-/* Showcase */
-.landing-root .showcase-grid { display: grid; grid-template-columns: 1.55fr 1fr; gap: var(--space-5); margin-top: var(--space-5); align-items: start; }
-.landing-root .showcase-grid > * { min-width: 0; }
-@media (max-width: 900px) { .landing-root .showcase-grid { grid-template-columns: 1fr; } }
-
-.landing-root .dash { background: var(--color-surface); border: 1px solid var(--color-line); border-radius: var(--radius-card); overflow: hidden; box-shadow: 0 30px 60px -30px var(--shadow-color); transition: transform 260ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 260ms ease; }
-.landing-root .dash-top { background: var(--color-primary); color: #fff; padding: 0.7rem 1rem; display: flex; align-items: center; gap: 0.6rem; font-size: 0.78rem; }
-.landing-root .dash-dot { width: 8px; height: 8px; border-radius: 50%; background: rgba(255, 255, 255, 0.5); }
-.landing-root .dash-body { display: grid; grid-template-columns: 150px 1fr; min-height: 300px; }
-@media (max-width: 620px) { .landing-root .dash-body { grid-template-columns: 1fr; } }
-.landing-root .dash-nav { background: var(--color-primary-deep); color: rgba(255, 255, 255, 0.82); padding: 0.9rem 0.7rem; font-size: 0.78rem; display: flex; flex-direction: column; gap: 0.15rem; }
-@media (max-width: 620px) { .landing-root .dash-nav { display: none; } }
-.landing-root .dash-nav .item { padding: 0.45rem 0.6rem; border-radius: 7px; }
-.landing-root .dash-nav .item.active { background: rgba(255, 255, 255, 0.14); color: #fff; font-weight: 600; }
-.landing-root .dash-main { padding: 1rem 1.1rem; }
-.landing-root .dash-metric-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.6rem; }
-.landing-root .dmetric {
-  border: 1px solid var(--color-line); border-radius: 10px; padding: 0.65rem 0.75rem;
-  display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;
-  transition: transform 180ms ease, box-shadow 180ms ease;
-}
-.landing-root .dmetric-copy { display: flex; flex-direction: column; min-width: 0; }
-.landing-root .dmetric-copy .lbl { font-size: 0.62rem; color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.05em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.landing-root .dmetric-copy .num { font-size: 1.05rem; font-weight: 700; margin-top: 0.1rem; }
-.landing-root .dmetric-copy .sub { font-size: 0.62rem; color: var(--color-text-muted); margin-top: 0.1rem; }
-.landing-root .dmetric-icon { flex-shrink: 0; width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; }
-.landing-root .dmetric-icon.teal { background: var(--color-primary-soft); color: var(--color-primary-deep); }
-.landing-root .dmetric-icon.blue { background: #dcfce7; color: #15803d; }
-.landing-root .dmetric-icon.amber { background: var(--color-accent-soft); color: var(--color-accent-deep); }
-.landing-root .dash-chart-card { border: 1px solid var(--color-line); border-radius: 10px; padding: 0.7rem 0.8rem 0.5rem; margin-top: 0.6rem; }
-.landing-root .chart-title { font-size: 0.72rem; font-weight: 600; color: var(--color-text); }
-.landing-root .dash-chart { display: flex; align-items: flex-end; gap: 0.5rem; height: 64px; margin-top: 0.7rem; padding: 0 0.2rem; }
-.landing-root .dash-chart .bar { flex: 1; height: var(--h); min-height: 8px; border-radius: 5px 5px 2px 2px; background: linear-gradient(180deg, var(--color-primary) 0%, var(--color-primary-deep) 100%); position: relative; }
-.landing-root .dash-chart .v { position: absolute; top: -1.15rem; left: 50%; transform: translateX(-50%); font-family: var(--font-mono); font-size: 0.62rem; color: var(--color-text-muted); }
-
-.landing-root .phone { width: 240px; margin-inline: auto; border: 10px solid var(--color-text); border-radius: 34px; overflow: hidden; box-shadow: 0 30px 60px -30px var(--shadow-color); transition: transform 260ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 260ms ease; }
-.landing-root .phone-screen { background: var(--color-surface); min-height: 430px; }
-.landing-root .phone-head { background: var(--color-primary); color: #fff; padding: 1rem 0.9rem 1.4rem; }
-.landing-root .phone-head .welcome { font-size: 0.85rem; font-weight: 700; }
-.landing-root .phone-head .org { display: flex; align-items: center; gap: 0.4rem; font-size: 0.68rem; opacity: 0.85; margin-top: 2px; font-family: var(--font-mono); }
-.landing-root .sync-pill { font-family: var(--font-sans, inherit); background: rgba(255, 255, 255, 0.18); color: #fff; border-radius: 999px; padding: 0.1em 0.55em; font-size: 0.6rem; letter-spacing: 0.03em; }
-.landing-root .phone-kpis { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; padding: 0.8rem; margin-top: -1rem; }
-.landing-root .phone-kpi { background: var(--color-surface); border: 1px solid var(--color-line); border-radius: 9px; padding: 0.5rem 0.6rem; font-size: 0.68rem; box-shadow: 0 8px 16px -10px var(--shadow-color); transition: transform 180ms ease, box-shadow 180ms ease; }
-.landing-root .phone-kpi b { display: block; font-size: 0.95rem; font-family: var(--font-mono); }
-.landing-root .phone-menu { padding: 0 0.8rem; display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-top: 0.3rem; }
-.landing-root .phone-btn { background: var(--color-primary); color: #fff; border-radius: 8px; padding: 0.7rem 0.5rem; font-size: 0.68rem; text-align: center; font-weight: 600; }
-.landing-root .phone-btn.alt { background: var(--color-accent); color: #1A1200; }
-.landing-root .phone-btn.outline { background: var(--color-surface-2); color: var(--color-text); }
-
-.landing-root .showcase-caption { margin-top: var(--space-3); font-size: 0.85rem; color: var(--color-text-muted); text-align: center; }
-
-@media (hover: hover) and (pointer: fine) {
-  .landing-root .dash:hover { transform: translateY(-5px); box-shadow: 0 36px 70px -34px var(--shadow-color); }
-  .landing-root .phone:hover { transform: translateY(-5px) rotate(0.4deg); box-shadow: 0 36px 70px -34px var(--shadow-color); }
-  .landing-root .dash:active,
-  .landing-root .phone:active { transform: translateY(-2px) scale(0.996); }
+  .landing-root .product-view-dashboard { max-width: 680px; margin-inline: auto; }
+  .landing-root .mobile-frame,
+  .landing-root .product-view-mobile figcaption { width: min(72%, 240px); }
 }
 
 /* Request a demo */
@@ -1445,13 +1729,9 @@ onBeforeUnmount(() => {
   :global(html) { scroll-behavior: auto; }
   .landing-root .reveal { opacity: 1; transform: none; transition: none; }
   .landing-root .feature-card-reveal { opacity: 1; translate: 0 0; transition: none; }
-  .landing-root .feature,
-  .landing-root .feature-icon,
-  .landing-root .mini-widget,
-  .landing-root .dash,
+  .landing-root .platform-offline,
+  .landing-root .platform-group,
   .landing-root .kpi,
-  .landing-root .phone,
-  .landing-root .phone-kpi,
   .landing-root .demo-card,
   .landing-root .foot-col a { transition: none; }
   .landing-root .how-carousel-track { transition: none; }
@@ -1467,7 +1747,7 @@ onBeforeUnmount(() => {
     --space-5: 2rem;
     --space-6: 2.55rem;
   }
-  .landing-root .hero-visual { min-height: min(410px, calc(100svh - var(--nav-height))); }
+  .landing-root .hero-visual { height: min(560px, calc(100svh - var(--nav-height))); min-height: min(520px, calc(100svh - var(--nav-height))); }
   .landing-root .hero-slide { min-height: 11.5rem; }
   .landing-root .hero-slide-icon { width: 38px; height: 38px; }
 }
@@ -1481,6 +1761,6 @@ onBeforeUnmount(() => {
 
 @media (min-width: 2200px) {
   .landing-root .hero-copy { max-width: 37.5rem; }
-  .landing-root .hero-visual { min-height: clamp(440px, 46vh, 500px); }
+  .landing-root .hero-visual { height: min(580px, calc(100svh - var(--nav-height))); min-height: min(540px, calc(100svh - var(--nav-height))); }
 }
 </style>

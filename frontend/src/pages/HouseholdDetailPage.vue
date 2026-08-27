@@ -27,7 +27,7 @@ const router = useRouter()
 const auth = useAuthStore()
 const toast = useToast()
 
-interface GeoNode { code: string; name: string }
+interface GeoNode { code: string; name: string; stateCode?: string; countyCode?: string; locationCode?: string }
 
 interface PaymentEvent {
   id?: number
@@ -76,6 +76,9 @@ const countyNameByCode = computed(() => new Map(counties.value.map((c) => [c.cod
 const locationNameByCode = computed(() => new Map(locations.value.map((l) => [l.code, l.name])))
 const villageNameByCode = computed(() => new Map(villages.value.map((v) => [v.code, v.name])))
 function orgName(code?: string) { return (code && orgNameByCode.value.get(code)) || code || '—' }
+const countiesForState = (stateCode: string) => stateCode ? counties.value.filter((c) => c.stateCode === stateCode) : counties.value
+const locationsForCounty = (countyCode: string) => countyCode ? locations.value.filter((l) => l.countyCode === countyCode) : locations.value
+const villagesForLocation = (locationCode: string) => locationCode ? villages.value.filter((v) => v.locationCode === locationCode) : villages.value
 
 const householdNumber = computed(() => String(route.params.householdNumber ?? ''))
 
@@ -284,6 +287,69 @@ async function printVoucher() {
   }
 }
 
+// ---- Edit household (UPDATE_HOUSEHOLD already existed on the backend; this wires
+// it into the UI, which previously offered no way to correct a household's own
+// details after registration). ------------------------------------------------
+
+const editDialog = ref(false)
+const editing = ref(false)
+const editForm = ref({
+  householdName: '', age: null as number | null, gender: '', maritalStatus: '', phoneNumber: '',
+  householdSize: null as number | null, stateCode: '', countyCode: '', locationCode: '', villageCode: '',
+})
+
+// Bound to each geo select's own change event (not a watcher on the whole form),
+// so resetting dependent fields only happens when the user actively picks a new
+// parent value -- never when openEdit() below populates the form in one go.
+function onEditStateChange() { editForm.value.countyCode = ''; editForm.value.locationCode = ''; editForm.value.villageCode = '' }
+function onEditCountyChange() { editForm.value.locationCode = ''; editForm.value.villageCode = '' }
+function onEditLocationChange() { editForm.value.villageCode = '' }
+
+function openEdit() {
+  const d = detail.value
+  if (!d) return
+  editForm.value = {
+    householdName: d.householdName ?? '',
+    age: d.age ?? null,
+    gender: d.gender ?? '',
+    maritalStatus: d.maritalStatus ?? '',
+    phoneNumber: d.phoneNumber ?? '',
+    householdSize: d.householdSize ?? null,
+    stateCode: d.stateCode ?? '',
+    countyCode: d.countyCode ?? '',
+    locationCode: d.payamCode ?? '',
+    villageCode: d.bomaCode ?? '',
+  }
+  editDialog.value = true
+}
+
+async function saveEdit() {
+  if (!editForm.value.householdName.trim()) {
+    toast.error('Head of household name is required')
+    return
+  }
+  editing.value = true
+  try {
+    await dispatch('UPDATE_HOUSEHOLD', {
+      householdNumber: householdNumber.value,
+      householdName: editForm.value.householdName.trim(),
+      age: editForm.value.age ?? undefined,
+      gender: editForm.value.gender || undefined,
+      maritalStatus: editForm.value.maritalStatus || undefined,
+      phoneNumber: editForm.value.phoneNumber || undefined,
+      householdSize: editForm.value.householdSize ?? undefined,
+      bomaCode: editForm.value.villageCode || undefined,
+    })
+    toast.success('Household updated')
+    editDialog.value = false
+    await load()
+  } catch (err) {
+    toast.error(err instanceof Error ? err.message : 'Failed to update household')
+  } finally {
+    editing.value = false
+  }
+}
+
 // Exports this household's alternates to CSV.
 function exportAlternates() {
   if (!alternates.value.length) {
@@ -392,6 +458,15 @@ onMounted(() => { load(); loadNameLookups() })
       </div>
       <v-spacer />
       <v-btn
+        v-if="detail && auth.can('ACCESS_HOUSEHOLDS')"
+        variant="tonal"
+        prepend-icon="mdi-pencil-outline"
+        class="mr-3"
+        @click="openEdit"
+      >
+        Edit
+      </v-btn>
+      <v-btn
         v-if="detail && auth.can('ACCESS_VOUCHERS')"
         color="primary"
         variant="tonal"
@@ -414,13 +489,13 @@ onMounted(() => { load(); loadNameLookups() })
     <v-progress-linear v-if="loading" indeterminate color="primary" class="mb-4" />
 
     <v-alert
-      v-else-if="!detail"
+      v-if="!loading && !detail"
       type="warning"
       variant="tonal"
       text="Household not found or not in your organisation."
     />
 
-    <v-row v-else>
+    <v-row v-if="detail">
       <v-col cols="12" md="8">
         <v-card variant="flat" border class="mb-4">
           <v-card-title class="text-subtitle-1 font-weight-bold">Household details</v-card-title>
@@ -592,6 +667,41 @@ onMounted(() => { load(); loadNameLookups() })
         </v-card>
       </v-col>
     </v-row>
+
+    <v-dialog v-model="editDialog" max-width="560">
+      <v-card>
+        <v-card-title class="d-flex align-center">
+          Edit household
+          <v-spacer />
+        </v-card-title>
+        <dialog-close-button @close="editDialog = false" />
+        <v-divider />
+        <v-card-text class="pt-4">
+          <v-text-field v-model="editForm.householdName" label="Head of household name" />
+          <v-row>
+            <v-col cols="6"><v-text-field v-model.number="editForm.age" label="Age" type="number" /></v-col>
+            <v-col cols="6">
+              <v-select v-model="editForm.gender" label="Gender" :items="['M', 'F']" />
+            </v-col>
+          </v-row>
+          <v-text-field v-model="editForm.maritalStatus" label="Marital status" />
+          <v-text-field v-model="editForm.phoneNumber" label="Phone number" />
+          <v-text-field v-model.number="editForm.householdSize" label="Household size" type="number" />
+          <div class="text-caption text-medium-emphasis mt-2 mb-1">Location</div>
+          <v-row dense>
+            <v-col cols="6"><v-select v-model="editForm.stateCode" :items="states" item-title="name" item-value="code" label="State" density="compact" @update:model-value="onEditStateChange" /></v-col>
+            <v-col cols="6"><v-select v-model="editForm.countyCode" :items="countiesForState(editForm.stateCode)" item-title="name" item-value="code" label="County" density="compact" @update:model-value="onEditCountyChange" /></v-col>
+            <v-col cols="6"><v-select v-model="editForm.locationCode" :items="locationsForCounty(editForm.countyCode)" item-title="name" item-value="code" label="Location" density="compact" @update:model-value="onEditLocationChange" /></v-col>
+            <v-col cols="6"><v-select v-model="editForm.villageCode" :items="villagesForLocation(editForm.locationCode)" item-title="name" item-value="code" label="Village" density="compact" /></v-col>
+          </v-row>
+        </v-card-text>
+        <v-card-actions class="pa-4 pt-0">
+          <v-spacer />
+          <v-btn variant="text" @click="editDialog = false">Cancel</v-btn>
+          <v-btn color="secondary" :loading="editing" @click="saveEdit">Save</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
 
     <v-dialog v-model="addAltDialog" max-width="520">
       <v-card>

@@ -87,6 +87,7 @@ function onSearchInput() {
 const form = ref({
   householdName: '', age: null as number | null, gender: '', phoneNumber: '',
   householdSize: null as number | null, stateCode: '', countyCode: '', locationCode: '', villageCode: '',
+  organisationCode: null as string | null,
 })
 
 const headers = [
@@ -177,7 +178,7 @@ async function loadGeo() {
       dispatch<{ results: GeoNode[] }>('GET_LOCATIONS'),
       dispatch<{ results: GeoNode[] }>('GET_VILLAGES'),
     ]
-    if (auth.isAnchorAdministrator || (auth.isSystemAdmin && selectedAnchorId.value))
+    if (auth.isAnchorAdministrator || auth.isSystemAdmin)
       requests.push(dispatch<{ results: typeof organizations.value }>('GET_ORGANIZATIONS', { targetAnchorId: auth.isSystemAdmin ? selectedAnchorId.value : undefined }))
     const [s, c, l, v, o] = await Promise.all(requests)
     states.value = s.results
@@ -232,7 +233,7 @@ watch(() => filters.value.reviewStatus, load)
 watch(() => filters.value.dateFrom, load)
 watch(() => filters.value.dateTo, load)
 
-// System Owner picking a different anchor resets whatever organisation was
+// Super Admin picking a different anchor resets whatever organisation was
 // selected under the previous one, then reloads both the organisation list
 // and the (now re-scoped) household list.
 watch(selectedAnchorId, () => { filters.value.organisationCode = null; loadGeo(); load() })
@@ -273,7 +274,10 @@ const checkingDup = ref(false)
 const duplicateCandidates = ref<DuplicateCandidate[]>([])
 
 function openCreate() {
-  form.value = { householdName: '', age: null, gender: '', phoneNumber: '', householdSize: null, stateCode: '', countyCode: '', locationCode: '', villageCode: '' }
+  form.value = {
+    householdName: '', age: null, gender: '', phoneNumber: '', householdSize: null, stateCode: '', countyCode: '', locationCode: '', villageCode: '',
+    organisationCode: filters.value.organisationCode,
+  }
   duplicateCandidates.value = []
   dialog.value = true
 }
@@ -284,6 +288,10 @@ function openCreate() {
 async function attemptSave() {
   if (!form.value.householdName.trim()) {
     toast.error('Head of household name is required')
+    return
+  }
+  if (auth.isAnchor && !form.value.organisationCode) {
+    toast.error('Select the organisation this household belongs to')
     return
   }
   checkingDup.value = true
@@ -313,6 +321,7 @@ async function save() {
       phoneNumber: form.value.phoneNumber, householdSize: form.value.householdSize,
       stateCode: form.value.stateCode, countyCode: form.value.countyCode,
       payamCode: form.value.locationCode, bomaCode: form.value.villageCode,
+      organisationCode: form.value.organisationCode || undefined,
     })
     toast.success('Household registered')
     dialog.value = false
@@ -385,6 +394,7 @@ async function saveReview() {
 // now only includes the fields the user actually selects, rather than always every field.
 
 const bulkDialog = ref(false)
+const bulkOrganisationCode = ref<string | null>(null)
 const bulkStateCode = ref('')
 const bulkCountyCode = ref('')
 const bulkLocationCode = ref('')
@@ -408,6 +418,7 @@ const templateFields = ref<string[]>(OPTIONAL_TEMPLATE_FIELDS.map((f) => f.key))
 const templateDownloaded = ref(false)
 
 function openBulk() {
+  bulkOrganisationCode.value = filters.value.organisationCode
   bulkStateCode.value = ''; bulkCountyCode.value = ''; bulkLocationCode.value = ''; bulkVillageCode.value = ''
   bulkFileName.value = ''; bulkRows.value = []; bulkResult.value = null
   templateFields.value = OPTIONAL_TEMPLATE_FIELDS.map((f) => f.key)
@@ -433,7 +444,8 @@ function onBulkFile(event: Event) {
   reader.readAsText(file)
 }
 
-const bulkReady = computed(() => !!bulkVillageCode.value && bulkRows.value.length > 0)
+const bulkReady = computed(() =>
+  !!bulkVillageCode.value && bulkRows.value.length > 0 && (!auth.isAnchor || !!bulkOrganisationCode.value))
 
 async function submitBulk() {
   if (!bulkReady.value) return
@@ -453,7 +465,7 @@ async function submitBulk() {
     }))
     const res = await dispatch<{ successCount: number; failureCount: number; errors: { row: number; message: string }[] }>(
       'BULK_UPLOAD_HOUSEHOLDS',
-      { villageCode: bulkVillageCode.value, fileName: bulkFileName.value, rows },
+      { organisationCode: bulkOrganisationCode.value || undefined, villageCode: bulkVillageCode.value, fileName: bulkFileName.value, rows },
     )
     bulkResult.value = res
     toast.success(`${res.successCount} household(s) registered, ${res.failureCount} failed`)
@@ -477,18 +489,8 @@ async function submitBulk() {
       </div>
     </div>
 
-    <v-select
-      v-if="anchorGateActive" v-model="selectedAnchorId" :items="anchors" item-title="name" item-value="id"
-      label="Choose anchor" variant="outlined" class="mb-4" style="max-width: 420px"
-      prepend-inner-icon="mdi-bank-outline"
-    />
-    <v-select
-      v-else-if="auth.isAnchorAdministrator" v-model="filters.organisationCode" :items="organizations" item-title="name" item-value="organisationCode"
-      label="Choose organisation" variant="outlined" class="mb-4" style="max-width: 420px"
-      prepend-inner-icon="mdi-domain"
-    />
     <v-alert v-if="auth.isSystemAdmin ? !anchorChosen : (auth.isAnchorAdministrator && !filters.organisationCode)" type="info" variant="tonal" class="mb-4">
-      {{ auth.isSystemAdmin ? 'Showing households across every anchor. Choose one above to narrow the list.' : 'Showing households across every organisation. Choose one above to narrow the list.' }}
+      {{ auth.isSystemAdmin ? 'Showing households across every anchor. Choose one in the filters below to narrow the list.' : 'Showing households across every organisation. Choose one in the filters below to narrow the list.' }}
     </v-alert>
 
     <template v-if="scopeReady">
@@ -530,7 +532,10 @@ async function submitBulk() {
     <v-card variant="flat" border>
       <v-card-text>
         <v-row dense align="center">
-          <v-col v-if="auth.isSystemAdmin" cols="12" sm="6" md="3">
+          <v-col v-if="anchorGateActive" cols="12" sm="6" md="3">
+            <v-select v-model="selectedAnchorId" :items="anchors" item-title="name" item-value="id" label="Anchor" clearable hide-details density="compact" prepend-inner-icon="mdi-bank-outline" />
+          </v-col>
+          <v-col v-if="auth.isSystemAdmin || auth.isAnchorAdministrator" cols="12" sm="6" md="3">
             <v-select v-model="filters.organisationCode" :items="organizations" item-title="name" item-value="organisationCode" label="Organisation" clearable hide-details density="compact" />
           </v-col>
           <v-col cols="6" sm="3" md="2">
@@ -647,6 +652,11 @@ async function submitBulk() {
         <dialog-close-button @close="dialog = false" />
         <v-card-title>Add Household</v-card-title>
         <v-card-text>
+          <v-select
+            v-if="auth.isAnchor"
+            v-model="form.organisationCode" :items="organizations" item-title="name" item-value="organisationCode"
+            label="Organisation" class="mb-2"
+          />
           <v-text-field v-model="form.householdName" label="Head of household name" />
           <v-row>
             <v-col cols="6"><v-text-field v-model.number="form.age" label="Age" type="number" /></v-col>
@@ -700,6 +710,11 @@ async function submitBulk() {
           <v-alert type="info" variant="tonal" density="compact" class="mb-3">
             Pick the village this batch belongs to, choose which fields to include, download the template, fill in one row per household, then upload it here.
           </v-alert>
+          <v-select
+            v-if="auth.isAnchor"
+            v-model="bulkOrganisationCode" :items="organizations" item-title="name" item-value="organisationCode"
+            label="Organisation" density="compact" class="mb-2"
+          />
           <v-row dense>
             <v-col cols="4"><v-select v-model="bulkStateCode" :items="states" item-title="name" item-value="code" label="State" density="compact" /></v-col>
             <v-col cols="4"><v-select v-model="bulkCountyCode" :items="countiesForState(bulkStateCode)" item-title="name" item-value="code" label="County" density="compact" /></v-col>
@@ -719,7 +734,7 @@ async function submitBulk() {
           </v-btn>
           <v-file-input
             label="Upload filled CSV" accept=".csv" prepend-icon="mdi-file-upload"
-            :disabled="!bulkVillageCode || !templateDownloaded" @change="onBulkFile"
+            :disabled="!bulkVillageCode || !templateDownloaded || (auth.isAnchor && !bulkOrganisationCode)" @change="onBulkFile"
           />
           <div v-if="!templateDownloaded" class="text-caption text-medium-emphasis mb-2">Download the template above before uploading a filled CSV.</div>
           <div v-if="bulkRows.length" class="text-caption mb-2">{{ bulkRows.length }} row(s) ready to upload from {{ bulkFileName }}</div>

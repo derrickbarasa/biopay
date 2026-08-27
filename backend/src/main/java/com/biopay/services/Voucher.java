@@ -82,6 +82,17 @@ public class Voucher extends AbstractVerticle {
         return TenantScope.isSystemOwner(payload);
     }
 
+    /** Resolves organisationCode's real anchor server-side rather than trusting whatever
+     *  anchorId the client sent -- fails if the organisation doesn't exist or (for an Anchor
+     *  Administrator) isn't inside their own anchor. The Super Admin may target any anchor. */
+    private io.vertx.core.Future<Integer> resolveOrgAnchorId(JsonObject payload, String organisationCode) {
+        return pool.preparedQuery("SELECT anchor_id FROM organizations WHERE organization_code=@p1 AND (@p2=1 OR anchor_id=@p3)")
+                .execute(Tuple.of(organisationCode, isSystemAdmin(payload), TenantScope.anchorId(payload)))
+                .compose(rows -> rows.size() == 0
+                        ? io.vertx.core.Future.failedFuture("Organisation is outside your anchor")
+                        : io.vertx.core.Future.succeededFuture(Rows.intVal(rows.iterator().next(), "anchor_id")));
+    }
+
     private static String blankToNull(String value) {
         return value == null || value.trim().isEmpty() ? null : value.trim();
     }
@@ -106,8 +117,10 @@ public class Voucher extends AbstractVerticle {
                         replyError(message, "Voucher redemption is not enabled for this organisation");
                         return;
                     }
-                    insertVoucher(message, partnerCode, anchorIdOf(payload), householdNumber, amount,
-                            blankToNull(payload.getString("purpose")), blankToNull(payload.getString("expiresAt")), payload.getValue("actorId"));
+                    resolveOrgAnchorId(payload, partnerCode)
+                            .onFailure(err -> replyError(message, err.getMessage()))
+                            .onSuccess(resolvedAnchorId -> insertVoucher(message, partnerCode, resolvedAnchorId, householdNumber, amount,
+                                    blankToNull(payload.getString("purpose")), blankToNull(payload.getString("expiresAt")), payload.getValue("actorId")));
                 });
     }
 
@@ -139,7 +152,6 @@ public class Voucher extends AbstractVerticle {
     private void bulkIssue(Message<Object> message) {
         JsonObject payload = new JsonObject(message.body().toString());
         String partnerCode = isAnchor(payload) ? payload.getString("organisationCode", "") : payload.getString("partnerCode", "");
-        Integer anchorId = anchorIdOf(payload);
         JsonArray rows = payload.getJsonArray("rows", new JsonArray());
         String purpose = blankToNull(payload.getString("purpose"));
         String expiresAt = blankToNull(payload.getString("expiresAt"));
@@ -161,8 +173,10 @@ public class Voucher extends AbstractVerticle {
                         replyError(message, "Voucher redemption is not enabled for this organisation");
                         return;
                     }
-                    processBulkRow(message, rows, 0, partnerCode, anchorId, purpose, expiresAt, actorId,
-                            new JsonArray(), new JsonArray());
+                    resolveOrgAnchorId(payload, partnerCode)
+                            .onFailure(err -> replyError(message, err.getMessage()))
+                            .onSuccess(resolvedAnchorId -> processBulkRow(message, rows, 0, partnerCode, resolvedAnchorId, purpose, expiresAt, actorId,
+                                    new JsonArray(), new JsonArray()));
                 });
     }
 

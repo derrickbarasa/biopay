@@ -18,7 +18,7 @@ import android.database.sqlite.SQLiteOpenHelper;
 public class DatabaseHelper extends SQLiteOpenHelper {
 
     private static final String DB_NAME = "biopay_agent.db";
-    private static final int DB_VERSION = 6;
+    private static final int DB_VERSION = 8;
 
     /** Every offline-captured row starts PENDING and flips to SYNCED once the server accepts it. */
     public static final int SYNC_PENDING = 0;
@@ -54,6 +54,26 @@ public class DatabaseHelper extends SQLiteOpenHelper {
                 "(SELECT COUNT(*) FROM vouchers " +
                 " WHERE status='REDEEMED' AND redemption_sync_status=0)";
         try (Cursor cursor = getReadableDatabase().rawQuery(sql, null)) {
+            return cursor.moveToFirst() ? cursor.getInt(0) : 0;
+        }
+    }
+
+    /** Per-table breakdown backing the Sync Center screen's pending-record counts. */
+    public int countPendingHouseholds() {
+        return countPendingIn("households");
+    }
+
+    public int countPendingMembers() {
+        return countPendingIn("alternates");
+    }
+
+    public int countPendingTransactions() {
+        return countPendingIn("payments");
+    }
+
+    private int countPendingIn(String table) {
+        try (Cursor cursor = getReadableDatabase()
+                .rawQuery("SELECT COUNT(*) FROM " + table + " WHERE sync_status=0", null)) {
             return cursor.moveToFirst() ? cursor.getInt(0) : 0;
         }
     }
@@ -176,6 +196,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
                 "status INTEGER DEFAULT 0," +
                 "cycle VARCHAR," +
                 "sync_status INTEGER DEFAULT 0," +
+                "intervention_type VARCHAR DEFAULT 'CASH'," +
                 "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);");
 
         db.execSQL("CREATE TABLE attendances (" +
@@ -199,6 +220,8 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         createVoucherTable(db);
 
         createGeoTables(db);
+
+        createVerificationEventsTable(db);
 
         db.execSQL("CREATE INDEX idx_alternates_household ON alternates(household_number)");
         db.execSQL("CREATE INDEX idx_fingerprints_beneficiary ON fingerprints(beneficiary_id)");
@@ -230,6 +253,15 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             // which enrolled face embedding matched, parallel to the existing matched_fingerprint_uuid.
             db.execSQL("ALTER TABLE payments ADD COLUMN matched_face_uuid VARCHAR");
         }
+        if (oldVersion < 7) {
+            // The redesigned disbursement flow's intervention-type selector (Cash/Voucher/Food/
+            // In-kind) is local-only for now -- RECORD_FIELD_PAYMENT has no matching backend
+            // column yet, so this doesn't sync, but it does show on the on-device receipt.
+            db.execSQL("ALTER TABLE payments ADD COLUMN intervention_type VARCHAR DEFAULT 'CASH'");
+        }
+        if (oldVersion < 8) {
+            createVerificationEventsTable(db);
+        }
     }
 
     /**
@@ -245,6 +277,23 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         db.execSQL("CREATE INDEX IF NOT EXISTS idx_counties_state ON counties(state_code)");
         db.execSQL("CREATE INDEX IF NOT EXISTS idx_payams_county ON payams(county_code)");
         db.execSQL("CREATE INDEX IF NOT EXISTS idx_bomas_payam ON bomas(payam_code)");
+    }
+
+    /** A lightweight local log of successful identity verifications -- the redesigned Activity
+     * feed's "Verification" filter needs something to show since {@code faces}/{@code
+     * fingerprints} only record enrollment, not "this specific verify attempt succeeded".
+     * Written to from {@link com.biopay.agent.payments.FingerprintVerifyActivity} and {@link
+     * com.biopay.agent.payments.PaymentVerificationActivity}'s face-match path. Never synced --
+     * it's purely a device-local activity record, not a server-facing entity. */
+    private static void createVerificationEventsTable(SQLiteDatabase db) {
+        db.execSQL("CREATE TABLE IF NOT EXISTS verification_events (" +
+                "id INTEGER PRIMARY KEY AUTOINCREMENT," +
+                "household_number VARCHAR," +
+                "beneficiary_id VARCHAR," +
+                "person_name VARCHAR," +
+                "method VARCHAR NOT NULL," +
+                "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);");
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_verification_events_household ON verification_events(household_number)");
     }
 
     private static void createVoucherTable(SQLiteDatabase db) {

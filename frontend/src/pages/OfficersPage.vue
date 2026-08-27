@@ -116,7 +116,7 @@ async function loadGeo() {
 }
 
 async function loadOrganizations() {
-  if (!(auth.isAnchorAdministrator || (auth.isSystemAdmin && selectedAnchorId.value))) return
+  if (!(auth.isAnchorAdministrator || auth.isSystemAdmin)) return
   try {
     const res = await dispatch<{ results: typeof organizations.value }>('GET_ORGANIZATIONS', {
       targetAnchorId: auth.isSystemAdmin ? selectedAnchorId.value : undefined,
@@ -246,25 +246,18 @@ async function assignLocation() {
       <v-btn v-if="scopeReady && auth.can('ACCESS_SUPERVISORS')" color="secondary" prepend-icon="mdi-account-plus" @click="openCreate">Register Field Officer</v-btn>
     </div>
 
-    <v-select
-      v-if="anchorGateActive" v-model="selectedAnchorId" :items="anchors" item-title="name" item-value="id"
-      label="Choose anchor" variant="outlined" class="mb-4" style="max-width: 420px"
-      prepend-inner-icon="mdi-bank-outline"
-    />
-    <v-select
-      v-else-if="auth.isAnchorAdministrator" v-model="filters.organisationCode" :items="organizations" item-title="name" item-value="organisationCode"
-      label="Choose organisation" variant="outlined" class="mb-4" style="max-width: 420px"
-      prepend-inner-icon="mdi-domain"
-    />
     <v-alert v-if="auth.isSystemAdmin ? !anchorChosen : (auth.isAnchorAdministrator && !filters.organisationCode)" type="info" variant="tonal" class="mb-4">
-      {{ auth.isSystemAdmin ? 'Showing field officers across every anchor. Choose one above to narrow the list.' : 'Showing field officers across every organisation. Choose one above to narrow the list.' }}
+      {{ auth.isSystemAdmin ? 'Showing field officers across every anchor. Choose one in the filters below to narrow the list.' : 'Showing field officers across every organisation. Choose one in the filters below to narrow the list.' }}
     </v-alert>
 
     <template v-if="scopeReady">
     <v-card variant="flat" border>
       <v-card-text>
         <v-row dense align="center">
-          <v-col v-if="auth.isSystemAdmin" cols="12" sm="4" md="3">
+          <v-col v-if="anchorGateActive" cols="12" sm="4" md="3">
+            <v-select v-model="selectedAnchorId" :items="anchors" item-title="name" item-value="id" label="Anchor" clearable hide-details density="compact" prepend-inner-icon="mdi-bank-outline" />
+          </v-col>
+          <v-col v-if="auth.isSystemAdmin || auth.isAnchorAdministrator" cols="12" sm="4" md="3">
             <v-select v-model="filters.organisationCode" :items="organizations" item-title="name" item-value="organisationCode" label="Organisation" clearable hide-details density="compact" />
           </v-col>
           <v-col cols="12" sm="4" md="3">

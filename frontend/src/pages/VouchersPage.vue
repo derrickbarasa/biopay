@@ -156,7 +156,7 @@ async function load() {
 watch(organisationFilter, load)
 
 async function loadOrganizations() {
-  if (!auth.isAnchorAdministrator && !(auth.isSystemAdmin && selectedAnchorId.value)) { organizations.value = []; return }
+  if (!auth.isAnchorAdministrator && !auth.isSystemAdmin) { organizations.value = []; return }
   try {
     const res = await dispatch<{ results: typeof organizations.value }>('GET_ORGANIZATIONS', {
       targetAnchorId: auth.isSystemAdmin ? selectedAnchorId.value : undefined,
@@ -167,7 +167,7 @@ async function loadOrganizations() {
   }
 }
 
-// System Owner picking a different anchor resets whatever organisation was
+// Super Admin picking a different anchor resets whatever organisation was
 // selected under the previous one, then reloads both lists.
 watch(selectedAnchorId, () => { organisationFilter.value = null; loadOrganizations(); load() })
 
@@ -218,7 +218,7 @@ async function issue() {
   }
   saving.value = true
   try {
-    await dispatch('CREATE_VOUCHER', { ...form.value, targetAnchorId: targetAnchorForOrg(form.value.organisationCode) })
+    await dispatch('CREATE_VOUCHER', { ...form.value, organisationCode: form.value.organisationCode || undefined, targetAnchorId: targetAnchorForOrg(form.value.organisationCode) })
     toast.success('Voucher issued')
     issueDialog.value = false
     await load()
@@ -534,18 +534,8 @@ function statusColor(status: string) {
       </div>
     </div>
 
-    <v-select
-      v-if="anchorGateActive" v-model="selectedAnchorId" :items="anchors" item-title="name" item-value="id"
-      label="Choose anchor" variant="outlined" class="mb-4" style="max-width: 420px"
-      prepend-inner-icon="mdi-bank-outline"
-    />
-    <v-select
-      v-else-if="auth.isAnchorAdministrator" v-model="organisationFilter" :items="organizations" item-title="name" item-value="organisationCode"
-      label="Choose organisation" variant="outlined" class="mb-4" style="max-width: 420px"
-      prepend-inner-icon="mdi-domain"
-    />
     <v-alert v-if="auth.isSystemAdmin ? !anchorChosen : (auth.isAnchorAdministrator && !organisationFilter)" type="info" variant="tonal" class="mb-4">
-      {{ auth.isSystemAdmin ? 'Showing vouchers across every anchor. Choose one above to narrow the list.' : 'Showing vouchers across every organisation. Choose one above to narrow the list.' }}
+      {{ auth.isSystemAdmin ? 'Showing vouchers across every anchor. Choose one in the filters below to narrow the list.' : 'Showing vouchers across every organisation. Choose one in the filters below to narrow the list.' }}
     </v-alert>
 
     <template v-if="scopeReady">
@@ -568,9 +558,13 @@ function statusColor(status: string) {
     </div>
 
     <v-card variant="flat" border>
-      <v-card-text class="d-flex ga-3">
+      <v-card-text class="d-flex ga-3 flex-wrap">
         <v-select
-          v-if="auth.isSystemAdmin" v-model="organisationFilter" :items="organizations" item-title="name" item-value="organisationCode"
+          v-if="anchorGateActive" v-model="selectedAnchorId" :items="anchors" item-title="name" item-value="id"
+          label="Anchor" clearable hide-details density="compact" style="max-width: 220px" prepend-inner-icon="mdi-bank-outline"
+        />
+        <v-select
+          v-if="auth.isSystemAdmin || auth.isAnchorAdministrator" v-model="organisationFilter" :items="organizations" item-title="name" item-value="organisationCode"
           label="Organisation" clearable hide-details density="compact" style="max-width: 220px"
         />
         <v-text-field

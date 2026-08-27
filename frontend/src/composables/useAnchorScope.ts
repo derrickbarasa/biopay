@@ -10,11 +10,11 @@ export interface AnchorOption {
 }
 
 /**
- * Shared "which anchor am I looking at" state for the System Owner, used on
+ * Shared "which anchor am I looking at" state for the Super Admin, used on
  * every anchor-scoped operational page (Households, Payments, Payment
  * Cycles, Vouchers, Attendance, Field Officers). Mirrors the anchor-picker
  * pattern already established on OrganizationsPage/RolesPage/SubscriptionPage:
- * the System Owner has total access everywhere, but must choose an anchor
+ * the Super Admin has total access everywhere, but must choose an anchor
  * before an anchor-scoped page shows anything, the same way an Anchor
  * Administrator must choose an organisation on the same pages (see each
  * page's own `organisationCode` filter, now required rather than optional
@@ -27,7 +27,7 @@ export function useAnchorScope() {
   const anchors = ref<AnchorOption[]>([])
   const selectedAnchorId = ref<number | null>(null)
 
-  // Only the System Owner ever needs to pick an anchor -- an Anchor
+  // Only the Super Admin ever needs to pick an anchor -- an Anchor
   // Administrator already has exactly one (their own, from the JWT).
   const anchorGateActive = computed(() => auth.isSystemAdmin)
   const anchorChosen = computed(() => !auth.isSystemAdmin || selectedAnchorId.value != null)

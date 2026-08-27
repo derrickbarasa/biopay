@@ -73,4 +73,17 @@ public class Utilities {
                     return String.format("ANC%03d", next);
                 });
     }
+
+    /** Next sequential organisation code, e.g. "ORG001", "ORG002" -- generated server-side
+     *  so operators never have to type an identifier by hand; the org is identified to
+     *  users by its name instead. */
+    public static Future<String> nextOrganizationCode(MSSQLPool pool) {
+        return pool.query("SELECT MAX(TRY_CAST(SUBSTRING(organization_code, 4, 10) AS INT)) AS mx FROM organizations WHERE organization_code LIKE 'ORG%'")
+                .execute()
+                .map(rows -> {
+                    Integer max = rows.size() == 0 ? null : rows.iterator().next().getInteger("mx");
+                    int next = (max == null ? 0 : max) + 1;
+                    return String.format("ORG%03d", next);
+                });
+    }
 }

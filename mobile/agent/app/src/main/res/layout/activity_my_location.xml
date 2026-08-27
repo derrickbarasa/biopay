@@ -11,11 +11,11 @@
         <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:paddingStart="16dp" android:paddingTop="8dp" android:paddingEnd="16dp" android:paddingBottom="28dp">
             <TextView style="@style/BioPay.SupportingText" android:layout_marginTop="4dp" android:text="@string/my_location_description" />
 
-            <com.google.android.material.card.MaterialCardView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp" app:cardBackgroundColor="@color/bp_surface" app:cardCornerRadius="16dp" app:cardElevation="1dp" app:strokeWidth="0dp">
+            <com.google.android.material.card.MaterialCardView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp" app:cardBackgroundColor="@color/bp_surface" app:cardCornerRadius="16dp" app:cardElevation="1dp" app:strokeWidth="1dp" app:strokeColor="@color/bp_outline_variant">
                 <com.biopay.agent.location.SiteMapView android:id="@+id/siteMapView" android:layout_width="match_parent" android:layout_height="260dp" />
             </com.google.android.material.card.MaterialCardView>
 
-            <com.google.android.material.card.MaterialCardView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp" app:cardBackgroundColor="@color/bp_surface" app:cardCornerRadius="16dp" app:cardElevation="1dp" app:strokeWidth="0dp">
+            <com.google.android.material.card.MaterialCardView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp" app:cardBackgroundColor="@color/bp_surface" app:cardCornerRadius="16dp" app:cardElevation="1dp" app:strokeWidth="1dp" app:strokeColor="@color/bp_outline_variant">
                 <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="18dp">
                     <TextView android:id="@+id/tvCoordinates" style="@style/BioPay.KpiValue" android:textSize="18sp" />
                     <TextView android:id="@+id/tvAccuracy" style="@style/BioPay.KpiLabel" android:layout_marginTop="4dp" />

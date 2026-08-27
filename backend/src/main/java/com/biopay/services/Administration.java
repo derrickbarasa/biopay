@@ -28,6 +28,7 @@ public class Administration extends AbstractVerticle {
         vertx.eventBus().consumer("GET_ANCHORS", this::getAnchors);
         vertx.eventBus().consumer("CREATE_ANCHOR", this::createAnchor);
         vertx.eventBus().consumer("UPDATE_ANCHOR", this::updateAnchor);
+        vertx.eventBus().consumer("TOGGLE_ANCHOR_STATUS", this::toggleAnchorStatus);
         vertx.eventBus().consumer("GET_USERS", this::getUsers);
         vertx.eventBus().consumer("GET_USER", this::getUser);
         vertx.eventBus().consumer("CREATE_USER", this::createUser);
@@ -35,8 +36,10 @@ public class Administration extends AbstractVerticle {
         vertx.eventBus().consumer("TOGGLE_USER_STATUS", this::toggleUserStatus);
         vertx.eventBus().consumer("GET_ROLES", this::getRoles);
         vertx.eventBus().consumer("SAVE_ROLE", this::saveRole);
+        vertx.eventBus().consumer("DELETE_ROLE", this::deleteRole);
         vertx.eventBus().consumer("GET_PERMISSIONS", this::getPermissions);
         vertx.eventBus().consumer("CREATE_PERMISSION", this::createPermission);
+        vertx.eventBus().consumer("DELETE_PERMISSION", this::deletePermission);
         startPromise.complete();
     }
 
@@ -56,7 +59,7 @@ public class Administration extends AbstractVerticle {
 
     private void getAnchors(Message<Object> message) {
         JsonObject p = data(message);
-        if (!anchor(p)) { fail(message, "Only the system owner or an anchor administrator can view anchor settings"); return; }
+        if (!anchor(p)) { fail(message, "Only the super admin or an anchor administrator can view anchor settings"); return; }
         // An anchor is its Anchor Administrator's own row in `users` (user_scope='ANCHOR'),
         // not a separate table -- so "every anchor" is every such row. The system admin can
         // browse every anchor (for the anchor-picker on admin@biopay.com's sessions); a plain
@@ -82,7 +85,7 @@ public class Administration extends AbstractVerticle {
 
     private void createAnchor(Message<Object> message) {
         JsonObject p = data(message);
-        if (!systemAdmin(p)) { fail(message, "Only the system owner can create anchors"); return; }
+        if (!systemAdmin(p)) { fail(message, "Only the super admin can create anchors"); return; }
         String name = strOrEmpty(p.getString("name")).trim();
         String authorisedName = strOrEmpty(p.getString("authorisedName")).trim();
         String authorisedEmail = strOrEmpty(p.getString("authorisedEmail")).trim().toLowerCase();
@@ -120,7 +123,7 @@ public class Administration extends AbstractVerticle {
 
     private void updateAnchor(Message<Object> message) {
         JsonObject p = data(message);
-        if (!anchor(p)) { fail(message, "Only the system owner or an anchor administrator can update anchor settings"); return; }
+        if (!anchor(p)) { fail(message, "Only the super admin or an anchor administrator can update anchor settings"); return; }
         int targetAnchorId = systemAdmin(p)
                 ? p.getInteger("targetAnchorId", Integer.parseInt(p.getValue("anchorId").toString()))
                 : Integer.parseInt(p.getValue("anchorId").toString());
@@ -129,6 +132,26 @@ public class Administration extends AbstractVerticle {
                         p.getString("authorisedContact"),p.getString("address"),strOrEmpty(p.getString("country")).trim(),
                         strOrEmpty(p.getString("city")).trim(),p.getString("website"),targetAnchorId))
                 .onFailure(e -> dbFail(message,e)).onSuccess(r -> ok(message,"Anchor updated",null));
+    }
+
+    /** Anchors have no separate table to hard-delete a row from -- an anchor IS its Anchor
+     *  Administrator's own `users` row, and every organisation/user/household beneath it
+     *  references that row. "Delete" is therefore the same reversible soft-delete pattern
+     *  used for organisations: status=0 blocks sign-in and hides it from active lists, and
+     *  it can be reactivated the same way. */
+    private void toggleAnchorStatus(Message<Object> message) {
+        JsonObject p = data(message);
+        if (!systemAdmin(p)) { fail(message, "Only the super admin can delete or restore an anchor"); return; }
+        Integer targetAnchorId = p.getInteger("targetAnchorId");
+        Integer status = p.getInteger("status");
+        if (targetAnchorId == null || status == null) { fail(message, "targetAnchorId and status are required"); return; }
+        pool.preparedQuery("UPDATE users SET status=@p1, updated_at=GETDATE() WHERE id=@p2 AND user_scope='ANCHOR'")
+                .execute(Tuple.of(status, targetAnchorId))
+                .onFailure(e -> dbFail(message, e))
+                .onSuccess(rows -> {
+                    if (rows.rowCount() == 0) { fail(message, "Anchor not found"); return; }
+                    ok(message, status == 1 ? "Anchor restored" : "Anchor deleted", null);
+                });
     }
 
     private void getUsers(Message<Object> message) {
@@ -163,6 +186,7 @@ public class Administration extends AbstractVerticle {
         JsonObject p = data(message);
         String email=p.getString("email","").trim().toLowerCase();
         String requestedScope=p.getString("userScope","ORGANISATION").toUpperCase();
+        if ("SYSTEM".equals(requestedScope)) { createSuperAdmin(message, p, email); return; }
         String partner = anchor(p) ? p.getString("organisationCode") : p.getString("partnerCode");
         if (!"ANCHOR".equals(requestedScope) && !"ORGANISATION".equals(requestedScope)) { fail(message,"User scope must be Anchor or Organisation"); return; }
         if (!anchor(p) && !"ORGANISATION".equals(requestedScope)) { fail(message,"Organisation administrators can only create organisation users"); return; }
@@ -192,6 +216,34 @@ public class Administration extends AbstractVerticle {
                                     + "</strong>. Please log in and change it as soon as possible.")
                             .toString());
                     ok(message,"User created. Temporary password sent by email",null);
+                });
+    }
+
+    /** Only an existing Super Admin can mint another one -- a tenantless, permission-bypass
+     * identity with no anchor/organisation, so it skips every anchor-scoped check above. */
+    private void createSuperAdmin(Message<Object> message, JsonObject p, String email) {
+        if (!systemAdmin(p)) { fail(message,"Only a super admin can create another super admin"); return; }
+        String firstName = strOrEmpty(p.getString("firstName")).trim();
+        if (email.isEmpty() || firstName.isEmpty()) { fail(message,"Email and first name are required"); return; }
+        String username=p.getString("username",email.split("@")[0]).trim();
+        String tempPassword = Utilities.generateRandomPassword(10);
+        pool.preparedQuery("SELECT TOP 1 id FROM roles WHERE role_name='Super Admin' AND anchor_id IS NULL AND role_scope='SYSTEM' AND status=1")
+                .execute()
+                .compose(roleRows -> roleRows.size()==0 ? Future.failedFuture("Super Admin role not found")
+                        : pool.preparedQuery("INSERT INTO users (email,username,password,first_name,other_names,role_id,active,status,user_scope,anchor_id,is_system_admin,created_by,created_at,updated_at) "
+                                + "VALUES (@p1,@p2,@p3,@p4,@p5,@p6,1,1,'SYSTEM',NULL,1,@p7,GETDATE(),GETDATE())")
+                        .execute(Tuple.of(email,username,Passwords.hash(tempPassword),firstName,p.getString("otherNames"),
+                                Rows.intVal(roleRows.iterator().next(),"id"),Integer.parseInt(p.getValue("actorId").toString()))))
+                .onFailure(e -> fail(message,"A user with that email or username may already exist"))
+                .onSuccess(r -> {
+                    eventBus.send("EMAIL", new JsonObject()
+                            .put("mailTo", email)
+                            .put("subject", "Your BioPay Super Admin Account")
+                            .put("msg", "Dear " + firstName + ",<br />A BioPay Super Admin account has been created for you. "
+                                    + "Your temporary password is <strong>" + tempPassword
+                                    + "</strong>. Please log in and change it as soon as possible.")
+                            .toString());
+                    ok(message,"Super Admin created. Temporary password sent by email",null);
                 });
     }
 
@@ -238,7 +290,38 @@ public class Administration extends AbstractVerticle {
     private void toggleUserStatus(Message<Object> message) {
         JsonObject p=data(message); int userId=p.getInteger("userId",0); int status=p.getInteger("status",0);
         if (userId==Integer.parseInt(p.getValue("actorId").toString()) && status==0) { fail(message,"You cannot deactivate your own account"); return; }
-        String sql=systemAdmin(p)?"UPDATE users SET status=@p1, active=@p1, updated_at=GETDATE() WHERE id=@p2 AND is_system_admin=0"
+        // A Super Admin may now deactivate another Super Admin -- the only remaining rule is
+        // that the platform can never be left with zero active ones, checked just before the
+        // write so it stays correct under the ordinary (non-concurrent) admin-console usage
+        // this dashboard sees.
+        if (systemAdmin(p) && status == 0) {
+            pool.preparedQuery("SELECT is_system_admin FROM users WHERE id=@p1")
+                    .execute(Tuple.of(userId))
+                    .onFailure(e -> dbFail(message, e))
+                    .onSuccess(rows -> {
+                        if (rows.size() == 0) { fail(message, "User not found"); return; }
+                        if (!Boolean.TRUE.equals(rows.iterator().next().getBoolean("is_system_admin"))) {
+                            doToggleUserStatus(message, p, userId, status);
+                            return;
+                        }
+                        pool.query("SELECT COUNT(*) AS cnt FROM users WHERE is_system_admin=1 AND status=1")
+                                .execute()
+                                .onFailure(e -> dbFail(message, e))
+                                .onSuccess(cntRows -> {
+                                    if (Rows.intVal(cntRows.iterator().next(), "cnt") <= 1) {
+                                        fail(message, "At least one Super Admin must remain active");
+                                        return;
+                                    }
+                                    doToggleUserStatus(message, p, userId, status);
+                                });
+                    });
+            return;
+        }
+        doToggleUserStatus(message, p, userId, status);
+    }
+
+    private void doToggleUserStatus(Message<Object> message, JsonObject p, int userId, int status) {
+        String sql=systemAdmin(p)?"UPDATE users SET status=@p1, active=@p1, updated_at=GETDATE() WHERE id=@p2"
                 :anchor(p)?"UPDATE users SET status=@p1, active=@p1, updated_at=GETDATE() WHERE id=@p2 AND anchor_id=@p3"
                 :"UPDATE users SET status=@p1, active=@p1, updated_at=GETDATE() WHERE id=@p2 AND organization_code=@p3";
         Tuple params=systemAdmin(p)?Tuple.of(status,userId)
@@ -288,7 +371,7 @@ public class Administration extends AbstractVerticle {
         // Explicit column list rather than r.* -- MSSQL requires every selected column to be
         // aggregated or in GROUP BY, so r.* silently breaks the moment the roles table carries
         // any column (e.g. a legacy one on an older database) that isn't in the GROUP BY list.
-        // The System Owner manages every role and permission by definition -- browsing the page
+        // The Super Admin manages every role and permission by definition -- browsing the page
         // without first picking a target anchor shows every anchor's roles (plus its own System
         // Owner role) rather than nothing; picking an anchor narrows the list to just that tenant.
         boolean browseAll = systemAdmin(p) && anchorId == null;
@@ -299,23 +382,28 @@ public class Administration extends AbstractVerticle {
                     : "WHERE r.status=1 AND r.role_scope<>'SYSTEM' AND ((r.anchor_id IS NULL AND r.role_name IN ('Anchor Administrator','Organisation Administrator')) OR r.anchor_id=@p1) ")
                 + "GROUP BY r.id,r.role_name,r.description,r.anchor_id,r.organization_code,r.role_scope,r.status,r.created_at,r.updated_at ORDER BY r.role_name";
         pool.preparedQuery(sql).execute(browseAll ? Tuple.tuple() : Tuple.of(anchorId)).onFailure(e->dbFail(message,e)).onSuccess(rows->{
-            JsonArray out=new JsonArray(); for(Row r:rows){String roleName=Rows.str(r,"role_name");String names=Rows.str(r,"permission_names");boolean builtIn="System Owner".equals(roleName)||"Anchor Administrator".equals(roleName)||"Organisation Administrator".equals(roleName);out.add(new JsonObject().put("id",Rows.intVal(r,"id")).put("name",roleName).put("description",Rows.str(r,"description")).put("scope",Rows.str(r,"role_scope")).put("anchorId",Rows.intVal(r,"anchor_id")).put("builtIn",builtIn).put("systemRole","SYSTEM".equalsIgnoreCase(Rows.str(r,"role_scope"))).put("status",Rows.intVal(r,"status")).put("permissions",names==null?new JsonArray():new JsonArray(java.util.Arrays.asList(names.split(",")))));}
+            JsonArray out=new JsonArray(); for(Row r:rows){String roleName=Rows.str(r,"role_name");String names=Rows.str(r,"permission_names");boolean builtIn="Super Admin".equals(roleName)||"Anchor Administrator".equals(roleName)||"Organisation Administrator".equals(roleName);out.add(new JsonObject().put("id",Rows.intVal(r,"id")).put("name",roleName).put("description",Rows.str(r,"description")).put("scope",Rows.str(r,"role_scope")).put("anchorId",Rows.intVal(r,"anchor_id")).put("builtIn",builtIn).put("systemRole","SYSTEM".equalsIgnoreCase(Rows.str(r,"role_scope"))).put("status",Rows.intVal(r,"status")).put("permissions",names==null?new JsonArray():new JsonArray(java.util.Arrays.asList(names.split(",")))));}
             ok(message,"Roles found",out);
         });
     }
 
     private void saveRole(Message<Object> message) {
-        JsonObject p=data(message); if(!anchor(p)){fail(message,"Only the system owner or an anchor administrator can manage roles");return;}
+        JsonObject p=data(message); if(!anchor(p)){fail(message,"Only the super admin or an anchor administrator can manage roles");return;}
         boolean isSystemAdmin=systemAdmin(p);
         Integer anchorId=TenantScope.anchorId(p);
         Integer roleId=p.getInteger("roleId"); String name=p.getString("name","").trim(); JsonArray ids=p.getJsonArray("permissionIds",new JsonArray());
         if(name.isEmpty()){fail(message,"Role name is required");return;}
         String scope=p.getString("scope","ORGANISATION").toUpperCase();
-        if(!"ANCHOR".equals(scope) && !"ORGANISATION".equals(scope)){fail(message,"Role scope must be Anchor or Organisation");return;}
-        if(roleId==null && ("System Owner".equalsIgnoreCase(name) || "Anchor Administrator".equalsIgnoreCase(name) || "Organisation Administrator".equalsIgnoreCase(name))){fail(message,"That role name is reserved for a built-in administrator");return;}
+        // SYSTEM scope is never settable when creating (that would mint a new tenantless,
+        // permission-bypass role) -- it's only ever preserved when the Super Admin edits the
+        // one role that already carries it (their own "Super Admin" role), which the UI keeps
+        // locked to that scope rather than offering it as a choice.
+        boolean editingOwnSystemRole = "SYSTEM".equals(scope) && isSystemAdmin && roleId != null;
+        if(!"ANCHOR".equals(scope) && !"ORGANISATION".equals(scope) && !editingOwnSystemRole){fail(message,"Role scope must be Anchor or Organisation");return;}
+        if(roleId==null && ("Super Admin".equalsIgnoreCase(name) || "Anchor Administrator".equalsIgnoreCase(name) || "Organisation Administrator".equalsIgnoreCase(name))){fail(message,"That role name is reserved for a built-in administrator");return;}
         // A brand-new tenant role has to belong to some anchor, so creating one still needs a
         // target chosen first. Editing an existing role never does: an Anchor Administrator's
-        // own anchor is always known from their session, and the System Owner -- who manages
+        // own anchor is always known from their session, and the Super Admin -- who manages
         // every role and permission by definition -- can edit any anchor's role without first
         // narrowing the page down to that one tenant.
         if(anchorId==null && roleId==null){fail(message,"Choose an anchor before creating a new role for it");return;}
@@ -335,7 +423,69 @@ public class Administration extends AbstractVerticle {
                     .compose(rows->rows.size()==0?Future.failedFuture("Role not found or is system-managed"):Future.succeededFuture(Rows.intVal(rows.iterator().next(),"id")));
         }
         roleFuture.compose(id->pool.preparedQuery("DELETE FROM role_permissions WHERE role_id=@p1").execute(Tuple.of(id)).map(id))
-                .compose(id->{Future<Void> chain=Future.succeededFuture(); for(Object value:ids){int permissionId=Integer.parseInt(value.toString()); chain=chain.compose(v->pool.preparedQuery("INSERT INTO role_permissions (role_id,permission_id,status,created_at) VALUES (@p1,@p2,1,GETDATE())").execute(Tuple.of(id,permissionId)).mapEmpty());} return chain;})
+                // One batched multi-row INSERT instead of one round trip per permission -- a
+                // role with a large permission set (the Super Admin role carries ~27) sent as
+                // N sequential remote-DB round trips could run past the event-bus reply timeout
+                // and show a false failure toast even though every row still landed.
+                .compose(id->{
+                    if(ids.isEmpty()) return Future.succeededFuture();
+                    StringBuilder sql=new StringBuilder("INSERT INTO role_permissions (role_id,permission_id,status,created_at) VALUES ");
+                    Tuple params=Tuple.tuple();
+                    for(int i=0;i<ids.size();i++){
+                        if(i>0) sql.append(",");
+                        sql.append("(@p").append(i*2+1).append(",@p").append(i*2+2).append(",1,GETDATE())");
+                        params.addInteger(id).addInteger(Integer.parseInt(ids.getValue(i).toString()));
+                    }
+                    return pool.preparedQuery(sql.toString()).execute(params).mapEmpty();
+                })
                 .onFailure(e->dbFail(message,e)).onSuccess(v->ok(message,"Role saved",null));
+    }
+
+    private void deleteRole(Message<Object> message) {
+        JsonObject p=data(message);
+        if(!anchor(p)){fail(message,"Only a super admin or an anchor administrator can manage roles");return;}
+        Integer roleId=p.getInteger("roleId");
+        if(roleId==null){fail(message,"Role is required");return;}
+        boolean isSystemAdmin=systemAdmin(p);
+        Integer anchorId=TenantScope.anchorId(p);
+        if(anchorId==null && !isSystemAdmin){fail(message,"Choose an anchor before managing its roles");return;}
+        String scopeFilter = isSystemAdmin ? "" : " AND anchor_id=@p2";
+        Tuple lookupParams = isSystemAdmin ? Tuple.of(roleId) : Tuple.of(roleId,anchorId);
+        pool.preparedQuery("SELECT role_name FROM roles WHERE id=@p1" + scopeFilter).execute(lookupParams)
+                .compose(roleRows -> {
+                    if (roleRows.size()==0) return Future.failedFuture("Role not found");
+                    String roleName = Rows.str(roleRows.iterator().next(),"role_name");
+                    if ("Super Admin".equals(roleName) || "Anchor Administrator".equals(roleName) || "Organisation Administrator".equals(roleName)) {
+                        return Future.failedFuture("Built-in administrator roles cannot be deleted");
+                    }
+                    return pool.preparedQuery("SELECT COUNT(*) AS c FROM users WHERE role_id=@p1").execute(Tuple.of(roleId));
+                })
+                .compose(countRows -> {
+                    if (Rows.intVal(countRows.iterator().next(),"c") > 0) {
+                        return Future.failedFuture("This role is still assigned to one or more users -- reassign them first");
+                    }
+                    return pool.preparedQuery("DELETE FROM role_permissions WHERE role_id=@p1").execute(Tuple.of(roleId));
+                })
+                .compose(v -> pool.preparedQuery("DELETE FROM roles WHERE id=@p1" + scopeFilter).execute(lookupParams))
+                .onFailure(e -> fail(message, e.getMessage()!=null && !e.getMessage().startsWith("com.") ? e.getMessage() : "Database operation failed"))
+                .onSuccess(r -> ok(message,"Role deleted",null));
+    }
+
+    private void deletePermission(Message<Object> message) {
+        JsonObject p=data(message);
+        if (!systemAdmin(p)) { fail(message, "Only the super admin can delete permissions"); return; }
+        Integer permissionId=p.getInteger("permissionId");
+        if(permissionId==null){fail(message,"Permission is required");return;}
+        pool.preparedQuery("SELECT system_defined FROM permissions WHERE id=@p1").execute(Tuple.of(permissionId))
+                .compose(rows -> {
+                    if (rows.size()==0) return Future.failedFuture("Permission not found");
+                    if (Boolean.TRUE.equals(rows.iterator().next().getBoolean("system_defined"))) {
+                        return Future.failedFuture("Built-in permissions that ship with BioPay cannot be deleted");
+                    }
+                    return pool.preparedQuery("DELETE FROM role_permissions WHERE permission_id=@p1").execute(Tuple.of(permissionId));
+                })
+                .compose(v -> pool.preparedQuery("DELETE FROM permissions WHERE id=@p1").execute(Tuple.of(permissionId)))
+                .onFailure(e -> fail(message, e.getMessage()!=null && !e.getMessage().startsWith("com.") ? e.getMessage() : "Database operation failed"))
+                .onSuccess(r -> ok(message,"Permission deleted",null));
     }
 }

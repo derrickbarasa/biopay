@@ -9,23 +9,18 @@ import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.core.content.ContextCompat;
 
 import com.biopay.agent.R;
-import com.biopay.agent.alternates.AlternatesActivity;
-import com.biopay.agent.attendance.AttendanceActivity;
 import com.biopay.agent.data.DatabaseHelper;
 import com.biopay.agent.data.HouseholdDao;
 import com.biopay.agent.data.PaymentDao;
-import com.biopay.agent.households.HouseholdListActivity;
 import com.biopay.agent.households.HouseholdFormActivity;
 import com.biopay.agent.location.LocationHelper;
 import com.biopay.agent.network.ApiCallback;
 import com.biopay.agent.network.ApiClient;
-import com.biopay.agent.payments.PaymentsActivity;
 import com.biopay.agent.reports.ReportsActivity;
 import com.biopay.agent.session.SessionManager;
 import com.biopay.agent.settings.SettingsActivity;
 import com.biopay.agent.sync.SyncScheduler;
 import com.biopay.agent.ui.BaseActivity;
-import com.biopay.agent.vouchers.VoucherRedemptionActivity;
 import com.google.android.material.snackbar.Snackbar;
 
 import org.json.JSONObject;
@@ -53,6 +48,7 @@ public class HomeActivity extends BaseActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_home);
         setupMainNavigation(R.id.bottomNavigation, R.id.navHome);
+        setupScanFab(R.id.fabScan);
 
         sessionManager = new SessionManager(this);
         databaseHelper = DatabaseHelper.get(this);
@@ -67,38 +63,18 @@ public class HomeActivity extends BaseActivity {
 
         refreshIdentity();
 
-        findViewById(R.id.btnHouseholds).setOnClickListener(v ->
-                startActivity(new Intent(this, HouseholdListActivity.class)));
-        findViewById(R.id.btnAttendance).setOnClickListener(v ->
-                startActivity(new Intent(this, AttendanceActivity.class)));
-        findViewById(R.id.btnVouchers).setOnClickListener(v ->
-                startActivity(new Intent(this, VoucherRedemptionActivity.class)));
-        findViewById(R.id.btnAlternates).setOnClickListener(v ->
-                startActivity(new Intent(this, AlternatesActivity.class)));
-        findViewById(R.id.btnPayments).setOnClickListener(v ->
-                startActivity(new Intent(this, PaymentsActivity.class)));
-        findViewById(R.id.btnReports).setOnClickListener(v ->
-                startActivity(new Intent(this, ReportsActivity.class)));
+        // Every destination below already has exactly one other, permanent entry point
+        // (the bottom-nav tabs or the More menu) -- Home only keeps the shortcuts that
+        // aren't duplicates: the hero's primary actions and the KPI card's own "View all".
         findViewById(R.id.btnQuickRegister).setOnClickListener(v ->
                 startActivity(new Intent(this, HouseholdFormActivity.class)));
         findViewById(R.id.btnQuickSync).setOnClickListener(v -> {
             SyncScheduler.triggerNow(this);
             Snackbar.make(findViewById(R.id.btnQuickSync), R.string.settings_sync_queued, Snackbar.LENGTH_SHORT).show();
         });
-
-        // Quick-actions row + hero bell: each routes to a real, already-built destination --
-        // no new screens invented here (see the mobile.png revamp session notes).
         findViewById(R.id.btnNotifications).setOnClickListener(v ->
                 startActivity(new Intent(this, SettingsActivity.class)));
         findViewById(R.id.btnSummaryViewAll).setOnClickListener(v ->
-                startActivity(new Intent(this, ReportsActivity.class)));
-        findViewById(R.id.btnQuickScanQr).setOnClickListener(v ->
-                startActivity(new Intent(this, VoucherRedemptionActivity.class)));
-        findViewById(R.id.btnQuickVerifyIdentity).setOnClickListener(v ->
-                startActivity(new Intent(this, SettingsActivity.class)));
-        findViewById(R.id.btnQuickMyLocation).setOnClickListener(v ->
-                startActivity(new Intent(this, com.biopay.agent.location.MyLocationActivity.class)));
-        findViewById(R.id.btnQuickSyncHistory).setOnClickListener(v ->
                 startActivity(new Intent(this, ReportsActivity.class)));
     }
 

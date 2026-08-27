@@ -144,7 +144,9 @@ public class Payroll extends AbstractVerticle {
                         replyError(message, "Invalid or expired verification code");
                         return;
                     }
-                    countActiveHouseholds(partnerCode, householdNumbers)
+                    resolveOrgAnchorId(payload, partnerCode)
+                            .onFailure(err -> replyError(message, err.getMessage()))
+                            .onSuccess(resolvedAnchorId -> countActiveHouseholds(partnerCode, householdNumbers)
                             .onFailure(err -> onDbError(message, err))
                             .onSuccess(householdCount -> {
                                 if (householdCount == 0) {
@@ -153,7 +155,6 @@ public class Payroll extends AbstractVerticle {
                                 }
                                 double total = householdCount * amountPerHousehold;
                                 String cycleCode = Utilities.generateCode("PAYROLL");
-                                Object anchorIdVal = payload.getValue("anchorId");
 
                                 // Cycle header + its payment line items must land together --
                                 // a mid-way failure here must not leave a cycle with zero (or
@@ -165,13 +166,12 @@ public class Payroll extends AbstractVerticle {
                                             + "OUTPUT INSERTED.id "
                                             + "VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,'PENDING_APPROVAL',@p11,GETDATE(),1,@p12,GETDATE())";
                                     return client.preparedQuery(sql)
-                                            .execute(Tuple.of(cycleCode, partnerCode,
-                                                    anchorIdVal == null ? null : Integer.parseInt(anchorIdVal.toString()),
+                                            .execute(Tuple.of(cycleCode, partnerCode, resolvedAnchorId,
                                                     periodStart, periodEnd, amountPerHousehold, householdCount, total, currency, exchangeRate,
                                                     actorId(payload), String.valueOf(actorId(payload))))
                                             .compose(insertRows -> {
                                                 int cycleId = Rows.intVal(insertRows.iterator().next(), "id");
-                                                return createLineItems(client, cycleId, cycleCode, partnerCode, anchorIdVal,
+                                                return createLineItems(client, cycleId, cycleCode, partnerCode, resolvedAnchorId,
                                                         periodStart, periodEnd, amountPerHousehold, currency, exchangeRate,
                                                         actorId(payload), householdNumbers);
                                             });
@@ -184,8 +184,19 @@ public class Payroll extends AbstractVerticle {
                                           .put("totalAmount", total)
                                           .put("currency", currency)
                                           .put("exchangeRate", exchangeRate)));
-                            });
+                            }));
                 });
+    }
+
+    /** Resolves organisationCode's real anchor server-side rather than trusting whatever
+     *  anchorId the client sent -- fails if the organisation doesn't exist or (for an Anchor
+     *  Administrator) isn't inside their own anchor. The Super Admin may target any anchor. */
+    private Future<Integer> resolveOrgAnchorId(JsonObject payload, String organisationCode) {
+        return pool.preparedQuery("SELECT anchor_id FROM organizations WHERE organization_code=@p1 AND (@p2=1 OR anchor_id=@p3)")
+                .execute(Tuple.of(organisationCode, isSystemAdmin(payload), TenantScope.anchorId(payload)))
+                .compose(rows -> rows.size() == 0
+                        ? Future.failedFuture("Organisation is outside your anchor")
+                        : Future.succeededFuture(Rows.intVal(rows.iterator().next(), "anchor_id")));
     }
 
     /** @p1..@pN placeholders for an IN (...) list starting at parameter index {@code startIdx}. */

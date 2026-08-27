@@ -39,7 +39,7 @@ const editing = ref(false)
 const saving = ref(false)
 const form = ref({
   organisationCode: '', name: '', authorisedName: '', authorisedEmail: '', authorisedContact: '', address: '',
-  country: '', capitalCity: '', verificationMethod: 'BIOMETRIC',
+  country: '', capitalCity: '', verificationMethod: 'BIOMETRIC', anchorId: null as number | null,
   modules: [] as string[],
 })
 
@@ -72,7 +72,6 @@ const emailRule = (value: string) => !value || /.+@.+\..+/.test(value) || 'Enter
 
 const headers = computed(() => [
   ...(auth.isSystemAdmin ? [{ title: 'Anchor', key: 'anchorName' }] : []),
-  { title: 'Code', key: 'organisationCode' },
   { title: 'Name', key: 'name' },
   { title: 'Contact', key: 'authorisedName' },
   { title: 'Email', key: 'authorisedEmail' },
@@ -91,10 +90,6 @@ async function loadAnchors() {
 async function load() {
   loading.value = true
   try {
-    if (auth.isSystemAdmin && !selectedAnchorId.value) {
-      organizations.value = []
-      return
-    }
     const res = await dispatch<{ results: Organization[] }>('GET_ORGANIZATIONS', {
       status: statusFilter.value ?? undefined,
       targetAnchorId: auth.isSystemAdmin ? selectedAnchorId.value : undefined,
@@ -112,14 +107,10 @@ watch([statusFilter, selectedAnchorId], load)
 onMounted(async () => { await loadAnchors(); await load() })
 
 function openCreate() {
-  if (auth.isSystemAdmin && !selectedAnchorId.value) {
-    toast.error('Choose an anchor before creating an organization')
-    return
-  }
   editing.value = false
   form.value = {
     organisationCode: '', name: '', authorisedName: '', authorisedEmail: '', authorisedContact: '', address: '',
-    country: '', capitalCity: '', verificationMethod: 'BIOMETRIC', modules: [],
+    country: '', capitalCity: '', verificationMethod: 'BIOMETRIC', anchorId: selectedAnchorId.value, modules: [],
   }
   dialog.value = true
 }
@@ -131,13 +122,13 @@ async function openEdit(org: Organization) {
     authorisedName: org.authorisedName ?? '', authorisedEmail: org.authorisedEmail ?? '',
     authorisedContact: org.authorisedContact ?? '', address: org.address ?? '',
     country: org.country ?? '', capitalCity: org.capitalCity ?? '', verificationMethod: org.verificationMethod ?? 'BIOMETRIC',
-    modules: [],
+    anchorId: org.anchorId ?? null, modules: [],
   }
   dialog.value = true
   try {
     const res = await dispatch<{ results: string[] }>('GET_ORGANIZATION_MODULES', {
       organisationCode: org.organisationCode,
-      targetAnchorId: auth.isSystemAdmin ? selectedAnchorId.value : undefined,
+      targetAnchorId: auth.isSystemAdmin ? org.anchorId : undefined,
     })
     form.value.modules = res.results
   } catch (err) {
@@ -153,7 +144,7 @@ async function remove(org: Organization) {
     color: 'error',
   })) return
   try {
-    await dispatch('DELETE_ORGANIZATION', { organisationCode: org.organisationCode, targetAnchorId: auth.isSystemAdmin ? selectedAnchorId.value : undefined })
+    await dispatch('DELETE_ORGANIZATION', { organisationCode: org.organisationCode, targetAnchorId: auth.isSystemAdmin ? org.anchorId : undefined })
     toast.success('Organization deleted')
     await load()
   } catch (err) {
@@ -162,8 +153,12 @@ async function remove(org: Organization) {
 }
 
 async function save() {
-  if (!form.value.organisationCode.trim() || !form.value.name.trim() || !form.value.country || !form.value.verificationMethod) {
-    toast.error('Complete the organization code, name, country and verification method')
+  if (!form.value.name.trim() || !form.value.country || !form.value.verificationMethod) {
+    toast.error('Complete the organization name, country and verification method')
+    return
+  }
+  if (auth.isSystemAdmin && !editing.value && !form.value.anchorId) {
+    toast.error('Choose an anchor for this organization')
     return
   }
   if (form.value.authorisedEmail && !/.+@.+\..+/.test(form.value.authorisedEmail)) {
@@ -178,14 +173,14 @@ async function save() {
   try {
     if (editing.value) {
       await Promise.all([
-        dispatch('UPDATE_ORGANIZATION', { ...form.value, targetAnchorId: auth.isSystemAdmin ? selectedAnchorId.value : undefined }),
-        dispatch('UPDATE_ORGANIZATION_MODULES', { organisationCode: form.value.organisationCode, modules: form.value.modules, targetAnchorId: auth.isSystemAdmin ? selectedAnchorId.value : undefined }),
+        dispatch('UPDATE_ORGANIZATION', { ...form.value, targetAnchorId: auth.isSystemAdmin ? form.value.anchorId : undefined }),
+        dispatch('UPDATE_ORGANIZATION_MODULES', { organisationCode: form.value.organisationCode, modules: form.value.modules, targetAnchorId: auth.isSystemAdmin ? form.value.anchorId : undefined }),
       ])
       toast.success('Organization updated')
     } else {
       await dispatch('CREATE_ORGANIZATION', {
         ...form.value,
-        targetAnchorId: auth.isSystemAdmin ? selectedAnchorId.value : undefined,
+        targetAnchorId: auth.isSystemAdmin ? form.value.anchorId : undefined,
       })
       toast.success('Organization created')
     }
@@ -212,7 +207,7 @@ async function toggleStatus(org: Organization) {
     await dispatch('TOGGLE_ORGANIZATION_STATUS', {
       organisationCode: org.organisationCode,
       status: org.status === 1 ? 0 : 1,
-      targetAnchorId: auth.isSystemAdmin ? selectedAnchorId.value : undefined,
+      targetAnchorId: auth.isSystemAdmin ? org.anchorId : undefined,
     })
     toast.success('Status updated')
     await load()
@@ -227,20 +222,10 @@ async function toggleStatus(org: Organization) {
     <div class="page-heading d-flex align-center justify-space-between mb-5 ga-4">
       <div>
         <h1 class="page-title">Organizations</h1>
-        <p>{{ auth.isSystemAdmin ? 'Choose an anchor, then manage only the organizations beneath it.' : 'Manage the organizations beneath your anchor.' }}</p>
+        <p>{{ auth.isSystemAdmin ? 'All organizations across every anchor. Filter by anchor to narrow the list.' : 'Manage the organizations beneath your anchor.' }}</p>
       </div>
-      <v-btn v-if="auth.can('ACCESS_ORGANISATIONS')" color="secondary" prepend-icon="mdi-domain-plus" :disabled="auth.isSystemAdmin && !selectedAnchorId" @click="openCreate">New Organization</v-btn>
+      <v-btn v-if="auth.can('ACCESS_ORGANISATIONS')" color="secondary" prepend-icon="mdi-domain-plus" @click="openCreate">New Organization</v-btn>
     </div>
-
-    <v-select
-      v-if="auth.isSystemAdmin" v-model="selectedAnchorId" :items="anchors" item-title="name" item-value="id"
-      label="Choose anchor" variant="outlined" prepend-inner-icon="mdi-bank-outline" class="anchor-scope-picker"
-      hint="Organizations are always created and managed inside the selected anchor." persistent-hint
-    />
-
-    <v-alert v-if="auth.isSystemAdmin && !selectedAnchorId" type="info" variant="tonal" class="mb-5">
-      Choose an anchor to view or create its organizations.
-    </v-alert>
 
     <v-dialog v-model="dialog" max-width="880">
       <v-card class="org-editor" variant="flat" border>
@@ -256,7 +241,10 @@ async function toggleStatus(org: Organization) {
           <div class="identity-grid">
             <section class="form-group" aria-labelledby="org-details-heading">
               <div id="org-details-heading" class="form-group-title"><v-icon icon="mdi-domain" size="19" /> Organization details</div>
-              <v-text-field v-model="form.organisationCode" label="Organization code" :disabled="editing" :rules="[required]" density="compact" hide-details="auto" />
+              <v-select
+                v-if="auth.isSystemAdmin && !editing" v-model="form.anchorId" :items="anchors" item-title="name" item-value="id"
+                label="Anchor" :rules="[v => !!v || 'Required']" density="compact" hide-details="auto" prepend-inner-icon="mdi-bank-outline"
+              />
               <v-text-field v-model="form.name" label="Organization name" :rules="[required]" density="compact" hide-details="auto" />
               <v-autocomplete v-model="form.country" :items="COUNTRIES" label="Country" :rules="[required]" density="compact" hide-details="auto" />
               <v-text-field v-model="form.capitalCity" label="Capital city" prepend-inner-icon="mdi-city-variant-outline" density="compact" hide-details="auto" />
@@ -305,6 +293,10 @@ async function toggleStatus(org: Organization) {
       <v-card-text>
         <div class="d-flex ga-3 flex-wrap">
           <v-select
+            v-if="auth.isSystemAdmin" v-model="selectedAnchorId" :items="anchors" item-title="name" item-value="id"
+            label="Anchor" clearable hide-details density="compact" style="max-width: 220px" prepend-inner-icon="mdi-bank-outline"
+          />
+          <v-select
             v-model="statusFilter" :items="[{ title: 'Active', value: 1 }, { title: 'Inactive', value: 0 }]"
             label="Status" clearable hide-details density="compact" style="max-width: 220px"
           />
@@ -334,7 +326,6 @@ async function toggleStatus(org: Organization) {
 
 <style scoped>
 .page-heading h1 { color: #0f172a; letter-spacing: -.025em; }
-.anchor-scope-picker { max-width: 460px; margin-bottom: 20px; }
 .page-heading p { color: #64748b; font-size: .9rem; margin: 5px 0 0; }
 .org-editor { padding: clamp(18px, 2.4vw, 26px); border-color: #cbd5e1 !important; background: #fff !important; }
 .editor-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; margin-bottom: 16px; }
