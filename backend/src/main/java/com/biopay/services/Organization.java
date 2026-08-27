@@ -13,8 +13,10 @@ import io.vertx.sqlclient.Tuple;
 import com.biopay.databases.Datasource;
 import com.biopay.utilities.Logging;
 import com.biopay.utilities.OrgModules;
+import com.biopay.utilities.Passwords;
 import com.biopay.utilities.Rows;
 import com.biopay.utilities.TenantScope;
+import com.biopay.utilities.Utilities;
 
 /**
  * Organisations (the existing {@code organizations} table -- see the 001
@@ -95,7 +97,7 @@ public class Organization extends AbstractVerticle {
 
         String name = payload.getString("name", "").trim();
         String authorisedName = payload.getString("authorisedName", "").trim();
-        String authorisedEmail = payload.getString("authorisedEmail", "").trim();
+        String authorisedEmail = payload.getString("authorisedEmail", "").trim().toLowerCase();
         String authorisedContact = payload.getString("authorisedContact", "").trim();
         String address = payload.getString("address", "").trim();
         // payload.getString(key, def) only substitutes def when the key is entirely absent --
@@ -111,6 +113,13 @@ public class Organization extends AbstractVerticle {
 
         if (name.isEmpty() || anchorIdVal == null) {
             replyError(message, "name and anchor are required");
+            return;
+        }
+        // The organisation's own dashboard sign-in account is minted from this email right here
+        // (see the transaction below), so unlike every other field on this form it can't be
+        // left blank -- there would be no way for anyone to ever log in as this organisation.
+        if (authorisedEmail.isEmpty() || !authorisedEmail.contains("@")) {
+            replyError(message, "A valid email is required to create the organisation's sign-in account");
             return;
         }
         if (!"BIOMETRIC".equals(verificationMethod) && !"FACIAL".equals(verificationMethod) && !"BOTH".equals(verificationMethod)) {
@@ -130,10 +139,17 @@ public class Organization extends AbstractVerticle {
 
         String capitalCity = strOrEmpty(payload.getString("capitalCity")).trim();
         final String selectedVerificationMethod = verificationMethod;
+        final String firstName = authorisedName.isEmpty() ? name : authorisedName;
+        final String temporaryPassword = Utilities.generateRandomPassword(10);
+        final String passwordHash = Passwords.hash(temporaryPassword);
 
-        String sql = "INSERT INTO organizations (organization_code, name, types, authorised_name, authorised_email, "
+        String orgSql = "INSERT INTO organizations (organization_code, name, types, authorised_name, authorised_email, "
                 + "authorised_contact, address, country, capital_city, verification_method, anchor_id, status, created_by, created_at, updated_at) "
                 + "VALUES (@p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10, @p11, @p12, @p13, GETDATE(), GETDATE())";
+        String loginSql = "INSERT INTO users (organization_code, email, username, password, first_name, role_id, active, status, "
+                + "anchor_id, user_scope, must_change_password, created_by, created_at, updated_at) "
+                + "VALUES (@p1, @p2, @p2, @p3, @p4, (SELECT TOP 1 id FROM roles WHERE role_name='Organisation Administrator' AND anchor_id IS NULL AND status=1), "
+                + "1, 1, @p5, 'ORGANISATION', 1, @p6, GETDATE(), GETDATE())";
         int targetAnchorId = Integer.parseInt(anchorIdVal.toString());
         pool.preparedQuery("SELECT 1 AS found FROM users WHERE id=@p1 AND user_scope='ANCHOR' AND status=1")
                 .execute(Tuple.of(targetAnchorId))
@@ -143,18 +159,25 @@ public class Organization extends AbstractVerticle {
                         replyError(message, "Selected anchor was not found or is inactive");
                         return;
                     }
-                    com.biopay.utilities.Utilities.nextOrganizationCode(pool)
+                    Utilities.nextOrganizationCode(pool)
                             .onFailure(err -> onDbError(message, err))
-                            .onSuccess(partnerId -> pool.preparedQuery(sql)
-                                    .execute(Tuple.of(partnerId, name, "1", authorisedName, authorisedEmail, authorisedContact,
+                            .onSuccess(newCode -> pool.withTransaction(connection -> connection.preparedQuery(orgSql)
+                                    .execute(Tuple.of(newCode, name, "1", authorisedName, authorisedEmail, authorisedContact,
                                             address, country.isEmpty() ? null : country, capitalCity.isEmpty() ? null : capitalCity, selectedVerificationMethod,
                                             targetAnchorId, 1, payload.getValue("actorId")))
-                                    .onFailure(err -> onDbError(message, err))
-                                    .onSuccess(rows -> {
-                                        if (rows.rowCount() == 0) {
-                                            replyError(message, "Failed to create organisation");
-                                            return;
-                                        }
+                                    .compose(orgRows -> orgRows.rowCount() == 0
+                                            ? Future.failedFuture("Failed to create organisation")
+                                            : connection.preparedQuery(loginSql).execute(Tuple.of(newCode, authorisedEmail, passwordHash,
+                                                    firstName, targetAnchorId, payload.getValue("actorId"))))
+                                    .map(v -> newCode))
+                                    .onFailure(err -> replyError(message, "An account with this email already exists"))
+                                    .onSuccess(partnerId -> {
+                                        eventBus.send("EMAIL", new JsonObject()
+                                                .put("mailTo", authorisedEmail)
+                                                .put("subject", "Your BioPay Organisation Administrator Account")
+                                                .put("msg", "Dear " + firstName + ",<br />" + name + " has been created in BioPay. "
+                                                        + "Your temporary password is <strong>" + temporaryPassword
+                                                        + "</strong>. You'll be asked to set a new password the first time you sign in."));
                                         saveModules(partnerId, modules)
                                                 .onComplete(ar -> reply(message, new JsonObject()
                                                         .put("responseCode", "000")

@@ -6,6 +6,8 @@ import { useToast } from '@/composables/useToast'
 import { useConfirm } from '@/composables/useConfirm'
 import { downloadCsv, parseCsv, toCsv } from '@/utils/csv'
 import { useAnchorScope } from '@/composables/useAnchorScope'
+import { useOrgCascade } from '@/composables/useOrgCascade'
+import { formatCurrency } from '@/utils/currency'
 
 interface VoucherRow {
   voucherCode: string
@@ -34,7 +36,10 @@ interface OrganizationOption { organisationCode: string; name: string; anchorId?
 const auth = useAuthStore()
 const toast = useToast()
 const { confirmAction } = useConfirm()
-const { anchors, selectedAnchorId, anchorGateActive, anchorChosen } = useAnchorScope()
+const { anchors, selectedAnchorId, anchorGateActive } = useAnchorScope()
+const { dialogAnchorId, dialogOrganizations, resetDialogScope } = useOrgCascade()
+const { dialogAnchorId: bulkDialogAnchorId, dialogOrganizations: bulkDialogOrganizations, resetDialogScope: resetBulkDialogScope } = useOrgCascade()
+const { dialogAnchorId: villageDialogAnchorId, dialogOrganizations: villageDialogOrganizations, resetDialogScope: resetVillageDialogScope } = useOrgCascade()
 const loading = ref(true)
 const householdFilter = ref('')
 const statusFilter = ref<string | null>(null)
@@ -52,10 +57,6 @@ const householdOptions = ref<HouseholdOption[]>([])
 const householdsLoading = ref(false)
 const orgNameByCode = computed(() => new Map(organizations.value.map((o) => [o.organisationCode, o.name])))
 function orgName(code?: string) { return (code && orgNameByCode.value.get(code)) || code || '—' }
-
-function targetAnchorForOrg(code?: string | null) {
-  return auth.isSystemAdmin ? organizations.value.find((organization) => organization.organisationCode === code)?.anchorId : undefined
-}
 
 // ---- Geo hierarchy -- shared by the Village column's name lookup and the "Generate by
 // Village" dialog's cascading selects, following the same client-side code->name lookup
@@ -123,11 +124,11 @@ const headers = [
   { title: 'Amount', key: 'amount' },
   { title: 'Status', key: 'status' },
   { title: 'Expires', key: 'expiresAt' },
-  { title: 'Actions', key: 'actions', sortable: false, align: 'end' as const },
+  { title: 'Actions', key: 'actions', sortable: false, align: 'start' as const },
 ]
 
 function currency(v: number | undefined) {
-  return (v ?? 0).toLocaleString(undefined, { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })
+  return formatCurrency(v)
 }
 
 async function load() {
@@ -156,7 +157,6 @@ async function load() {
 watch(organisationFilter, load)
 
 async function loadOrganizations() {
-  if (!auth.isAnchorAdministrator && !auth.isSystemAdmin) { organizations.value = []; return }
   try {
     const res = await dispatch<{ results: typeof organizations.value }>('GET_ORGANIZATIONS', {
       targetAnchorId: auth.isSystemAdmin ? selectedAnchorId.value : undefined,
@@ -182,7 +182,7 @@ onMounted(async () => {
   }
 })
 
-async function loadHouseholdOptions(organisationCode?: string | null) {
+async function loadHouseholdOptions(organisationCode?: string | null, anchorId?: number | null) {
   if (auth.isAnchor && !organisationCode) {
     householdOptions.value = []
     return
@@ -190,7 +190,7 @@ async function loadHouseholdOptions(organisationCode?: string | null) {
   householdsLoading.value = true
   try {
     const res = await dispatch<{ results: HouseholdOption[] }>('GET_HOUSEHOLDS', {
-      organisationCode: organisationCode || undefined, targetAnchorId: targetAnchorForOrg(organisationCode), status: 1, pageSize: 200,
+      organisationCode: organisationCode || undefined, targetAnchorId: auth.isSystemAdmin ? anchorId ?? undefined : undefined, status: 1, pageSize: 200,
     })
     householdOptions.value = res.results ?? []
   } catch (err) {
@@ -202,23 +202,30 @@ async function loadHouseholdOptions(organisationCode?: string | null) {
 
 function openIssue() {
   form.value = { organisationCode: null, householdNumber: '', amount: null, purpose: '', expiresAt: '' }
+  resetDialogScope(auth.isSystemAdmin ? selectedAnchorId.value : null)
   issueDialog.value = true
   if (!auth.isAnchor) loadHouseholdOptions()
 }
 
+watch(dialogAnchorId, () => { form.value.organisationCode = null })
+
 watch(() => form.value.organisationCode, (code) => {
   form.value.householdNumber = ''
-  if (issueDialog.value) loadHouseholdOptions(code)
+  if (issueDialog.value) loadHouseholdOptions(code, dialogAnchorId.value)
 })
 
 async function issue() {
+  if (auth.isSystemAdmin && !dialogAnchorId.value) {
+    toast.error('Select the anchor this voucher\'s organisation belongs to')
+    return
+  }
   if ((auth.isAnchor && !form.value.organisationCode) || !form.value.householdNumber || !form.value.amount) {
     toast.error('Choose an organisation, household and positive amount')
     return
   }
   saving.value = true
   try {
-    await dispatch('CREATE_VOUCHER', { ...form.value, organisationCode: form.value.organisationCode || undefined, targetAnchorId: targetAnchorForOrg(form.value.organisationCode) })
+    await dispatch('CREATE_VOUCHER', { ...form.value, organisationCode: form.value.organisationCode || undefined, targetAnchorId: auth.isSystemAdmin ? dialogAnchorId.value ?? undefined : undefined })
     toast.success('Voucher issued')
     issueDialog.value = false
     await load()
@@ -236,9 +243,12 @@ function openBulk() {
   bulkFileName.value = ''
   bulkRows.value = []
   bulkErrors.value = []
+  resetBulkDialogScope(auth.isSystemAdmin ? selectedAnchorId.value : null)
   bulkDialog.value = true
   if (!auth.isAnchor) void loadHouseholdOptions()
 }
+
+watch(bulkDialogAnchorId, () => { bulkOrganisationCode.value = null })
 
 function downloadBulkTemplate() {
   downloadCsv('voucher-issue-template.csv', toCsv(['householdName', 'amount'], [['Example Household', '5000']]))
@@ -271,10 +281,14 @@ function onBulkFile(event: Event) {
 watch(bulkOrganisationCode, (code) => {
   bulkRows.value = []
   bulkErrors.value = []
-  if (bulkDialog.value) void loadHouseholdOptions(code)
+  if (bulkDialog.value) void loadHouseholdOptions(code, bulkDialogAnchorId.value)
 })
 
 async function submitBulk() {
+  if (auth.isSystemAdmin && !bulkDialogAnchorId.value) {
+    toast.error('Select the anchor these vouchers belong to')
+    return
+  }
   if (auth.isAnchor && !bulkOrganisationCode.value) {
     toast.error('Select the organisation receiving these vouchers')
     return
@@ -287,7 +301,7 @@ async function submitBulk() {
   try {
     const res = await dispatch<{ successCount: number; failureCount: number; errors: { row: number; message: string }[] }>(
       'BULK_ISSUE_VOUCHERS',
-      { organisationCode: bulkOrganisationCode.value || undefined, targetAnchorId: targetAnchorForOrg(bulkOrganisationCode.value), rows: bulkRows.value, purpose: bulkPurpose.value || undefined, expiresAt: bulkExpiresAt.value || undefined },
+      { organisationCode: bulkOrganisationCode.value || undefined, targetAnchorId: auth.isSystemAdmin ? bulkDialogAnchorId.value ?? undefined : undefined, rows: bulkRows.value, purpose: bulkPurpose.value || undefined, expiresAt: bulkExpiresAt.value || undefined },
     )
     bulkErrors.value = res.errors ?? []
     toast.success(`${res.successCount} voucher(s) issued, ${res.failureCount} failed`)
@@ -311,16 +325,17 @@ async function openVillageGenerate() {
   villagePurpose.value = ''
   villageExpiresAt.value = ''
   villageRows.value = []
+  resetVillageDialogScope(auth.isSystemAdmin ? selectedAnchorId.value : null)
   villageDialog.value = true
-  if (!auth.isSystemAdmin) await loadGenerationGeo()
+  geoLoaded = false
+  if (!auth.isSystemAdmin || villageDialogAnchorId.value) await loadGenerationGeo()
 }
 
 async function loadGenerationGeo() {
   if (geoLoaded && !auth.isSystemAdmin) return
-  const selectedOrganization = organizations.value.find((organization) => organization.organisationCode === villageOrganisationCode.value)
-  if (auth.isSystemAdmin && !selectedOrganization?.anchorId) return
+  if (auth.isSystemAdmin && !villageDialogAnchorId.value) return
   try {
-    const scope = auth.isSystemAdmin ? { targetAnchorId: selectedOrganization?.anchorId } : {}
+    const scope = auth.isSystemAdmin ? { targetAnchorId: villageDialogAnchorId.value } : {}
     const [s, c, l, v] = await Promise.all([
       dispatch<{ results: GeoNode[] }>('GET_STATES', scope),
       dispatch<{ results: GeoNode[] }>('GET_COUNTIES', scope),
@@ -376,7 +391,7 @@ async function loadScopeHouseholds() {
           : generationLevel.value === 'LOCATION' ? { locationCode: villageLocationCode.value }
             : { villageCode: villageSelected.value }
       const res = await dispatch<{ results: { householdNumber: string; householdName: string }[] }>('GET_HOUSEHOLDS', {
-        organisationCode: villageOrganisationCode.value || undefined, targetAnchorId: targetAnchorForOrg(villageOrganisationCode.value), ...geographicFilter, status: 1, page, pageSize,
+        organisationCode: villageOrganisationCode.value || undefined, targetAnchorId: auth.isSystemAdmin ? villageDialogAnchorId.value ?? undefined : undefined, ...geographicFilter, status: 1, page, pageSize,
       })
       for (const h of res.results) {
         if (rows.length >= 500) break
@@ -394,12 +409,17 @@ async function loadScopeHouseholds() {
   }
 }
 
-watch(villageOrganisationCode, () => {
+watch(villageDialogAnchorId, () => {
+  villageOrganisationCode.value = null
   resetGenerationScope()
   if (auth.isSystemAdmin) {
     geoLoaded = false
     void loadGenerationGeo()
   }
+})
+
+watch(villageOrganisationCode, () => {
+  resetGenerationScope()
 })
 
 function onVillageStateChange() {
@@ -429,6 +449,10 @@ function applyFlatAmountToAll() {
 }
 
 async function submitVillage() {
+  if (auth.isSystemAdmin && !villageDialogAnchorId.value) {
+    toast.error('Select the anchor these vouchers belong to')
+    return
+  }
   if (auth.isAnchor && !villageOrganisationCode.value) {
     toast.error('Select the organisation receiving these vouchers')
     return
@@ -442,7 +466,7 @@ async function submitVillage() {
   try {
     const res = await dispatch<{ successCount: number; failureCount: number; errors: { row: number; message: string }[] }>(
       'BULK_ISSUE_VOUCHERS',
-      { organisationCode: villageOrganisationCode.value || undefined, targetAnchorId: targetAnchorForOrg(villageOrganisationCode.value), rows: villageRows.value, purpose: villagePurpose.value || undefined, expiresAt: villageExpiresAt.value || undefined },
+      { organisationCode: villageOrganisationCode.value || undefined, targetAnchorId: auth.isSystemAdmin ? villageDialogAnchorId.value ?? undefined : undefined, rows: villageRows.value, purpose: villagePurpose.value || undefined, expiresAt: villageExpiresAt.value || undefined },
     )
     toast.success(`${res.successCount} voucher(s) issued, ${res.failureCount} failed`)
     if (!(res.errors ?? []).length) villageDialog.value = false
@@ -534,10 +558,6 @@ function statusColor(status: string) {
       </div>
     </div>
 
-    <v-alert v-if="auth.isSystemAdmin ? !anchorChosen : (auth.isAnchorAdministrator && !organisationFilter)" type="info" variant="tonal" class="mb-4">
-      {{ auth.isSystemAdmin ? 'Showing vouchers across every anchor. Choose one in the filters below to narrow the list.' : 'Showing vouchers across every organisation. Choose one in the filters below to narrow the list.' }}
-    </v-alert>
-
     <template v-if="scopeReady">
     <div class="voucher-summary-grid mb-4">
       <v-card class="summary-card" variant="flat" border>
@@ -605,16 +625,21 @@ function statusColor(status: string) {
         <v-form @submit.prevent="issue">
           <div class="field-grid">
             <v-select
-              v-if="auth.isAnchor" v-model="form.organisationCode" :items="organizations"
+              v-if="auth.isSystemAdmin" v-model="dialogAnchorId" :items="anchors" item-title="name" item-value="id"
+              label="Anchor" density="compact" placeholder="Choose an anchor" required
+            />
+            <v-select
+              v-if="auth.isAnchor" v-model="form.organisationCode" :items="dialogOrganizations"
               item-title="name" item-value="organisationCode" label="Organisation" density="compact"
+              placeholder="Choose an organisation" :disabled="auth.isSystemAdmin && !dialogAnchorId" required
             />
             <v-autocomplete
               v-model="form.householdNumber" :items="householdOptions" item-title="householdName" item-value="householdNumber"
               label="Household name" density="compact" :loading="householdsLoading"
               :disabled="auth.isAnchor && !form.organisationCode" no-data-text="No active households available"
             />
-            <v-text-field v-model.number="form.amount" label="Amount" type="number" prepend-inner-icon="mdi-cash" density="compact" />
-            <v-text-field v-model="form.purpose" label="Purpose (optional)" prepend-inner-icon="mdi-clipboard-check-outline" density="compact" />
+            <v-text-field v-model.number="form.amount" label="Amount" type="number" placeholder="e.g. 5000" prepend-inner-icon="mdi-cash" density="compact" />
+            <v-text-field v-model="form.purpose" label="Purpose (optional)" placeholder="e.g. School fees" prepend-inner-icon="mdi-clipboard-check-outline" density="compact" />
             <v-text-field v-model="form.expiresAt" label="Expires on (optional)" type="date" density="compact" />
           </div>
           <div class="editor-actions">
@@ -634,8 +659,13 @@ function statusColor(status: string) {
             Download the template, enter each household name and amount, then upload it here.
           </v-alert>
           <v-select
-            v-if="auth.isAnchor" v-model="bulkOrganisationCode" :items="organizations"
+            v-if="auth.isSystemAdmin" v-model="bulkDialogAnchorId" :items="anchors" item-title="name" item-value="id"
+            label="Anchor" class="mb-2" placeholder="Choose an anchor" required
+          />
+          <v-select
+            v-if="auth.isAnchor" v-model="bulkOrganisationCode" :items="bulkDialogOrganizations"
             item-title="name" item-value="organisationCode" label="Organisation" class="mb-2"
+            placeholder="Choose an organisation" :disabled="auth.isSystemAdmin && !bulkDialogAnchorId" required
           />
           <v-btn variant="outlined" size="small" prepend-icon="mdi-download" class="mb-4" @click="downloadBulkTemplate">
             Download Template
@@ -646,7 +676,7 @@ function statusColor(status: string) {
             <thead><tr><th>Household</th><th class="text-right">Amount</th></tr></thead>
             <tbody><tr v-for="row in bulkRows.slice(0, 8)" :key="row.householdNumber"><td>{{ row.householdName }}</td><td class="text-right">{{ currency(row.amount) }}</td></tr></tbody>
           </v-table>
-          <v-text-field v-model="bulkPurpose" label="Purpose (applies to all, optional)" />
+          <v-text-field v-model="bulkPurpose" label="Purpose (applies to all, optional)" placeholder="e.g. School fees" />
           <v-text-field v-model="bulkExpiresAt" label="Expires on (applies to all, optional)" type="date" />
           <v-alert v-if="bulkErrors.length" type="warning" variant="tonal" density="compact" class="mt-2">
             {{ bulkErrors.length }} row(s) failed:
@@ -670,8 +700,13 @@ function statusColor(status: string) {
             Choose a state, county, location or village. Every active household in that area will be prepared for voucher generation.
           </v-alert>
           <v-select
-            v-if="auth.isAnchor" v-model="villageOrganisationCode" :items="organizations"
+            v-if="auth.isSystemAdmin" v-model="villageDialogAnchorId" :items="anchors" item-title="name" item-value="id"
+            label="Anchor" class="mb-3" placeholder="Choose an anchor" required
+          />
+          <v-select
+            v-if="auth.isAnchor" v-model="villageOrganisationCode" :items="villageDialogOrganizations"
             item-title="name" item-value="organisationCode" label="Organisation" class="mb-3"
+            placeholder="Choose an organisation" :disabled="auth.isSystemAdmin && !villageDialogAnchorId" required
           />
           <v-select
             v-model="generationLevel"
@@ -715,7 +750,7 @@ function statusColor(status: string) {
               <v-spacer />
               <span class="text-caption text-medium-emphasis">{{ villageRows.length }} household(s) in {{ selectedScopeName }}</span>
             </div>
-            <v-text-field v-model="villagePurpose" label="Purpose (applies to all, optional)" density="compact" class="mb-2" />
+            <v-text-field v-model="villagePurpose" label="Purpose (applies to all, optional)" placeholder="e.g. School fees" density="compact" class="mb-2" />
             <v-text-field v-model="villageExpiresAt" label="Expires on (applies to all, optional)" type="date" density="compact" class="mb-3" />
             <div class="village-rows-scroll">
               <v-data-table :headers="villageRowHeaders" :items="villageRows" density="compact" :items-per-page="10">

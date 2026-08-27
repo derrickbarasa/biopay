@@ -1,0 +1,14 @@
+deploymentId EntryPoint =49432f7a-97c7-4be5-97f7-c63dcd606c82
+deploymentId Auth =070c5686-9193-438b-a56a-93fbabfeb5c4
+deploymentId Officer =131d9ba4-9f88-4bcf-b872-480f7b19c7e9
+deploymentId Organization =2cf38387-5d36-47ae-bcb7-fa5028e9519f
+deploymentId Payment =5e101fba-5b92-4ec9-84ca-23800ab0b955
+deploymentId Dashboard =d5392d96-d18b-4adf-b57b-8306b34c1a95
+deploymentId Voucher =167c71f4-edbd-45bf-9dda-bee43cccd74f
+deploymentId Geography =9cab3baf-0021-48ed-910c-e25e48c02c8c
+deploymentId Payroll =698bab56-f2bb-476b-8673-15c5cec94f97
+deploymentId Notification =acdb51cc-118f-4c8d-8341-e3f13bd85696
+biopay listening at http://0.0.0.0:7730
+deploymentId Household =8601fc57-e90a-414e-b8a5-9a02e6fcaa58
+deploymentId Biometric =4e2edd96-e3ad-4897-a059-f267ecb751ff
+deploymentId Subscription =9117195f-b7b6-4ebe-a38c-9869e4a394b2

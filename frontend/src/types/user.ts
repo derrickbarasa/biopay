@@ -30,8 +30,15 @@ export interface SessionUser {
   permissions?: string[]
   enabledModules?: OrgModule[]
   totpEnabled?: boolean
+  /** Defaults true server-side; can only be turned off once totpEnabled is true,
+   *  so an account never ends up with zero login-OTP methods. */
+  emailOtpEnabled?: boolean
   /** Platform-wide Super Admin. This identity has no anchor or organisation membership. */
   systemAdmin?: boolean
+  /** True for an account whose password was system-generated (anchor/organisation/user
+   *  creation) and never chosen by the account holder -- the router redirects everywhere
+   *  else to /change-password until CHANGE_PASSWORD clears it. */
+  mustChangePassword?: boolean
 }
 
 /** OTP method offered on the "choose a verification method" step after password login. */

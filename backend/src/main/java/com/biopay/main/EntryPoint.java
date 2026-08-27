@@ -62,7 +62,7 @@ public class EntryPoint extends AbstractVerticle {
     private static final Set<String> SUBSCRIPTION_EXEMPT_CODES = Set.of(
             "GET_SUBSCRIPTION", "RENEW_SUBSCRIPTION", "GET_SUBSCRIPTION_INVOICES", "GET_SUBSCRIPTION_INVOICE_RECEIPT",
             "ME", "LOGOUT", "CHANGE_PASSWORD", "UPDATE_PROFILE",
-            "TOTP_SETUP_INIT", "TOTP_SETUP_CONFIRM", "TOTP_DISABLE",
+            "TOTP_SETUP_INIT", "TOTP_SETUP_CONFIRM", "TOTP_DISABLE", "EMAIL_OTP_ENABLE", "EMAIL_OTP_DISABLE",
             "GET_ORGANIZATION_MODULES");
 
     public static void main(String[] args) {
@@ -80,20 +80,28 @@ public class EntryPoint extends AbstractVerticle {
                 .setThreadingModel(ThreadingModel.EVENT_LOOP)
                 .setHa(true);
 
-        vertx.deployVerticle(EntryPoint.class.getName(), options);
-        vertx.deployVerticle(Auth.class.getName(), options);
-        vertx.deployVerticle(Organization.class.getName(), options);
-        vertx.deployVerticle(Officer.class.getName(), options);
-        vertx.deployVerticle(Household.class.getName(), options);
-        vertx.deployVerticle(Payroll.class.getName(), options);
-        vertx.deployVerticle(Payment.class.getName(), options);
-        vertx.deployVerticle(Dashboard.class.getName(), options);
-        vertx.deployVerticle(Biometric.class.getName(), options);
-        vertx.deployVerticle(Notification.class.getName(), options);
-        vertx.deployVerticle(Geography.class.getName(), options);
-        vertx.deployVerticle(Voucher.class.getName(), options);
-        vertx.deployVerticle(Subscription.class.getName(), options);
-        vertx.deployVerticle(Administration.class.getName(), options);
+        deploy(vertx, EntryPoint.class.getName(), options);
+        deploy(vertx, Auth.class.getName(), options);
+        deploy(vertx, Organization.class.getName(), options);
+        deploy(vertx, Officer.class.getName(), options);
+        deploy(vertx, Household.class.getName(), options);
+        deploy(vertx, Payroll.class.getName(), options);
+        deploy(vertx, Payment.class.getName(), options);
+        deploy(vertx, Dashboard.class.getName(), options);
+        deploy(vertx, Biometric.class.getName(), options);
+        deploy(vertx, Notification.class.getName(), options);
+        deploy(vertx, Geography.class.getName(), options);
+        deploy(vertx, Voucher.class.getName(), options);
+        deploy(vertx, Subscription.class.getName(), options);
+        deploy(vertx, Administration.class.getName(), options);
+    }
+
+    /** {@code deployVerticle} without an {@code onFailure} handler drops the failure entirely --
+     *  a broken verticle (e.g. an exception thrown from its {@code start()}) silently never
+     *  registers its event-bus consumers, and every request to it times out with no clue why. */
+    private static void deploy(Vertx vertx, String verticleName, DeploymentOptions options) {
+        vertx.deployVerticle(verticleName, options)
+                .onFailure(err -> System.err.println("FAILED TO DEPLOY " + verticleName + ": " + err));
     }
 
     @Override

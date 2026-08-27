@@ -1,0 +1,54 @@
+/* Vuetify's outlined field border is a 1px hairline (--v-field-border-width: 1px,
+ * only bumped to 2px on focus). At some fractional device-pixel ratios / OS
+ * display-scaling combinations that hairline anti-aliases down to invisible on
+ * some fields but not others (same computed CSS, different sub-pixel position) --
+ * e.g. the Country field on the New Organization form rendering with no visible
+ * border while the Anchor field right next to it looks fine.
+ *
+ * Two earlier attempts at a fix hand-rolled explicit border-width overrides on
+ * __start/__end/__notch individually and got it wrong both times: first by adding
+ * a border to the sides where __start/__end butt against __notch (Vuetify never
+ * borders those touching sides -- that created a real seam), then by setting
+ * border-TOP-width on __notch::after, which is actually the field's BOTTOM
+ * border (positioned via `bottom: 0`, drawn with `border-width: 0 0 <width>`) --
+ * so the field's bottom edge stayed at the un-overridden 1px/0.38-opacity
+ * default across the entire notch span (nearly the whole field width), while
+ * only the two small 12px end-caps got the hardcoded 2px, producing a bottom
+ * edge that's thick at both corners and thin/faint in between.
+ *
+ * Overriding the single CSS variable every one of those segments already reads
+ * from avoids re-deriving Vuetify's per-side logic by hand: __start's top/
+ * bottom/inline-start, __end's top/bottom/inline-end, __notch::before's top and
+ * __notch::after's bottom all key off --v-field-border-width, so one override
+ * makes every segment and every side (top, bottom, both end-caps) consistently
+ * 2px with no seam, whether the field is focused or not. */
+.v-field--variant-outlined .v-field__outline {
+  --v-field-border-width: 2px;
+}
+
+.v-card--border {
+  border-width: 1.5px !important;
+}
+
+/* Vuetify's default disabled-field opacity (0.38, the Material Design spec value) fades
+ * the ENTIRE outlined box -- border, background and label together -- down to a near-
+ * invisible ghost against a white card (e.g. the "Organisation" field waiting on an
+ * "Anchor" selection first). A disabled field should read as "a real field you can't
+ * edit yet", not vanish -- keep it clearly present at a lighter but legible opacity. */
+.v-field--disabled {
+  opacity: 0.7 !important;
+}
+
+/* A data-table row's icon-only action buttons (view/edit/delete etc.) are plain inline
+ * v-btn siblings inside their <td>, so once the column gets squeezed by a wide table
+ * they wrap onto separate lines instead of staying a single horizontal row. Keep every
+ * multi-button actions cell as one non-wrapping row app-wide; the table itself already
+ * scrolls horizontally (see .table-scroll / v-data-table's own overflow) so nothing is
+ * lost by refusing to wrap here. */
+.v-table td:has(> .v-btn + .v-btn),
+.v-data-table td:has(> .v-btn + .v-btn) {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  white-space: nowrap;
+}

@@ -22,8 +22,8 @@ const organizationName = ref('')
 onMounted(async () => {
   if (auth.user?.partnerCode) {
     try {
-      const res = await dispatch<{ results: { name: string }[] }>('GET_ORGANIZATION', { organisationCode: auth.user.partnerCode })
-      organizationName.value = res.results?.[0]?.name ?? auth.user.partnerCode
+      const res = await dispatch<{ results: { organisationCode: string; name: string }[] }>('GET_ORGANIZATIONS')
+      organizationName.value = res.results?.find((o) => o.organisationCode === auth.user?.partnerCode)?.name ?? auth.user.partnerCode
     } catch {
       organizationName.value = auth.user.partnerCode
     }
@@ -129,6 +129,46 @@ async function confirmDisable() {
     disabling.value = false
   }
 }
+
+// ---- Email OTP toggle -- defaults on; disabling needs TOTP already enabled -----
+
+const emailEnabling = ref(false)
+const emailDisableDialog = ref(false)
+const emailDisabling = ref(false)
+const emailDisablePassword = ref('')
+const showEmailDisablePassword = ref(false)
+
+async function enableEmailOtp() {
+  emailEnabling.value = true
+  try {
+    await dispatch('EMAIL_OTP_ENABLE')
+    toast.success('Email verification enabled')
+    await auth.refreshProfile()
+  } catch (err) {
+    toast.error(err instanceof Error ? err.message : 'Failed to enable')
+  } finally {
+    emailEnabling.value = false
+  }
+}
+
+function openEmailDisable() {
+  emailDisablePassword.value = ''
+  emailDisableDialog.value = true
+}
+
+async function confirmEmailDisable() {
+  emailDisabling.value = true
+  try {
+    await dispatch('EMAIL_OTP_DISABLE', { password: emailDisablePassword.value })
+    toast.success('Email verification disabled')
+    emailDisableDialog.value = false
+    await auth.refreshProfile()
+  } catch (err) {
+    toast.error(err instanceof Error ? err.message : 'Failed to disable')
+  } finally {
+    emailDisabling.value = false
+  }
+}
 </script>
 
 <template>
@@ -156,7 +196,11 @@ async function confirmDisable() {
             <v-divider class="my-4" />
             <v-text-field v-model="profileFirstName" label="First name" autocomplete="given-name" />
             <v-text-field v-model="profileLastName" label="Last name" autocomplete="family-name" />
-            <v-text-field :model-value="auth.user?.email" label="Email address" readonly hint="Contact an administrator to change the sign-in email." persistent-hint />
+            <v-text-field
+              :model-value="auth.user?.email" label="Email address" readonly
+              :hint="auth.isSystemAdmin ? 'Sign-in email cannot be changed here.' : 'Contact your anchor or organisation administrator to change the sign-in email.'"
+              persistent-hint
+            />
             <v-btn color="secondary" class="mt-4" :loading="savingProfile" @click="saveProfile">Save profile</v-btn>
           </v-card-text>
         </v-card>
@@ -166,14 +210,27 @@ async function confirmDisable() {
           <v-card-text class="pl-0">
             <div class="d-flex align-center justify-space-between py-2">
               <div class="d-flex align-center">
-                <v-icon icon="mdi-email-check-outline" class="mr-3" color="success" />
+                <v-icon icon="mdi-email-check-outline" class="mr-3" :color="auth.user?.emailOtpEnabled ? 'success' : 'medium-emphasis'" />
                 <div>
                   <div class="text-body-2 font-weight-medium">Email</div>
-                  <div class="text-caption text-medium-emphasis">Always enabled as your default verification method</div>
+                  <div class="text-caption text-medium-emphasis">
+                    <template v-if="auth.user?.emailOtpEnabled">Send a 6-digit code to your inbox at sign-in</template>
+                    <template v-else>Turned off &mdash; you sign in with the authenticator app only</template>
+                  </div>
                 </div>
               </div>
-              <v-chip color="success" variant="tonal" size="small">Enabled</v-chip>
+              <v-btn
+                v-if="auth.user?.emailOtpEnabled" size="small" variant="outlined" color="error"
+                :disabled="!auth.user?.totpEnabled"
+                @click="openEmailDisable"
+              >
+                Disable
+              </v-btn>
+              <v-btn v-else size="small" color="secondary" :loading="emailEnabling" @click="enableEmailOtp">Enable</v-btn>
             </div>
+            <p v-if="auth.user?.emailOtpEnabled && !auth.user?.totpEnabled" class="text-caption text-medium-emphasis mb-0">
+              Enable the authenticator app before you can turn this off.
+            </p>
             <v-divider class="my-2" />
             <div class="d-flex align-center justify-space-between py-2">
               <div class="d-flex align-center">
@@ -277,6 +334,30 @@ async function confirmDisable() {
           <v-spacer />
           <v-btn variant="text" @click="disableDialog = false">Cancel</v-btn>
           <v-btn color="error" :loading="disabling" @click="confirmDisable">Disable</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <v-dialog v-model="emailDisableDialog" max-width="420">
+      <v-card>
+        <dialog-close-button @close="emailDisableDialog = false" />
+        <v-card-title>Disable Email Verification</v-card-title>
+        <v-card-text>
+          <p class="text-body-2 mb-3">Enter your current password to confirm. You'll sign in with the authenticator app only from now on.</p>
+          <v-text-field v-model="emailDisablePassword" label="Current password" :type="showEmailDisablePassword ? 'text' : 'password'" autofocus autocomplete="current-password">
+            <template #append-inner>
+              <v-btn
+                :icon="showEmailDisablePassword ? 'mdi-eye-off' : 'mdi-eye'" variant="text" density="compact"
+                :aria-label="showEmailDisablePassword ? 'Hide password' : 'Show password'"
+                @click="showEmailDisablePassword = !showEmailDisablePassword"
+              />
+            </template>
+          </v-text-field>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" @click="emailDisableDialog = false">Cancel</v-btn>
+          <v-btn color="error" :loading="emailDisabling" @click="confirmEmailDisable">Disable</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>

@@ -68,7 +68,7 @@ function verificationMethodLabel(method?: string) {
 }
 
 const required = (value: string) => !!value?.trim() || 'Required'
-const emailRule = (value: string) => !value || /.+@.+\..+/.test(value) || 'Enter a valid email'
+const emailRule = (value: string) => /.+@.+\..+/.test(value ?? '') || 'A valid email is required to sign in'
 
 const headers = computed(() => [
   ...(auth.isSystemAdmin ? [{ title: 'Anchor', key: 'anchorName' }] : []),
@@ -78,7 +78,7 @@ const headers = computed(() => [
   { title: 'Country', key: 'country' },
   { title: 'Verification', key: 'verificationMethod' },
   { title: 'Status', key: 'status' },
-  { title: 'Actions', key: 'actions', sortable: false, align: 'end' as const },
+  { title: 'Actions', key: 'actions', sortable: false, align: 'start' as const },
 ])
 
 async function loadAnchors() {
@@ -161,8 +161,8 @@ async function save() {
     toast.error('Choose an anchor for this organization')
     return
   }
-  if (form.value.authorisedEmail && !/.+@.+\..+/.test(form.value.authorisedEmail)) {
-    toast.error('Enter a valid authorized contact email')
+  if (!/.+@.+\..+/.test(form.value.authorisedEmail)) {
+    toast.error(editing.value ? 'Enter a valid authorized contact email' : 'A valid email is required to create the organization\'s sign-in account')
     return
   }
   if (!form.value.modules.length) {
@@ -182,7 +182,7 @@ async function save() {
         ...form.value,
         targetAnchorId: auth.isSystemAdmin ? form.value.anchorId : undefined,
       })
-      toast.success('Organization created')
+      toast.success('Organization created. A temporary password was emailed to sign in.')
     }
     dialog.value = false
     await load()
@@ -232,7 +232,7 @@ async function toggleStatus(org: Organization) {
         <div class="editor-heading">
           <div>
             <div class="editor-title">{{ editing ? 'Edit Organization' : 'New Organization' }}</div>
-            <p>{{ editing ? 'Update the organization profile and programme access.' : 'Create the delivery partner, then choose what its teams can operate.' }}</p>
+            <p>{{ editing ? 'Update the organization profile and programme access.' : 'A sign-in account is created automatically for the email below, with a temporary password emailed to it.' }}</p>
           </div>
           <dialog-close-button @close="dialog = false" />
         </div>
@@ -245,22 +245,26 @@ async function toggleStatus(org: Organization) {
                 v-if="auth.isSystemAdmin && !editing" v-model="form.anchorId" :items="anchors" item-title="name" item-value="id"
                 label="Anchor" :rules="[v => !!v || 'Required']" density="compact" hide-details="auto" prepend-inner-icon="mdi-bank-outline"
               />
-              <v-text-field v-model="form.name" label="Organization name" :rules="[required]" density="compact" hide-details="auto" />
+              <v-text-field v-model="form.name" label="Organization name" placeholder="e.g. Bright Future Trust" :rules="[required]" density="compact" hide-details="auto" />
               <v-autocomplete v-model="form.country" :items="COUNTRIES" label="Country" :rules="[required]" density="compact" hide-details="auto" />
-              <v-text-field v-model="form.capitalCity" label="Capital city" prepend-inner-icon="mdi-city-variant-outline" density="compact" hide-details="auto" />
+              <v-text-field v-model="form.capitalCity" label="Capital city" placeholder="e.g. Nairobi" prepend-inner-icon="mdi-city-variant-outline" density="compact" hide-details="auto" />
+              <v-text-field v-model="form.address" label="Address" placeholder="e.g. Westlands Road" prepend-inner-icon="mdi-map-marker-outline" density="compact" hide-details="auto" />
             </section>
 
             <section class="form-group" aria-labelledby="contact-details-heading">
               <div id="contact-details-heading" class="form-group-title"><v-icon icon="mdi-account-outline" size="19" /> Authorized contact</div>
-              <v-text-field v-model="form.authorisedName" label="Contact name" density="compact" hide-details="auto" />
-              <v-text-field v-model="form.authorisedEmail" label="Email" type="email" :rules="[emailRule]" density="compact" hide-details="auto" />
-              <v-text-field v-model="form.authorisedContact" label="Phone" density="compact" hide-details="auto" />
+              <v-text-field v-model="form.authorisedName" label="Contact name" placeholder="e.g. Amina Yusuf" density="compact" hide-details="auto" />
+              <v-text-field
+                v-model="form.authorisedEmail" :label="editing ? 'Email' : 'Email (used to sign in)'"
+                placeholder="e.g. amina@brightfuture.org" type="email" :rules="[emailRule]" density="compact" hide-details="auto"
+              />
+              <v-text-field v-model="form.authorisedContact" label="Phone" placeholder="e.g. +254 700 000000" density="compact" hide-details="auto" />
+              <v-select
+                v-model="form.verificationMethod" :items="VERIFICATION_METHODS" label="Household verification method"
+                :prepend-inner-icon="verificationMethodIcon(form.verificationMethod)" :rules="[required]" density="compact"
+                hint="How field officers verify a household member's identity during registration and payment." persistent-hint
+              />
             </section>
-          </div>
-
-          <div class="policy-row">
-            <v-text-field v-model="form.address" label="Address" prepend-inner-icon="mdi-map-marker-outline" density="compact" hide-details="auto" />
-            <v-select v-model="form.verificationMethod" :items="VERIFICATION_METHODS" label="Verification method" :prepend-inner-icon="verificationMethodIcon(form.verificationMethod)" :rules="[required]" density="compact" hide-details="auto" />
           </div>
 
           <section class="module-section" aria-labelledby="module-heading">
@@ -334,7 +338,6 @@ async function toggleStatus(org: Organization) {
 .identity-grid { display: grid; grid-template-columns: 1fr 1fr; column-gap: clamp(20px, 4vw, 44px); row-gap: 10px; }
 .form-group { min-width: 0; display: grid; gap: 10px; align-content: start; }
 .form-group-title { display: flex; align-items: center; gap: 8px; color: #0f766e; font-size: .8rem; font-weight: 750; margin-bottom: 2px; }
-.policy-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 12px; }
 .module-section { border-top: 1px solid #e2e8f0; margin-top: 14px; padding-top: 14px; }
 .module-heading-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 10px; }
 .module-heading-row > span { flex-shrink: 0; color: #0f766e; background: #ccfbf1; border-radius: 999px; padding: 5px 10px; font-size: .72rem; font-weight: 750; }
@@ -349,7 +352,7 @@ async function toggleStatus(org: Organization) {
 @media (max-width: 680px) {
   .page-heading { align-items: flex-start !important; flex-direction: column; }
   .page-heading :deep(.v-btn) { width: 100%; }
-  .identity-grid, .policy-row { grid-template-columns: 1fr; gap: 0; }
+  .identity-grid { grid-template-columns: 1fr; gap: 0; }
   .module-grid { grid-template-columns: 1fr; }
   .editor-actions :deep(.v-btn) { flex: 1; }
 }

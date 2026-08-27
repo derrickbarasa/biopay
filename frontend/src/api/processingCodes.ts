@@ -33,6 +33,8 @@ export type ProcessingCode =
   | 'TOTP_SETUP_INIT'
   | 'TOTP_SETUP_CONFIRM'
   | 'TOTP_DISABLE'
+  | 'EMAIL_OTP_ENABLE'
+  | 'EMAIL_OTP_DISABLE'
   // administration
   | 'GET_ANCHORS'
   | 'CREATE_ANCHOR'

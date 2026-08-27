@@ -4,6 +4,7 @@ import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Promise;
 import io.vertx.core.eventbus.EventBus;
 import io.vertx.core.eventbus.Message;
+import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import com.biopay.utilities.Logging;
 
@@ -34,6 +35,7 @@ public class Notification extends AbstractVerticle {
         String recipient = payload.getString("mailTo", "").trim();
         String subject = payload.getString("subject", "").trim();
         String html = payload.getString("msg", "");
+        JsonArray inlineImages = payload.getJsonArray("inlineImages");
 
         if (mailClient == null) {
             Logging.applicationLog(Logging.logPreString()
@@ -45,7 +47,7 @@ public class Notification extends AbstractVerticle {
         }
 
         try {
-            mailClient.send(recipient, subject, html).whenComplete((ignored, error) -> {
+            mailClient.send(recipient, subject, html, inlineImages).whenComplete((ignored, error) -> {
                 if (error == null) {
                     Logging.applicationLog(Logging.logPreString() + "EMAIL SENT recipient=" + recipient
                             + " subject=" + subject + "\n\n", "", 2);

@@ -36,7 +36,13 @@ body {
 .v-application { font-family: 'Ubuntu', sans-serif !important; }
 .v-application .dashboard-main .v-card,
 .v-overlay[role='dialog'] .v-card,
-.v-application > .v-card { border-radius: var(--bp-radius-surface) !important; border-color: #e2e8f0 !important; box-shadow: 0 10px 28px -20px rgba(15, 118, 110, .35); }
+.v-application > .v-card { border-radius: var(--bp-radius-surface) !important; border-color: #e2e8f0 !important; }
+/* No box-shadow on bordered cards: a shadow with a downward offset (the previous
+ * rule here, `0 10px 28px -20px`) only casts on the bottom/sides, never the top,
+ * so a card that also has a real border reads as having a thicker/blurrier edge
+ * on some sides than others -- the opposite of the "uniform border" these cards
+ * are meant to have. A card already communicates its boundary with the border;
+ * it doesn't need a shadow doing the same job asymmetrically on top of it. */
 .v-application .dashboard-main .role-list,
 .v-application .dashboard-main .role-editor,
 .v-application .dashboard-main .permission-group,

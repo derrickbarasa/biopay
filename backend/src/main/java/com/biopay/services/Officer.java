@@ -93,8 +93,8 @@ public class Officer extends AbstractVerticle {
         int supervisorId = (int) (System.currentTimeMillis() % 1000000);
 
         String sql = "INSERT INTO field_officers (officer_code, username, email, password, firstname, lastname, "
-                + "organization_code, role, active, anchor_id, created_by, created_at) "
-                + "VALUES (@p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10, @p11, GETDATE())";
+                + "organization_code, role, active, anchor_id, must_change_password, created_by, created_at) "
+                + "VALUES (@p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10, 1, @p11, GETDATE())";
         pool.preparedQuery("SELECT anchor_id FROM organizations WHERE organization_code=@p1 AND (@p2=1 OR anchor_id=@p3)")
                 .execute(Tuple.of(partnerCode, isSystemAdmin(payload), anchorId))
                 .compose(orgRows -> orgRows.size() == 0 ? io.vertx.core.Future.failedFuture("Organisation is outside your anchor")

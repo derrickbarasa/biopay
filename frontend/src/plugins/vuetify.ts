@@ -38,5 +38,8 @@ export default createVuetify({
     VBtn: { rounded: 'md', elevation: 0 },
     VTextField: { variant: 'outlined', density: 'comfortable' },
     VSelect: { variant: 'outlined', density: 'comfortable' },
+    VAutocomplete: { variant: 'outlined', density: 'comfortable' },
+    VTextarea: { variant: 'outlined', density: 'comfortable' },
+    VCombobox: { variant: 'outlined', density: 'comfortable' },
   },
 })

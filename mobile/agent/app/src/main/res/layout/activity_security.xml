@@ -24,8 +24,8 @@
             android:paddingEnd="20dp"
             android:paddingBottom="32dp">
 
-            <TextView style="@style/BioPay.ScreenTitle" android:text="@string/settings_security" />
-            <TextView style="@style/BioPay.SupportingText" android:layout_marginTop="4dp" android:text="@string/settings_security_policy" />
+            <TextView android:id="@+id/tvScreenTitle" style="@style/BioPay.ScreenTitle" android:text="@string/settings_security" />
+            <TextView android:id="@+id/tvScreenSubtitle" style="@style/BioPay.SupportingText" android:layout_marginTop="4dp" android:text="@string/settings_security_policy" />
 
             <TextView style="@style/BioPay.SectionHeader" android:text="@string/settings_change_password_intro" />
             <com.google.android.material.textfield.TextInputLayout style="@style/BioPay.FormField" android:hint="@string/settings_current_password" app:endIconMode="password_toggle">

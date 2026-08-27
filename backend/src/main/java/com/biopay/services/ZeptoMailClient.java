@@ -39,7 +39,15 @@ final class ZeptoMailClient {
     }
 
     CompletableFuture<Void> send(String recipient, String subject, String html) {
-        JsonObject body = payload(fromAddress, fromName, recipient, subject, html);
+        return send(recipient, subject, html, null);
+    }
+
+    /** {@code inlineImages}, when non-empty, is ZeptoMail's {@code inline_images} array shape
+     *  verbatim ({@code cid}/{@code mime_type}/{@code content} per entry) -- referenced from
+     *  {@code html} via {@code <img src="cid:...">}, not linked or data-URI, since neither of
+     *  those survive Gmail's/Outlook.com's HTML sanitizer on the way into an inbox. */
+    CompletableFuture<Void> send(String recipient, String subject, String html, JsonArray inlineImages) {
+        JsonObject body = payload(fromAddress, fromName, recipient, subject, html, inlineImages);
         HttpRequest request = HttpRequest.newBuilder(endpoint)
                 .timeout(Duration.ofSeconds(20))
                 .header("Accept", "application/json")
@@ -58,16 +66,25 @@ final class ZeptoMailClient {
     }
 
     static JsonObject payload(String from, String fromName, String recipient, String subject, String html) {
+        return payload(from, fromName, recipient, subject, html, null);
+    }
+
+    static JsonObject payload(String from, String fromName, String recipient, String subject, String html,
+            JsonArray inlineImages) {
         String to = required(recipient, "mailTo");
         if (!to.contains("@")) {
             throw new IllegalArgumentException("mailTo is not a valid email address");
         }
-        return new JsonObject()
+        JsonObject body = new JsonObject()
                 .put("from", new JsonObject().put("address", required(from, "MAIL_FROM")).put("name", fromName))
                 .put("to", new JsonArray().add(new JsonObject().put("email_address",
                         new JsonObject().put("address", to))))
                 .put("subject", required(subject, "subject"))
                 .put("htmlbody", required(html, "msg"));
+        if (inlineImages != null && !inlineImages.isEmpty()) {
+            body.put("inline_images", inlineImages);
+        }
+        return body;
     }
 
     static String authorizationValue(String token) {

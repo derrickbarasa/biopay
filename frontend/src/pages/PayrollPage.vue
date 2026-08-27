@@ -5,6 +5,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
 import { useConfirm } from '@/composables/useConfirm'
 import { useAnchorScope } from '@/composables/useAnchorScope'
+import { useOrgCascade } from '@/composables/useOrgCascade'
 
 interface Cycle {
   cycleCode: string
@@ -47,7 +48,8 @@ interface HouseholdOption {
 const auth = useAuthStore()
 const toast = useToast()
 const { confirmAction } = useConfirm()
-const { anchors, selectedAnchorId, anchorGateActive, anchorChosen } = useAnchorScope()
+const { anchors, selectedAnchorId, anchorGateActive } = useAnchorScope()
+const { dialogAnchorId, dialogOrganizations, resetDialogScope } = useOrgCascade()
 const CURRENCIES = ['USD', 'SSP', 'KES', 'UGX', 'ETB', 'EUR', 'GBP']
 
 const loading = ref(true)
@@ -72,7 +74,7 @@ const headers = [
   { title: 'Amount Out', key: 'amountOut' },
   { title: 'Amount In', key: 'amountIn' },
   { title: 'Status', key: 'status' },
-  { title: 'Actions', key: 'actions', sortable: false, align: 'end' as const },
+  { title: 'Actions', key: 'actions', sortable: false, align: 'start' as const },
 ]
 
 async function load() {
@@ -99,7 +101,6 @@ function clearFilters() {
 }
 
 async function loadOrganizations() {
-  if (!auth.isAnchorAdministrator && !auth.isSystemAdmin) { organizations.value = []; return }
   try {
     const res = await dispatch<{ results: typeof organizations.value }>('GET_ORGANIZATIONS', {
       targetAnchorId: auth.isSystemAdmin ? selectedAnchorId.value : undefined,
@@ -125,9 +126,6 @@ const statusColor: Record<string, string> = {
 
 const orgNameByCode = computed(() => new Map(organizations.value.map((o) => [o.organisationCode, o.name])))
 function orgName(code?: string) { return (code && orgNameByCode.value.get(code)) || code || '—' }
-function targetAnchorForOrg(code?: string | null) {
-  return auth.isSystemAdmin ? organizations.value.find((organization) => organization.organisationCode === code)?.anchorId : undefined
-}
 function fmtAmount(v?: number | null) { return (v ?? 0).toLocaleString() }
 
 async function removeCycle(cycle: Cycle) {
@@ -199,9 +197,12 @@ function openWizard() {
   otpSent.value = false
   rateAsOf.value = ''
   rateError.value = ''
+  resetDialogScope(auth.isSystemAdmin ? selectedAnchorId.value : null)
   wizard.value = true
   if (!auth.isAnchor) loadHouseholdOptions(null)
 }
+
+watch(dialogAnchorId, () => { genForm.value.organisationCode = null })
 
 async function fetchExchangeRate(currency: string) {
   const quote = currency.trim().toUpperCase()
@@ -268,9 +269,13 @@ async function sendGenerateOtp() {
 }
 
 async function confirmGenerate() {
+  if (auth.isSystemAdmin && !dialogAnchorId.value) {
+    toast.error('Select the anchor this payment cycle\'s organisation belongs to')
+    return
+  }
   generating.value = true
   try {
-    await dispatch('GENERATE_PAYROLL', { ...genForm.value, organisationCode: genForm.value.organisationCode || undefined, targetAnchorId: targetAnchorForOrg(genForm.value.organisationCode) })
+    await dispatch('GENERATE_PAYROLL', { ...genForm.value, organisationCode: genForm.value.organisationCode || undefined, targetAnchorId: auth.isSystemAdmin ? dialogAnchorId.value ?? undefined : undefined })
     toast.success('Payroll cycle generated and pending approval')
     wizard.value = false
     await load()
@@ -466,10 +471,6 @@ function itemStatusColor(item: PaymentLine) {
       <v-btn v-if="scopeReady && auth.can('ACCESS_PAYMENT_CYCLES')" color="secondary" prepend-icon="mdi-calendar-month-outline" @click="openWizard">Generate Payment Cycle</v-btn>
     </div>
 
-    <v-alert v-if="auth.isSystemAdmin ? !anchorChosen : (auth.isAnchorAdministrator && !organisationFilter)" type="info" variant="tonal" class="mb-4">
-      {{ auth.isSystemAdmin ? 'Showing payment cycles across every anchor. Choose one in the filters below to narrow the list.' : 'Showing payment cycles across every organisation. Choose one in the filters below to narrow the list.' }}
-    </v-alert>
-
     <template v-if="scopeReady">
     <v-card variant="flat" border>
       <v-card-text>
@@ -547,16 +548,23 @@ function itemStatusColor(item: PaymentLine) {
             <template #actions></template>
             <template #item.1>
               <v-select
+                v-if="auth.isSystemAdmin"
+                v-model="dialogAnchorId"
+                :items="anchors" item-title="name" item-value="id"
+                label="Anchor" class="mb-2" placeholder="Choose an anchor" required
+              />
+              <v-select
                 v-if="auth.isAnchor"
                 v-model="genForm.organisationCode"
-                :items="organizations" item-title="name" item-value="organisationCode"
-                label="Organisation" class="mb-2"
+                :items="dialogOrganizations" item-title="name" item-value="organisationCode"
+                label="Organisation" class="mb-2" placeholder="Choose an organisation"
+                :disabled="auth.isSystemAdmin && !dialogAnchorId" required
               />
               <v-text-field v-model="genForm.periodStart" label="Period start" type="date" />
               <v-text-field v-model="genForm.periodEnd" label="Period end" type="date" />
               <v-btn
                 color="secondary" block
-                :disabled="!genForm.periodStart || !genForm.periodEnd || (auth.isAnchor && !genForm.organisationCode)"
+                :disabled="!genForm.periodStart || !genForm.periodEnd || (auth.isAnchor && !genForm.organisationCode) || (auth.isSystemAdmin && !dialogAnchorId)"
                 @click="step = 2"
               >Next</v-btn>
             </template>
@@ -580,7 +588,7 @@ function itemStatusColor(item: PaymentLine) {
               <v-btn color="secondary" block :disabled="!genForm.householdNumbers.length" @click="step = 3">Next</v-btn>
             </template>
             <template #item.3>
-              <v-text-field v-model.number="genForm.amountPerHousehold" label="Amount per household (amount out)" type="number" />
+              <v-text-field v-model.number="genForm.amountPerHousehold" label="Amount per household (amount out)" type="number" placeholder="e.g. 5000" />
               <v-row dense>
                 <v-col cols="6">
                   <v-autocomplete v-model="genForm.currency" :items="CURRENCIES" label="Payout currency" />
@@ -609,7 +617,7 @@ function itemStatusColor(item: PaymentLine) {
               </v-alert>
               <v-btn v-if="!otpSent" color="secondary" block :loading="sendingOtp" @click="sendGenerateOtp">Send Verification Code</v-btn>
               <template v-else>
-                <v-text-field v-model="genForm.otpCode" label="Verification code" maxlength="6" />
+                <v-text-field v-model="genForm.otpCode" label="Verification code" placeholder="6-digit code" maxlength="6" />
                 <v-btn color="secondary" block :loading="generating" :disabled="!genForm.otpCode" @click="confirmGenerate">
                   Confirm & Generate
                 </v-btn>
@@ -665,7 +673,7 @@ function itemStatusColor(item: PaymentLine) {
             <v-btn color="secondary" block class="mb-3" :loading="sendingApproveOtp" @click="sendApproveOtp">
               Send Verification Code
             </v-btn>
-            <v-text-field v-model="approveOtp" label="Verification code" maxlength="6" />
+            <v-text-field v-model="approveOtp" label="Verification code" placeholder="6-digit code" maxlength="6" />
           </template>
         </v-card-text>
         <v-card-actions>
@@ -683,7 +691,7 @@ function itemStatusColor(item: PaymentLine) {
         <v-card-title>Reject payment cycle?</v-card-title>
         <v-card-text>
           <p class="mb-3">Explain why {{ rejectTarget.cycleCode }} cannot proceed. This reason is kept with the cycle.</p>
-          <v-textarea v-model="rejectReason" label="Rejection reason" rows="3" autofocus required />
+          <v-textarea v-model="rejectReason" label="Rejection reason" placeholder="Why this cycle cannot proceed" rows="3" autofocus required />
         </v-card-text>
         <v-card-actions>
           <v-spacer />

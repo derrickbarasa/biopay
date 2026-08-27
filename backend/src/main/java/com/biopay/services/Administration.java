@@ -78,7 +78,7 @@ public class Administration extends AbstractVerticle {
                             .put("authorisedEmail",Rows.str(r,"email"))
                             .put("authorisedContact",Rows.str(r,"phone")).put("address",Rows.str(r,"address"))
                             .put("country",Rows.str(r,"country")).put("city",Rows.str(r,"city"))
-                            .put("website",Rows.str(r,"website")).put("status",Rows.intVal(r,"status")));
+                            .put("status",Rows.intVal(r,"status")));
                     ok(message, "Anchor found", out);
                 });
     }
@@ -99,12 +99,12 @@ public class Administration extends AbstractVerticle {
         String createdBy = String.valueOf(p.getValue("actorId"));
         Utilities.nextAnchorCode(pool).compose(anchorCode -> pool.withTransaction(connection -> connection.preparedQuery(
                         "INSERT INTO users (email,username,password,first_name,other_names,role_id,active,status,user_scope,is_system_admin,"
-                                + "anchor_code,anchor_name,phone,address,country,city,website,created_by,created_at,updated_at) "
+                                + "anchor_code,anchor_name,phone,address,country,city,must_change_password,created_by,created_at,updated_at) "
                                 + "OUTPUT INSERTED.id VALUES (@p1,@p2,@p3,@p4,'',(SELECT TOP 1 id FROM roles WHERE role_name='Anchor Administrator' AND anchor_id IS NULL AND status=1),"
-                                + "1,1,'ANCHOR',0,@p5,@p6,@p7,@p8,@p9,@p10,@p11,@p12,GETDATE(),GETDATE())")
+                                + "1,1,'ANCHOR',0,@p5,@p6,@p7,@p8,@p9,@p10,1,@p11,GETDATE(),GETDATE())")
                 .execute(Tuple.of(authorisedEmail, username, passwordHash, authorisedName, anchorCode, name,
                         p.getString("authorisedContact"), p.getString("address"), p.getString("country"),
-                        p.getString("city"), p.getString("website"), createdBy))
+                        p.getString("city"), createdBy))
                 .map(rows -> Rows.intVal(rows.iterator().next(), "id"))
                 .compose(userId -> connection.preparedQuery("UPDATE users SET anchor_id=id WHERE id=@p1")
                         .execute(Tuple.of(userId)).map(userId))))
@@ -115,7 +115,7 @@ public class Administration extends AbstractVerticle {
                             .put("subject", "Your BioPay Anchor Administrator Account")
                             .put("msg", "Dear " + authorisedName + ",<br />Your anchor has been created in BioPay. "
                                     + "Your temporary password is <strong>" + temporaryPassword
-                                    + "</strong>. Please sign in and change it immediately.")
+                                    + "</strong>. You'll be asked to set a new password the first time you sign in.")
                             .toString());
                     ok(message, "Anchor and anchor administrator created", new JsonObject().put("anchorId", anchorId));
                 });
@@ -127,10 +127,10 @@ public class Administration extends AbstractVerticle {
         int targetAnchorId = systemAdmin(p)
                 ? p.getInteger("targetAnchorId", Integer.parseInt(p.getValue("anchorId").toString()))
                 : Integer.parseInt(p.getValue("anchorId").toString());
-        pool.preparedQuery("UPDATE users SET anchor_name=@p1, first_name=@p2, phone=@p3, address=@p4, country=@p5, city=@p6, website=@p7, updated_at=GETDATE() WHERE id=@p8 AND user_scope='ANCHOR'")
+        pool.preparedQuery("UPDATE users SET anchor_name=@p1, first_name=@p2, phone=@p3, address=@p4, country=@p5, city=@p6, updated_at=GETDATE() WHERE id=@p7 AND user_scope='ANCHOR'")
                 .execute(Tuple.of(p.getString("name","").trim(),p.getString("authorisedName"),
                         p.getString("authorisedContact"),p.getString("address"),strOrEmpty(p.getString("country")).trim(),
-                        strOrEmpty(p.getString("city")).trim(),p.getString("website"),targetAnchorId))
+                        strOrEmpty(p.getString("city")).trim(),targetAnchorId))
                 .onFailure(e -> dbFail(message,e)).onSuccess(r -> ok(message,"Anchor updated",null));
     }
 
@@ -203,7 +203,7 @@ public class Administration extends AbstractVerticle {
         pool.preparedQuery("SELECT 1 AS allowed FROM roles WHERE id=@p1 AND role_scope=@p2 AND status=1 AND (anchor_id IS NULL OR anchor_id=@p3)")
                 .execute(Tuple.of(roleId, requestedScope, anchorId))
                 .compose(roleRows -> roleRows.size()==0 ? Future.failedFuture("Role is outside the selected anchor or has the wrong scope")
-                        : pool.preparedQuery("INSERT INTO users (organization_code,email,username,password,first_name,other_names,role_id,active,status,anchor_id,user_scope,created_by,created_at,updated_at) VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,1,1,@p8,@p9,@p10,GETDATE(),GETDATE())")
+                        : pool.preparedQuery("INSERT INTO users (organization_code,email,username,password,first_name,other_names,role_id,active,status,anchor_id,user_scope,must_change_password,created_by,created_at,updated_at) VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,1,1,@p8,@p9,1,@p10,GETDATE(),GETDATE())")
                         .execute(Tuple.of("ANCHOR".equals(requestedScope)?null:partner,email,username,Passwords.hash(tempPassword),firstName,
                                 p.getString("otherNames"),roleId,anchorId,requestedScope,Integer.parseInt(p.getValue("actorId").toString()))))
                 .onFailure(e -> fail(message,"A user with that email or username may already exist"))
@@ -213,7 +213,7 @@ public class Administration extends AbstractVerticle {
                             .put("subject", "Your BioPay Dashboard Account")
                             .put("msg", "Dear " + firstName + ",<br />Your BioPay dashboard account has been created. "
                                     + "Your temporary password is <strong>" + tempPassword
-                                    + "</strong>. Please log in and change it as soon as possible.")
+                                    + "</strong>. You'll be asked to set a new password the first time you sign in.")
                             .toString());
                     ok(message,"User created. Temporary password sent by email",null);
                 });
@@ -230,8 +230,8 @@ public class Administration extends AbstractVerticle {
         pool.preparedQuery("SELECT TOP 1 id FROM roles WHERE role_name='Super Admin' AND anchor_id IS NULL AND role_scope='SYSTEM' AND status=1")
                 .execute()
                 .compose(roleRows -> roleRows.size()==0 ? Future.failedFuture("Super Admin role not found")
-                        : pool.preparedQuery("INSERT INTO users (email,username,password,first_name,other_names,role_id,active,status,user_scope,anchor_id,is_system_admin,created_by,created_at,updated_at) "
-                                + "VALUES (@p1,@p2,@p3,@p4,@p5,@p6,1,1,'SYSTEM',NULL,1,@p7,GETDATE(),GETDATE())")
+                        : pool.preparedQuery("INSERT INTO users (email,username,password,first_name,other_names,role_id,active,status,user_scope,anchor_id,is_system_admin,must_change_password,created_by,created_at,updated_at) "
+                                + "VALUES (@p1,@p2,@p3,@p4,@p5,@p6,1,1,'SYSTEM',NULL,1,1,@p7,GETDATE(),GETDATE())")
                         .execute(Tuple.of(email,username,Passwords.hash(tempPassword),firstName,p.getString("otherNames"),
                                 Rows.intVal(roleRows.iterator().next(),"id"),Integer.parseInt(p.getValue("actorId").toString()))))
                 .onFailure(e -> fail(message,"A user with that email or username may already exist"))
@@ -241,7 +241,7 @@ public class Administration extends AbstractVerticle {
                             .put("subject", "Your BioPay Super Admin Account")
                             .put("msg", "Dear " + firstName + ",<br />A BioPay Super Admin account has been created for you. "
                                     + "Your temporary password is <strong>" + tempPassword
-                                    + "</strong>. Please log in and change it as soon as possible.")
+                                    + "</strong>. You'll be asked to set a new password the first time you sign in.")
                             .toString());
                     ok(message,"Super Admin created. Temporary password sent by email",null);
                 });
@@ -394,24 +394,25 @@ public class Administration extends AbstractVerticle {
         Integer roleId=p.getInteger("roleId"); String name=p.getString("name","").trim(); JsonArray ids=p.getJsonArray("permissionIds",new JsonArray());
         if(name.isEmpty()){fail(message,"Role name is required");return;}
         String scope=p.getString("scope","ORGANISATION").toUpperCase();
-        // SYSTEM scope is never settable when creating (that would mint a new tenantless,
-        // permission-bypass role) -- it's only ever preserved when the Super Admin edits the
-        // one role that already carries it (their own "Super Admin" role), which the UI keeps
-        // locked to that scope rather than offering it as a choice.
-        boolean editingOwnSystemRole = "SYSTEM".equals(scope) && isSystemAdmin && roleId != null;
-        if(!"ANCHOR".equals(scope) && !"ORGANISATION".equals(scope) && !editingOwnSystemRole){fail(message,"Role scope must be Anchor or Organisation");return;}
+        // The Super Admin has full system access, so unlike an Anchor Administrator they may
+        // both create and edit SYSTEM-scoped roles (tenantless, not tied to any anchor) --
+        // never allowed for anyone else, at creation or edit.
+        boolean systemScopeAllowed = "SYSTEM".equals(scope) && isSystemAdmin;
+        if(!"ANCHOR".equals(scope) && !"ORGANISATION".equals(scope) && !systemScopeAllowed){fail(message,"Role scope must be Anchor or Organisation");return;}
         if(roleId==null && ("Super Admin".equalsIgnoreCase(name) || "Anchor Administrator".equalsIgnoreCase(name) || "Organisation Administrator".equalsIgnoreCase(name))){fail(message,"That role name is reserved for a built-in administrator");return;}
-        // A brand-new tenant role has to belong to some anchor, so creating one still needs a
-        // target chosen first. Editing an existing role never does: an Anchor Administrator's
-        // own anchor is always known from their session, and the Super Admin -- who manages
-        // every role and permission by definition -- can edit any anchor's role without first
-        // narrowing the page down to that one tenant.
-        if(anchorId==null && roleId==null){fail(message,"Choose an anchor before creating a new role for it");return;}
+        // A brand-new tenant role (Anchor/Organisation scope) has to belong to some anchor, so
+        // creating one still needs a target chosen first -- unless it's SYSTEM-scoped, which by
+        // definition belongs to no anchor. Editing an existing role never does: an Anchor
+        // Administrator's own anchor is always known from their session, and the Super Admin --
+        // who manages every role and permission by definition -- can edit any anchor's role
+        // without first narrowing the page down to that one tenant.
+        if(anchorId==null && roleId==null && !systemScopeAllowed){fail(message,"Choose an anchor before creating a new role for it");return;}
         if(anchorId==null && !isSystemAdmin){fail(message,"Choose an anchor before managing its roles");return;}
         Future<Integer> roleFuture;
         if(roleId==null){
+            Integer insertAnchorId = systemScopeAllowed ? null : anchorId;
             roleFuture=pool.preparedQuery("INSERT INTO roles (role_name,description,anchor_id,role_scope,status,created_at) OUTPUT INSERTED.id VALUES (@p1,@p2,@p3,@p4,1,GETDATE())")
-                    .execute(Tuple.of(name,p.getString("description"),anchorId,scope))
+                    .execute(Tuple.of(name,p.getString("description"),insertAnchorId,scope))
                     .map(rows->Rows.intVal(rows.iterator().next(),"id"));
         }else if(isSystemAdmin){
             roleFuture=pool.preparedQuery("UPDATE roles SET role_name=@p1,description=@p2,role_scope=@p3,updated_at=GETDATE() OUTPUT INSERTED.id WHERE id=@p4")

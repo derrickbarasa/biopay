@@ -41,6 +41,12 @@ const router = createRouter({
       meta: { requiresGuest: true },
     },
     {
+      path: '/change-password',
+      name: 'force-password-change',
+      component: () => import('@/pages/ForcePasswordChangePage.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
       path: '/app',
       component: () => import('@/layouts/DefaultLayout.vue'),
       meta: { requiresAuth: true },
@@ -133,6 +139,9 @@ router.beforeEach((to) => {
   }
   if (to.meta.requiresAuth && !auth.isAuthenticated) {
     return { name: 'login', query: { redirect: to.fullPath } }
+  }
+  if (auth.isAuthenticated && auth.user?.mustChangePassword && to.name !== 'force-password-change') {
+    return { name: 'force-password-change' }
   }
   const allowedRoles = to.meta.roles as string[] | undefined
   if (allowedRoles && auth.role && !auth.isSystemAdmin && !allowedRoles.includes(auth.role)) {

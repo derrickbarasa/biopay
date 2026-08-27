@@ -14,6 +14,7 @@ import com.biopay.agent.R;
 import com.biopay.agent.home.HomeActivity;
 import com.biopay.agent.network.ApiCallback;
 import com.biopay.agent.network.ApiClient;
+import com.biopay.agent.security.SecurityActivity;
 import com.biopay.agent.session.SessionManager;
 import com.biopay.agent.session.SubscriptionGate;
 import com.biopay.agent.session.SubscriptionLockedActivity;
@@ -95,6 +96,17 @@ public class LoginActivity extends BaseActivity {
                         anchorId,
                         user != null ? user.optString("partnerCode", null) : null,
                         user != null ? user.optString("verificationMethod", "BIOMETRIC") : "BIOMETRIC");
+
+                // A first-login, system-generated password (mirrors the web dashboard's
+                // must-change-password router guard) has to be replaced before anything
+                // else in the app is reachable -- checked ahead of the subscription gate,
+                // which SecurityActivity runs itself once the password is actually changed.
+                if (user != null && user.optBoolean("mustChangePassword", false)) {
+                    setLoading(false);
+                    startActivity(SecurityActivity.newForcedIntent(LoginActivity.this, anchorId));
+                    finish();
+                    return;
+                }
 
                 // Mirrors the web dashboard's archived-subscription gate -- see
                 // SubscriptionGate's javadoc for why this only needs checking here.

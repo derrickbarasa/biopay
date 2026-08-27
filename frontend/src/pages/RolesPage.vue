@@ -28,6 +28,13 @@ const newPermission = reactive({ name: '', displayName: '', groupKey: 'REPORTS',
 
 const assignablePermissions = computed(() => permissions.value.filter((permission) => !isLegacyPermission(permission.name)))
 const selectedRole = computed(() => roles.value.find((role) => role.id === selected.value))
+// Whichever scope the current session itself belongs to reads first -- a Super Admin
+// wants to see the Super Admin role at the top of their own roles list, not buried
+// under every anchor/organisation role that happens to sort ahead of it alphabetically.
+const sortedRoles = computed(() => {
+  const ownScopeRank = (role: Role) => (auth.isSystemAdmin ? (role.scope === 'SYSTEM' ? 0 : 1) : (role.scope === auth.role ? 0 : 1))
+  return [...roles.value].sort((a, b) => ownScopeRank(a) - ownScopeRank(b))
+})
 const anchorNameById = computed(() => new Map(anchors.value.map((a) => [a.id, a.name])))
 function roleAnchorName(role: Role) { return role.anchorId != null ? anchorNameById.value.get(role.anchorId) ?? null : null }
 // The Super Admin has full system access, so no role or permission is locked to them -- these
@@ -38,12 +45,13 @@ const isUnlimitedRole = computed(() => !auth.isSystemAdmin && !!selectedRole.val
 // "System"), so its scope field alone stays fixed even though everything else about the role
 // -- name, description, permissions -- opens up for the Super Admin like any other role.
 const isFixedScopeRole = computed(() => selectedRole.value?.scope === 'SYSTEM')
-// Creating a brand-new tenant role needs a target anchor -- chosen right here in the editor,
-// not as a page-wide precondition -- since a role has to belong to some anchor. Editing an
-// existing one never does: an Anchor Administrator's own anchor is always known from their
+// Creating a brand-new Anchor/Organisation-scoped role needs a target anchor -- chosen right
+// here in the editor, not as a page-wide precondition -- since a role has to belong to some
+// anchor. A System-scoped role belongs to no anchor, so it never needs one. Editing an existing
+// role never does either: an Anchor Administrator's own anchor is always known from their
 // session, and the Super Admin can save changes to any anchor's role without narrowing the
 // page down to that one tenant first.
-const canSave = computed(() => auth.can('ACCESS_ROLES') && (!auth.isSystemAdmin || form.roleId !== null || !!form.anchorId) && !isBuiltInRole.value)
+const canSave = computed(() => auth.can('ACCESS_ROLES') && (!auth.isSystemAdmin || form.roleId !== null || form.scope === 'SYSTEM' || !!form.anchorId) && !isBuiltInRole.value)
 const selectedPermissionCount = computed(() => form.permissionIds.filter((id) => assignablePermissions.value.some((permission) => permission.id === id)).length)
 const allPermissionsSelected = computed(() => assignablePermissions.value.length > 0 && selectedPermissionCount.value === assignablePermissions.value.length)
 
@@ -91,7 +99,7 @@ async function load(preferredRoleId?: number | null) {
     ])
     roles.value = roleResponse.results ?? []
     permissions.value = permissionResponse.results ?? []
-    const target = roles.value.find((role) => role.id === preferredRoleId) ?? roles.value.find((role) => role.id === selected.value) ?? roles.value[0]
+    const target = roles.value.find((role) => role.id === preferredRoleId) ?? roles.value.find((role) => role.id === selected.value) ?? sortedRoles.value[0]
     if (target) edit(target)
   } catch (error) {
     toast.error(error instanceof Error ? error.message : 'Unable to load roles')
@@ -128,7 +136,7 @@ async function save() {
     toast.error('Select at least one permission for this role')
     return
   }
-  if (auth.isSystemAdmin && form.roleId === null && !form.anchorId) {
+  if (auth.isSystemAdmin && form.roleId === null && form.scope !== 'SYSTEM' && !form.anchorId) {
     toast.error('Choose an anchor for this role')
     return
   }
@@ -224,17 +232,18 @@ watch(selectedAnchorId, () => { selected.value = null; void load() })
       </div>
     </header>
 
-    <v-select
-      v-if="auth.isSystemAdmin" v-model="selectedAnchorId" :items="anchors" item-title="name" item-value="id" clearable
-      label="Filter by anchor (optional)" variant="outlined" class="mb-5" style="max-width: 420px"
-    />
-
     <div class="role-workspace">
       <aside class="role-list" aria-label="Available roles">
-        <div class="role-list-head"><strong>Roles</strong><span>{{ roles.length }}</span></div>
+        <div class="role-list-head">
+          <div class="role-list-heading"><strong>Roles</strong><span>{{ roles.length }}</span></div>
+          <v-select
+            v-if="auth.isSystemAdmin" v-model="selectedAnchorId" :items="anchors" item-title="name" item-value="id" clearable
+            label="Anchor" variant="outlined" density="compact" hide-details class="role-list-anchor-filter"
+          />
+        </div>
         <v-skeleton-loader v-if="loading" type="list-item-two-line@3" />
         <template v-else>
-          <button v-for="role in roles" :key="role.id" type="button" :class="{ active: selected === role.id }" @click="edit(role)">
+          <button v-for="role in sortedRoles" :key="role.id" type="button" :class="{ active: selected === role.id }" @click="edit(role)">
             <span>{{ role.name }}</span>
             <small>{{ role.systemRole ? 'Unlimited platform access' : `${role.permissions.filter((permission) => !isLegacyPermission(permission)).length} permissions` }} · {{ role.scope === 'SYSTEM' ? 'System' : role.scope === 'ANCHOR' ? 'Anchor' : 'Organisation' }}{{ auth.isSystemAdmin && !selectedAnchorId && roleAnchorName(role) ? ` · ${roleAnchorName(role)}` : '' }}</small>
           </button>
@@ -252,10 +261,16 @@ watch(selectedAnchorId, () => { selected.value = null; void load() })
         </div>
 
         <div class="role-fields">
-          <v-select v-if="auth.isSystemAdmin && form.roleId === null" v-model="form.anchorId" :items="anchors" item-title="name" item-value="id" label="Anchor" variant="outlined" density="compact" class="wide" />
-          <v-text-field v-model="form.name" label="Role name" variant="outlined" density="compact" required :disabled="isBuiltInRole" />
-          <v-select v-model="form.scope" :items="[{ title: 'Organisation', value: 'ORGANISATION' }, { title: 'Anchor', value: 'ANCHOR' }, { title: 'System', value: 'SYSTEM' }]" label="Access scope" variant="outlined" density="compact" :disabled="isBuiltInRole || isFixedScopeRole" />
-          <v-textarea v-model="form.description" label="Description" variant="outlined" rows="2" density="compact" class="wide" :disabled="isBuiltInRole" />
+          <v-select v-if="auth.isSystemAdmin && form.roleId === null && form.scope !== 'SYSTEM'" v-model="form.anchorId" :items="anchors" item-title="name" item-value="id" label="Anchor" variant="outlined" density="compact" class="wide" />
+          <v-text-field v-model="form.name" label="Role name" placeholder="e.g. Regional Coordinator" variant="outlined" density="compact" required :disabled="isBuiltInRole" />
+          <v-select
+            v-model="form.scope"
+            :items="auth.isSystemAdmin
+              ? [{ title: 'Organisation', value: 'ORGANISATION' }, { title: 'Anchor', value: 'ANCHOR' }, { title: 'System', value: 'SYSTEM' }]
+              : [{ title: 'Organisation', value: 'ORGANISATION' }, { title: 'Anchor', value: 'ANCHOR' }]"
+            label="Access scope" variant="outlined" density="compact" :disabled="isBuiltInRole || isFixedScopeRole"
+          />
+          <v-textarea v-model="form.description" label="Description" placeholder="What this role is for" variant="outlined" rows="2" density="compact" class="wide" :disabled="isBuiltInRole" />
         </div>
 
         <div class="permission-heading">
@@ -292,7 +307,7 @@ watch(selectedAnchorId, () => { selected.value = null; void load() })
         </div>
 
         <div class="editor-actions">
-          <p v-if="!canSave">{{ isUnlimitedRole ? 'Super Admin access is enforced by the platform and cannot be changed.' : isBuiltInRole ? 'Built-in tenant administrator permissions are managed by BioPay policy.' : auth.isSystemAdmin && form.roleId === null && !form.anchorId ? 'Choose an anchor for this role.' : 'Your role can view roles but cannot change them.' }}</p>
+          <p v-if="!canSave">{{ isUnlimitedRole ? 'Super Admin access is enforced by the platform and cannot be changed.' : isBuiltInRole ? 'Built-in tenant administrator permissions are managed by BioPay policy.' : auth.isSystemAdmin && form.roleId === null && form.scope !== 'SYSTEM' && !form.anchorId ? 'Choose an anchor for this role.' : 'Your role can view roles but cannot change them.' }}</p>
           <v-btn v-if="canSave && form.roleId !== null" variant="outlined" color="error" prepend-icon="mdi-trash-can-outline" @click="deleteRoleDialog = true">Delete role</v-btn>
           <v-btn color="secondary" :loading="saving" :disabled="!canSave" prepend-icon="mdi-content-save-outline" @click="save">{{ form.roleId === null ? 'Create role' : 'Save permissions' }}</v-btn>
         </div>
@@ -344,7 +359,10 @@ watch(selectedAnchorId, () => { selected.value = null; void load() })
 .role-workspace { display: grid; grid-template-columns: 270px minmax(0, 1fr); gap: 18px; align-items: start; }
 .role-list, .role-editor { background: #fff; border: 1px solid #e2e8f0; border-radius: 16px; }
 .role-list { padding: 10px; display: flex; flex-direction: column; gap: 7px; position: sticky; top: 18px; }
-.role-list-head { display: flex; justify-content: space-between; align-items: center; padding: 8px 8px 10px; color: #334155; }
+.role-list-head { display: flex; flex-direction: column; gap: 8px; padding: 8px 8px 10px; color: #334155; }
+.role-list-heading { display: flex; justify-content: space-between; align-items: center; }
+.role-list-anchor-filter { max-width: 100%; }
+.role-list-anchor-filter :deep(.v-field) { font-size: .82rem; }
 .role-list-head span { min-width: 24px; height: 24px; display: grid; place-items: center; border-radius: 999px; background: #e2e8f0; font-size: .75rem; font-weight: 700; }
 .role-list button { width: 100%; text-align: left; background: transparent; border: 1px solid transparent; border-radius: 12px; padding: 13px 12px; color: #334155; cursor: pointer; }
 .role-list button:hover { background: #f8fafc; }

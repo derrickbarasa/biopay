@@ -21,7 +21,7 @@ interface PaymentRow {
 const auth = useAuthStore()
 const toast = useToast()
 const { confirmAction } = useConfirm()
-const { anchors, selectedAnchorId, anchorGateActive, anchorChosen } = useAnchorScope()
+const { anchors, selectedAnchorId, anchorGateActive } = useAnchorScope()
 const loading = ref(true)
 const payments = ref<PaymentRow[]>([])
 const tableSearch = ref('')
@@ -44,7 +44,7 @@ const headers = [
   { title: 'Amount', key: 'amount' },
   { title: 'Status', key: 'status' },
   { title: 'Date', key: 'createdAt' },
-  { title: 'Actions', key: 'actions', sortable: false, align: 'end' as const },
+  { title: 'Actions', key: 'actions', sortable: false, align: 'start' as const },
 ]
 
 // Name-not-code lookup, matching the pattern used elsewhere in the dashboard.
@@ -106,7 +106,6 @@ function clearFilters() {
 }
 
 async function loadOrganizations() {
-  if (!auth.isAnchorAdministrator && !auth.isSystemAdmin) { organizations.value = []; return }
   try {
     const res = await dispatch<{ results: typeof organizations.value }>('GET_ORGANIZATIONS', {
       targetAnchorId: auth.isSystemAdmin ? selectedAnchorId.value : undefined,
@@ -184,10 +183,6 @@ async function remove(row: PaymentRow) {
       <v-btn v-if="scopeReady && auth.can('DOWNLOAD_REPORTS')" color="secondary" prepend-icon="mdi-download" @click="exportCsv">Export CSV</v-btn>
     </div>
 
-    <v-alert v-if="auth.isSystemAdmin ? !anchorChosen : (auth.isAnchorAdministrator && !organisationFilter)" type="info" variant="tonal" class="mb-4">
-      {{ auth.isSystemAdmin ? 'Showing payments across every anchor. Choose one in the filters below to narrow the list.' : 'Showing payments across every organisation. Choose one in the filters below to narrow the list.' }}
-    </v-alert>
-
     <template v-if="scopeReady">
     <v-row class="mb-2">
       <v-col cols="12" sm="4">
@@ -247,7 +242,10 @@ async function remove(row: PaymentRow) {
             <v-select v-model="selectedAnchorId" :items="anchors" item-title="name" item-value="id" label="Anchor" clearable hide-details density="compact" prepend-inner-icon="mdi-bank-outline" />
           </v-col>
           <v-col v-if="auth.isSystemAdmin || auth.isAnchorAdministrator" cols="12" sm="4" md="3">
-            <v-select v-model="organisationFilter" :items="organizations" item-title="name" item-value="organisationCode" label="Organisation" clearable hide-details density="compact" />
+            <v-select
+              v-model="organisationFilter" :items="organizations" item-title="name" item-value="organisationCode"
+              label="Organisation" clearable hide-details density="compact" :disabled="auth.isSystemAdmin && !selectedAnchorId"
+            />
           </v-col>
           <v-col cols="6" sm="4" md="2">
             <v-select

@@ -46,7 +46,7 @@ function scoped(payload: Record<string, unknown> = {}) {
 const tableSearch = ref('')
 watch(tab, () => { tableSearch.value = '' })
 
-const actionsHeader = { title: 'Actions', key: 'actions', sortable: false, align: 'end' as const }
+const actionsHeader = { title: 'Actions', key: 'actions', sortable: false, align: 'start' as const }
 const stateHeaders = [{ title: 'Code', key: 'code' }, { title: 'State', key: 'name' }, actionsHeader]
 const countyHeaders = [{ title: 'Code', key: 'code' }, { title: 'Name', key: 'name' }, { title: 'State', key: 'stateCode' }, actionsHeader]
 const locationHeaders = [{ title: 'Code', key: 'code' }, { title: 'Name', key: 'name' }, { title: 'County', key: 'countyCode' }, actionsHeader]
@@ -406,7 +406,7 @@ async function submitBulk() {
           <v-select v-if="dialogLevel !== 'STATE'" v-model="form.stateCode" :items="dialogStates" item-title="name" item-value="code" label="State" />
           <v-select v-if="dialogLevel === 'LOCATION' || dialogLevel === 'VILLAGE'" v-model="form.countyCode" :items="countiesForState(form.stateCode)" item-title="name" item-value="code" label="County" />
           <v-select v-if="dialogLevel === 'VILLAGE'" v-model="form.locationCode" :items="locationsForCounty(form.countyCode)" item-title="name" item-value="code" label="Location" />
-          <v-text-field v-model="form.name" label="Name" class="mt-2" />
+          <v-text-field v-model="form.name" label="Name" placeholder="e.g. Central" class="mt-2" />
           <p class="text-caption text-medium-emphasis mt-2 mb-0">The code is generated automatically. State is the top-level geography, so no separate country field is needed.</p>
         </v-card-text>
         <v-card-actions>

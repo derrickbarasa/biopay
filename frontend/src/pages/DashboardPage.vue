@@ -5,13 +5,13 @@ import { useAuthStore } from '@/stores/auth'
 import { dispatch } from '@/api/client'
 import LineChart from '@/components/LineChart.vue'
 import BarChart from '@/components/BarChart.vue'
+import { formatCurrency, formatCurrencyCompact } from '@/utils/currency'
 
 const auth = useAuthStore()
 const router = useRouter()
 
 const loading = ref(true)
 const loadError = ref('')
-const lastUpdated = ref<Date | null>(null)
 const metrics = ref<Record<string, any>>({})
 const paymentsSeries = ref<{ label: string; value: number }[]>([])
 const householdsSeries = ref<{ label: string; value: number }[]>([])
@@ -24,7 +24,26 @@ interface MetricCard {
   detail: string
   art: MetricArt
   tone?: 'teal' | 'amber' | 'blue'
-  wide?: boolean
+}
+
+// The backend only returns a bucket for months that actually have rows, so an anchor with
+// activity in a single month gets back exactly one point -- a lone dot with no line to draw.
+// Pad the series out to a rolling 6-month window (ending this month) so there's always a real
+// trend line to read, with genuinely-empty months showing as zero rather than being omitted.
+function padMonthlySeries<T extends { period: string; value: number }>(
+  rows: T[],
+  months = 6,
+): { label: string; value: number }[] {
+  const byPeriod = new Map(rows.map((r) => [r.period, r.value]))
+  const out: { label: string; value: number }[] = []
+  const cursor = new Date()
+  cursor.setDate(1)
+  for (let i = months - 1; i >= 0; i--) {
+    const d = new Date(cursor.getFullYear(), cursor.getMonth() - i, 1)
+    const period = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+    out.push({ label: period, value: byPeriod.get(period) ?? 0 })
+  }
+  return out
 }
 
 async function load() {
@@ -37,9 +56,8 @@ async function load() {
       dispatch<{ results: { period: string; count: number }[] }>('DASHBOARD_HOUSEHOLDS_CHART'),
     ])
     metrics.value = m.results
-    paymentsSeries.value = p.results.map((r) => ({ label: r.period, value: r.amount }))
-    householdsSeries.value = h.results.map((r) => ({ label: r.period, value: r.count }))
-    lastUpdated.value = new Date()
+    paymentsSeries.value = padMonthlySeries(p.results.map((r) => ({ period: r.period, value: r.amount })))
+    householdsSeries.value = padMonthlySeries(h.results.map((r) => ({ period: r.period, value: r.count })))
   } catch (err) {
     loadError.value = err instanceof Error ? err.message : 'The dashboard could not be loaded.'
   } finally {
@@ -58,14 +76,14 @@ const orgAmountSeries = computed(() =>
 )
 
 function currency(v: number | undefined) {
-  return (v ?? 0).toLocaleString(undefined, { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })
+  return formatCurrency(v)
 }
 
 // Card values use a compact/abbreviated form (USD 2.4M) so long amounts never
 // force one KPI card to grow taller or wider than the rest of the row; full
 // precision remains in the detail line and every table below.
 function compactCurrency(v: number | undefined) {
-  return (v ?? 0).toLocaleString(undefined, { style: 'currency', currency: 'USD', notation: 'compact', maximumFractionDigits: 1 })
+  return formatCurrencyCompact(v)
 }
 
 function displayDate(value: unknown) {
@@ -88,7 +106,7 @@ const anchorMetricCards = computed<MetricCard[]>(() => [
   {
     label: 'Total Generated', value: compactCurrency(metrics.value.totalGeneratedAmount),
     detail: `${metrics.value.generatedCycles ?? 0} non-rejected payment cycle${metrics.value.generatedCycles === 1 ? '' : 's'}`,
-    art: 'generated', wide: true,
+    art: 'generated',
   },
   { label: 'Pending Approvals', value: metrics.value.pendingPayrolls ?? '—', detail: 'Payment cycles awaiting a checker', art: 'pending', tone: 'amber' },
   {
@@ -127,7 +145,7 @@ const organisationMetricCards = computed<MetricCard[]>(() => [
   {
     label: 'Total Generated', value: compactCurrency(metrics.value.totalGeneratedAmount),
     detail: `${metrics.value.generatedCycles ?? 0} non-rejected payment cycle${metrics.value.generatedCycles === 1 ? '' : 's'}`,
-    art: 'generated', wide: true,
+    art: 'generated',
   },
 ])
 </script>
@@ -143,7 +161,6 @@ const organisationMetricCards = computed<MetricCard[]>(() => [
         />
         <h1 class="dashboard-title">Welcome back, {{ auth.fullName }}</h1>
         <p>Track programme activity and keep every disbursement accountable.</p>
-        <p v-if="lastUpdated" class="updated-at">Updated {{ lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }}</p>
       </div>
       <div class="dashboard-actions d-flex ga-2 flex-wrap justify-end">
         <v-btn size="small" variant="text" prepend-icon="mdi-refresh" :loading="loading" @click="load">
@@ -182,7 +199,7 @@ const organisationMetricCards = computed<MetricCard[]>(() => [
       <v-card
         v-for="card in (auth.isAnchor ? anchorMetricCards : organisationMetricCards)"
         :key="card.label"
-        class="metric-card" :class="[`tone-${card.tone ?? 'teal'}`, { 'metric-card-wide': card.wide }]" variant="flat" border
+        class="metric-card" :class="`tone-${card.tone ?? 'teal'}`" variant="flat" border
       >
         <div class="metric-copy">
           <div class="metric-label">{{ card.label }}</div>
@@ -259,7 +276,7 @@ const organisationMetricCards = computed<MetricCard[]>(() => [
       <v-col cols="12" md="7">
         <v-card class="pa-3" variant="flat" border>
           <div class="chart-heading">Payment volume over time</div>
-          <LineChart v-if="paymentsSeries.length" :data="paymentsSeries" value-prefix="USD " />
+          <LineChart v-if="paymentsSeries.some((p) => p.value > 0)" :data="paymentsSeries" value-prefix="USD " />
           <div v-else class="chart-empty">
             <v-icon icon="mdi-chart-line" size="24" />
             <span>No payment activity to chart yet.</span>
@@ -269,7 +286,7 @@ const organisationMetricCards = computed<MetricCard[]>(() => [
       <v-col cols="12" md="5">
         <v-card class="pa-3" variant="flat" border>
           <div class="chart-heading">Household registration trend</div>
-          <LineChart v-if="householdsSeries.length" :data="householdsSeries" />
+          <LineChart v-if="householdsSeries.some((p) => p.value > 0)" :data="householdsSeries" />
           <div v-else class="chart-empty">
             <v-icon icon="mdi-chart-bar" size="24" />
             <span>No household registrations to chart yet.</span>
@@ -396,9 +413,8 @@ const organisationMetricCards = computed<MetricCard[]>(() => [
 .dashboard-actions { max-width: 34rem; }
 
 /* Real CSS grid, not v-row/v-col: every cell in a row shares the same
-   explicit row height, so all seven KPI cards line up pixel-for-pixel no
-   matter how short or long their value/detail text is. The wide "Total
-   Generated" card spans two columns but never grows taller than its peers. */
+   explicit row height, so every KPI card lines up pixel-for-pixel and at
+   an identical size no matter how short or long its value/detail text is. */
 .metric-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -420,7 +436,6 @@ const organisationMetricCards = computed<MetricCard[]>(() => [
 }
 .metric-card.tone-amber { --metric-color: #d97706; --metric-soft: #fef3c7; }
 .metric-card.tone-blue { --metric-color: #15803d; --metric-soft: #dcfce7; }
-.metric-card-wide { grid-column: span 2; grid-template-columns: minmax(0, 1fr) 96px; }
 .metric-copy { position: relative; z-index: 1; min-width: 0; }
 .metric-label { color: #64748b; font-size: .66rem; font-weight: 700; letter-spacing: .045em; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .metric-value { color: #0f172a; font-size: clamp(1.1rem, .96rem + .45vw, 1.375rem); font-weight: 750; letter-spacing: -.03em; line-height: 1.15; margin-top: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -444,12 +459,14 @@ const organisationMetricCards = computed<MetricCard[]>(() => [
 }
 .metric-art svg { position: relative; width: 100%; max-height: 46px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
 .metric-art svg .art-dot { fill: currentColor; stroke: none; }
-.metric-card-wide .metric-art svg { max-height: 52px; }
 @media (hover: hover) and (pointer: fine) {
   .metric-card:hover .metric-art svg { transform: translateY(-2px); }
 }
 .metric-art svg { transition: transform 220ms cubic-bezier(.16, 1, .3, 1); }
-.analytics-grid :deep(.v-card) { padding: 16px !important; }
+.analytics-grid { align-items: stretch; }
+.analytics-grid > .v-col { display: flex; }
+.analytics-grid :deep(.v-card) { padding: 16px !important; width: 100%; display: flex; flex-direction: column; }
+.analytics-grid :deep(.chart-empty) { flex: 1; }
 .chart-heading { font-size: .85rem; font-weight: 600; color: #0f172a; margin-bottom: 8px; }
 .chart-empty { min-height: 180px; display: grid; place-content: center; justify-items: center; gap: 8px; color: #64748b; text-align: center; font-size: .85rem; }
 .dashboard-empty { min-height: 92px; display: flex; align-items: center; justify-content: center; gap: 14px; color: #475569; border: 1px dashed #cbd5e1; border-radius: 14px; background: #fff; padding: 18px; font-size: .85rem; }
@@ -459,18 +476,16 @@ const organisationMetricCards = computed<MetricCard[]>(() => [
 .table-scroll { max-width: 100%; overflow-x: auto; outline-offset: -2px; }
 .table-scroll :deep(table) { font-size: .8rem; }
 .table-scroll:focus-visible { outline: 2px solid #0d9488; }
-.table-scroll :deep(th) { text-align: center !important; }
 .dashboard-table-card { border-radius: 0 !important; }
 .dashboard-table-card :deep(.v-card-title) { border-radius: 0 !important; }
 @media (max-width: 1100px) {
   .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .metric-card-wide { grid-column: span 2; }
 }
 @media (max-width: 720px) {
   .dashboard-heading { flex-direction: column; }
   .dashboard-actions { width: 100%; justify-content: flex-start !important; }
   .dashboard-actions :deep(.v-btn) { flex: 1 1 auto; }
   .metric-grid { grid-template-columns: 1fr; }
-  .metric-card, .metric-card-wide { grid-column: span 1; height: auto; min-height: 108px; }
+  .metric-card { height: auto; min-height: 108px; }
 }
 </style>

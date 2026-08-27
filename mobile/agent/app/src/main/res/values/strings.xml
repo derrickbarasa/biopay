@@ -393,6 +393,8 @@
     <string name="settings_password_mismatch">New passwords do not match.</string>
     <string name="settings_password_length">Use at least 8 characters for the new password.</string>
     <string name="settings_password_changed">Password changed successfully.</string>
+    <string name="security_forced_title">Set a new password</string>
+    <string name="security_forced_subtitle">Your account was created with a temporary password. Choose your own before continuing.</string>
 
     <string name="settings_data_storage">Data and storage</string>
     <string name="settings_data_storage_title">Stored on this device</string>

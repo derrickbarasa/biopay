@@ -73,6 +73,8 @@ public class Auth extends AbstractVerticle {
         eventBus.consumer("TOTP_SETUP_INIT", this::totpSetupInit);
         eventBus.consumer("TOTP_SETUP_CONFIRM", this::totpSetupConfirm);
         eventBus.consumer("TOTP_DISABLE", this::totpDisable);
+        eventBus.consumer("EMAIL_OTP_ENABLE", this::emailOtpEnable);
+        eventBus.consumer("EMAIL_OTP_DISABLE", this::emailOtpDisable);
         startPromise.complete();
     }
 
@@ -200,8 +202,9 @@ public class Auth extends AbstractVerticle {
                     Integer anchorId = intOr(r, "anchor_id", null);
                     String partnerCode = "ORGANISATION".equalsIgnoreCase(scope) ? Rows.str(r, "organization_code") : null;
                     boolean totpEnabled = Boolean.TRUE.equals(r.getBoolean("totp_enabled"));
+                    boolean emailOtpEnabled = !Boolean.FALSE.equals(r.getBoolean("email_otp_enabled"));
                     if (otpRequired()) {
-                        startOtpChallenge(message, id, scope, anchorId, partnerCode, email, totpEnabled);
+                        startOtpChallenge(message, id, scope, anchorId, partnerCode, email, totpEnabled, emailOtpEnabled);
                     } else {
                         // Already have the full, just-verified row in hand -- skip the extra
                         // round-trip to the (often remote, latency-dominated) database that
@@ -214,7 +217,7 @@ public class Auth extends AbstractVerticle {
     /** Password verified -- mint the short-lived pending token and tell the caller which
      *  OTP methods are available, instead of a real session (see {@link #finishLogin}). */
     private void startOtpChallenge(Message<Object> message, int userId, String scope, Integer anchorId,
-            String partnerCode, String email, boolean totpEnabled) {
+            String partnerCode, String email, boolean totpEnabled, boolean emailOtpEnabled) {
         JsonObject pendingClaims = new JsonObject()
                 .put("sub", userId)
                 .put("purpose", "LOGIN_OTP_PENDING")
@@ -229,9 +232,18 @@ public class Auth extends AbstractVerticle {
                         .setIssuer("biopay")
                         .setExpiresInMinutes(OTP_PENDING_MINUTES));
 
-        JsonArray methods = new JsonArray().add("EMAIL");
+        JsonArray methods = new JsonArray();
+        if (emailOtpEnabled) {
+            methods.add("EMAIL");
+        }
         if (totpEnabled) {
             methods.add("TOTP");
+        }
+        // Fail safe: a row can never legitimately reach both flags off (EMAIL_OTP_DISABLE
+        // refuses without totp_enabled=1), but never lock an account out of its own login
+        // over it -- fall back to EMAIL rather than replying with an empty method list.
+        if (methods.isEmpty()) {
+            methods.add("EMAIL");
         }
 
         reply(message, new JsonObject()
@@ -391,6 +403,8 @@ public class Auth extends AbstractVerticle {
                                     .put("partnerCode", partnerCode)
                                     .put("systemAdmin", systemAdmin)
                                     .put("totpEnabled", Boolean.TRUE.equals(r.getBoolean("totp_enabled")))
+                                    .put("emailOtpEnabled", !Boolean.FALSE.equals(r.getBoolean("email_otp_enabled")))
+                                    .put("mustChangePassword", Boolean.TRUE.equals(r.getBoolean("must_change_password")))
                                     .put("permissions", permsF.result() != null ? permsF.result() : new JsonArray())
                                     .put("enabledModules", modulesF.result() != null ? modulesF.result() : new JsonArray())));
                 });
@@ -450,7 +464,7 @@ public class Auth extends AbstractVerticle {
                     int anchorId = ids.getInteger("anchorId");
                     audit(userId, anchorId, "USER", null, "SIGNUP_SUCCESS", ip, new JsonObject());
                     if (otpRequired()) {
-                        startOtpChallenge(message, userId, "ANCHOR", anchorId, null, email, false);
+                        startOtpChallenge(message, userId, "ANCHOR", anchorId, null, email, false, true);
                     } else {
                         finishLogin(message, userId, ip);
                     }
@@ -659,7 +673,8 @@ public class Auth extends AbstractVerticle {
                                                 .put("anchorId", anchorId)
                                                 .put("partnerCode", partnerCode)
                                                 .put("enabledModules", modulesF.succeeded() ? modulesF.result() : new JsonArray())
-                                                .put("verificationMethod", verificationMethodF.succeeded() ? verificationMethodF.result() : "BIOMETRIC")));
+                                                .put("verificationMethod", verificationMethodF.succeeded() ? verificationMethodF.result() : "BIOMETRIC")
+                                                .put("mustChangePassword", Boolean.TRUE.equals(r.getBoolean("must_change_password")))));
                             });
                 });
     }
@@ -802,7 +817,7 @@ public class Auth extends AbstractVerticle {
                         return;
                     }
                     String newHash = Passwords.hash(newPassword);
-                    pool.preparedQuery("UPDATE " + table + " SET password=@p1 WHERE id=@p2")
+                    pool.preparedQuery("UPDATE " + table + " SET password=@p1, must_change_password=0 WHERE id=@p2")
                             .execute(Tuple.of(newHash, actorId))
                             .onFailure(err -> onDbError(message, err))
                             .onSuccess(up -> reply(message, new JsonObject()
@@ -876,6 +891,8 @@ public class Auth extends AbstractVerticle {
                                     .put("partnerCode", partnerCode)
                                     .put("systemAdmin", Boolean.TRUE.equals(r.getBoolean("is_system_admin")))
                                     .put("totpEnabled", Boolean.TRUE.equals(r.getBoolean("totp_enabled")))
+                                    .put("emailOtpEnabled", !Boolean.FALSE.equals(r.getBoolean("email_otp_enabled")))
+                                    .put("mustChangePassword", Boolean.TRUE.equals(r.getBoolean("must_change_password")))
                                     .put("permissions", permsF.result() != null ? permsF.result() : new JsonArray())
                                     .put("enabledModules", modulesF.result() != null ? modulesF.result() : new JsonArray()))));
                 });
@@ -972,6 +989,65 @@ public class Auth extends AbstractVerticle {
                             .onSuccess(v -> reply(message, new JsonObject()
                                     .put("responseCode", "000")
                                     .put("responseMessage", "Authenticator app disabled")));
+                });
+    }
+
+    // ---- EMAIL_OTP_ENABLE / EMAIL_OTP_DISABLE (authenticated) -----------------------
+
+    /** Turning email verification back on is never a security regression, so no
+     *  password check -- unlike {@link #emailOtpDisable} and {@link #totpDisable}. */
+    private void emailOtpEnable(Message<Object> message) {
+        JsonObject payload = new JsonObject(message.body().toString());
+        Object actorIdVal = payload.getValue("actorId");
+        if (actorIdVal == null || "SUPERVISOR".equalsIgnoreCase(payload.getString("actorRole", ""))) {
+            replyError(message, "Not authorised");
+            return;
+        }
+        int actorId = Integer.parseInt(actorIdVal.toString());
+
+        pool.preparedQuery("UPDATE users SET email_otp_enabled=1 WHERE id=@p1")
+                .execute(Tuple.of(actorId))
+                .onFailure(err -> onDbError(message, err))
+                .onSuccess(v -> reply(message, new JsonObject()
+                        .put("responseCode", "000")
+                        .put("responseMessage", "Email verification enabled")));
+    }
+
+    /** Refuses unless the account already has the authenticator app enabled --
+     *  otherwise this would strip a user's only remaining login OTP method. */
+    private void emailOtpDisable(Message<Object> message) {
+        JsonObject payload = new JsonObject(message.body().toString());
+        Object actorIdVal = payload.getValue("actorId");
+        String password = payload.getString("password", "");
+        if (actorIdVal == null || password.isEmpty()) {
+            replyError(message, "Your current password is required to disable this");
+            return;
+        }
+        int actorId = Integer.parseInt(actorIdVal.toString());
+
+        pool.preparedQuery("SELECT password, totp_enabled FROM users WHERE id=@p1")
+                .execute(Tuple.of(actorId))
+                .onFailure(err -> onDbError(message, err))
+                .onSuccess(rows -> {
+                    if (rows.size() == 0) {
+                        replyError(message, "Current password is incorrect");
+                        return;
+                    }
+                    Row r = rows.iterator().next();
+                    if (!Passwords.verify(password, Rows.str(r, "password"))) {
+                        replyError(message, "Current password is incorrect");
+                        return;
+                    }
+                    if (!Boolean.TRUE.equals(r.getBoolean("totp_enabled"))) {
+                        replyError(message, "Enable the authenticator app before turning off email verification");
+                        return;
+                    }
+                    pool.preparedQuery("UPDATE users SET email_otp_enabled=0 WHERE id=@p1")
+                            .execute(Tuple.of(actorId))
+                            .onFailure(err -> onDbError(message, err))
+                            .onSuccess(v -> reply(message, new JsonObject()
+                                    .put("responseCode", "000")
+                                    .put("responseMessage", "Email verification disabled")));
                 });
     }
 

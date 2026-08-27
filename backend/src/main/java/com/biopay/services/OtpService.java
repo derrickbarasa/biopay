@@ -6,6 +6,7 @@ import io.vertx.core.json.JsonObject;
 import io.vertx.mssqlclient.MSSQLPool;
 import io.vertx.sqlclient.Row;
 import io.vertx.sqlclient.Tuple;
+import com.biopay.utilities.EmailTemplates;
 import com.biopay.utilities.Hashing;
 import com.biopay.utilities.Rows;
 import com.biopay.utilities.Utilities;
@@ -21,7 +22,7 @@ import com.biopay.utilities.Utilities;
  */
 final class OtpService {
 
-    private static final int OTP_TTL_MINUTES = 10;
+    private static final int OTP_TTL_MINUTES = 5;
     private static final int MAX_ATTEMPTS = 5;
 
     private final MSSQLPool pool;
@@ -44,10 +45,9 @@ final class OtpService {
                 .execute(Tuple.of(referenceType, referenceCode, userId, userScope, codeHash, OTP_TTL_MINUTES))
                 .compose(rows -> eventBus.<JsonObject>request("EMAIL", new JsonObject()
                             .put("mailTo", emailTo)
-                            .put("subject", "BioPay verification code")
-                            .put("msg", "Your verification code is <strong>" + code + "</strong>. "
-                                    + "It expires in " + OTP_TTL_MINUTES + " minutes. "
-                                    + "Do not share this code with anyone."))
+                            .put("subject", "Your BioPay verification code")
+                            .put("msg", EmailTemplates.otpEmail(code, OTP_TTL_MINUTES))
+                            .put("inlineImages", EmailTemplates.logoInlineImages()))
                         .map(ignored -> (Void) null));
     }
 

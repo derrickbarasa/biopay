@@ -3,6 +3,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { dispatch } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
+import { formatCurrency } from '@/utils/currency'
 
 interface SubscriptionStatus {
   status: 'NONE' | 'ACTIVE' | 'GRACE' | 'ARCHIVED'
@@ -49,6 +50,13 @@ const allSubscriptions = ref<AnchorSubscription[]>([])
 const loadingAll = ref(false)
 const selectedAnchorId = ref<number | null>(null)
 const subscriptionScope = computed(() => auth.isSystemAdmin ? { targetAnchorId: selectedAnchorId.value } : {})
+const statusFilter = ref<string | null>(null)
+const anchorSearch = ref('')
+const filteredSubscriptions = computed(() => allSubscriptions.value.filter((a) => {
+  if (statusFilter.value && a.status !== statusFilter.value) return false
+  if (anchorSearch.value && !(a.anchorName ?? '').toLowerCase().includes(anchorSearch.value.toLowerCase())) return false
+  return true
+}))
 
 /** Currencies available for renewal records -- USD is the platform default, the rest cover
  *  the anchors this system already operates across (see the org/anchor Country picker). */
@@ -73,12 +81,12 @@ const headers = [
   { title: 'Amount', key: 'amount' },
   { title: 'Status', key: 'status' },
   { title: 'Issued', key: 'createdAt' },
-  { title: 'Actions', key: 'actions', sortable: false, align: 'end' as const },
+  { title: 'Actions', key: 'actions', sortable: false, align: 'start' as const },
 ]
 
 function currency(amount: number | undefined, code: string | undefined) {
   if (amount == null) return '—'
-  return amount.toLocaleString(undefined, { style: 'currency', currency: code || 'USD', maximumFractionDigits: 0 })
+  return formatCurrency(amount, code || 'USD')
 }
 
 function displayDate(value: unknown) {
@@ -233,13 +241,6 @@ const statusHeadline = computed(() => {
       </v-btn>
     </div>
 
-    <v-select
-      v-if="auth.isSystemAdmin" v-model="selectedAnchorId" :items="allSubscriptions"
-      item-title="anchorName" item-value="anchorId" label="Filter by anchor"
-      variant="outlined" class="mb-4" style="max-width: 460px"
-      clearable hint="View-only filter, to open one anchor's invoice history below. Renewals choose their anchor in the dialog." persistent-hint
-    />
-
     <v-progress-linear v-if="loading" indeterminate color="primary" class="mb-4" />
 
     <v-card v-if="!auth.isSystemAdmin || selectedAnchorId" variant="flat" border class="pa-5 mb-5 status-card">
@@ -262,8 +263,16 @@ const statusHeadline = computed(() => {
     </v-card>
 
     <v-card v-if="auth.isSystemAdmin" variant="flat" border class="mb-5">
-      <v-card-title class="text-subtitle-1 font-weight-bold">All anchors (super admin view)</v-card-title>
-      <v-data-table :headers="allSubsHeaders" :items="allSubscriptions" :loading="loadingAll">
+      <div class="d-flex align-center flex-wrap ga-3 pa-4">
+        <h2 class="text-subtitle-1 font-weight-bold mr-auto">All anchors</h2>
+        <v-text-field v-model="anchorSearch" prepend-inner-icon="mdi-magnify" label="Search anchors" hide-details density="compact" variant="outlined" style="max-width: 240px" />
+        <v-select v-model="statusFilter" :items="['ACTIVE', 'GRACE', 'ARCHIVED', 'NONE']" label="Status" clearable hide-details density="compact" variant="outlined" style="max-width: 160px" />
+      </div>
+      <v-data-table
+        class="all-anchors-table"
+        :headers="allSubsHeaders" :items="filteredSubscriptions" :loading="loadingAll"
+        @click:row="(_e: unknown, row: { item: AnchorSubscription }) => selectedAnchorId = row.item.anchorId"
+      >
         <template #item.status="{ item }">
           <v-chip size="small" :color="statusColor[item.status] ?? 'grey'" variant="tonal">{{ item.status }}</v-chip>
         </template>
@@ -273,6 +282,10 @@ const statusHeadline = computed(() => {
         </template>
       </v-data-table>
     </v-card>
+
+    <p v-if="auth.isSystemAdmin && selectedAnchorId" class="text-subtitle-1 font-weight-bold mb-3">
+      {{ allSubscriptions.find((a) => a.anchorId === selectedAnchorId)?.anchorName }}
+    </p>
 
     <v-card v-if="!auth.isSystemAdmin || selectedAnchorId" variant="flat" border>
       <v-card-title class="text-subtitle-1 font-weight-bold">Payment history</v-card-title>
@@ -324,4 +337,5 @@ const statusHeadline = computed(() => {
 
 <style scoped>
 .status-card { border-radius: 16px !important; }
+.all-anchors-table :deep(tbody tr) { cursor: pointer; }
 </style>

@@ -5,6 +5,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
 import { useConfirm } from '@/composables/useConfirm'
 import { useAnchorScope } from '@/composables/useAnchorScope'
+import { useOrgCascade } from '@/composables/useOrgCascade'
 
 interface Officer {
   id: number
@@ -29,7 +30,8 @@ interface OfficerLocation { stateCode?: string; countyCode?: string; payamCode?:
 const auth = useAuthStore()
 const toast = useToast()
 const { confirmAction } = useConfirm()
-const { anchors, selectedAnchorId, anchorGateActive, anchorChosen } = useAnchorScope()
+const { anchors, selectedAnchorId, anchorGateActive } = useAnchorScope()
+const { dialogAnchorId, dialogOrganizations, resetDialogScope } = useOrgCascade()
 const loading = ref(true)
 const officers = ref<Officer[]>([])
 const tableSearch = ref('')
@@ -57,7 +59,7 @@ const headers = [
   { title: 'Email', key: 'email' },
   { title: 'Organization', key: 'organisationCode' },
   { title: 'Status', key: 'active' },
-  { title: 'Actions', key: 'actions', sortable: false, align: 'end' as const },
+  { title: 'Actions', key: 'actions', sortable: false, align: 'start' as const },
 ]
 
 // Name-not-code lookups, matching the pattern used on Households.
@@ -86,6 +88,7 @@ async function load() {
   }
 }
 
+watch(dialogAnchorId, () => { form.value.organisationCode = '' })
 watch(() => filters.value.organisationCode, load)
 watch(() => filters.value.active, load)
 watch(selectedAnchorId, () => { filters.value.organisationCode = null; loadOrganizations(); load() })
@@ -116,7 +119,6 @@ async function loadGeo() {
 }
 
 async function loadOrganizations() {
-  if (!(auth.isAnchorAdministrator || auth.isSystemAdmin)) return
   try {
     const res = await dispatch<{ results: typeof organizations.value }>('GET_ORGANIZATIONS', {
       targetAnchorId: auth.isSystemAdmin ? selectedAnchorId.value : undefined,
@@ -136,6 +138,7 @@ onMounted(() => {
 function openCreate() {
   editing.value = false
   form.value = { firstName: '', lastName: '', email: '', organisationCode: '' }
+  resetDialogScope(auth.isSystemAdmin ? selectedAnchorId.value : null)
   dialog.value = true
 }
 
@@ -148,6 +151,10 @@ function openEdit(officer: Officer) {
 async function save() {
   if (!form.value.firstName.trim() || !form.value.lastName.trim() || !/.+@.+\..+/.test(form.value.email)) {
     toast.error('Enter the officer\'s first name, last name and a valid email address')
+    return
+  }
+  if (auth.isSystemAdmin && !editing.value && !dialogAnchorId.value) {
+    toast.error('Select the anchor this officer\'s organisation belongs to')
     return
   }
   if (auth.isAnchor && !editing.value && !form.value.organisationCode) {
@@ -246,10 +253,6 @@ async function assignLocation() {
       <v-btn v-if="scopeReady && auth.can('ACCESS_SUPERVISORS')" color="secondary" prepend-icon="mdi-account-plus" @click="openCreate">Register Field Officer</v-btn>
     </div>
 
-    <v-alert v-if="auth.isSystemAdmin ? !anchorChosen : (auth.isAnchorAdministrator && !filters.organisationCode)" type="info" variant="tonal" class="mb-4">
-      {{ auth.isSystemAdmin ? 'Showing field officers across every anchor. Choose one in the filters below to narrow the list.' : 'Showing field officers across every organisation. Choose one in the filters below to narrow the list.' }}
-    </v-alert>
-
     <template v-if="scopeReady">
     <v-card variant="flat" border>
       <v-card-text>
@@ -305,14 +308,20 @@ async function assignLocation() {
         </div>
         <v-form @submit.prevent="save">
           <div class="field-grid">
-            <v-text-field v-model="form.firstName" label="First name" density="compact" required />
-            <v-text-field v-model="form.lastName" label="Last name" density="compact" required />
-            <v-text-field v-model="form.email" label="Email" type="email" :disabled="editing" density="compact" required />
+            <v-select
+              v-if="auth.isSystemAdmin && !editing"
+              v-model="dialogAnchorId" :items="anchors" item-title="name" item-value="id"
+              label="Anchor" density="compact" placeholder="Choose an anchor" required
+            />
             <v-select
               v-if="auth.isAnchor && !editing"
-              v-model="form.organisationCode" :items="organizations" item-title="name" item-value="organisationCode"
-              label="Organisation" density="compact"
+              v-model="form.organisationCode" :items="dialogOrganizations" item-title="name" item-value="organisationCode"
+              label="Organisation" density="compact" placeholder="Choose an organisation"
+              :disabled="auth.isSystemAdmin && !dialogAnchorId" required
             />
+            <v-text-field v-model="form.firstName" label="First name" placeholder="e.g. Jane" density="compact" required />
+            <v-text-field v-model="form.lastName" label="Last name" placeholder="e.g. Mwangi" density="compact" required />
+            <v-text-field v-model="form.email" label="Email" type="email" placeholder="e.g. jane.mwangi@example.org" :disabled="editing" density="compact" required />
           </div>
           <v-alert v-if="!editing" type="info" variant="tonal" density="compact" class="mt-1">
             A temporary password will be generated and emailed to this officer.

@@ -6,6 +6,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
 import { useConfirm } from '@/composables/useConfirm'
 import { useAnchorScope } from '@/composables/useAnchorScope'
+import { useOrgCascade } from '@/composables/useOrgCascade'
 import { downloadCsv, parseCsv, toCsv } from '@/utils/csv'
 import BarChart from '@/components/BarChart.vue'
 import LineChart from '@/components/LineChart.vue'
@@ -44,7 +45,9 @@ const auth = useAuthStore()
 const toast = useToast()
 const { confirmAction } = useConfirm()
 const router = useRouter()
-const { anchors, selectedAnchorId, anchorGateActive, anchorChosen } = useAnchorScope()
+const { anchors, selectedAnchorId, anchorGateActive } = useAnchorScope()
+const { dialogAnchorId, dialogOrganizations, resetDialogScope } = useOrgCascade()
+const { dialogAnchorId: bulkDialogAnchorId, dialogOrganizations: bulkDialogOrganizations, resetDialogScope: resetBulkDialogScope } = useOrgCascade()
 const loading = ref(true)
 const households = ref<HouseholdRow[]>([])
 
@@ -100,7 +103,7 @@ const headers = [
   { title: 'Cycles', key: 'paymentCycleCount' },
   { title: 'Status', key: 'status' },
   { title: 'Review', key: 'reviewStatus' },
-  { title: 'Actions', key: 'actions', sortable: false, align: 'end' as const },
+  { title: 'Actions', key: 'actions', sortable: false, align: 'start' as const },
 ]
 
 // ---- Name-not-code lookups -- the table shows organisation/village names, not their
@@ -178,8 +181,7 @@ async function loadGeo() {
       dispatch<{ results: GeoNode[] }>('GET_LOCATIONS'),
       dispatch<{ results: GeoNode[] }>('GET_VILLAGES'),
     ]
-    if (auth.isAnchorAdministrator || auth.isSystemAdmin)
-      requests.push(dispatch<{ results: typeof organizations.value }>('GET_ORGANIZATIONS', { targetAnchorId: auth.isSystemAdmin ? selectedAnchorId.value : undefined }))
+    requests.push(dispatch<{ results: typeof organizations.value }>('GET_ORGANIZATIONS', { targetAnchorId: auth.isSystemAdmin ? selectedAnchorId.value : undefined }))
     const [s, c, l, v, o] = await Promise.all(requests)
     states.value = s.results
     counties.value = c.results
@@ -276,11 +278,13 @@ const duplicateCandidates = ref<DuplicateCandidate[]>([])
 function openCreate() {
   form.value = {
     householdName: '', age: null, gender: '', phoneNumber: '', householdSize: null, stateCode: '', countyCode: '', locationCode: '', villageCode: '',
-    organisationCode: filters.value.organisationCode,
+    organisationCode: null,
   }
   duplicateCandidates.value = []
+  resetDialogScope(auth.isSystemAdmin ? selectedAnchorId.value : null)
   dialog.value = true
 }
+watch(dialogAnchorId, () => { form.value.organisationCode = null })
 
 // Screens the entry against existing households before creating. If any possible
 // duplicates come back, they're shown and creation waits for an explicit "Register
@@ -288,6 +292,10 @@ function openCreate() {
 async function attemptSave() {
   if (!form.value.householdName.trim()) {
     toast.error('Head of household name is required')
+    return
+  }
+  if (auth.isSystemAdmin && !dialogAnchorId.value) {
+    toast.error('Select the anchor this household\'s organisation belongs to')
     return
   }
   if (auth.isAnchor && !form.value.organisationCode) {
@@ -418,13 +426,15 @@ const templateFields = ref<string[]>(OPTIONAL_TEMPLATE_FIELDS.map((f) => f.key))
 const templateDownloaded = ref(false)
 
 function openBulk() {
-  bulkOrganisationCode.value = filters.value.organisationCode
+  bulkOrganisationCode.value = null
   bulkStateCode.value = ''; bulkCountyCode.value = ''; bulkLocationCode.value = ''; bulkVillageCode.value = ''
   bulkFileName.value = ''; bulkRows.value = []; bulkResult.value = null
   templateFields.value = OPTIONAL_TEMPLATE_FIELDS.map((f) => f.key)
   templateDownloaded.value = false
+  resetBulkDialogScope(auth.isSystemAdmin ? selectedAnchorId.value : null)
   bulkDialog.value = true
 }
+watch(bulkDialogAnchorId, () => { bulkOrganisationCode.value = null })
 
 function downloadTemplate() {
   const headers = ['householdName', ...OPTIONAL_TEMPLATE_FIELDS.filter((f) => templateFields.value.includes(f.key)).map((f) => f.key)]
@@ -445,7 +455,8 @@ function onBulkFile(event: Event) {
 }
 
 const bulkReady = computed(() =>
-  !!bulkVillageCode.value && bulkRows.value.length > 0 && (!auth.isAnchor || !!bulkOrganisationCode.value))
+  !!bulkVillageCode.value && bulkRows.value.length > 0 && (!auth.isAnchor || !!bulkOrganisationCode.value)
+  && (!auth.isSystemAdmin || !!bulkDialogAnchorId.value))
 
 async function submitBulk() {
   if (!bulkReady.value) return
@@ -488,10 +499,6 @@ async function submitBulk() {
         <v-btn v-if="auth.can('ACCESS_HOUSEHOLDS')" color="secondary" prepend-icon="mdi-home-plus" @click="openCreate">Add Household</v-btn>
       </div>
     </div>
-
-    <v-alert v-if="auth.isSystemAdmin ? !anchorChosen : (auth.isAnchorAdministrator && !filters.organisationCode)" type="info" variant="tonal" class="mb-4">
-      {{ auth.isSystemAdmin ? 'Showing households across every anchor. Choose one in the filters below to narrow the list.' : 'Showing households across every organisation. Choose one in the filters below to narrow the list.' }}
-    </v-alert>
 
     <template v-if="scopeReady">
     <h2 class="section-heading mb-2">Household breakdown</h2>
@@ -653,13 +660,19 @@ async function submitBulk() {
         <v-card-title>Add Household</v-card-title>
         <v-card-text>
           <v-select
-            v-if="auth.isAnchor"
-            v-model="form.organisationCode" :items="organizations" item-title="name" item-value="organisationCode"
-            label="Organisation" class="mb-2"
+            v-if="auth.isSystemAdmin"
+            v-model="dialogAnchorId" :items="anchors" item-title="name" item-value="id"
+            label="Anchor" class="mb-2" placeholder="Choose an anchor" required
           />
-          <v-text-field v-model="form.householdName" label="Head of household name" />
+          <v-select
+            v-if="auth.isAnchor"
+            v-model="form.organisationCode" :items="dialogOrganizations" item-title="name" item-value="organisationCode"
+            label="Organisation" class="mb-2" placeholder="Choose an organisation"
+            :disabled="auth.isSystemAdmin && !dialogAnchorId" required
+          />
+          <v-text-field v-model="form.householdName" label="Head of household name" placeholder="e.g. Jane Doe" />
           <v-row>
-            <v-col cols="6"><v-text-field v-model.number="form.age" label="Age" type="number" /></v-col>
+            <v-col cols="6"><v-text-field v-model.number="form.age" label="Age" type="number" placeholder="e.g. 34" /></v-col>
             <v-col cols="6">
               <v-select v-model="form.gender" label="Gender" :items="['M', 'F']" />
             </v-col>
@@ -711,9 +724,15 @@ async function submitBulk() {
             Pick the village this batch belongs to, choose which fields to include, download the template, fill in one row per household, then upload it here.
           </v-alert>
           <v-select
+            v-if="auth.isSystemAdmin"
+            v-model="bulkDialogAnchorId" :items="anchors" item-title="name" item-value="id"
+            label="Anchor" density="compact" class="mb-2" placeholder="Choose an anchor" required
+          />
+          <v-select
             v-if="auth.isAnchor"
-            v-model="bulkOrganisationCode" :items="organizations" item-title="name" item-value="organisationCode"
-            label="Organisation" density="compact" class="mb-2"
+            v-model="bulkOrganisationCode" :items="bulkDialogOrganizations" item-title="name" item-value="organisationCode"
+            label="Organisation" density="compact" class="mb-2" placeholder="Choose an organisation"
+            :disabled="auth.isSystemAdmin && !bulkDialogAnchorId" required
           />
           <v-row dense>
             <v-col cols="4"><v-select v-model="bulkStateCode" :items="states" item-title="name" item-value="code" label="State" density="compact" /></v-col>
