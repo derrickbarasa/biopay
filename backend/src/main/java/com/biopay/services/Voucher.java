@@ -85,12 +85,24 @@ public class Voucher extends AbstractVerticle {
     /** Resolves organisationCode's real anchor server-side rather than trusting whatever
      *  anchorId the client sent -- fails if the organisation doesn't exist or (for an Anchor
      *  Administrator) isn't inside their own anchor. The Super Admin may target any anchor. */
+    private static final String ORG_OUTSIDE_ANCHOR = "Organisation is outside your anchor";
+
     private io.vertx.core.Future<Integer> resolveOrgAnchorId(JsonObject payload, String organisationCode) {
         return pool.preparedQuery("SELECT anchor_id FROM organizations WHERE organization_code=@p1 AND (@p2=1 OR anchor_id=@p3)")
                 .execute(Tuple.of(organisationCode, isSystemAdmin(payload), TenantScope.anchorId(payload)))
                 .compose(rows -> rows.size() == 0
-                        ? io.vertx.core.Future.failedFuture("Organisation is outside your anchor")
-                        : io.vertx.core.Future.succeededFuture(Rows.intVal(rows.iterator().next(), "anchor_id")));
+                        ? io.vertx.core.Future.<Integer>failedFuture(ORG_OUTSIDE_ANCHOR)
+                        : io.vertx.core.Future.succeededFuture(Rows.intVal(rows.iterator().next(), "anchor_id")))
+                // A DB-level failure here (timeout, connection drop, ...) must not reach the
+                // client as raw driver text the way the deliberate ORG_OUTSIDE_ANCHOR message does.
+                .recover(err -> ORG_OUTSIDE_ANCHOR.equals(err.getMessage())
+                        ? io.vertx.core.Future.failedFuture(err)
+                        : io.vertx.core.Future.failedFuture(logDbFailureAndMask(err)));
+    }
+
+    private String logDbFailureAndMask(Throwable err) {
+        Logging.applicationLog(Logging.logPreString() + "Fail. " + err.getMessage() + "\n\n", "", 3);
+        return "Failed with an error";
     }
 
     private static String blankToNull(String value) {
