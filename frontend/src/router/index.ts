@@ -9,7 +9,6 @@ const router = createRouter({
       path: '/',
       name: 'home',
       component: () => import('@/pages/LandingPage.vue'),
-      meta: { title: 'BioPay | biometric payment infrastructure' },
     },
     {
       path: '/login',
@@ -131,7 +130,7 @@ router.beforeEach(() => {
 router.afterEach((to) => {
   routeNavigating.value = false
   const pageTitle = to.meta.title as string | undefined
-  document.title = pageTitle && to.name !== 'home' ? `${pageTitle} | BioPay` : 'BioPay | biometric payment infrastructure'
+  document.title = pageTitle ? `${pageTitle} | BioPay` : 'BioPay | biometric payment infrastructure'
 })
 
 router.beforeEach((to) => {
