@@ -180,7 +180,7 @@ async function submitCode() {
           <a href="#" class="brand-back" @click.prevent="useDifferentAccount">
             <v-icon icon="mdi-arrow-left" size="18" class="mr-1" /> Use a different account
           </a>
-          <img src="/biopay-features.png" alt="BioPay — biometric payment solutions" class="brand-graphic" />
+          <img src="/biopay-features.webp" alt="BioPay — biometric payment solutions" class="brand-graphic" />
         </aside>
 
         <!-- Right: verification step (white) -->

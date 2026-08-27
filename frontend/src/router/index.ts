@@ -9,42 +9,43 @@ const router = createRouter({
       path: '/',
       name: 'home',
       component: () => import('@/pages/LandingPage.vue'),
+      meta: { title: 'BioPay | biometric payment infrastructure' },
     },
     {
       path: '/login',
       name: 'login',
       component: () => import('@/pages/LoginPage.vue'),
-      meta: { requiresGuest: true },
+      meta: { requiresGuest: true, title: 'Sign in' },
     },
     {
       path: '/signup',
       name: 'signup',
       component: () => import('@/pages/SignupPage.vue'),
-      meta: { requiresGuest: true },
+      meta: { requiresGuest: true, title: 'Sign up' },
     },
     {
       path: '/forgot-password',
       name: 'forgot-password',
       component: () => import('@/pages/ForgotPasswordPage.vue'),
-      meta: { requiresGuest: true },
+      meta: { requiresGuest: true, title: 'Forgot password' },
     },
     {
       path: '/reset-password',
       name: 'reset-password',
       component: () => import('@/pages/ResetPasswordPage.vue'),
-      meta: { requiresGuest: true },
+      meta: { requiresGuest: true, title: 'Reset password' },
     },
     {
       path: '/verify-otp',
       name: 'verify-otp',
       component: () => import('@/pages/VerifyOtpPage.vue'),
-      meta: { requiresGuest: true },
+      meta: { requiresGuest: true, title: 'Verify code' },
     },
     {
       path: '/change-password',
       name: 'force-password-change',
       component: () => import('@/pages/ForcePasswordChangePage.vue'),
-      meta: { requiresAuth: true },
+      meta: { requiresAuth: true, title: 'Change password' },
     },
     {
       path: '/app',
@@ -52,67 +53,67 @@ const router = createRouter({
       meta: { requiresAuth: true },
       children: [
         { path: '', redirect: { name: 'dashboard' } },
-        { path: 'access-denied', name: 'access-denied', component: () => import('@/pages/AccessDeniedPage.vue') },
-        { path: 'dashboard', name: 'dashboard', component: () => import('@/pages/DashboardPage.vue'), meta: { permission: 'VIEW_REPORTS' } },
-        { path: 'anchors', name: 'anchors', component: () => import('@/pages/AnchorsPage.vue'), meta: { roles: ['ANCHOR'], systemOnly: true } },
-        { path: 'users', name: 'users', component: () => import('@/pages/UsersPage.vue'), meta: { roles: ['ANCHOR', 'ORGANISATION'], permission: 'ACCESS_USERS' } },
-        { path: 'roles', name: 'roles', component: () => import('@/pages/RolesPage.vue'), meta: { roles: ['ANCHOR'], permission: 'ACCESS_ROLES' } },
+        { path: 'access-denied', name: 'access-denied', component: () => import('@/pages/AccessDeniedPage.vue'), meta: { title: 'Access denied' } },
+        { path: 'dashboard', name: 'dashboard', component: () => import('@/pages/DashboardPage.vue'), meta: { permission: 'VIEW_REPORTS', title: 'Dashboard' } },
+        { path: 'anchors', name: 'anchors', component: () => import('@/pages/AnchorsPage.vue'), meta: { roles: ['ANCHOR'], systemOnly: true, title: 'Anchors' } },
+        { path: 'users', name: 'users', component: () => import('@/pages/UsersPage.vue'), meta: { roles: ['ANCHOR', 'ORGANISATION'], permission: 'ACCESS_USERS', title: 'Users' } },
+        { path: 'roles', name: 'roles', component: () => import('@/pages/RolesPage.vue'), meta: { roles: ['ANCHOR'], permission: 'ACCESS_ROLES', title: 'Roles & permissions' } },
         {
           path: 'organizations',
           name: 'organizations',
           component: () => import('@/pages/OrganizationsPage.vue'),
-          meta: { roles: ['ANCHOR'], permission: 'ACCESS_ORGANISATIONS' },
+          meta: { roles: ['ANCHOR'], permission: 'ACCESS_ORGANISATIONS', title: 'Organizations' },
         },
         {
           path: 'households',
           name: 'households',
           component: () => import('@/pages/HouseholdsPage.vue'),
-          meta: { roles: ['ANCHOR', 'ORGANISATION'], module: 'HOUSEHOLDS', permission: 'ACCESS_HOUSEHOLDS' },
+          meta: { roles: ['ANCHOR', 'ORGANISATION'], module: 'HOUSEHOLDS', permission: 'ACCESS_HOUSEHOLDS', title: 'Households' },
         },
         {
           path: 'households/:householdNumber',
           name: 'household-detail',
           component: () => import('@/pages/HouseholdDetailPage.vue'),
-          meta: { roles: ['ANCHOR', 'ORGANISATION'], module: 'HOUSEHOLDS', permission: 'ACCESS_HOUSEHOLDS' },
+          meta: { roles: ['ANCHOR', 'ORGANISATION'], module: 'HOUSEHOLDS', permission: 'ACCESS_HOUSEHOLDS', title: 'Household detail' },
         },
         {
           path: 'officers',
           name: 'officers',
           component: () => import('@/pages/OfficersPage.vue'),
-          meta: { roles: ['ANCHOR', 'ORGANISATION'], permission: 'ACCESS_SUPERVISORS' },
+          meta: { roles: ['ANCHOR', 'ORGANISATION'], permission: 'ACCESS_SUPERVISORS', title: 'Field officers' },
         },
         {
           path: 'payments',
           name: 'payments',
           component: () => import('@/pages/PaymentsPage.vue'),
-          meta: { roles: ['ANCHOR', 'ORGANISATION'], module: 'CASH_TRANSFERS', permission: 'ACCESS_PAYMENTS' },
+          meta: { roles: ['ANCHOR', 'ORGANISATION'], module: 'CASH_TRANSFERS', permission: 'ACCESS_PAYMENTS', title: 'Payments' },
         },
         {
           path: 'payroll',
           name: 'payroll',
           component: () => import('@/pages/PayrollPage.vue'),
-          meta: { roles: ['ANCHOR', 'ORGANISATION'], module: 'CASH_TRANSFERS', permission: 'ACCESS_PAYMENT_CYCLES' },
+          meta: { roles: ['ANCHOR', 'ORGANISATION'], module: 'CASH_TRANSFERS', permission: 'ACCESS_PAYMENT_CYCLES', title: 'Payroll' },
         },
         {
           path: 'vouchers',
           name: 'vouchers',
           component: () => import('@/pages/VouchersPage.vue'),
-          meta: { roles: ['ANCHOR', 'ORGANISATION'], module: 'VOUCHERS', permission: 'ACCESS_VOUCHERS' },
+          meta: { roles: ['ANCHOR', 'ORGANISATION'], module: 'VOUCHERS', permission: 'ACCESS_VOUCHERS', title: 'Vouchers' },
         },
         {
           path: 'locations',
           name: 'locations',
           component: () => import('@/pages/LocationsPage.vue'),
-          meta: { roles: ['ANCHOR', 'ORGANISATION'], permission: 'ACCESS_LOCATIONS' },
+          meta: { roles: ['ANCHOR', 'ORGANISATION'], permission: 'ACCESS_LOCATIONS', title: 'Locations' },
         },
         {
           path: 'attendance',
           name: 'attendance',
           component: () => import('@/pages/AttendancePage.vue'),
-          meta: { roles: ['ANCHOR', 'ORGANISATION'], permission: 'ACCESS_ATTENDANCE' },
+          meta: { roles: ['ANCHOR', 'ORGANISATION'], permission: 'ACCESS_ATTENDANCE', title: 'Attendance' },
         },
-        { path: 'settings', name: 'settings', component: () => import('@/pages/SettingsPage.vue') },
-        { path: 'subscription', name: 'subscription', component: () => import('@/pages/SubscriptionPage.vue'), meta: { roles: ['ANCHOR'], anchorSubscription: true, permission: 'ACCESS_SUBSCRIPTION' } },
+        { path: 'settings', name: 'settings', component: () => import('@/pages/SettingsPage.vue'), meta: { title: 'Settings' } },
+        { path: 'subscription', name: 'subscription', component: () => import('@/pages/SubscriptionPage.vue'), meta: { roles: ['ANCHOR'], anchorSubscription: true, permission: 'ACCESS_SUBSCRIPTION', title: 'Subscription' } },
       ],
     },
     { path: '/:pathMatch(.*)*', redirect: { name: 'home' } },
@@ -127,8 +128,10 @@ router.beforeEach(() => {
   return true
 })
 
-router.afterEach(() => {
+router.afterEach((to) => {
   routeNavigating.value = false
+  const pageTitle = to.meta.title as string | undefined
+  document.title = pageTitle && to.name !== 'home' ? `${pageTitle} | BioPay` : 'BioPay | biometric payment infrastructure'
 })
 
 router.beforeEach((to) => {

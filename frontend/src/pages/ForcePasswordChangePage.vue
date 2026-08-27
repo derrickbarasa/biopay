@@ -55,7 +55,7 @@ async function logout() {
           <a href="#" class="brand-back" @click.prevent="logout">
             <v-icon icon="mdi-arrow-left" size="18" class="mr-1" /> Log out
           </a>
-          <img src="/biopay-features.png" alt="BioPay — biometric payment solutions" class="brand-graphic" />
+          <img src="/biopay-features.webp" alt="BioPay — biometric payment solutions" class="brand-graphic" />
         </aside>
 
         <section class="form-side">

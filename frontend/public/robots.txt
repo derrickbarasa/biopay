@@ -1,0 +1,11 @@
+User-agent: *
+Allow: /$
+Disallow: /login
+Disallow: /signup
+Disallow: /forgot-password
+Disallow: /reset-password
+Disallow: /verify-otp
+Disallow: /change-password
+Disallow: /app/
+
+Sitemap: https://biopay.app/sitemap.xml

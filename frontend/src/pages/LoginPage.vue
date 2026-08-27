@@ -54,7 +54,7 @@ async function handleSubmit() {
           <router-link to="/" class="brand-back">
             <v-icon icon="mdi-arrow-left" size="18" class="mr-1" /> Back to website
           </router-link>
-          <img src="/biopay-features.png" alt="BioPay — biometric payment solutions" class="brand-graphic" />
+          <img src="/biopay-features.webp" alt="BioPay — biometric payment solutions" class="brand-graphic" />
         </aside>
 
         <!-- Right: login form (white) -->
