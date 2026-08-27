@@ -253,7 +253,7 @@ function onNavClick(event: MouseEvent | KeyboardEvent, to: string) {
           <v-card-actions>
             <v-spacer />
             <v-btn variant="text" @click="logoutNow">Log out</v-btn>
-            <v-btn color="primary" @click="confirmStillHere">Yes, I'm still here</v-btn>
+            <v-btn color="secondary" @click="confirmStillHere">Yes, I'm still here</v-btn>
           </v-card-actions>
         </v-card>
       </v-dialog>

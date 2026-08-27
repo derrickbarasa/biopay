@@ -527,12 +527,23 @@ onBeforeUnmount(() => {
 
               <article class="platform-group feature-card-reveal">
                 <header>
-                  <span class="platform-symbol"><i class="mdi mdi-chart-line"></i></span>
+                  <span class="platform-symbol"><i class="mdi mdi-account-multiple-check-outline"></i></span>
+                  <div><h3>Payment cycle assurance</h3><p>No disbursement leaves without two people signing off.</p></div>
+                </header>
+                <div class="platform-points">
+                  <div><i class="mdi mdi-check-decagram-outline"></i><p><b>Maker-checker approval</b><span>An anchor initiates a batch, an organisation maker prepares it, and a checker approves it before anyone is paid.</span></p></div>
+                  <div><i class="mdi mdi-history"></i><p><b>End-to-end audit trail</b><span>Every batch, approval and disbursement is time-stamped and traceable from anchor to recipient.</span></p></div>
+                </div>
+              </article>
+
+              <article class="platform-group feature-card-reveal">
+                <header>
+                  <span class="platform-symbol accent"><i class="mdi mdi-chart-line"></i></span>
                   <div><h3>Programme oversight</h3><p>Give authorised teams one accountable operating record.</p></div>
                 </header>
                 <div class="platform-points">
                   <div><i class="mdi mdi-eye-outline"></i><p><b>Continuous review</b><span>Surface duplicate registrations and unusual activity for review.</span></p></div>
-                  <div><i class="mdi mdi-domain"></i><p><b>Per-anchor management</b><span>Manage organisations, access and subscription from one place.</span></p></div>
+                  <div><i class="mdi mdi-credit-card-outline"></i><p><b>Subscription &amp; billing</b><span>Renewals, invoices and grace periods, priced per the terms agreed for your anchor.</span></p></div>
                 </div>
               </article>
             </div>
@@ -570,6 +581,7 @@ onBeforeUnmount(() => {
                     <div class="preview-nav-item"><i class="mdi mdi-map-marker-radius"></i>Locations</div>
                     <small>User management</small>
                     <div class="preview-nav-item"><i class="mdi mdi-account-multiple-outline"></i>Users</div>
+                    <div class="preview-nav-item"><i class="mdi mdi-shield-account-outline"></i>Roles &amp; permissions</div>
                     <div class="preview-nav-item"><i class="mdi mdi-account-tie"></i>Field officers</div>
                     <small>Biodata</small>
                     <div class="preview-nav-item"><i class="mdi mdi-home-group"></i>Households</div>
@@ -664,19 +676,18 @@ onBeforeUnmount(() => {
                       </div>
                     </section>
 
-                    <section class="preview-phone-card preview-tasks">
-                      <header><b><i class="mdi mdi-calendar-check"></i> Field tasks</b></header>
-                      <div><i class="mdi mdi-home-group"></i><p><b>Households</b><span>View and manage registered households</span></p><em>›</em></div>
-                      <div><i class="mdi mdi-calendar-check"></i><p><b>Attendance</b><span>Capture event and activity attendance</span></p><em>›</em></div>
-                      <div><i class="mdi mdi-ticket-confirmation-outline"></i><p><b>Vouchers</b><span>Scan and redeem beneficiary vouchers</span></p><em>›</em></div>
-                      <div><i class="mdi mdi-cash-multiple"></i><p><b>Payments</b><span>Review paid and pending disbursements</span></p><em>›</em></div>
-                    </section>
-
-                    <section class="preview-quick-actions">
-                      <div><i class="mdi mdi-qrcode-scan"></i><span>Scan QR</span></div>
-                      <div><i class="mdi mdi-fingerprint"></i><span>Verify identity</span></div>
-                      <div><i class="mdi mdi-map-marker-radius"></i><span>My location</span></div>
-                      <div><i class="mdi mdi-history"></i><span>Sync history</span></div>
+                    <section class="preview-phone-card preview-donut">
+                      <header><b><i class="mdi mdi-chart-donut"></i> Payment status</b></header>
+                      <div class="donut-row">
+                        <svg class="donut-svg" viewBox="0 0 100 100" aria-hidden="true">
+                          <circle cx="50" cy="50" r="40" fill="none" stroke="#e7eeeb" stroke-width="14" />
+                          <circle cx="50" cy="50" r="40" fill="none" stroke="#0d9488" stroke-width="14" stroke-linecap="round" stroke-dasharray="237.4 251.3" transform="rotate(-90 50 50)" />
+                        </svg>
+                        <div class="donut-legend">
+                          <span><i class="donut-dot green"></i>Paid<b>204</b></span>
+                          <span><i class="donut-dot amber"></i>Pending<b>12</b></span>
+                        </div>
+                      </div>
                     </section>
                   </div>
                   <nav class="preview-phone-nav">
@@ -1305,16 +1316,25 @@ onBeforeUnmount(() => {
   align-items: stretch;
 }
 .landing-root .platform-offline {
+  position: relative;
   min-height: 520px;
   display: flex;
   flex-direction: column;
   padding: clamp(1.5rem, 3vw, 2.25rem);
   border-radius: var(--radius-card);
-  background: var(--color-primary-deep);
+  background: url('/platform/offline-field-officer.webp') center 18% / cover no-repeat, var(--color-primary-deep);
   color: #fff;
   box-shadow: 0 30px 60px -36px rgba(2, 31, 27, .88);
   transition: opacity 550ms ease, translate 550ms cubic-bezier(0.16, 1, 0.3, 1);
 }
+.landing-root .platform-offline::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(168deg, rgba(6, 46, 40, .93) 0%, rgba(7, 59, 51, .86) 40%, rgba(4, 33, 29, .95) 100%);
+}
+.landing-root .platform-offline > * { position: relative; z-index: 1; }
 .landing-root .platform-offline-heading { display: flex; align-items: flex-start; gap: var(--space-3); }
 .landing-root .platform-symbol {
   width: 42px;
@@ -1597,18 +1617,13 @@ onBeforeUnmount(() => {
 .landing-root .preview-phone-kpis .amber i { background: #fff1d6; color: #a65300; }
 .landing-root .preview-phone-kpis .green i { background: #d7f5e3; color: #18794e; }
 .landing-root .preview-phone-kpis .orange i { background: #ffe2c3; color: #a94c00; }
-.landing-root .preview-tasks { padding-bottom: 0.6em; }
-.landing-root .preview-tasks > div { display: grid; grid-template-columns: auto 1fr auto; gap: 1em; align-items: center; padding: 1em 0; border-top: 1px solid #e7eeeb; }
-.landing-root .preview-tasks > div:first-of-type { margin-top: 0.8em; }
-.landing-root .preview-tasks > div > i { width: 2.8em; height: 2.8em; border-radius: 50%; display: grid; place-items: center; background: #d8f3ec; color: #006b5b; font-size: 1.3em; }
-.landing-root .preview-tasks p { display: grid; min-width: 0; }
-.landing-root .preview-tasks p b { font-size: 1.05em; }
-.landing-root .preview-tasks p span { margin-top: 0.2em; overflow: hidden; color: #52615d; font-size: 0.86em; text-overflow: ellipsis; white-space: nowrap; }
-.landing-root .preview-tasks em { color: #71807b; font-size: 1.7em; font-style: normal; }
-.landing-root .preview-quick-actions { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.3em; margin-top: 1.35em; padding: 1.35em 0.5em; border-radius: 14px; background: #e7eeeb; }
-.landing-root .preview-quick-actions > div { display: grid; justify-items: center; gap: 0.55em; text-align: center; }
-.landing-root .preview-quick-actions i { color: #006b5b; font-size: 1.75em; }
-.landing-root .preview-quick-actions span { font-size: 0.78em; }
+.landing-root .donut-row { display: flex; align-items: center; gap: 1.4em; margin-top: 1.1em; }
+.landing-root .donut-svg { flex: 0 0 auto; width: 4.4em; height: 4.4em; }
+.landing-root .donut-legend { display: grid; gap: 0.6em; }
+.landing-root .donut-legend span { display: flex; align-items: center; gap: 0.55em; color: #52615d; font-size: 0.92em; }
+.landing-root .donut-legend b { margin-left: auto; color: #0f172a; font-size: 1.05em; }
+.landing-root .donut-dot { width: 0.7em; height: 0.7em; border-radius: 50%; background: #0d9488; }
+.landing-root .donut-dot.amber { background: #e2a33d; }
 .landing-root .preview-phone-nav { position: relative; min-height: 7em; display: grid; grid-template-columns: repeat(5, 1fr); align-items: center; padding: 0.8em 0.7em 0.55em; background: #fff; box-shadow: 0 -8px 20px -18px rgba(23, 32, 30, 0.8); }
 .landing-root .preview-phone-nav > div { display: grid; justify-items: center; gap: 0.3em; color: #52615d; }
 .landing-root .preview-phone-nav > div i { font-size: 1.8em; }

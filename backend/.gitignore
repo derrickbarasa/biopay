@@ -3,6 +3,7 @@ target/
 
 # Runtime logs
 logs/
+*.log
 
 # Secrets / key material
 *.jks
