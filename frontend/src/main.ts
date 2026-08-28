@@ -1,3 +1,4 @@
+import 'vuetify/styles'
 import './style.css'
 import './styles/ui-fixes.css'
 import { createApp } from 'vue'

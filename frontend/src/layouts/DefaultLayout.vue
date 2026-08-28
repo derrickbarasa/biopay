@@ -82,30 +82,14 @@ interface NavSection {
   items: NavItem[]
 }
 
-// Grouped navigation: Dashboard / Configs / User management / Biodata / Settings, matching the
-// progress.md sidebar structure. Role + module gating is unchanged -- it is now
-// applied per-item within each section (see visibleSections below).
+// Grouped navigation: Dashboard / Biodata / Payment Generation / Configs / User management /
+// Settings. Role + module gating is unchanged -- it is now applied per-item
+// within each section (see visibleSections below).
 const navSections: NavSection[] = [
   {
     title: '',
     items: [
       { title: 'Dashboard', icon: 'mdi-view-dashboard-outline', to: '/app/dashboard', permission: 'VIEW_REPORTS' },
-    ],
-  },
-  {
-    title: 'Configs',
-    items: [
-      { title: 'Anchors', icon: 'mdi-bank-outline', to: '/app/anchors', roles: ['ANCHOR'], systemOnly: true },
-      { title: 'Organizations', icon: 'mdi-domain', to: '/app/organizations', roles: ['ANCHOR'], permission: 'ACCESS_ORGANISATIONS' },
-      { title: 'Locations', icon: 'mdi-map-marker-radius', to: '/app/locations', roles: ['ANCHOR', 'ORGANISATION'], permission: 'ACCESS_LOCATIONS' },
-    ],
-  },
-  {
-    title: 'User Management',
-    items: [
-      { title: 'Users', icon: 'mdi-account-multiple-outline', to: '/app/users', roles: ['ANCHOR', 'ORGANISATION'], permission: 'ACCESS_USERS' },
-      { title: 'Roles & Permissions', icon: 'mdi-shield-account-outline', to: '/app/roles', roles: ['ANCHOR'], permission: 'ACCESS_ROLES' },
-      { title: 'Field Officers', icon: 'mdi-account-tie', to: '/app/officers', roles: ['ANCHOR', 'ORGANISATION'], permission: 'ACCESS_SUPERVISORS' },
     ],
   },
   {
@@ -124,8 +108,19 @@ const navSections: NavSection[] = [
     ],
   },
   {
-    title: '',
+    title: 'Configs',
     items: [
+      { title: 'Anchors', icon: 'mdi-bank-outline', to: '/app/anchors', roles: ['ANCHOR'], systemOnly: true },
+      { title: 'Organizations', icon: 'mdi-domain', to: '/app/organizations', roles: ['ANCHOR'], permission: 'ACCESS_ORGANISATIONS' },
+      { title: 'Locations', icon: 'mdi-map-marker-radius', to: '/app/locations', roles: ['ANCHOR', 'ORGANISATION'], permission: 'ACCESS_LOCATIONS' },
+    ],
+  },
+  {
+    title: 'User Management',
+    items: [
+      { title: 'Users', icon: 'mdi-account-multiple-outline', to: '/app/users', roles: ['ANCHOR', 'ORGANISATION'], permission: 'ACCESS_USERS' },
+      { title: 'Field Officers', icon: 'mdi-account-tie', to: '/app/officers', roles: ['ANCHOR', 'ORGANISATION'], permission: 'ACCESS_SUPERVISORS' },
+      { title: 'Roles & Permissions', icon: 'mdi-shield-account-outline', to: '/app/roles', roles: ['ANCHOR'], permission: 'ACCESS_ROLES' },
       { title: 'Subscription', icon: 'mdi-credit-card-outline', to: '/app/subscription', roles: ['ANCHOR'], anchorSubscription: true, permission: 'ACCESS_SUBSCRIPTION' },
     ],
   },

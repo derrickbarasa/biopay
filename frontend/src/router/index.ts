@@ -70,6 +70,12 @@ const router = createRouter({
           meta: { roles: ['ANCHOR', 'ORGANISATION'], module: 'HOUSEHOLDS', permission: 'ACCESS_HOUSEHOLDS', title: 'Households' },
         },
         {
+          path: 'households/add',
+          name: 'household-create',
+          component: () => import('@/pages/HouseholdCreatePage.vue'),
+          meta: { roles: ['ANCHOR', 'ORGANISATION'], module: 'HOUSEHOLDS', permission: 'ACCESS_HOUSEHOLDS', title: 'Add Household' },
+        },
+        {
           path: 'households/:householdNumber',
           name: 'household-detail',
           component: () => import('@/pages/HouseholdDetailPage.vue'),
@@ -94,10 +100,22 @@ const router = createRouter({
           meta: { roles: ['ANCHOR', 'ORGANISATION'], module: 'CASH_TRANSFERS', permission: 'ACCESS_PAYMENT_CYCLES', title: 'Payroll' },
         },
         {
+          path: 'payroll/generate',
+          name: 'payroll-generate',
+          component: () => import('@/pages/PayrollGeneratePage.vue'),
+          meta: { roles: ['ANCHOR', 'ORGANISATION'], module: 'CASH_TRANSFERS', permission: 'ACCESS_PAYMENT_CYCLES', title: 'Generate Payment Cycle' },
+        },
+        {
           path: 'vouchers',
           name: 'vouchers',
           component: () => import('@/pages/VouchersPage.vue'),
           meta: { roles: ['ANCHOR', 'ORGANISATION'], module: 'VOUCHERS', permission: 'ACCESS_VOUCHERS', title: 'Vouchers' },
+        },
+        {
+          path: 'vouchers/generate',
+          name: 'voucher-generate',
+          component: () => import('@/pages/VoucherGeneratePage.vue'),
+          meta: { roles: ['ANCHOR', 'ORGANISATION'], module: 'VOUCHERS', permission: 'ACCESS_VOUCHERS', title: 'Generate Vouchers by Area' },
         },
         {
           path: 'locations',

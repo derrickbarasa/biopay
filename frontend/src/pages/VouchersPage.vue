@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { dispatch } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
@@ -35,11 +36,11 @@ interface OrganizationOption { organisationCode: string; name: string; anchorId?
 
 const auth = useAuthStore()
 const toast = useToast()
+const router = useRouter()
 const { confirmAction } = useConfirm()
 const { anchors, selectedAnchorId, anchorGateActive } = useAnchorScope()
 const { dialogAnchorId, dialogOrganizations, resetDialogScope } = useOrgCascade()
 const { dialogAnchorId: bulkDialogAnchorId, dialogOrganizations: bulkDialogOrganizations, resetDialogScope: resetBulkDialogScope } = useOrgCascade()
-const { dialogAnchorId: villageDialogAnchorId, dialogOrganizations: villageDialogOrganizations, resetDialogScope: resetVillageDialogScope } = useOrgCascade()
 const loading = ref(true)
 const householdFilter = ref('')
 const statusFilter = ref<string | null>(null)
@@ -58,18 +59,12 @@ const householdsLoading = ref(false)
 const orgNameByCode = computed(() => new Map(organizations.value.map((o) => [o.organisationCode, o.name])))
 function orgName(code?: string) { return (code && orgNameByCode.value.get(code)) || code || '—' }
 
-// ---- Geo hierarchy -- shared by the Village column's name lookup and the "Generate by
-// Village" dialog's cascading selects, following the same client-side code->name lookup
-// convention as HouseholdsPage/LocationsPage (villageName()/orgName()). ----
-const states = ref<GeoNode[]>([])
-const counties = ref<GeoNode[]>([])
-const locations = ref<GeoNode[]>([])
+// ---- Village name lookup -- shared by the Village column, following the same
+// client-side code->name lookup convention as HouseholdsPage/LocationsPage
+// (villageName()/orgName()). ----
 const villages = ref<GeoNode[]>([])
 const villageNameByCode = computed(() => new Map(villages.value.map((v) => [v.code, v.name])))
 function villageName(code?: string) { return (code && villageNameByCode.value.get(code)) || code || '—' }
-const countiesForState = (stateCode: string | null) => stateCode ? counties.value.filter((c) => c.stateCode === stateCode) : counties.value
-const locationsForCounty = (countyCode: string | null) => countyCode ? locations.value.filter((l) => l.countyCode === countyCode) : locations.value
-const villagesForLocation = (locationCode: string | null) => locationCode ? villages.value.filter((v) => v.locationCode === locationCode) : villages.value
 
 let householdDebounce: ReturnType<typeof setTimeout> | null = null
 
@@ -80,7 +75,6 @@ function onHouseholdFilterInput() {
 
 const issueDialog = ref(false)
 const bulkDialog = ref(false)
-const villageDialog = ref(false)
 const redeemDialog = ref(false)
 const saving = ref(false)
 const redeeming = ref<VoucherRow | null>(null)
@@ -94,27 +88,6 @@ const bulkExpiresAt = ref('')
 const bulkFileName = ref('')
 const bulkRows = ref<{ householdNumber: string; householdName: string; amount: number }[]>([])
 const bulkErrors = ref<{ row: number; message: string }[]>([])
-
-// ---- Generate vouchers by geographic level -- picks a state, county, location or village,
-// auto-fills every active household in it, then submits through the same
-// BULK_ISSUE_VOUCHERS endpoint the CSV bulk-issue flow already uses. ----
-type GenerationLevel = 'STATE' | 'COUNTY' | 'LOCATION' | 'VILLAGE'
-const generationLevel = ref<GenerationLevel>('VILLAGE')
-const villageStateCode = ref<string | null>(null)
-const villageOrganisationCode = ref<string | null>(null)
-const villageCountyCode = ref<string | null>(null)
-const villageLocationCode = ref<string | null>(null)
-const villageSelected = ref<string | null>(null)
-const villageLoading = ref(false)
-const villageFlatAmount = ref<number | null>(null)
-const villagePurpose = ref('')
-const villageExpiresAt = ref('')
-const villageRows = ref<{ householdNumber: string; householdName: string; amount: number }[]>([])
-const villageRowHeaders = [
-  { title: 'Household', key: 'householdName' },
-  { title: 'Amount', key: 'amount' },
-]
-let geoLoaded = false
 
 const headers = [
   { title: 'Voucher Code', key: 'voucherCode' },
@@ -314,170 +287,6 @@ async function submitBulk() {
   }
 }
 
-async function openVillageGenerate() {
-  generationLevel.value = 'VILLAGE'
-  villageOrganisationCode.value = null
-  villageStateCode.value = null
-  villageCountyCode.value = null
-  villageLocationCode.value = null
-  villageSelected.value = null
-  villageFlatAmount.value = null
-  villagePurpose.value = ''
-  villageExpiresAt.value = ''
-  villageRows.value = []
-  resetVillageDialogScope(auth.isSystemAdmin ? selectedAnchorId.value : null)
-  villageDialog.value = true
-  geoLoaded = false
-  if (!auth.isSystemAdmin || villageDialogAnchorId.value) await loadGenerationGeo()
-}
-
-async function loadGenerationGeo() {
-  if (geoLoaded && !auth.isSystemAdmin) return
-  if (auth.isSystemAdmin && !villageDialogAnchorId.value) return
-  try {
-    const scope = auth.isSystemAdmin ? { targetAnchorId: villageDialogAnchorId.value } : {}
-    const [s, c, l, v] = await Promise.all([
-      dispatch<{ results: GeoNode[] }>('GET_STATES', scope),
-      dispatch<{ results: GeoNode[] }>('GET_COUNTIES', scope),
-      dispatch<{ results: GeoNode[] }>('GET_LOCATIONS', scope),
-      dispatch<{ results: GeoNode[] }>('GET_VILLAGES', scope),
-    ])
-    states.value = s.results
-    counties.value = c.results
-    locations.value = l.results
-    villages.value = v.results
-    geoLoaded = true
-  } catch (err) {
-    toast.error(err instanceof Error ? err.message : 'Failed to load locations')
-  }
-}
-
-const selectedScopeCode = computed(() => {
-  if (generationLevel.value === 'STATE') return villageStateCode.value
-  if (generationLevel.value === 'COUNTY') return villageCountyCode.value
-  if (generationLevel.value === 'LOCATION') return villageLocationCode.value
-  return villageSelected.value
-})
-
-const selectedScopeName = computed(() => {
-  const code = selectedScopeCode.value
-  const source = generationLevel.value === 'STATE' ? states.value
-    : generationLevel.value === 'COUNTY' ? counties.value
-      : generationLevel.value === 'LOCATION' ? locations.value : villages.value
-  return source.find((item) => item.code === code)?.name ?? ''
-})
-
-function resetGenerationScope() {
-  villageStateCode.value = null
-  villageCountyCode.value = null
-  villageLocationCode.value = null
-  villageSelected.value = null
-  villageRows.value = []
-}
-
-// Every active household in the chosen geographic scope, one page at a time (GET_HOUSEHOLDS caps
-// pageSize at 200 server-side), stopping at BULK_ISSUE_VOUCHERS' own 500-row limit.
-async function loadScopeHouseholds() {
-  villageRows.value = []
-  if (!selectedScopeCode.value) return
-  villageLoading.value = true
-  try {
-    const rows: { householdNumber: string; householdName: string; amount: number }[] = []
-    const pageSize = 200
-    let page = 1
-    while (rows.length < 500) {
-      const geographicFilter = generationLevel.value === 'STATE' ? { stateCode: villageStateCode.value }
-        : generationLevel.value === 'COUNTY' ? { countyCode: villageCountyCode.value }
-          : generationLevel.value === 'LOCATION' ? { locationCode: villageLocationCode.value }
-            : { villageCode: villageSelected.value }
-      const res = await dispatch<{ results: { householdNumber: string; householdName: string }[] }>('GET_HOUSEHOLDS', {
-        organisationCode: villageOrganisationCode.value || undefined, targetAnchorId: auth.isSystemAdmin ? villageDialogAnchorId.value ?? undefined : undefined, ...geographicFilter, status: 1, page, pageSize,
-      })
-      for (const h of res.results) {
-        if (rows.length >= 500) break
-        rows.push({ householdNumber: h.householdNumber, householdName: h.householdName, amount: villageFlatAmount.value ?? 0 })
-      }
-      if (res.results.length < pageSize) break
-      page++
-    }
-    villageRows.value = rows
-    if (!rows.length) toast.error(`No active households found in this ${generationLevel.value.toLowerCase()}`)
-  } catch (err) {
-    toast.error(err instanceof Error ? err.message : 'Failed to load households for this area')
-  } finally {
-    villageLoading.value = false
-  }
-}
-
-watch(villageDialogAnchorId, () => {
-  villageOrganisationCode.value = null
-  resetGenerationScope()
-  if (auth.isSystemAdmin) {
-    geoLoaded = false
-    void loadGenerationGeo()
-  }
-})
-
-watch(villageOrganisationCode, () => {
-  resetGenerationScope()
-})
-
-function onVillageStateChange() {
-  villageCountyCode.value = null
-  villageLocationCode.value = null
-  villageSelected.value = null
-  villageRows.value = []
-  if (generationLevel.value === 'STATE') void loadScopeHouseholds()
-}
-function onVillageCountyChange() {
-  villageLocationCode.value = null
-  villageSelected.value = null
-  villageRows.value = []
-  if (generationLevel.value === 'COUNTY') void loadScopeHouseholds()
-}
-function onVillageLocationChange() {
-  villageSelected.value = null
-  villageRows.value = []
-  if (generationLevel.value === 'LOCATION') void loadScopeHouseholds()
-}
-
-watch(generationLevel, resetGenerationScope)
-
-function applyFlatAmountToAll() {
-  const amount = villageFlatAmount.value ?? 0
-  for (const row of villageRows.value) row.amount = amount
-}
-
-async function submitVillage() {
-  if (auth.isSystemAdmin && !villageDialogAnchorId.value) {
-    toast.error('Select the anchor these vouchers belong to')
-    return
-  }
-  if (auth.isAnchor && !villageOrganisationCode.value) {
-    toast.error('Select the organisation receiving these vouchers')
-    return
-  }
-  if (!villageRows.value.length) return
-  if (villageRows.value.some((r) => !r.amount || r.amount <= 0)) {
-    toast.error('Every household needs a positive amount')
-    return
-  }
-  saving.value = true
-  try {
-    const res = await dispatch<{ successCount: number; failureCount: number; errors: { row: number; message: string }[] }>(
-      'BULK_ISSUE_VOUCHERS',
-      { organisationCode: villageOrganisationCode.value || undefined, targetAnchorId: auth.isSystemAdmin ? villageDialogAnchorId.value ?? undefined : undefined, rows: villageRows.value, purpose: villagePurpose.value || undefined, expiresAt: villageExpiresAt.value || undefined },
-    )
-    toast.success(`${res.successCount} voucher(s) issued, ${res.failureCount} failed`)
-    if (!(res.errors ?? []).length) villageDialog.value = false
-    await load()
-  } catch (err) {
-    toast.error(err instanceof Error ? err.message : 'Geographic voucher generation failed')
-  } finally {
-    saving.value = false
-  }
-}
-
 function openRedeem(row: VoucherRow) {
   redeeming.value = row
   redeemNotes.value = ''
@@ -553,7 +362,7 @@ function statusColor(status: string) {
       <h1 class="page-title">Vouchers</h1>
       <div v-if="scopeReady" class="d-flex ga-2">
         <v-btn v-if="auth.can('ACCESS_VOUCHERS')" variant="outlined" prepend-icon="mdi-file-upload" @click="openBulk">Bulk Issue</v-btn>
-        <v-btn v-if="auth.can('ACCESS_VOUCHERS')" color="secondary" prepend-icon="mdi-map-marker-radius-outline" @click="openVillageGenerate">Generate by Area</v-btn>
+        <v-btn v-if="auth.can('ACCESS_VOUCHERS')" color="secondary" prepend-icon="mdi-map-marker-radius-outline" @click="router.push({ name: 'voucher-generate' })">Generate by Area</v-btn>
         <v-btn v-if="auth.can('ACCESS_VOUCHERS')" color="secondary" prepend-icon="mdi-ticket-confirmation-outline" @click="openIssue">Issue Voucher</v-btn>
       </div>
     </div>
@@ -691,84 +500,6 @@ function statusColor(status: string) {
       </v-card>
     </v-dialog>
 
-    <v-dialog v-model="villageDialog" max-width="680">
-      <v-card>
-        <dialog-close-button @close="villageDialog = false" />
-        <v-card-title>Generate Vouchers by Area</v-card-title>
-        <v-card-text>
-          <v-alert type="info" variant="tonal" density="compact" class="mb-3">
-            Choose a state, county, location or village. Every active household in that area will be prepared for voucher generation.
-          </v-alert>
-          <v-select
-            v-if="auth.isSystemAdmin" v-model="villageDialogAnchorId" :items="anchors" item-title="name" item-value="id"
-            label="Anchor" class="mb-3" placeholder="Choose an anchor" required
-          />
-          <v-select
-            v-if="auth.isAnchor" v-model="villageOrganisationCode" :items="villageDialogOrganizations"
-            item-title="name" item-value="organisationCode" label="Organisation" class="mb-3"
-            placeholder="Choose an organisation" :disabled="auth.isSystemAdmin && !villageDialogAnchorId" required
-          />
-          <v-select
-            v-model="generationLevel"
-            :items="[{ title: 'State', value: 'STATE' }, { title: 'County', value: 'COUNTY' }, { title: 'Location', value: 'LOCATION' }, { title: 'Village', value: 'VILLAGE' }]"
-            label="Generate for" density="compact" class="mb-3" style="max-width: 240px"
-          />
-          <div class="d-flex ga-3 flex-wrap mb-3">
-            <v-select
-              v-model="villageStateCode" :items="states" item-title="name" item-value="code" label="State"
-              clearable hide-details density="compact" style="max-width: 170px" :disabled="auth.isAnchor && !villageOrganisationCode" @update:model-value="onVillageStateChange"
-            />
-            <v-select
-              v-if="generationLevel !== 'STATE'"
-              v-model="villageCountyCode" :items="countiesForState(villageStateCode)" item-title="name" item-value="code" label="County"
-              clearable hide-details density="compact" style="max-width: 170px" @update:model-value="onVillageCountyChange"
-            />
-            <v-select
-              v-if="generationLevel === 'LOCATION' || generationLevel === 'VILLAGE'"
-              v-model="villageLocationCode" :items="locationsForCounty(villageCountyCode)" item-title="name" item-value="code" label="Location"
-              clearable hide-details density="compact" style="max-width: 170px" @update:model-value="onVillageLocationChange"
-            />
-            <v-select
-              v-if="generationLevel === 'VILLAGE'"
-              v-model="villageSelected" :items="villagesForLocation(villageLocationCode)" item-title="name" item-value="code" label="Village"
-              clearable hide-details density="compact" style="max-width: 170px" @update:model-value="loadScopeHouseholds"
-            />
-          </div>
-
-          <v-alert v-if="villageLoading" type="info" variant="tonal" density="compact" class="mb-3">Loading households…</v-alert>
-          <v-alert v-else-if="selectedScopeCode && !villageRows.length" type="warning" variant="tonal" density="compact" class="mb-3">
-            No active households found in this {{ generationLevel.toLowerCase() }}.
-          </v-alert>
-
-          <template v-if="villageRows.length">
-            <div class="d-flex align-center ga-3 flex-wrap mb-3">
-              <v-text-field
-                v-model.number="villageFlatAmount" label="Amount per voucher" type="number" density="compact"
-                hide-details style="max-width: 200px"
-              />
-              <v-btn size="small" color="primary" variant="flat" @click="applyFlatAmountToAll">Apply to all rows</v-btn>
-              <v-spacer />
-              <span class="text-caption text-medium-emphasis">{{ villageRows.length }} household(s) in {{ selectedScopeName }}</span>
-            </div>
-            <v-text-field v-model="villagePurpose" label="Purpose (applies to all, optional)" placeholder="e.g. School fees" density="compact" class="mb-2" />
-            <v-text-field v-model="villageExpiresAt" label="Expires on (applies to all, optional)" type="date" density="compact" class="mb-3" />
-            <div class="village-rows-scroll">
-              <v-data-table :headers="villageRowHeaders" :items="villageRows" density="compact" :items-per-page="10">
-                <template #item.amount="{ item }">
-                  <v-text-field v-model.number="item.amount" type="number" density="compact" hide-details style="max-width: 140px" />
-                </template>
-              </v-data-table>
-            </div>
-          </template>
-        </v-card-text>
-        <v-card-actions>
-          <v-spacer />
-          <v-btn variant="text" @click="villageDialog = false">Close</v-btn>
-          <v-btn color="secondary" :loading="saving" :disabled="!villageRows.length" @click="submitVillage">Generate Vouchers</v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
-
     <v-dialog v-model="redeemDialog" max-width="440">
       <v-card v-if="redeeming">
         <dialog-close-button @close="redeemDialog = false" />
@@ -797,8 +528,6 @@ function statusColor(status: string) {
 .summary-value { color: #0f172a; font-size: 1.25rem; font-weight: 750; letter-spacing: -.02em; margin-top: 6px; }
 .summary-detail { color: #64748b; font-size: .74rem; margin-top: 4px; }
 @media (max-width: 620px) { .voucher-summary-grid { grid-template-columns: 1fr; } }
-
-.village-rows-scroll { max-height: 320px; overflow-y: auto; }
 
 .voucher-editor { padding: 22px 24px; }
 .editor-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 18px; }

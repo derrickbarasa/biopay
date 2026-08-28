@@ -46,7 +46,6 @@ const toast = useToast()
 const { confirmAction } = useConfirm()
 const router = useRouter()
 const { anchors, selectedAnchorId, anchorGateActive } = useAnchorScope()
-const { dialogAnchorId, dialogOrganizations, resetDialogScope } = useOrgCascade()
 const { dialogAnchorId: bulkDialogAnchorId, dialogOrganizations: bulkDialogOrganizations, resetDialogScope: resetBulkDialogScope } = useOrgCascade()
 const loading = ref(true)
 const households = ref<HouseholdRow[]>([])
@@ -55,7 +54,6 @@ const households = ref<HouseholdRow[]>([])
 // treats an unset anchor/organisation filter as "show all" (`IS NULL OR ...`),
 // so the picker below narrows the view without ever blocking it.
 const scopeReady = computed(() => true)
-const dialog = ref(false)
 const saving = ref(false)
 
 const states = ref<GeoNode[]>([])
@@ -86,12 +84,6 @@ function onSearchInput() {
   if (searchDebounce) clearTimeout(searchDebounce)
   searchDebounce = setTimeout(load, 400)
 }
-
-const form = ref({
-  householdName: '', age: null as number | null, gender: '', phoneNumber: '',
-  householdSize: null as number | null, stateCode: '', countyCode: '', locationCode: '', villageCode: '',
-  organisationCode: null as string | null,
-})
 
 const headers = [
   { title: 'Household #', key: 'householdNumber' },
@@ -264,84 +256,6 @@ function exportCsv() {
 
 onMounted(() => { load(); loadGeo() })
 
-// ---- Deduplication -------------------------------------------------------------
-interface DuplicateCandidate {
-  householdNumber: string
-  householdName?: string
-  phoneNumber?: string
-  bomaCode?: string
-  reasons: string[]
-}
-const checkingDup = ref(false)
-const duplicateCandidates = ref<DuplicateCandidate[]>([])
-
-function openCreate() {
-  form.value = {
-    householdName: '', age: null, gender: '', phoneNumber: '', householdSize: null, stateCode: '', countyCode: '', locationCode: '', villageCode: '',
-    organisationCode: null,
-  }
-  duplicateCandidates.value = []
-  resetDialogScope(auth.isSystemAdmin ? selectedAnchorId.value : null)
-  dialog.value = true
-}
-watch(dialogAnchorId, () => { form.value.organisationCode = null })
-
-// Screens the entry against existing households before creating. If any possible
-// duplicates come back, they're shown and creation waits for an explicit "Register
-// anyway"; a clean check registers immediately.
-async function attemptSave() {
-  if (!form.value.householdName.trim()) {
-    toast.error('Head of household name is required')
-    return
-  }
-  if (auth.isSystemAdmin && !dialogAnchorId.value) {
-    toast.error('Select the anchor this household\'s organisation belongs to')
-    return
-  }
-  if (auth.isAnchor && !form.value.organisationCode) {
-    toast.error('Select the organisation this household belongs to')
-    return
-  }
-  checkingDup.value = true
-  try {
-    const res = await dispatch<{ results: DuplicateCandidate[] }>('CHECK_HOUSEHOLD_DUPLICATE', {
-      householdName: form.value.householdName,
-      phoneNumber: form.value.phoneNumber || undefined,
-      bomaCode: form.value.villageCode || undefined,
-    })
-    if (res.results.length) {
-      duplicateCandidates.value = res.results
-      return
-    }
-  } catch {
-    // If the check itself fails, don't block registration -- fall through to save.
-  } finally {
-    checkingDup.value = false
-  }
-  await save()
-}
-
-async function save() {
-  saving.value = true
-  try {
-    await dispatch('CREATE_HOUSEHOLD', {
-      householdName: form.value.householdName, age: form.value.age, gender: form.value.gender,
-      phoneNumber: form.value.phoneNumber, householdSize: form.value.householdSize,
-      stateCode: form.value.stateCode, countyCode: form.value.countyCode,
-      payamCode: form.value.locationCode, bomaCode: form.value.villageCode,
-      organisationCode: form.value.organisationCode || undefined,
-    })
-    toast.success('Household registered')
-    dialog.value = false
-    duplicateCandidates.value = []
-    await load()
-  } catch (err) {
-    toast.error(err instanceof Error ? err.message : 'Save failed')
-  } finally {
-    saving.value = false
-  }
-}
-
 function viewDetail(row: HouseholdRow) {
   router.push({ name: 'household-detail', params: { householdNumber: row.householdNumber } })
 }
@@ -496,7 +410,7 @@ async function submitBulk() {
       <div v-if="scopeReady" class="d-flex ga-2">
         <v-btn v-if="auth.can('DOWNLOAD_REPORTS')" variant="outlined" prepend-icon="mdi-download" @click="exportCsv">Export CSV</v-btn>
         <v-btn v-if="auth.can('ACCESS_HOUSEHOLDS')" variant="outlined" prepend-icon="mdi-file-upload" @click="openBulk">Import CSV</v-btn>
-        <v-btn v-if="auth.can('ACCESS_HOUSEHOLDS')" color="secondary" prepend-icon="mdi-home-plus" @click="openCreate">Add Household</v-btn>
+        <v-btn v-if="auth.can('ACCESS_HOUSEHOLDS')" color="secondary" prepend-icon="mdi-home-plus" @click="router.push({ name: 'household-create' })">Add Household</v-btn>
       </div>
     </div>
 
@@ -650,67 +564,6 @@ async function submitBulk() {
           <v-spacer />
           <v-btn variant="text" @click="reviewDialog = false">Cancel</v-btn>
           <v-btn color="secondary" :loading="reviewSaving" @click="saveReview">Save</v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
-
-    <v-dialog v-model="dialog" max-width="560">
-      <v-card>
-        <dialog-close-button @close="dialog = false" />
-        <v-card-title>Add Household</v-card-title>
-        <v-card-text>
-          <v-select
-            v-if="auth.isSystemAdmin"
-            v-model="dialogAnchorId" :items="anchors" item-title="name" item-value="id"
-            label="Anchor" class="mb-2" placeholder="Choose an anchor" required
-          />
-          <v-select
-            v-if="auth.isAnchor"
-            v-model="form.organisationCode" :items="dialogOrganizations" item-title="name" item-value="organisationCode"
-            label="Organisation" class="mb-2" placeholder="Choose an organisation"
-            :disabled="auth.isSystemAdmin && !dialogAnchorId" required
-          />
-          <v-text-field v-model="form.householdName" label="Head of household name" placeholder="e.g. Jane Doe" />
-          <v-row>
-            <v-col cols="6"><v-text-field v-model.number="form.age" label="Age" type="number" placeholder="e.g. 34" /></v-col>
-            <v-col cols="6">
-              <v-select v-model="form.gender" label="Gender" :items="['M', 'F']" />
-            </v-col>
-          </v-row>
-          <v-text-field v-model="form.phoneNumber" label="Phone number" />
-          <v-text-field v-model.number="form.householdSize" label="Household size" type="number" />
-          <div class="text-caption text-medium-emphasis mt-2 mb-1">Location</div>
-          <v-row dense>
-            <v-col cols="6"><v-select v-model="form.stateCode" :items="states" item-title="name" item-value="code" label="State" density="compact" /></v-col>
-            <v-col cols="6"><v-select v-model="form.countyCode" :items="countiesForState(form.stateCode)" item-title="name" item-value="code" label="County" density="compact" /></v-col>
-            <v-col cols="6"><v-select v-model="form.locationCode" :items="locationsForCounty(form.countyCode)" item-title="name" item-value="code" label="Location" density="compact" /></v-col>
-            <v-col cols="6"><v-select v-model="form.villageCode" :items="villagesForLocation(form.locationCode)" item-title="name" item-value="code" label="Village" density="compact" /></v-col>
-          </v-row>
-
-          <v-alert
-            v-if="duplicateCandidates.length"
-            type="warning" variant="tonal" density="compact" class="mt-3"
-            icon="mdi-account-alert-outline"
-          >
-            <div class="font-weight-medium mb-1">
-              {{ duplicateCandidates.length }} possible duplicate{{ duplicateCandidates.length > 1 ? 's' : '' }} found
-            </div>
-            <div v-for="c in duplicateCandidates" :key="c.householdNumber" class="text-body-2 mb-1">
-              <strong>{{ c.householdName }}</strong> ({{ c.householdNumber }}) — {{ c.reasons.join(', ') }}
-            </div>
-            <div class="text-caption mt-1">Review these before registering a new record.</div>
-          </v-alert>
-        </v-card-text>
-        <v-card-actions>
-          <v-spacer />
-          <v-btn variant="text" @click="dialog = false">Cancel</v-btn>
-          <v-btn
-            v-if="duplicateCandidates.length"
-            color="warning" variant="flat" :loading="saving" @click="save"
-          >
-            Register anyway
-          </v-btn>
-          <v-btn v-else color="secondary" :loading="checkingDup || saving" @click="attemptSave">Save</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>

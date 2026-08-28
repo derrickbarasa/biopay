@@ -59,14 +59,26 @@ const headers = [
   { title: 'Email', key: 'email' },
   { title: 'Organization', key: 'organisationCode' },
   { title: 'Status', key: 'active' },
+  { title: 'Location', key: 'location', sortable: false, align: 'start' as const },
   { title: 'Actions', key: 'actions', sortable: false, align: 'start' as const },
 ]
 
 // Name-not-code lookups, matching the pattern used on Households.
 const orgNameByCode = computed(() => new Map(organizations.value.map((o) => [o.organisationCode, o.name])))
+const stateNameByCode = computed(() => new Map(states.value.map((s) => [s.code, s.name])))
+const countyNameByCode = computed(() => new Map(counties.value.map((c) => [c.code, c.name])))
+const locationNameByCode = computed(() => new Map(locations.value.map((l) => [l.code, l.name])))
 const villageNameByCode = computed(() => new Map(villages.value.map((v) => [v.code, v.name])))
 function orgName(code?: string) { return (code && orgNameByCode.value.get(code)) || code || '—' }
+function stateName(code?: string) { return (code && stateNameByCode.value.get(code)) || code || '—' }
+function countyName(code?: string) { return (code && countyNameByCode.value.get(code)) || code || '—' }
+function locationNodeName(code?: string) { return (code && locationNameByCode.value.get(code)) || code || '—' }
 function villageName(code?: string) { return (code && villageNameByCode.value.get(code)) || code || '—' }
+// Villages can share a name across different states/counties, so any display of an
+// assigned location must show the full path, not just the village.
+function locationPath(loc: OfficerLocation) {
+  return [stateName(loc.stateCode), countyName(loc.countyCode), locationNodeName(loc.payamCode), villageName(loc.bomaCode)].join(' › ')
+}
 
 const countiesForState = (stateCode: string) => stateCode ? counties.value.filter((c) => c.stateCode === stateCode) : counties.value
 const locationsForCounty = (countyCode: string) => countyCode ? locations.value.filter((l) => l.countyCode === countyCode) : locations.value
@@ -282,9 +294,13 @@ async function assignLocation() {
             {{ item.active === '1' ? 'Active' : 'Inactive' }}
           </v-chip>
         </template>
+        <template #item.location="{ item }">
+          <v-btn v-if="auth.can('ACCESS_SUPERVISORS')" variant="tonal" size="small" color="primary" prepend-icon="mdi-map-marker-outline" @click="openAssignLocations(item)">
+            Assign Location
+          </v-btn>
+        </template>
         <template #item.actions="{ item }">
           <v-btn v-if="auth.can('ACCESS_SUPERVISORS')" icon="mdi-pencil" variant="text" size="small" :aria-label="`Edit ${item.firstName} ${item.lastName}`" @click="openEdit(item)" />
-          <v-btn v-if="auth.can('ACCESS_SUPERVISORS')" icon="mdi-map-marker-outline" variant="text" size="small" :aria-label="`Assign locations to ${item.firstName} ${item.lastName}`" @click="openAssignLocations(item)" />
           <v-btn
             v-if="auth.can('ACCESS_SUPERVISORS')"
             :icon="item.active === '1' ? 'mdi-account-cancel-outline' : 'mdi-account-check-outline'"
@@ -360,7 +376,7 @@ async function assignLocation() {
           <v-progress-linear v-if="loadingLocations" indeterminate color="primary" class="mb-2" />
           <v-chip v-for="(loc, i) in assignedLocations" :key="i" size="small" variant="tonal" color="primary" class="mr-1 mb-1">
             <v-icon icon="mdi-map-marker-outline" size="14" start />
-            {{ villageName(loc.bomaCode) }}
+            {{ locationPath(loc) }}
           </v-chip>
           <p v-if="!loadingLocations && !assignedLocations.length" class="text-caption text-medium-emphasis">No coverage areas assigned yet.</p>
         </v-card-text>

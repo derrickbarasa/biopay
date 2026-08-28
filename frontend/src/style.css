@@ -2,6 +2,17 @@ html, body, #app {
   height: 100%;
 }
 
+/* Vuetify's field/button styles assume border-box sizing throughout, but the
+   browser's UA stylesheet defaults native form controls (input, textarea,
+   select, button) to content-box. Without this reset, an outlined text
+   field's padding is added on top of its intended height instead of being
+   included in it -- e.g. a 48px comfortable-density field renders at 72px
+   (48px + 12px top/bottom padding), with its label and outline sized for the
+   intended height while the actual box balloons past them. */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
 /* Scrollbars stay functional everywhere but are never drawn -- the default
    OS/browser scrollbar reads as visual clutter against this UI. */
 * {

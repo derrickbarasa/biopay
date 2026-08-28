@@ -51,17 +51,24 @@ async function handleSubmit() {
       <div class="split">
         <!-- Left: brand / system description (theme colour) -->
         <aside class="brand-side">
-          <router-link to="/" class="brand-back">
-            <v-icon icon="mdi-arrow-left" size="18" class="mr-1" /> Back to website
-          </router-link>
-          <img src="/biopay-features.webp" alt="BioPay — biometric payment solutions" class="brand-graphic" />
+          <img src="/biopay-mark-watermark.webp" alt="" class="brand-watermark" aria-hidden="true" />
+          <div class="brand-copy">
+            <h1 class="brand-title">Biometric proof for every payment.</h1>
+            <p class="brand-text">BioPay ties every disbursement to the beneficiary's own body — a fingerprint or face match, captured once and verified again the moment they're paid. From anchor to field officer, every batch moves through maker-checker approval, offline-ready capture, and continuous AI review for the patterns a manual check would miss.</p>
+            <ul class="brand-points">
+              <li><v-icon icon="mdi-fingerprint" size="20" /> Fingerprint &amp; face verification</li>
+              <li><v-icon icon="mdi-wifi-off" size="20" /> Works fully offline, syncs when back online</li>
+              <li><v-icon icon="mdi-account-multiple-check-outline" size="20" /> Maker-checker approval on every batch</li>
+              <li><v-icon icon="mdi-shield-check-outline" size="20" /> Time-stamped, GPS-tagged and fully auditable</li>
+            </ul>
+          </div>
         </aside>
 
         <!-- Right: login form (white) -->
         <section class="form-side">
           <div class="form-wrap">
-            <router-link to="/" class="auth-brand" aria-label="BioPay home">
-              <img src="/biopay_logo_horizontal.svg" alt="BioPay" />
+            <router-link to="/" class="back-link">
+              <v-icon icon="mdi-arrow-left" size="18" class="mr-1" /> Back to website
             </router-link>
             <div class="form-head">
               <h2 class="form-title">Welcome back</h2>
@@ -124,42 +131,50 @@ async function handleSubmit() {
 .split > * { min-width: 0; }
 @media (max-width: 900px) { .split { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); } }
 
-/* ---- Brand side -- the supplied BioPay feature graphic, full-bleed ---- */
+/* ---- Brand side -- deep teal panel with the mark as a soft background watermark ---- */
 .brand-side {
   position: relative;
-  background: #050b1a;
+  background: #0F766E;
   color: #fff;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
+  display: flex;
+  align-items: safe center;
+  padding: clamp(2rem, 5vw, 4rem);
 }
-.brand-back {
+.brand-watermark {
   position: absolute;
-  top: clamp(1rem, 3vh, 1.75rem);
-  left: clamp(1.25rem, 3vw, 2rem);
-  z-index: 2;
-  display: inline-flex; align-items: center; color: rgba(255,255,255,.92);
-  text-decoration: none; font-size: .875rem; font-weight: 500;
-  padding: .4rem .85rem .4rem .6rem;
-  border-radius: 999px;
-  background: rgba(5, 11, 26, .55);
-  backdrop-filter: blur(6px);
+  top: 50%;
+  left: 50%;
+  width: min(720px, 82%);
+  height: auto;
+  transform: translate(-50%, -50%);
+  opacity: 0.55;
+  pointer-events: none;
+  user-select: none;
 }
-.brand-back:hover { color: #fff; background: rgba(5, 11, 26, .74); }
-.brand-graphic {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  object-position: center;
-}
-@media (max-width: 900px) { .brand-graphic { display: none; } }
+.brand-copy { position: relative; z-index: 1; max-width: 420px; }
+.brand-title,
+.brand-text,
+.brand-points li { text-shadow: 0 1px 10px rgba(2, 10, 8, .6); }
+.brand-title { font-size: clamp(1.7rem, 2.6vw, 2.3rem); font-weight: 700; line-height: 1.15; letter-spacing: -.01em; margin: 0 0 1rem; }
+.brand-text { color: rgba(255,255,255,.78); font-size: 1rem; line-height: 1.6; margin: 0 0 2rem; }
+.brand-points { list-style: none; margin: 0; padding: 0; display: grid; gap: 1rem; }
+.brand-points li { display: flex; align-items: center; gap: .75rem; font-size: .92rem; color: rgba(255,255,255,.9); }
+.brand-points .v-icon { color: #6ee7c5; flex: 0 0 auto; }
 
 /* ---- Form side (white) ---- */
-.form-side { width: 100%; min-height: 0; overflow-y: auto; overflow-x: hidden; background: #fff; display: flex; align-items: center; justify-content: center; padding: clamp(1.25rem, 4vh, 2.5rem) 1.5rem; }
+.form-side { width: 100%; min-height: 0; overflow-y: auto; overflow-x: hidden; background: #fff; display: flex; align-items: safe center; justify-content: center; padding: clamp(1.25rem, 4vh, 2.5rem) 1.5rem; }
 .form-wrap { width: 100%; min-width: 0; max-width: 400px; }
-.auth-brand { display: inline-flex; margin-bottom: 2.5rem; border-radius: 6px; }
-.auth-brand img { display: block; width: 158px; height: auto; }
-.auth-brand:focus-visible { outline: 3px solid #0d9488; outline-offset: 4px; }
+.back-link {
+  display: inline-flex; align-items: center;
+  margin-bottom: 2rem;
+  color: #64748b; text-decoration: none;
+  font-size: .875rem; font-weight: 500;
+  border-radius: 6px;
+}
+.back-link:hover { color: #0f172a; }
+.back-link:focus-visible { outline: 3px solid #0d9488; outline-offset: 4px; }
 .form-wrap :deep(.v-input) { max-width: 100%; }
 .form-head { margin-bottom: 1.75rem; }
 .form-title { font-size: 1.6rem; font-weight: 700; color: #0f172a; margin: 0 0 .3rem; letter-spacing: -.01em; }
@@ -173,16 +188,10 @@ async function handleSubmit() {
 .btn-accent:hover { background-color: #ea580c !important; }
 
 @media (max-width: 900px) {
-  .brand-side { display: flex; align-items: center; padding: .85rem 1.25rem; }
-  .brand-back { position: static; background: none; backdrop-filter: none; padding: 0; }
-}
-
-@media (max-width: 900px) {
-  .brand-side { flex-direction: row; align-items: center; justify-content: flex-start; padding: .85rem 1.25rem; }
-  .brand-back { font-size: .78rem; }
+  .brand-side { display: none; }
   .form-side { padding: 1rem 1.25rem; }
   .form-head { margin-bottom: 1.1rem; }
-  .auth-brand { margin-bottom: 1.6rem; }
+  .back-link { margin-bottom: 1.4rem; }
   .form-title { font-size: 1.45rem; }
 }
 

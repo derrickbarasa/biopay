@@ -5,6 +5,13 @@ const mobileNavOpen = ref(false)
 const revealRoot = ref<HTMLElement | null>(null)
 let observer: IntersectionObserver | null = null
 let featureObserver: IntersectionObserver | null = null
+let navSpyObserver: IntersectionObserver | null = null
+
+// Highlights the nav link for whichever section currently sits in the
+// vertical center band of the viewport, so the nav stays in sync whether the
+// visitor clicks a link or free-scrolls past a section.
+const navSections = ['mission', 'how', 'platform', 'showcase']
+const activeSection = ref('')
 let scrollDir: 'up' | 'down' = 'down'
 let lastScrollY = 0
 let navRevealTimer: ReturnType<typeof setTimeout> | null = null
@@ -260,6 +267,21 @@ onMounted(() => {
     featureCards.forEach((el) => featureObserver?.observe(el))
   }
 
+  if ('IntersectionObserver' in window) {
+    const sectionEls = navSections
+      .map((id) => document.getElementById(id))
+      .filter((el): el is HTMLElement => !!el)
+    navSpyObserver = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) activeSection.value = entry.target.id
+        })
+      },
+      { rootMargin: '-45% 0px -50% 0px', threshold: 0 },
+    )
+    sectionEls.forEach((el) => navSpyObserver?.observe(el))
+  }
+
   heroTimerReduceMotion = reduceMotion
   restartHeroTimer()
 
@@ -271,6 +293,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   observer?.disconnect()
   featureObserver?.disconnect()
+  navSpyObserver?.disconnect()
   window.removeEventListener('scroll', trackScrollDir)
   window.removeEventListener('scroll', handleNavScroll)
   window.removeEventListener('resize', onHowResize)
@@ -289,10 +312,10 @@ onBeforeUnmount(() => {
           <img src="/biopay_logo_horizontal.svg" alt="BioPay" class="brand-logo" />
         </a>
         <nav class="nav-links">
-          <a href="#mission">Mission</a>
-          <a href="#how">How it works</a>
-          <a href="#platform">Platform</a>
-          <a href="#showcase">Product</a>
+          <a href="#mission" :class="{ active: activeSection === 'mission' }">Mission</a>
+          <a href="#how" :class="{ active: activeSection === 'how' }">How it works</a>
+          <a href="#platform" :class="{ active: activeSection === 'platform' }">Platform</a>
+          <a href="#showcase" :class="{ active: activeSection === 'showcase' }">Product</a>
         </nav>
         <div class="nav-actions">
           <router-link class="nav-login" to="/login">Log in</router-link>
@@ -307,10 +330,10 @@ onBeforeUnmount(() => {
         </div>
       </div>
       <nav v-if="mobileNavOpen" id="mobile-navigation" class="mobile-nav" aria-label="Mobile navigation">
-        <a href="#mission" @click="closeMobileNav">Mission</a>
-        <a href="#how" @click="closeMobileNav">How it works</a>
-        <a href="#platform" @click="closeMobileNav">Platform</a>
-        <a href="#showcase" @click="closeMobileNav">Product</a>
+        <a href="#mission" :class="{ active: activeSection === 'mission' }" @click="closeMobileNav">Mission</a>
+        <a href="#how" :class="{ active: activeSection === 'how' }" @click="closeMobileNav">How it works</a>
+        <a href="#platform" :class="{ active: activeSection === 'platform' }" @click="closeMobileNav">Platform</a>
+        <a href="#showcase" :class="{ active: activeSection === 'showcase' }" @click="closeMobileNav">Product</a>
         <a href="#demo" @click="closeMobileNav">Request a demo</a>
         <router-link to="/login" @click="closeMobileNav">Log in</router-link>
       </nav>
@@ -528,10 +551,10 @@ onBeforeUnmount(() => {
               <article class="platform-group feature-card-reveal">
                 <header>
                   <span class="platform-symbol"><i class="mdi mdi-account-multiple-check-outline"></i></span>
-                  <div><h3>Payment cycle assurance</h3><p>No disbursement leaves without two people signing off.</p></div>
+                  <div><h3>Payment cycle assurance</h3><p>Every disbursement is checked before it's paid.</p></div>
                 </header>
                 <div class="platform-points">
-                  <div><i class="mdi mdi-check-decagram-outline"></i><p><b>Maker-checker approval</b><span>An anchor initiates a batch, an organisation maker prepares it, and a checker approves it before anyone is paid.</span></p></div>
+                  <div><i class="mdi mdi-robot-outline"></i><p><b>AI-monitored disbursements</b><span>An AI agent reviews every batch as it lands, flagging the patterns a manual review would miss.</span></p></div>
                   <div><i class="mdi mdi-history"></i><p><b>End-to-end audit trail</b><span>Every batch, approval and disbursement is time-stamped and traceable from anchor to recipient.</span></p></div>
                 </div>
               </article>
@@ -1036,8 +1059,10 @@ onBeforeUnmount(() => {
   flex-shrink: 0;
 }
 .landing-root .nav-links { display: flex; align-items: center; gap: var(--space-4); font-size: 0.92rem; }
-.landing-root .nav-links a { text-decoration: none; color: var(--color-text-muted); }
+.landing-root .nav-links a { text-decoration: none; color: var(--color-text-muted); transition: color 180ms ease; }
 .landing-root .nav-links a:hover { color: var(--color-text); }
+.landing-root .nav-links a.active { color: var(--color-accent); font-weight: 600; }
+.landing-root .nav-links a.active:hover { color: var(--color-accent-deep); }
 .landing-root .nav-links a:focus-visible,
 .landing-root .nav-login:focus-visible,
 .landing-root .brand:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 5px; border-radius: 4px; }
@@ -1063,6 +1088,7 @@ onBeforeUnmount(() => {
 }
 .landing-root .mobile-nav a { min-height: 44px; display: flex; align-items: center; padding: 0.65rem .35rem; border-bottom: 1px solid var(--color-line); text-decoration: none; color: var(--color-text-muted); font-weight: 600; }
 .landing-root .mobile-nav a:last-child { border-bottom: 0; }
+.landing-root .mobile-nav a.active { color: var(--color-accent); }
 .landing-root .mobile-nav a:focus-visible { outline: 2px solid var(--color-primary); outline-offset: -2px; }
 
 /* Hero artwork is close to square, so it is fitted inside the first screen
@@ -1332,9 +1358,14 @@ onBeforeUnmount(() => {
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  background: linear-gradient(168deg, rgba(6, 46, 40, .93) 0%, rgba(7, 59, 51, .86) 40%, rgba(4, 33, 29, .95) 100%);
+  background: linear-gradient(180deg, rgba(4, 22, 19, .74) 0%, rgba(5, 40, 34, .38) 38%, rgba(5, 40, 34, .3) 58%, rgba(3, 18, 15, .82) 100%);
 }
 .landing-root .platform-offline > * { position: relative; z-index: 1; }
+.landing-root .platform-offline-heading h3,
+.landing-root .platform-offline-heading p,
+.landing-root .platform-flow b,
+.landing-root .platform-flow span,
+.landing-root .platform-offline-note { text-shadow: 0 1px 6px rgba(0, 0, 0, .6); }
 .landing-root .platform-offline-heading { display: flex; align-items: flex-start; gap: var(--space-3); }
 .landing-root .platform-symbol {
   width: 42px;
