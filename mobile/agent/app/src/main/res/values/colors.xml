@@ -21,6 +21,7 @@
     <color name="bp_warning">#A65300</color>
     <color name="bp_warning_container">#FFE2C3</color>
     <color name="bp_on_primary">#FFFFFF</color>
+    <color name="bp_on_primary_muted">#CDEBE4</color>
     <color name="bp_text_primary">#17201E</color>
     <color name="bp_text_secondary">#52615D</color>
     <color name="bp_disabled">#9AA6A2</color>

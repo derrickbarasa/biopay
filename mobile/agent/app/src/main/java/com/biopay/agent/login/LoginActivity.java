@@ -30,7 +30,6 @@ public class LoginActivity extends BaseActivity {
 
     private EditText etEmail;
     private EditText etPassword;
-    private EditText etServerUrl;
     private TextView tvErrorMessage;
     private ProgressBar progressBar;
     private Button btnLogin;
@@ -44,8 +43,6 @@ public class LoginActivity extends BaseActivity {
         sessionManager = new SessionManager(this);
         etEmail = findViewById(R.id.etEmail);
         etPassword = findViewById(R.id.etPassword);
-        etServerUrl = findViewById(R.id.etServerUrl);
-        etServerUrl.setText(ApiClient.getBaseUrl(this));
         tvErrorMessage = findViewById(R.id.tvErrorMessage);
         progressBar = findViewById(R.id.progressBar);
         btnLogin = findViewById(R.id.btnLogin);
@@ -67,12 +64,6 @@ public class LoginActivity extends BaseActivity {
         String password = etPassword.getText().toString();
         if (email.isEmpty() || password.isEmpty()) {
             showError(getString(R.string.login_error_required));
-            return;
-        }
-        try {
-            ApiClient.setBaseUrl(this, etServerUrl.getText().toString());
-        } catch (IllegalArgumentException ex) {
-            showError(ex.getMessage());
             return;
         }
         setLoading(true);
@@ -138,7 +129,7 @@ public class LoginActivity extends BaseActivity {
     private void setLoading(boolean loading) {
         progressBar.setVisibility(loading ? View.VISIBLE : View.GONE);
         btnLogin.setEnabled(!loading);
-        etServerUrl.setEnabled(!loading);
+        btnLogin.setText(loading ? R.string.login_signing_in : R.string.login_button);
         etEmail.setEnabled(!loading);
         etPassword.setEnabled(!loading);
     }

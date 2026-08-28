@@ -12,15 +12,15 @@
     <string name="notification_sync_title">Records waiting to sync</string>
     <string name="notification_sync_body">%1$d record(s) captured on this device haven\'t reached the server yet. Open BioPay on a connection to retry.</string>
 
-    <string name="login_title">Field access</string>
-    <string name="login_subtitle">Sign in to access your organisation data and offline field tools.</string>
+    <string name="login_brand_supporting">Trusted field operations</string>
+    <string name="login_title">Field officer sign in</string>
+    <string name="login_subtitle">Use your BioPay field account to continue to your organisation workspace.</string>
     <string name="login_email_hint">Email address</string>
     <string name="login_password_hint">Password</string>
-    <string name="login_button">Sign in securely</string>
+    <string name="login_button">Sign in</string>
     <string name="login_signing_in">Signing in</string>
     <string name="login_error_required">Enter your email address and password.</string>
-    <string name="login_server_hint">BioPay server address</string>
-    <string name="login_server_help">Use the computer Wi-Fi address. Both devices must be on the same network.</string>
+    <string name="login_security_note">Secure access for authorised field officers</string>
 
     <string name="subscription_locked_title">Subscription expired</string>
     <string name="subscription_locked_message">Your organisation\'s BioPay subscription has lapsed past its grace period. Ask your anchor administrator to renew it from the web dashboard, then try again.</string>
@@ -349,11 +349,9 @@
     <string name="settings_sync_alerts_denied">Allow notifications for BioPay to turn on sync alerts.</string>
 
     <string name="settings_connection">Connection and sync</string>
-    <string name="settings_server_help">The server address is shared by login and background synchronization.</string>
-    <string name="settings_save_server">Save server</string>
+    <string name="settings_server_help">The BioPay service is managed by your app configuration.</string>
     <string name="settings_test_connection">Test connection</string>
     <string name="settings_connection_ok">BioPay server is reachable.</string>
-    <string name="settings_server_saved">Server address saved.</string>
     <string name="settings_sync_now">Sync now</string>
     <string name="settings_sync_queued">Sync queued. It will run when a network is available.</string>
 

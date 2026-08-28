@@ -6,7 +6,6 @@ import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
-import android.widget.EditText;
 import android.widget.TextView;
 
 import androidx.activity.result.ActivityResultLauncher;
@@ -44,8 +43,6 @@ import java.io.IOException;
 import java.util.HashMap;
 
 public class SettingsActivity extends BaseActivity {
-    private EditText serverUrl;
-
     private SessionManager sessionManager;
     private SyncAlertsManager syncAlertsManager;
     private TextView tvScannerStatus;
@@ -77,9 +74,7 @@ public class SettingsActivity extends BaseActivity {
         sessionManager = new SessionManager(this);
         syncAlertsManager = new SyncAlertsManager(this);
 
-        serverUrl = findViewById(R.id.etSettingsServer);
         tvScannerStatus = findViewById(R.id.tvScannerStatus);
-        serverUrl.setText(ApiClient.getBaseUrl(this));
 
         setupAccountRow();
         setupSecurityRow();
@@ -87,7 +82,6 @@ public class SettingsActivity extends BaseActivity {
         setupBiometrics();
         setupDataAndStorage();
 
-        findViewById(R.id.btnSaveServer).setOnClickListener(view -> saveServer());
         findViewById(R.id.btnTestConnection).setOnClickListener(view -> testConnection());
         findViewById(R.id.btnSyncNow).setOnClickListener(view -> {
             SyncScheduler.triggerNow(this);
@@ -223,23 +217,11 @@ public class SettingsActivity extends BaseActivity {
         try {
             startActivity(intent);
         } catch (android.content.ActivityNotFoundException ex) {
-            Snackbar.make(serverUrl, R.string.settings_feedback_no_app, Snackbar.LENGTH_LONG).show();
-        }
-    }
-
-    private boolean saveServer() {
-        try {
-            ApiClient.setBaseUrl(this, serverUrl.getText().toString());
-            show(R.string.settings_server_saved);
-            return true;
-        } catch (IllegalArgumentException ex) {
-            Snackbar.make(serverUrl, ex.getMessage(), Snackbar.LENGTH_LONG).show();
-            return false;
+            Snackbar.make(findViewById(android.R.id.content), R.string.settings_feedback_no_app, Snackbar.LENGTH_LONG).show();
         }
     }
 
     private void testConnection() {
-        if (!saveServer()) return;
         findViewById(R.id.btnTestConnection).setEnabled(false);
         ApiClient.get(this).dispatch("ME", new HashMap<>(), new ApiCallback() {
             @Override public void onSuccess(JSONObject response) {
@@ -248,7 +230,7 @@ public class SettingsActivity extends BaseActivity {
             }
             @Override public void onError(String message, String responseCode) {
                 findViewById(R.id.btnTestConnection).setEnabled(true);
-                Snackbar.make(serverUrl, message, Snackbar.LENGTH_LONG).show();
+                Snackbar.make(findViewById(android.R.id.content), message, Snackbar.LENGTH_LONG).show();
             }
         });
     }
@@ -271,6 +253,6 @@ public class SettingsActivity extends BaseActivity {
     }
 
     private void show(int stringId) {
-        Snackbar.make(serverUrl, stringId, Snackbar.LENGTH_SHORT).show();
+        Snackbar.make(findViewById(android.R.id.content), stringId, Snackbar.LENGTH_SHORT).show();
     }
 }
