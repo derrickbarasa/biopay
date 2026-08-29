@@ -22,10 +22,7 @@ import java.util.List;
 /**
  * Full-screen fingerprint verification -- hosts the exact capture sequence that used to live in
  * a modal dialog inside PaymentVerificationActivity (device.open/startVerify/cancelLiveAcquisition
- * /close, the same VerifyCallback contract), moved verbatim rather than reimplemented. Unlike the
- * dialog, a plain Activity's own onUserInteraction() already resets SessionTimeoutManager, so no
- * keepAlive() call is needed here -- that helper existed specifically because a Dialog's own
- * Window doesn't propagate touches to the hosting Activity.
+ * /close, the same VerifyCallback contract), moved verbatim rather than reimplemented.
  */
 public class FingerprintVerifyActivity extends BaseActivity {
 

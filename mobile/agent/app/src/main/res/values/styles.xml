@@ -42,13 +42,13 @@
         <item name="android:layout_height">56dp</item>
         <item name="android:textAllCaps">false</item>
         <item name="android:textSize">16sp</item>
-        <item name="cornerRadius">14dp</item>
+        <item name="cornerRadius">@dimen/bp_radius_control</item>
     </style>
 
     <style name="BioPay.SecondaryButton" parent="Widget.Material3.Button.OutlinedButton">
         <item name="android:layout_height">52dp</item>
         <item name="android:textAllCaps">false</item>
-        <item name="cornerRadius">14dp</item>
+        <item name="cornerRadius">@dimen/bp_radius_control</item>
     </style>
 
     <style name="BioPay.Toolbar" parent="Widget.Material3.Toolbar">
@@ -62,6 +62,15 @@
     <style name="BioPay.StatusChip" parent="Widget.Material3.Chip.Assist">
         <item name="android:minHeight">32dp</item>
         <item name="android:textSize">12sp</item>
+    </style>
+
+    <style name="BioPay.NavigationLabel" parent="">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:textSize">@dimen/main_navigation_label_size</item>
+    </style>
+
+    <style name="BioPay.NavigationLabel.Active" parent="BioPay.NavigationLabel">
+        <item name="android:textStyle">bold</item>
     </style>
 
     <style name="BioPay.KpiValue" parent="">

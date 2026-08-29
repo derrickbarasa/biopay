@@ -227,7 +227,6 @@ public class PersonCaptureActivity extends BaseActivity {
                 })
                 .create();
         dialog.show();
-        com.biopay.agent.session.SessionTimeoutManager.keepAlive(dialog);
 
         device.startCapture(1, new CaptureCallback() {
             @Override public void onProgress(String message) { progress.setText(message); }
@@ -337,7 +336,6 @@ public class PersonCaptureActivity extends BaseActivity {
                     applyPerson(alternateNumber, Beneficiary.TYPE_ALTERNATE, name);
                 })
                 .show();
-        com.biopay.agent.session.SessionTimeoutManager.keepAlive(addPersonDialog);
     }
 
     private static Integer parseIntOrNull(String text) {

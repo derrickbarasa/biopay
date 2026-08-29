@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Mirrors the authenticated dashboard shape system: restrained surfaces and controls. -->
+    <dimen name="bp_radius_surface">10dp</dimen>
+    <dimen name="bp_radius_control">8dp</dimen>
+
+    <!-- Compact phones: preserve usable content width without sacrificing touch targets. -->
+    <dimen name="home_content_horizontal_padding">12dp</dimen>
+    <dimen name="home_content_top_padding">16dp</dimen>
+    <dimen name="home_hero_padding">16dp</dimen>
+    <dimen name="main_navigation_height">76dp</dimen>
+    <dimen name="main_navigation_label_size">11sp</dimen>
+</resources>

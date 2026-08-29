@@ -19,13 +19,15 @@ import com.biopay.agent.home.HomeActivity;
 import com.biopay.agent.households.HouseholdListActivity;
 import com.biopay.agent.more.MoreActivity;
 import com.biopay.agent.scan.ScanBottomSheetFragment;
-import com.biopay.agent.session.SessionManager;
-import com.biopay.agent.session.SessionTimeoutManager;
 
 import android.content.Intent;
 
 /** Shared window and navigation behavior for BioPay task screens. */
 public abstract class BaseActivity extends AppCompatActivity {
+
+    @Nullable
+    private BottomNavigationView mainNavigation;
+    private int mainNavigationSelectedItemId = View.NO_ID;
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
@@ -40,23 +42,7 @@ public abstract class BaseActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
-        if (new SessionManager(this).isLoggedIn()) {
-            SessionTimeoutManager.get().attach(this);
-        }
-    }
-
-    @Override
-    protected void onPause() {
-        super.onPause();
-        SessionTimeoutManager.get().detach(this);
-    }
-
-    @Override
-    public void onUserInteraction() {
-        super.onUserInteraction();
-        if (new SessionManager(this).isLoggedIn()) {
-            SessionTimeoutManager.get().reset();
-        }
+        syncMainNavigationSelection();
     }
 
     @Override
@@ -84,9 +70,14 @@ public abstract class BaseActivity extends AppCompatActivity {
 
     protected void setupMainNavigation(int navigationId, int selectedItemId) {
         BottomNavigationView navigation = findViewById(navigationId);
-        navigation.setSelectedItemId(selectedItemId);
+        mainNavigation = navigation;
+        mainNavigationSelectedItemId = selectedItemId;
         navigation.setOnItemSelectedListener(item -> {
             int targetId = item.getItemId();
+            if (targetId == R.id.navScan) {
+                showScanSheet();
+                return false;
+            }
             if (targetId == selectedItemId) {
                 return true;
             }
@@ -104,8 +95,19 @@ public abstract class BaseActivity extends AppCompatActivity {
                     .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
             startActivity(intent);
             overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out);
-            return true;
+            // The destination activity owns the new selected state. Keeping this screen's
+            // current item selected prevents a stale highlight when the user navigates back.
+            return false;
         });
+        syncMainNavigationSelection();
+    }
+
+    private void syncMainNavigationSelection() {
+        if (mainNavigation != null
+                && mainNavigationSelectedItemId != View.NO_ID
+                && mainNavigation.getSelectedItemId() != mainNavigationSelectedItemId) {
+            mainNavigation.setSelectedItemId(mainNavigationSelectedItemId);
+        }
     }
 
     /** Wires the floating center action shared by every bottom-nav tab screen to the Scan sheet. */
@@ -115,6 +117,12 @@ public abstract class BaseActivity extends AppCompatActivity {
             return;
         }
         fab.setOnClickListener(v ->
-                new ScanBottomSheetFragment().show(getSupportFragmentManager(), "scan"));
+                showScanSheet());
+    }
+
+    private void showScanSheet() {
+        if (getSupportFragmentManager().findFragmentByTag("scan") == null) {
+            new ScanBottomSheetFragment().show(getSupportFragmentManager(), "scan");
+        }
     }
 }

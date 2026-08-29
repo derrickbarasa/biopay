@@ -16,10 +16,8 @@ import com.biopay.agent.ui.BaseActivity;
 /**
  * Launcher screen. Also doubles as a quick sanity check that the active
  * product flavor resolved the right {@link BiometricDevice} implementation --
- * see {@link BiometricDeviceFactory}. A session only reaches this screen already
- * signed in if the app never left the foreground; {@link com.biopay.agent.BioPayAgentApplication}
- * clears the session as soon as the app is backgrounded, so leaving BioPay always
- * means logging back in.
+ * see {@link BiometricDeviceFactory}. The application keeps a session while BioPay is in the
+ * foreground and for one minute after it moves to the background.
  */
 public class SplashActivity extends BaseActivity {
 
@@ -34,11 +32,11 @@ public class SplashActivity extends BaseActivity {
         TextView tvDeviceLabel = findViewById(R.id.tvDeviceLabel);
         tvDeviceLabel.setText(getString(R.string.splash_scanner_label, device.getDisplayName()));
 
-        boolean loggedIn = new SessionManager(this).isLoggedIn();
-        new Handler(Looper.getMainLooper()).postDelayed(() -> goToNextScreen(loggedIn), DISPLAY_MILLIS);
+        new Handler(Looper.getMainLooper()).postDelayed(this::goToNextScreen, DISPLAY_MILLIS);
     }
 
-    private void goToNextScreen(boolean loggedIn) {
+    private void goToNextScreen() {
+        boolean loggedIn = new SessionManager(this).isLoggedIn();
         Intent intent = new Intent(this, loggedIn ? HomeActivity.class : LoginActivity.class);
         startActivity(intent);
         finish();

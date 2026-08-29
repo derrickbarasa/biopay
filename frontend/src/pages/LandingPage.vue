@@ -3,18 +3,36 @@ import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
 
 const mobileNavOpen = ref(false)
 const revealRoot = ref<HTMLElement | null>(null)
+const siteNav = ref<HTMLElement | null>(null)
 let observer: IntersectionObserver | null = null
 let featureObserver: IntersectionObserver | null = null
-let navSpyObserver: IntersectionObserver | null = null
 
-// Highlights the nav link for whichever section currently sits in the
-// vertical center band of the viewport, so the nav stays in sync whether the
-// visitor clicks a link or free-scrolls past a section.
+// The hero is the landing page itself, so no section link is active there.
+// Once a section reaches the fixed navbar, its matching link becomes active.
 const navSections = ['mission', 'how', 'platform', 'showcase']
 const activeSection = ref('')
+let navSpyRafId: number | undefined
 let scrollDir: 'up' | 'down' = 'down'
 let lastScrollY = 0
 let navRevealTimer: ReturnType<typeof setTimeout> | null = null
+
+function scheduleActiveSectionSync() {
+  if (navSpyRafId !== undefined) return
+  navSpyRafId = requestAnimationFrame(() => {
+    navSpyRafId = undefined
+    const activationLine = (siteNav.value?.offsetHeight ?? 0) + 16
+    let currentSection = ''
+
+    for (const id of navSections) {
+      const section = document.getElementById(id)
+      if (section && section.getBoundingClientRect().top <= activationLine) {
+        currentSection = id
+      }
+    }
+
+    activeSection.value = currentSection
+  })
+}
 
 function trackScrollDir() {
   const y = window.scrollY
@@ -244,6 +262,7 @@ onMounted(() => {
   lastScrollY = window.scrollY
   window.addEventListener('scroll', trackScrollDir, { passive: true })
   window.addEventListener('scroll', handleNavScroll, { passive: true })
+  window.addEventListener('scroll', scheduleActiveSectionSync, { passive: true })
 
   if (reduceMotion || !('IntersectionObserver' in window)) {
     featureCards.forEach((el) => el.classList.add('in'))
@@ -267,20 +286,7 @@ onMounted(() => {
     featureCards.forEach((el) => featureObserver?.observe(el))
   }
 
-  if ('IntersectionObserver' in window) {
-    const sectionEls = navSections
-      .map((id) => document.getElementById(id))
-      .filter((el): el is HTMLElement => !!el)
-    navSpyObserver = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) activeSection.value = entry.target.id
-        })
-      },
-      { rootMargin: '-45% 0px -50% 0px', threshold: 0 },
-    )
-    sectionEls.forEach((el) => navSpyObserver?.observe(el))
-  }
+  scheduleActiveSectionSync()
 
   heroTimerReduceMotion = reduceMotion
   restartHeroTimer()
@@ -288,25 +294,28 @@ onMounted(() => {
   howPaused.value = reduceMotion
   if (!reduceMotion) howRafId = requestAnimationFrame(howTick)
   window.addEventListener('resize', onHowResize, { passive: true })
+  window.addEventListener('resize', scheduleActiveSectionSync, { passive: true })
 })
 
 onBeforeUnmount(() => {
   observer?.disconnect()
   featureObserver?.disconnect()
-  navSpyObserver?.disconnect()
   window.removeEventListener('scroll', trackScrollDir)
   window.removeEventListener('scroll', handleNavScroll)
+  window.removeEventListener('scroll', scheduleActiveSectionSync)
   window.removeEventListener('resize', onHowResize)
+  window.removeEventListener('resize', scheduleActiveSectionSync)
   if (navRevealTimer) clearTimeout(navRevealTimer)
   if (heroTimer) clearInterval(heroTimer)
   if (howRafId) cancelAnimationFrame(howRafId)
+  if (navSpyRafId !== undefined) cancelAnimationFrame(navSpyRafId)
 })
 </script>
 
 <template>
   <div class="landing-root" ref="revealRoot">
     <a class="skip-link" href="#main-content">Skip to main content</a>
-    <header class="site-nav" :class="{ 'nav-hidden': navHidden && !mobileNavOpen }">
+    <header ref="siteNav" class="site-nav" :class="{ 'nav-hidden': navHidden && !mobileNavOpen }">
       <div class="wrap nav-row">
         <a class="brand" href="#top">
           <img src="/biopay_logo_horizontal.svg" alt="BioPay" class="brand-logo" />

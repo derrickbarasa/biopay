@@ -3,10 +3,6 @@
     <string name="biopay_logo_description">BioPay fingerprint logo</string>
     <string name="back">Back</string>
     <string name="splash_scanner_label">Scanner profile: %1$s</string>
-    <string name="session_timeout_title">Still there?</string>
-    <string name="session_timeout_message">You\'ve been inactive for a while. For your security, you\'ll be signed out in 30 seconds unless you confirm you\'re still using this device.</string>
-    <string name="session_timeout_confirm">Yes, I\'m still here</string>
-
     <string name="notification_channel_sync_name">Sync alerts</string>
     <string name="notification_channel_sync_description">Notifies you when offline records can\'t reach the BioPay server.</string>
     <string name="notification_sync_title">Records waiting to sync</string>
@@ -59,6 +55,7 @@
     <string name="nav_home">Home</string>
     <string name="nav_settings">Settings</string>
     <string name="nav_households">Households</string>
+    <string name="nav_scan">Scan</string>
     <string name="nav_activity">Activity</string>
     <string name="nav_more">More</string>
 

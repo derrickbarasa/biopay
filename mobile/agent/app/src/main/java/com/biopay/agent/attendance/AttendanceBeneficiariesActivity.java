@@ -131,7 +131,6 @@ public class AttendanceBeneficiariesActivity extends BaseActivity {
                 })
                 .create();
         dialog.show();
-        com.biopay.agent.session.SessionTimeoutManager.keepAlive(dialog);
 
         attemptVerify(device, templates, 0, tvProgress, dialog, beneficiary, clock);
     }

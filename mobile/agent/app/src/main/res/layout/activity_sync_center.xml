@@ -34,7 +34,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 app:cardBackgroundColor="@color/bp_surface"
-                app:cardCornerRadius="16dp"
+                app:cardCornerRadius="@dimen/bp_radius_surface"
                 app:cardElevation="1dp"
                 app:strokeWidth="1dp"
                 app:strokeColor="@color/bp_outline_variant">
@@ -68,7 +68,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 app:cardBackgroundColor="@color/bp_surface"
-                app:cardCornerRadius="16dp"
+                app:cardCornerRadius="@dimen/bp_radius_surface"
                 app:cardElevation="1dp"
                 app:strokeWidth="1dp"
                 app:strokeColor="@color/bp_outline_variant">

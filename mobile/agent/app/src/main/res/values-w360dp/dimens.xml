@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <dimen name="home_content_horizontal_padding">16dp</dimen>
+    <dimen name="home_content_top_padding">20dp</dimen>
+    <dimen name="home_hero_padding">20dp</dimen>
+    <dimen name="main_navigation_label_size">12sp</dimen>
+</resources>

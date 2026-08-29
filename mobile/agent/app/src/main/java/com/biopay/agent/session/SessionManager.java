@@ -22,6 +22,7 @@ public class SessionManager {
     private static final String KEY_ANCHOR_ID = "anchor_id";
     private static final String KEY_PARTNER_CODE = "partner_code";
     private static final String KEY_VERIFICATION_METHOD = "verification_method";
+    private static final String KEY_APP_BACKGROUNDED_AT = "app_backgrounded_at";
 
     private final SharedPreferences prefs;
 
@@ -58,6 +59,28 @@ public class SessionManager {
 
     public boolean isLoggedIn() {
         return getAccessToken() != null;
+    }
+
+    /** Records the leave time durably so the one-minute rule survives process termination. */
+    public void markAppBackgrounded() {
+        prefs.edit()
+                .putLong(KEY_APP_BACKGROUNDED_AT, System.currentTimeMillis())
+                .commit();
+    }
+
+    public void clearAppBackgrounded() {
+        prefs.edit().remove(KEY_APP_BACKGROUNDED_AT).apply();
+    }
+
+    public boolean isBackgroundLogoutDue(long timeoutMs) {
+        long backgroundedAt = prefs.getLong(KEY_APP_BACKGROUNDED_AT, -1L);
+        return isBackgroundLogoutDue(backgroundedAt, System.currentTimeMillis(), timeoutMs);
+    }
+
+    static boolean isBackgroundLogoutDue(long backgroundedAt, long now, long timeoutMs) {
+        return backgroundedAt > 0L
+                && now >= backgroundedAt
+                && now - backgroundedAt >= timeoutMs;
     }
 
     public String getAccessToken() {

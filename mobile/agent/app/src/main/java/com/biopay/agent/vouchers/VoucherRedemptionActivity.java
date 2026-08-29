@@ -89,7 +89,6 @@ public class VoucherRedemptionActivity extends BaseActivity {
                 })
                 .create();
         dialog.show();
-        com.biopay.agent.session.SessionTimeoutManager.keepAlive(dialog);
         attempt(device, templates, 0, progress, dialog, voucher);
     }
 
