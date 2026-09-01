@@ -168,10 +168,28 @@
                 app:strokeColor="@color/bp_outline_variant">
                 <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="8dp">
                     <com.google.android.material.checkbox.MaterialCheckBox android:id="@+id/cbDisabledMembers" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="52dp" android:text="@string/field_has_disabled_members" />
+                    <com.google.android.material.checkbox.MaterialCheckBox android:id="@+id/cbElderlyHeaded" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="52dp" android:text="@string/field_elderly_headed" />
+                    <com.google.android.material.checkbox.MaterialCheckBox android:id="@+id/cbChildHeaded" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="52dp" android:text="@string/field_child_headed" />
+                    <com.google.android.material.checkbox.MaterialCheckBox android:id="@+id/cbChronicIllness" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="52dp" android:text="@string/field_chronic_illness" />
+                    <com.google.android.material.checkbox.MaterialCheckBox android:id="@+id/cbPregnantLactating" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="52dp" android:text="@string/field_pregnant_lactating" />
+                    <com.google.android.material.checkbox.MaterialCheckBox android:id="@+id/cbSingleCaregiver" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="52dp" android:text="@string/field_single_caregiver" />
                     <com.google.android.material.checkbox.MaterialCheckBox android:id="@+id/cbLiteracy" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="52dp" android:text="@string/field_literate" />
                     <com.google.android.material.checkbox.MaterialCheckBox android:id="@+id/cbEligible" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="52dp" android:checked="true" android:text="@string/field_eligible" />
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
+
+            <com.google.android.material.textfield.TextInputLayout
+                style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:hint="@string/field_legal_status">
+                <com.google.android.material.textfield.MaterialAutoCompleteTextView
+                    android:id="@+id/spinnerLegalStatus"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="none" />
+            </com.google.android.material.textfield.TextInputLayout>
 
             <!-- Editing an existing household: shows who's captured so far and lets the officer
                  capture the head (if still missing) or add/capture more people. Hidden while

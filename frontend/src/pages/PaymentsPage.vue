@@ -16,6 +16,8 @@ interface PaymentRow {
   cycle?: string
   dateFrom?: string
   createdAt?: string
+  paymentChannel?: string | null
+  onlineReference?: string | null
 }
 
 const auth = useAuthStore()
@@ -61,9 +63,10 @@ function ringDash(fraction: number) {
   const clamped = Math.max(0, Math.min(1, fraction || 0))
   return `${(clamped * RING_CIRC).toFixed(2)} ${RING_CIRC.toFixed(2)}`
 }
-const totalCount = computed(() => (summary.value.paidCount ?? 0) + (summary.value.pendingCount ?? 0))
+const totalCount = computed(() => (summary.value.paidCount ?? 0) + (summary.value.pendingCount ?? 0) + (summary.value.failedCount ?? 0))
 const paidShare = computed(() => (totalCount.value ? (summary.value.paidCount ?? 0) / totalCount.value : 0))
 const pendingShare = computed(() => (totalCount.value ? (summary.value.pendingCount ?? 0) / totalCount.value : 0))
+const failedShare = computed(() => (totalCount.value ? (summary.value.failedCount ?? 0) / totalCount.value : 0))
 const paidAmountShare = computed(() => {
   const paidAmount = summary.value.paidAmount
   const total = summary.value.totalAmount
@@ -130,7 +133,7 @@ function exportCsv() {
     ['Household', 'Organization', 'Cycle', 'Amount', 'Status', 'Date'],
     ...payments.value.map((p) => [
       p.householdName, orgName(p.organisationCode), p.cycle ?? '', String(p.amount),
-      p.status === 1 ? 'Paid' : 'Pending', p.createdAt ?? '',
+      p.status === 1 ? 'Paid' : p.status === 2 ? 'Failed' : 'Pending', p.createdAt ?? '',
     ]),
   ]
   const csv = rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n')
@@ -156,6 +159,40 @@ async function markPaid(row: PaymentRow) {
     await load()
   } catch (err) {
     toast.error(err instanceof Error ? err.message : 'Update failed')
+  }
+}
+
+async function markFailed(row: PaymentRow) {
+  if (!await confirmAction({
+    title: 'Mark payment as failed?',
+    message: `${row.householdName}'s field payment did not go through. It moves to Failed so it can be recovered.`,
+    confirmLabel: 'Mark as failed',
+    color: 'error',
+  })) return
+  try {
+    await dispatch('UPDATE_PAYMENT_STATUS', { id: row.id, status: 2 })
+    toast.success('Payment marked as failed')
+    await load()
+  } catch (err) {
+    toast.error(err instanceof Error ? err.message : 'Update failed')
+  }
+}
+
+// Permission-gated -- default only for the System Owner (who bypasses permission checks
+// entirely), hidden for every other role until explicitly granted PAY_ONLINE from the Roles page.
+async function payOnline(row: PaymentRow) {
+  if (!await confirmAction({
+    title: 'Pay online?',
+    message: `Recover ${row.householdName}'s failed payment of ${row.amount.toLocaleString()} by paying it online now.`,
+    confirmLabel: 'Pay online',
+    color: 'secondary',
+  })) return
+  try {
+    await dispatch('PAY_PAYMENT_ONLINE', { id: row.id })
+    toast.success('Payment paid online')
+    await load()
+  } catch (err) {
+    toast.error(err instanceof Error ? err.message : 'Online payment failed')
   }
 }
 
@@ -185,7 +222,7 @@ async function remove(row: PaymentRow) {
 
     <template v-if="scopeReady">
     <v-row class="mb-2">
-      <v-col cols="12" sm="4">
+      <v-col cols="12" sm="6" md="3">
         <v-card class="pa-4 summary-card" variant="flat" border>
           <div>
             <div class="text-caption text-medium-emphasis">Total Amount</div>
@@ -201,7 +238,7 @@ async function remove(row: PaymentRow) {
           </svg>
         </v-card>
       </v-col>
-      <v-col cols="12" sm="4">
+      <v-col cols="12" sm="6" md="3">
         <v-card class="pa-4 summary-card" variant="flat" border>
           <div>
             <div class="text-caption text-medium-emphasis">Paid</div>
@@ -217,7 +254,7 @@ async function remove(row: PaymentRow) {
           </svg>
         </v-card>
       </v-col>
-      <v-col cols="12" sm="4">
+      <v-col cols="12" sm="6" md="3">
         <v-card class="pa-4 summary-card" variant="flat" border>
           <div>
             <div class="text-caption text-medium-emphasis">Pending</div>
@@ -229,6 +266,22 @@ async function remove(row: PaymentRow) {
               cx="18" cy="18" r="15.9155" fill="none" stroke="#F59E0B" stroke-width="3.2"
               stroke-linecap="round" transform="rotate(-90 18 18)"
               :stroke-dasharray="ringDash(pendingShare)"
+            />
+          </svg>
+        </v-card>
+      </v-col>
+      <v-col cols="12" sm="6" md="3">
+        <v-card class="pa-4 summary-card" variant="flat" border>
+          <div>
+            <div class="text-caption text-medium-emphasis">Failed</div>
+            <div class="text-h5 font-weight-bold">{{ summary.failedCount ?? 0 }}</div>
+          </div>
+          <svg viewBox="0 0 36 36" class="summary-ring" role="img" aria-label="Failed share of all payments">
+            <circle cx="18" cy="18" r="15.9155" fill="none" stroke="#EEF2F6" stroke-width="3.2" />
+            <circle
+              cx="18" cy="18" r="15.9155" fill="none" stroke="#DC2626" stroke-width="3.2"
+              stroke-linecap="round" transform="rotate(-90 18 18)"
+              :stroke-dasharray="ringDash(failedShare)"
             />
           </svg>
         </v-card>
@@ -249,7 +302,7 @@ async function remove(row: PaymentRow) {
           </v-col>
           <v-col cols="6" sm="4" md="2">
             <v-select
-              v-model="statusFilter" :items="[{ title: 'Pending', value: 0 }, { title: 'Paid', value: 1 }]"
+              v-model="statusFilter" :items="[{ title: 'Pending', value: 0 }, { title: 'Paid', value: 1 }, { title: 'Failed', value: 2 }]"
               label="Status" clearable hide-details density="compact"
             />
           </v-col>
@@ -271,15 +324,29 @@ async function remove(row: PaymentRow) {
         <template #item.organisationCode="{ item }">{{ orgName(item.organisationCode) }}</template>
         <template #item.amount="{ item }">{{ (item.amount ?? 0).toLocaleString() }}</template>
         <template #item.status="{ item }">
-          <v-chip size="small" :color="item.status === 1 ? 'success' : 'warning'" variant="tonal">
-            {{ item.status === 1 ? 'Paid' : 'Pending' }}
+          <v-chip size="small" :color="item.status === 1 ? 'success' : item.status === 2 ? 'error' : 'warning'" variant="tonal">
+            {{ item.status === 1 ? 'Paid' : item.status === 2 ? 'Failed' : 'Pending' }}
           </v-chip>
+          <div v-if="item.status === 1 && item.paymentChannel === 'ONLINE'" class="text-caption text-medium-emphasis mt-1">
+            Paid online{{ item.onlineReference ? ` · ${item.onlineReference}` : '' }}
+          </div>
         </template>
         <template #item.createdAt="{ item }">{{ item.createdAt ? new Date(item.createdAt).toLocaleDateString() : '-' }}</template>
         <template #item.actions="{ item }">
-          <v-btn v-if="auth.can('ACCESS_PAYMENTS') && item.status !== 1"
+          <v-btn v-if="auth.can('ACCESS_PAYMENTS') && item.status === 0"
             icon="mdi-check-circle-outline" variant="text" size="small" color="success"
             :aria-label="`Mark payment to ${item.householdName} as paid`" @click="markPaid(item)"
+          />
+          <v-btn v-if="auth.can('ACCESS_PAYMENTS') && item.status === 0"
+            icon="mdi-close-circle-outline" variant="text" size="small" color="error"
+            :aria-label="`Mark payment to ${item.householdName} as failed`" @click="markFailed(item)"
+          />
+          <!-- Permission-gated: hidden unless the current role has PAY_ONLINE. The System
+               Owner always sees it (auth.can bypasses the check for that role); any other
+               role only sees it once the System Owner grants PAY_ONLINE from the Roles page. -->
+          <v-btn v-if="auth.can('PAY_ONLINE') && item.status === 2"
+            icon="mdi-credit-card-outline" variant="text" size="small" color="secondary"
+            :aria-label="`Pay ${item.householdName}'s failed payment online`" @click="payOnline(item)"
           />
           <v-btn v-if="auth.can('ACCESS_PAYMENTS') && item.status !== 1"
             icon="mdi-delete" variant="text" size="small" color="error"

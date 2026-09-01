@@ -35,6 +35,7 @@ public class Payment extends AbstractVerticle {
         eventBus.consumer("UPDATE_PAYMENT_STATUS", this::updateStatus);
         eventBus.consumer("DELETE_PAYMENT", this::delete);
         eventBus.consumer("PAYMENT_SUMMARY", this::summary);
+        eventBus.consumer("PAY_PAYMENT_ONLINE", this::payOnline);
         startPromise.complete();
     }
 
@@ -173,6 +174,42 @@ public class Payment extends AbstractVerticle {
                 });
     }
 
+    // ---- PAY_PAYMENT_ONLINE (System Owner, or a role explicitly granted PAY_ONLINE,
+    // recovers a payment that failed field disbursement) ------------------------------
+
+    private void payOnline(Message<Object> message) {
+        JsonObject payload = new JsonObject(message.body().toString());
+        Integer id = payload.getInteger("id");
+        if (id == null) {
+            replyError(message, "id is required");
+            return;
+        }
+        String scopeClause = isAnchor(payload) ? " AND (@p4=1 OR anchor_id=@p5)" : " AND organization_code=@p4";
+        Object actorId = payload.getValue("actorId");
+        String reference = "ONLINE-" + java.util.UUID.randomUUID().toString().substring(0, 8).toUpperCase();
+        // Only a payment currently sitting FAILED (status=2) is eligible -- a pending or
+        // already-paid payment has nothing for this recovery channel to do.
+        String sql = "UPDATE payments SET status=1, payment_channel='ONLINE', online_reference=@p1, verified_by=@p2, "
+                + "verified_at=GETDATE(), updated_at=GETDATE() WHERE id=@p3 AND status=2" + scopeClause;
+        Tuple params = isAnchor(payload)
+                ? Tuple.of(reference, actorId, id, isSystemAdmin(payload), TenantScope.anchorId(payload))
+                : Tuple.of(reference, actorId, id, payload.getString("partnerCode", ""));
+
+        pool.preparedQuery(sql)
+                .execute(params)
+                .onFailure(err -> onDbError(message, err))
+                .onSuccess(rows -> {
+                    if (rows.rowCount() > 0) {
+                        reply(message, new JsonObject()
+                                .put("responseCode", "000")
+                                .put("responseMessage", "Payment paid online")
+                                .put("results", new JsonObject().put("onlineReference", reference)));
+                    } else {
+                        replyError(message, "Only a failed payment in your organisation can be paid online");
+                    }
+                });
+    }
+
     // ---- PAYMENT_SUMMARY (dashboard/payments-page KPIs) -----------------------------
 
     private void summary(Message<Object> message) {
@@ -184,7 +221,9 @@ public class Payment extends AbstractVerticle {
 
         String sql = "SELECT COUNT(*) AS cnt, ISNULL(SUM(pay.amount), 0) AS total, "
                 + "SUM(CASE WHEN pay.status=0 THEN 1 ELSE 0 END) AS pendingCount, "
-                + "SUM(CASE WHEN pay.status=1 THEN 1 ELSE 0 END) AS paidCount "
+                + "SUM(CASE WHEN pay.status=1 THEN 1 ELSE 0 END) AS paidCount, "
+                + "SUM(CASE WHEN pay.status=2 THEN 1 ELSE 0 END) AS failedCount, "
+                + "ISNULL(SUM(CASE WHEN pay.status=1 THEN pay.amount ELSE 0 END), 0) AS paidAmount "
                 + "FROM payments pay JOIN organizations p ON p.organization_code = pay.organization_code "
                 + "WHERE (@p1 IS NULL OR pay.organization_code=@p1) AND (@p3 IS NULL OR p.anchor_id=@p3)";
 
@@ -200,7 +239,9 @@ public class Payment extends AbstractVerticle {
                                     .put("totalCount", Rows.intVal(r, "cnt"))
                                     .put("totalAmount", Rows.dbl(r, "total"))
                                     .put("pendingCount", Rows.intVal(r, "pendingCount"))
-                                    .put("paidCount", Rows.intVal(r, "paidCount"))));
+                                    .put("paidCount", Rows.intVal(r, "paidCount"))
+                                    .put("failedCount", Rows.intVal(r, "failedCount"))
+                                    .put("paidAmount", Rows.dbl(r, "paidAmount"))));
                 });
     }
 
@@ -221,8 +262,17 @@ public class Payment extends AbstractVerticle {
                 .put("matchedFingerprint", Rows.str(r, "matched_fp"))
                 .put("latitude", Rows.str(r, "latitude"))
                 .put("longitude", Rows.str(r, "longitude"))
+                // payment_channel/online_reference arrive with migration 038; guard the read so
+                // the payments list still loads if that migration hasn't been applied yet.
+                .put("paymentChannel", strSafe(r, "payment_channel"))
+                .put("onlineReference", strSafe(r, "online_reference"))
                 .put("createdAt", Rows.str(r, "created_at"))
                 .put("verifiedAt", Rows.str(r, "verified_at"))
                 .put("approvedAt", Rows.str(r, "approved_at"));
+    }
+
+    /** Null-safe text read of a column that may not exist on this row (pre-migration-038 rows). */
+    private static String strSafe(Row r, String column) {
+        return r.getColumnIndex(column) < 0 ? null : Rows.str(r, column);
     }
 }

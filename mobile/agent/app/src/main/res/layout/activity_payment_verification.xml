@@ -3,7 +3,6 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/bp_background"
     android:fitsSystemWindows="true"
     android:orientation="vertical">
     <com.google.android.material.appbar.MaterialToolbar
@@ -30,6 +29,7 @@
             android:textColor="@color/bp_primary"
             android:textStyle="bold" />
         <TextView style="@style/BioPay.SupportingText" android:layout_marginTop="4dp" android:text="@string/payment_verify_body" />
+        <TextView style="@style/BioPay.SectionHeader" android:layout_marginTop="20dp" android:text="@string/payment_verify_choose_method" />
     </LinearLayout>
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/recyclerBeneficiaries"
@@ -41,4 +41,21 @@
         android:paddingTop="6dp"
         android:paddingEnd="12dp"
         android:paddingBottom="20dp" />
+    <TextView
+        android:id="@+id/verificationEmptyState"
+        style="@style/BioPay.SupportingText"
+        android:layout_marginStart="24dp"
+        android:layout_marginEnd="24dp"
+        android:layout_marginBottom="16dp"
+        android:gravity="center"
+        android:text="@string/payment_verify_no_methods"
+        android:visibility="gone" />
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnScanPayment"
+        style="@style/BioPay.PrimaryButton"
+        android:layout_marginStart="16dp"
+        android:layout_marginEnd="16dp"
+        android:layout_marginBottom="16dp"
+        android:enabled="false"
+        android:text="@string/payment_scan_disabled" />
 </LinearLayout>

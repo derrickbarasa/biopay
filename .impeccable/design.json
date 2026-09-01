@@ -1,0 +1,77 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-08-31T10:40:00+03:00",
+  "title": "Design System: BioPay",
+  "extensions": {
+    "colorMeta": {
+      "primary-teal": { "role": "primary", "displayName": "Accountability Teal", "canonical": "#0D9488", "tonalRamp": ["#042F2E", "#115E59", "#0F766E", "#0D9488", "#14B8A6", "#5EEAD4", "#99F6E4", "#F0FDFA"] },
+      "action-orange": { "role": "secondary", "displayName": "Action Orange", "canonical": "#F59E0B", "tonalRamp": ["#451A03", "#78350F", "#B45309", "#D97706", "#F59E0B", "#FBBF24", "#FDE68A", "#FFF7ED"] },
+      "ink": { "role": "neutral", "displayName": "Ledger Ink", "canonical": "#0F172A", "tonalRamp": ["#020617", "#0F172A", "#1E293B", "#334155", "#64748B", "#94A3B8", "#CBD5E1", "#F8FAFC"] }
+    },
+    "typographyMeta": {
+      "headline": { "displayName": "Operational Headline", "purpose": "Page titles and primary screen orientation." },
+      "body": { "displayName": "Interface Body", "purpose": "Forms, tables, descriptions, and navigation." },
+      "label": { "displayName": "Data Label", "purpose": "Metrics, statuses, and compact utility copy." }
+    },
+    "shadows": [],
+    "motion": [
+      { "name": "state-change", "value": "220ms cubic-bezier(.16, 1, .3, 1)", "purpose": "Small non-layout hover and state transitions." }
+    ],
+    "breakpoints": [
+      { "name": "mobile", "value": "520px" },
+      { "name": "tablet", "value": "900px" },
+      { "name": "laptop", "value": "1180px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Action",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Creates or advances operational work.",
+      "html": "<button class=\"ds-btn-primary\">Generate payment cycle</button>",
+      "css": ".ds-btn-primary { border: 0; border-radius: 8px; background: #F59E0B; color: #0F172A; padding: 9px 16px; font: 700 14px Ubuntu, sans-serif; cursor: pointer; transition: background 180ms ease; } .ds-btn-primary:hover { background: #EA580C; } .ds-btn-primary:focus-visible { outline: 2px solid #0D9488; outline-offset: 2px; }"
+    },
+    {
+      "name": "Metric Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "Compact role-aware summary with one factual supporting line.",
+      "html": "<article class=\"ds-metric\"><span class=\"ds-metric-icon\"><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M3 7h18v10H3zM8 12h8\"/></svg></span><div><small>Value disbursed</small><strong>USD 25</strong><p>1 voucher redeemed</p></div></article>",
+      "css": ".ds-metric { display: grid; grid-template-columns: 36px 1fr; gap: 11px; min-width: 240px; padding: 14px; border: 1px solid #E2E8F0; border-radius: 14px; background: #fff; color: #0F172A; font-family: Ubuntu, sans-serif; } .ds-metric-icon { display:grid;place-items:center;width:36px;height:36px;border-radius:10px;background:#E6FFFB;color:#0D9488; } .ds-metric-icon svg { width:20px;fill:none;stroke:currentColor;stroke-width:2; } .ds-metric small,.ds-metric p { display:block;margin:0;color:#64748B;font-size:11px; } .ds-metric strong { display:block;font-size:21px;line-height:1.2;font-variant-numeric:tabular-nums; }"
+    },
+    {
+      "name": "Outlined Field",
+      "kind": "input",
+      "description": "Comfortable form field used throughout administration flows.",
+      "html": "<label class=\"ds-field\">Organisation name<input placeholder=\"Enter organisation name\"></label>",
+      "css": ".ds-field { display:grid;gap:6px;color:#334155;font:600 12px Ubuntu,sans-serif; } .ds-field input { height:48px;border:2px solid #CBD5E1;border-radius:8px;background:#fff;padding:0 12px;color:#0F172A;font:400 14px Ubuntu,sans-serif; } .ds-field input:focus-visible { outline:0;border-color:#0D9488; } .ds-field input:disabled { background:#F1F5F9;color:#94A3B8; }"
+    },
+    {
+      "name": "Status Chip",
+      "kind": "chip",
+      "description": "Compact semantic state marker.",
+      "html": "<span class=\"ds-chip\">Paid</span>",
+      "css": ".ds-chip { display:inline-flex;align-items:center;min-height:24px;border-radius:999px;background:#D1FAE5;color:#047857;padding:3px 9px;font:700 11px Ubuntu,sans-serif; }"
+    },
+    {
+      "name": "Ranked Flow",
+      "kind": "custom",
+      "description": "Organisation comparison with exact totals and restrained proportional tracks.",
+      "html": "<div class=\"ds-rank\"><b>01</b><div><span>Bright Future NGO <strong>USD 25</strong></span><i><em style=\"width:72%\"></em></i><small>Cash USD 0 · Vouchers USD 25</small></div></div>",
+      "css": ".ds-rank { display:grid;grid-template-columns:24px 1fr;gap:10px;padding:10px 0;color:#334155;font-family:Ubuntu,sans-serif; } .ds-rank>b { color:#94A3B8;font-size:10px; } .ds-rank span { display:flex;justify-content:space-between;font-size:12px; } .ds-rank strong { color:#0F172A;font-variant-numeric:tabular-nums; } .ds-rank i { display:block;height:6px;margin:6px 0 5px;border-radius:4px;background:#E8EEF2;overflow:hidden; } .ds-rank em { display:block;height:100%;min-width:2px;border-radius:inherit;background:#0D9488; } .ds-rank small { color:#64748B;font-size:10px; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Accountability Ledger",
+    "overview": "A restrained, information-dense operations interface that makes scope, amounts, status, and next actions immediately legible.",
+    "keyCharacteristics": ["Compact role-aware density", "Teal identity with orange actions", "Border-led flat surfaces", "Tabular financial alignment"],
+    "rules": [
+      { "name": "Orange Means Action", "body": "Orange belongs to actions and attention states, not general decoration.", "section": "colors" },
+      { "name": "Data Stays Still", "body": "Amounts, counts, dates, and ranking indices use tabular numerals.", "section": "typography" },
+      { "name": "One Boundary", "body": "A container uses either its established border or elevation, never both.", "section": "elevation" }
+    ],
+    "dos": ["Show only role-accessible data and actions.", "Keep exact monetary detail available.", "Use directional empty-state copy."],
+    "donts": ["Do not let one chart dominate an operational page.", "Do not repeat a dataset without a distinct task reason.", "Do not combine bordered cards with directional shadows."]
+  }
+}

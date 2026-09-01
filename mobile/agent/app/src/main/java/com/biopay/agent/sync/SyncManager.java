@@ -70,6 +70,7 @@ public class SyncManager {
         allSucceeded &= syncImages();
         allSucceeded &= syncAttendances();
         allSucceeded &= syncFieldPayments();
+        allSucceeded &= syncPaymentCatalogue();
         allSucceeded &= syncVoucherCatalogue();
         allSucceeded &= syncVoucherRedemptions();
         return allSucceeded;
@@ -81,6 +82,33 @@ public class SyncManager {
             if(rows!=null)for(int i=0;i<rows.length();i++){org.json.JSONObject r=rows.getJSONObject(i);voucherDao.upsert(r.optString("voucherCode"),r.optString("householdNumber"),r.optDouble("amount"),r.optString("purpose",null),r.optString("expiresAt",null));}
             return true;
         } catch(Exception ex){Log.w(TAG,"Voucher catalogue sync failed: "+ex.getMessage());return false;}
+    }
+
+    /** Pulls payroll-generated entitlements after uploads so unsynced completions are preserved. */
+    public boolean syncPaymentCatalogue() {
+        try {
+            org.json.JSONArray rows = ApiClient.get(context)
+                    .dispatchSync("SYNC_PAYMENTS", new HashMap<>()).optJSONArray("results");
+            List<PaymentDao.RemotePayment> payments = new java.util.ArrayList<>();
+            if (rows != null) {
+                for (int i = 0; i < rows.length(); i++) {
+                    org.json.JSONObject row = rows.getJSONObject(i);
+                    PaymentDao.RemotePayment payment = new PaymentDao.RemotePayment();
+                    payment.id = row.optInt("id");
+                    payment.householdNumber = row.optString("householdNumber");
+                    payment.householdName = row.optString("householdName", null);
+                    payment.villageCode = row.optString("villageCode", null);
+                    payment.amount = row.optDouble("amount");
+                    payment.status = row.optInt("status");
+                    payments.add(payment);
+                }
+            }
+            paymentDao.replaceRemoteCache(payments, new SessionManager(context).getPartnerCode());
+            return true;
+        } catch (Exception ex) {
+            Log.w(TAG, "Payment catalogue sync failed: " + ex.getMessage());
+            return false;
+        }
     }
 
     private boolean syncVoucherRedemptions() {
@@ -154,6 +182,8 @@ public class SyncManager {
                 params.put("gender", h.gender);
                 params.put("phoneNumber", h.phoneNumber);
                 params.put("householdSize", h.householdSize);
+                params.put("vulnerabilityStatuses", csvValues(h.vulnerabilityStatuses));
+                params.put("legalStatus", h.legalStatus);
                 params.put("stateCode", h.stateCode);
                 params.put("countyCode", h.countyCode);
                 params.put("payamCode", h.payamCode);
@@ -168,6 +198,15 @@ public class SyncManager {
             }
         }
         return allOk;
+    }
+
+    private static java.util.List<String> csvValues(String csv) {
+        if (csv == null || csv.trim().isEmpty()) return java.util.Collections.emptyList();
+        java.util.List<String> values = new java.util.ArrayList<>();
+        for (String value : csv.split(",")) {
+            if (!value.trim().isEmpty()) values.add(value.trim());
+        }
+        return values;
     }
 
     private boolean syncAlternates() {
@@ -304,8 +343,12 @@ public class SyncManager {
             try {
                 Map<String, Object> params = new HashMap<>();
                 params.put("householdNumber", p.householdNumber);
+                if (p.remoteId != null) params.put("paymentId", p.remoteId);
                 params.put("amount", p.amount);
-                params.put("biometricVerified", true);
+                // A generated payment marked FAILED locally (see PaymentDao#markGeneratedPaymentFailed)
+                // uploads as biometricVerified=false so the backend moves it to status=2 instead of
+                // completing it -- the System Owner can then recover it with "Pay Online".
+                params.put("biometricVerified", p.status != PaymentDao.STATUS_FAILED);
                 params.put("fingerprintUuid", p.matchedFingerprintUuid);
                 params.put("faceUuid", p.matchedFaceUuid);
                 params.put("latitude", p.latitude);

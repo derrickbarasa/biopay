@@ -15,7 +15,7 @@ export const PERMISSION_GROUPS: PermissionGroupDefinition[] = [
   {
     key: 'HOUSEHOLDS_ALTERNATES', label: 'Households & alternates', icon: 'mdi-home-group',
     description: 'Choose the operational areas this role can open and work in.',
-    permissions: ['ACCESS_HOUSEHOLDS', 'ACCESS_ALTERNATES', 'ACCESS_PAYMENTS', 'ACCESS_PAYMENT_CYCLES', 'ACCESS_VOUCHERS', 'ACCESS_ATTENDANCE'],
+    permissions: ['ACCESS_HOUSEHOLDS', 'ACCESS_ALTERNATES', 'ACCESS_PAYMENTS', 'PAY_ONLINE', 'ACCESS_PAYMENT_CYCLES', 'ACCESS_VOUCHERS', 'ACCESS_ATTENDANCE'],
   },
   {
     key: 'USER_MANAGEMENT', label: 'User management', icon: 'mdi-account-cog-outline',

@@ -2,9 +2,9 @@ package com.biopay.agent.payments;
 
 import android.content.Context;
 import android.content.Intent;
+import android.location.Location;
 import android.os.Bundle;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
@@ -17,13 +17,18 @@ import com.biopay.agent.data.AlternateDao;
 import com.biopay.agent.data.FaceDao;
 import com.biopay.agent.data.FingerprintDao;
 import com.biopay.agent.data.HouseholdDao;
+import com.biopay.agent.data.PaymentDao;
 import com.biopay.agent.face.FaceCaptureActivity;
 import com.biopay.agent.face.FaceMatchConfig;
 import com.biopay.agent.face.FaceMatcher;
 import com.biopay.agent.face.FaceRecognitionEngine;
 import com.biopay.agent.face.FaceRecognitionException;
 import com.biopay.agent.face.MlKitFaceRecognitionEngine;
+import com.biopay.agent.location.LocationHelper;
+import com.biopay.agent.session.SessionManager;
+import com.biopay.agent.sync.SyncScheduler;
 import com.biopay.agent.ui.BaseActivity;
+import com.google.android.material.button.MaterialButton;
 
 import org.json.JSONArray;
 
@@ -33,23 +38,17 @@ import java.io.IOException;
 import java.text.NumberFormat;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
-/**
- * Picks which household member is collecting a pending field payment -- by whichever method
- * (fingerprint and/or face) that specific person actually has enrolled (see
- * {@link #buildBeneficiaries}) -- then hands off to the redesigned verify -> disburse -> review
- * -> success wizard ({@link FingerprintVerifyActivity} / face match here -> {@link
- * VerifySuccessActivity} -> {@link DisbursementActivity} -> {@link DisbursementReviewActivity}).
- * This screen itself is unchanged from before the redesign -- it's the destination of each
- * row's tap that changed, from an inline dialog/immediate-record to that full flow.
- */
+/** Selects a beneficiary and enrolled method, then completes one generated payment after a match. */
 public class PaymentVerificationActivity extends BaseActivity {
-
+    private static final String EXTRA_PAYMENT_ID = "payment_id";
     private static final String EXTRA_HOUSEHOLD_NUMBER = "household_number";
     private static final String EXTRA_AMOUNT = "amount";
 
-    public static Intent intentFor(Context context, String householdNumber, double amount) {
+    public static Intent intentFor(Context context, Integer paymentId, String householdNumber, double amount) {
         Intent intent = new Intent(context, PaymentVerificationActivity.class);
+        if (paymentId != null) intent.putExtra(EXTRA_PAYMENT_ID, paymentId);
         intent.putExtra(EXTRA_HOUSEHOLD_NUMBER, householdNumber);
         intent.putExtra(EXTRA_AMOUNT, amount);
         return intent;
@@ -59,21 +58,28 @@ public class PaymentVerificationActivity extends BaseActivity {
     private AlternateDao alternateDao;
     private FingerprintDao fingerprintDao;
     private FaceDao faceDao;
-
+    private Integer paymentId;
     private String householdNumber;
     private String householdName;
     private double amount;
+    private Beneficiary selectedBeneficiary;
+    private boolean selectedFingerprint;
     private Beneficiary pendingFaceBeneficiary;
     private Beneficiary pendingFingerprintBeneficiary;
+    private MaterialButton scanButton;
 
     private final ActivityResultLauncher<Intent> fingerprintVerifyLauncher =
             registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {
+                if (result.getResultCode() == FingerprintVerifyActivity.RESULT_VERIFY_FAILED) {
+                    showFailure(getString(R.string.payment_result_fingerprint_failed));
+                    return;
+                }
                 if (result.getResultCode() != RESULT_OK || result.getData() == null) return;
                 String matchedUuid = result.getData().getStringExtra(FingerprintVerifyActivity.EXTRA_RESULT_MATCHED_UUID);
                 Beneficiary beneficiary = pendingFingerprintBeneficiary;
                 pendingFingerprintBeneficiary = null;
                 if (beneficiary != null && matchedUuid != null) {
-                    proceedToSuccess(beneficiary, getString(R.string.verify_method_fingerprint_label), matchedUuid, null);
+                    completePayment(beneficiary, getString(R.string.verify_method_fingerprint_label), matchedUuid, null);
                 }
             });
 
@@ -86,17 +92,15 @@ public class PaymentVerificationActivity extends BaseActivity {
                 if (path != null) matchFace(beneficiary, path);
             });
 
-    @Override
-    protected void onCreate(Bundle savedInstanceState) {
+    @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_payment_verification);
         setupBackToolbar(R.id.toolbar);
-
         householdDao = new HouseholdDao(this);
         alternateDao = new AlternateDao(this);
         fingerprintDao = new FingerprintDao(this);
         faceDao = new FaceDao(this);
-
+        paymentId = getIntent().hasExtra(EXTRA_PAYMENT_ID) ? getIntent().getIntExtra(EXTRA_PAYMENT_ID, -1) : null;
         householdNumber = getIntent().getStringExtra(EXTRA_HOUSEHOLD_NUMBER);
         amount = getIntent().getDoubleExtra(EXTRA_AMOUNT, 0);
 
@@ -107,83 +111,86 @@ public class PaymentVerificationActivity extends BaseActivity {
         ((TextView) findViewById(R.id.tvAmount)).setText(
                 getString(R.string.payment_amount, NumberFormat.getNumberInstance().format(amount)));
 
-        PaymentBeneficiaryAdapter adapter = new PaymentBeneficiaryAdapter(new PaymentBeneficiaryAdapter.OnVerifyListener() {
-            @Override public void onVerifyFingerprint(Beneficiary beneficiary) {
-                pendingFingerprintBeneficiary = beneficiary;
-                fingerprintVerifyLauncher.launch(FingerprintVerifyActivity.intentFor(
-                        PaymentVerificationActivity.this, householdNumber, beneficiary.beneficiaryId, beneficiary.name, beneficiary.subtitle));
-            }
-            @Override public void onVerifyFace(Beneficiary beneficiary) { startFaceCapture(beneficiary); }
+        scanButton = findViewById(R.id.btnScanPayment);
+        PaymentBeneficiaryAdapter adapter = new PaymentBeneficiaryAdapter((beneficiary, fingerprint) -> {
+            selectedBeneficiary = beneficiary;
+            selectedFingerprint = fingerprint;
+            scanButton.setEnabled(true);
+            scanButton.setText(fingerprint ? R.string.payment_scan_fingerprint : R.string.payment_scan_face);
+            scanButton.setIconResource(fingerprint ? R.drawable.ic_fingerprint : R.drawable.ic_face);
         });
-        RecyclerView recyclerView = findViewById(R.id.recyclerBeneficiaries);
-        recyclerView.setLayoutManager(new LinearLayoutManager(this));
-        recyclerView.setAdapter(adapter);
-        adapter.submitList(buildBeneficiaries(household));
+        RecyclerView recycler = findViewById(R.id.recyclerBeneficiaries);
+        recycler.setLayoutManager(new LinearLayoutManager(this));
+        recycler.setAdapter(adapter);
+        List<PaymentBeneficiaryAdapter.Row> beneficiaries = buildBeneficiaries(household);
+        adapter.submitList(beneficiaries);
+        findViewById(R.id.verificationEmptyState).setVisibility(
+                beneficiaries.isEmpty() ? android.view.View.VISIBLE : android.view.View.GONE);
+        scanButton.setOnClickListener(v -> startSelectedVerification());
     }
 
-    /** Checks what each person actually has captured (not the stored registration_method label --
-     *  same principle as HouseholdFormActivity's "Captured people" section) so only real, usable
-     *  verification methods are offered. */
     private List<PaymentBeneficiaryAdapter.Row> buildBeneficiaries(HouseholdDao.Household household) {
         List<PaymentBeneficiaryAdapter.Row> rows = new ArrayList<>();
         if (household != null) {
-            Beneficiary head = new Beneficiary(household.householdNumber, household.householdNumber,
+            rows.add(toRow(new Beneficiary(household.householdNumber, household.householdNumber,
                     Beneficiary.TYPE_HOUSEHOLD_HEAD, household.householdName,
-                    getString(R.string.attendance_beneficiary_head));
-            rows.add(toRow(head));
+                    getString(R.string.attendance_beneficiary_head))));
         }
         for (AlternateDao.Alternate alternate : alternateDao.findByHousehold(householdNumber)) {
-            Beneficiary alt = new Beneficiary(alternate.alternateNumber, householdNumber,
+            rows.add(toRow(new Beneficiary(alternate.alternateNumber, householdNumber,
                     Beneficiary.TYPE_ALTERNATE, alternate.alternateName,
                     getString(R.string.alternate_detail,
-                            getString(R.string.attendance_beneficiary_alternate), alternate.relationship));
-            rows.add(toRow(alt));
+                            getString(R.string.attendance_beneficiary_alternate), alternate.relationship))));
         }
         return rows;
     }
 
     private PaymentBeneficiaryAdapter.Row toRow(Beneficiary beneficiary) {
-        boolean hasFingerprint = fingerprintDao.countForBeneficiary(beneficiary.beneficiaryId) > 0;
-        boolean hasFace = faceDao.existsForBeneficiary(beneficiary.beneficiaryId);
-        return new PaymentBeneficiaryAdapter.Row(beneficiary, hasFingerprint, hasFace);
+        return new PaymentBeneficiaryAdapter.Row(beneficiary,
+                fingerprintDao.countForBeneficiary(beneficiary.beneficiaryId) > 0,
+                faceDao.existsForBeneficiary(beneficiary.beneficiaryId));
     }
 
-    // ---- Face verify (first live face verification anywhere in the app) --------------------
-
-    private void startFaceCapture(Beneficiary beneficiary) {
-        pendingFaceBeneficiary = beneficiary;
-        faceCaptureLauncher.launch(new Intent(this, FaceCaptureActivity.class));
+    private void startSelectedVerification() {
+        if (selectedBeneficiary == null) return;
+        if (selectedFingerprint) {
+            pendingFingerprintBeneficiary = selectedBeneficiary;
+            fingerprintVerifyLauncher.launch(FingerprintVerifyActivity.intentFor(this, householdNumber,
+                    selectedBeneficiary.beneficiaryId, selectedBeneficiary.name, selectedBeneficiary.subtitle));
+        } else {
+            pendingFaceBeneficiary = selectedBeneficiary;
+            faceCaptureLauncher.launch(new Intent(this, FaceCaptureActivity.class));
+        }
     }
 
     private void matchFace(Beneficiary beneficiary, String imagePath) {
+        scanButton.setEnabled(false);
+        scanButton.setText(R.string.payment_verifying_face);
         new Thread(() -> {
             MlKitFaceRecognitionEngine engine = new MlKitFaceRecognitionEngine(this);
             try {
-                byte[] bytes = readFile(imagePath);
-                FaceRecognitionEngine.CaptureResult probeResult = engine.createEmbedding(bytes);
-                List<FaceDao.FaceRecord> enrolled = faceDao.listForBeneficiary(beneficiary.beneficiaryId, engine.modelVersion());
+                FaceRecognitionEngine.CaptureResult probe = engine.createEmbedding(readFile(imagePath));
                 FaceDao.FaceRecord matched = null;
-                for (FaceDao.FaceRecord record : enrolled) {
-                    float[] storedEmbedding = toFloatArray(new JSONArray(record.embedding));
-                    if (FaceMatcher.matches(probeResult.embedding, storedEmbedding, FaceMatchConfig.UNCALIBRATED_PLACEHOLDER_THRESHOLD)) {
+                for (FaceDao.FaceRecord record : faceDao.listForBeneficiary(
+                        beneficiary.beneficiaryId, engine.modelVersion())) {
+                    if (FaceMatcher.matches(probe.embedding, toFloatArray(new JSONArray(record.embedding)),
+                            FaceMatchConfig.UNCALIBRATED_PLACEHOLDER_THRESHOLD)) {
                         matched = record;
                         break;
                     }
                 }
-                FaceDao.FaceRecord finalMatched = matched;
+                FaceDao.FaceRecord result = matched;
                 runOnUiThread(() -> {
-                    if (finalMatched != null) {
+                    if (result == null) {
+                        showFailure(getString(R.string.payment_result_face_failed));
+                    } else {
                         new com.biopay.agent.data.VerificationEventDao(this)
                                 .record(householdNumber, beneficiary.beneficiaryId, beneficiary.name, "Face");
-                        proceedToSuccess(beneficiary, getString(R.string.settings_face_title), null, finalMatched.uuid);
-                    } else {
-                        Toast.makeText(this, R.string.payment_verify_no_face_match, Toast.LENGTH_SHORT).show();
+                        completePayment(beneficiary, getString(R.string.settings_face_title), null, result.uuid);
                     }
                 });
             } catch (FaceRecognitionException | IOException | org.json.JSONException | IllegalArgumentException ex) {
-                String detail = ex.getMessage();
-                runOnUiThread(() -> Toast.makeText(this,
-                        getString(R.string.person_capture_failed, detail), Toast.LENGTH_LONG).show());
+                runOnUiThread(() -> showFailure(getString(R.string.payment_result_face_error)));
             } finally {
                 engine.close();
                 new File(imagePath).delete();
@@ -191,11 +198,43 @@ public class PaymentVerificationActivity extends BaseActivity {
         }).start();
     }
 
+    private void completePayment(Beneficiary beneficiary, String method, String fingerprintUuid, String faceUuid) {
+        SessionManager session = new SessionManager(this);
+        Location location = LocationHelper.getLastKnownLocation(this);
+        String latitude = location == null ? null : String.valueOf(location.getLatitude());
+        String longitude = location == null ? null : String.valueOf(location.getLongitude());
+        PaymentDao dao = new PaymentDao(this);
+        boolean recorded;
+        if (paymentId != null && paymentId >= 0) {
+            recorded = dao.completeGeneratedPayment(paymentId, String.valueOf(session.getUserId()), householdName,
+                    fingerprintUuid, faceUuid, latitude, longitude) == 1;
+        } else {
+            recorded = dao.recordFieldPayment(String.valueOf(session.getUserId()), session.getPartnerCode(),
+                    householdNumber, householdName, amount, fingerprintUuid, faceUuid, latitude, longitude,
+                    UUID.randomUUID().toString(), "CASH") != -1;
+        }
+        if (!recorded) {
+            showFailure(getString(R.string.payment_result_unavailable));
+            return;
+        }
+        SyncScheduler.triggerNow(this);
+        startActivity(PaymentResultActivity.successIntent(this, beneficiary.name, householdName, amount, method));
+        finish();
+    }
+
+    private void showFailure(String message) {
+        // Only a generated payment has a remote row to fail -- an ad-hoc field payment with no
+        // paymentId never reached the server, so there's nothing there to mark FAILED.
+        if (paymentId != null && paymentId >= 0) {
+            new PaymentDao(this).markGeneratedPaymentFailed(paymentId);
+            SyncScheduler.triggerNow(this);
+        }
+        startActivity(PaymentResultActivity.failureIntent(this, message, householdName, amount));
+    }
+
     private static float[] toFloatArray(JSONArray array) throws org.json.JSONException {
         float[] result = new float[array.length()];
-        for (int i = 0; i < array.length(); i++) {
-            result[i] = (float) array.getDouble(i);
-        }
+        for (int i = 0; i < array.length(); i++) result[i] = (float) array.getDouble(i);
         return result;
     }
 
@@ -205,22 +244,8 @@ public class PaymentVerificationActivity extends BaseActivity {
         try (FileInputStream in = new FileInputStream(file)) {
             int offset = 0;
             int read;
-            while (offset < bytes.length && (read = in.read(bytes, offset, bytes.length - offset)) >= 0) {
-                offset += read;
-            }
+            while (offset < bytes.length && (read = in.read(bytes, offset, bytes.length - offset)) >= 0) offset += read;
         }
         return bytes;
-    }
-
-    // ---- Hand off to the shared success screen, then Disbursement --------------------------
-
-    private void proceedToSuccess(Beneficiary beneficiary, String methodLabel, String matchedFingerprintUuid, String matchedFaceUuid) {
-        Intent disbursement = DisbursementActivity.intentFor(this, householdNumber, householdName, amount,
-                beneficiary.name, methodLabel, matchedFingerprintUuid, matchedFaceUuid);
-        Intent success = VerifySuccessActivity.intentFor(this, VerifySuccessActivity.MODE_VERIFICATION,
-                getString(R.string.verify_success_title), beneficiary.name + " · " + householdName,
-                new String[]{getString(R.string.verify_success_verified_using, methodLabel)}, new String[]{""},
-                getString(R.string.verify_success_continue), disbursement);
-        startActivity(success);
     }
 }

@@ -30,7 +30,7 @@ public class MoreActivity extends BaseActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_more);
         setupMainNavigation(R.id.bottomNavigation, R.id.navMore);
-        setupScanFab(R.id.fabScan);
+        setupPaymentFab(R.id.fabPayment);
 
         bindRow(R.id.rowProfile, R.drawable.ic_profile, R.string.more_profile, R.string.more_profile_body,
                 new Intent(this, ProfileActivity.class));

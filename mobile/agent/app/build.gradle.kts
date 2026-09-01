@@ -6,8 +6,25 @@ plugins {
     alias(libs.plugins.android.application)
 }
 
+fun readDotEnvValue(file: File, key: String): String? {
+    if (!file.isFile) return null
+    return file.useLines { lines ->
+        lines.map(String::trim)
+            .filter { it.isNotEmpty() && !it.startsWith("#") }
+            .mapNotNull { line ->
+                val separator = line.indexOf('=')
+                if (separator <= 0 || line.substring(0, separator).trim() != key) null
+                else line.substring(separator + 1).trim().removeSurrounding("\"")
+            }
+            .firstOrNull()
+    }
+}
+
+val backendDotEnv = rootProject.layout.projectDirectory.file("../../backend/.env").asFile
+val dotEnvApiBaseUrl = readDotEnvValue(backendDotEnv, "BIOPAY_MOBILE_API_BASE_URL")
 val configuredApiBaseUrl = providers.gradleProperty("biopayApiBaseUrl")
-    .orElse("http://10.0.2.2:7730/biopay")
+    .orElse(providers.environmentVariable("BIOPAY_MOBILE_API_BASE_URL"))
+    .orElse(dotEnvApiBaseUrl ?: "http://10.0.2.2:7730/biopay")
     .get()
 
 android {

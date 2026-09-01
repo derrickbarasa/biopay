@@ -15,6 +15,7 @@ import com.biopay.databases.Datasource;
 import com.biopay.utilities.Crypto;
 import com.biopay.utilities.FileStore;
 import com.biopay.utilities.FaceEmbedding;
+import com.biopay.utilities.HouseholdClassification;
 import com.biopay.utilities.Logging;
 import com.biopay.utilities.Rows;
 import com.biopay.utilities.Utilities;
@@ -104,18 +105,37 @@ public class Biometric extends AbstractVerticle {
             return;
         }
         String householdNumber = payload.getString("householdNumber", Utilities.generateCode("HH"));
+        final String vulnerabilityStatuses;
+        final String legalStatus;
+        try {
+            vulnerabilityStatuses = HouseholdClassification.vulnerabilityCsv(payload);
+            legalStatus = HouseholdClassification.legalStatus(payload);
+        } catch (IllegalArgumentException err) {
+            replyError(message, err.getMessage());
+            return;
+        }
 
-        String sql = "INSERT INTO households (officer_code, organization_code, household_number, household_name, age, "
-                + "gender, phone_number, household_size, boma_code, latitude, longitude, duplicate, duplicate_number, "
-                + "matching_score, registration_method, status, created_by, created_at, updated_at, stored_at) "
-                + "VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,@p12,@p13,@p14,@p15,1,@p16,GETDATE(),GETDATE(),GETDATE())";
+        String sql = "MERGE households AS target "
+                + "USING (SELECT @p2 AS organization_code, @p3 AS household_number) AS source "
+                + "ON target.organization_code=source.organization_code AND target.household_number=source.household_number "
+                + "WHEN MATCHED THEN UPDATE SET household_name=@p4, age=@p5, gender=@p6, phone_number=@p7, "
+                + "household_size=@p8, vulnerability_status=@p9, legal_status=@p10, state_code=@p11, county_code=@p12, "
+                + "payam_code=@p13, boma_code=@p14, latitude=@p15, longitude=@p16, registration_method=@p20, "
+                + "updated_by=@p21, updated_at=GETDATE() "
+                + "WHEN NOT MATCHED THEN INSERT (officer_code, organization_code, household_number, household_name, age, "
+                + "gender, phone_number, household_size, vulnerability_status, legal_status, state_code, county_code, payam_code, "
+                + "boma_code, latitude, longitude, duplicate, duplicate_number, matching_score, registration_method, status, "
+                + "created_by, created_at, updated_at, stored_at) "
+                + "VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,@p12,@p13,@p14,@p15,@p16,@p17,@p18,@p19,@p20,1,@p21,GETDATE(),GETDATE(),GETDATE());";
 
         pool.preparedQuery(sql)
                 .execute(Tuple.of(
                         String.valueOf(payload.getValue("actorId")), partnerCode, householdNumber,
                         payload.getString("householdName", "").trim(), payload.getInteger("age"),
                         payload.getString("gender"), payload.getString("phoneNumber"),
-                        payload.getInteger("householdSize"), payload.getString("bomaCode"),
+                        payload.getInteger("householdSize"), vulnerabilityStatuses, legalStatus,
+                        payload.getString("stateCode"), payload.getString("countyCode"),
+                        payload.getString("payamCode"), payload.getString("bomaCode"),
                         payload.getString("latitude"), payload.getString("longitude"),
                         payload.getInteger("duplicate", 0), payload.getString("duplicateNumber"),
                         payload.getString("matchingScore"), payload.getString("registrationMethod", "FINGERPRINT"),
@@ -433,7 +453,11 @@ public class Biometric extends AbstractVerticle {
         JsonObject payload = new JsonObject(message.body().toString());
         String partnerCode = partnerCodeOf(payload);
 
-        pool.preparedQuery("SELECT * FROM payments WHERE organization_code=@p1 ORDER BY created_at DESC")
+        pool.preparedQuery("SELECT pay.*, COALESCE(pay.household_name,h.household_name) AS resolved_household_name, "
+                        + "COALESCE(pay.boma_code,h.boma_code) AS village_code FROM payments pay "
+                        + "LEFT JOIN households h ON h.household_number=pay.household_number "
+                        + "AND h.organization_code=pay.organization_code "
+                        + "WHERE pay.organization_code=@p1 ORDER BY pay.created_at DESC")
                 .execute(Tuple.of(partnerCode))
                 .onFailure(err -> onDbError(message, err))
                 .onSuccess(rows -> {
@@ -442,6 +466,8 @@ public class Biometric extends AbstractVerticle {
                         results.add(new JsonObject()
                                 .put("id", Rows.intVal(r, "id"))
                                 .put("householdNumber", Rows.str(r, "household_number"))
+                                .put("householdName", Rows.str(r, "resolved_household_name"))
+                                .put("villageCode", Rows.str(r, "village_code"))
                                 .put("amount", Rows.dbl(r, "amount"))
                                 .put("status", Rows.intVal(r, "status"))
                                 .put("cycle", Rows.str(r, "cycle")));
@@ -463,12 +489,62 @@ public class Biometric extends AbstractVerticle {
         Double amount = payload.getDouble("amount");
         Boolean biometricVerified = payload.getBoolean("biometricVerified", false);
 
-        if (householdNumber.isEmpty() || amount == null || !Boolean.TRUE.equals(biometricVerified)) {
-            replyError(message, "householdNumber, amount and a successful biometric verification are required");
+        if (householdNumber.isEmpty() || amount == null) {
+            replyError(message, "householdNumber and amount are required");
             return;
         }
 
         Object anchorIdVal = payload.getValue("anchorId");
+        Integer paymentId = payload.getInteger("paymentId");
+        if (paymentId != null && !Boolean.TRUE.equals(biometricVerified)) {
+            // Field verification failed (fingerprint/face mismatch or error) -- the generated
+            // payment moves to FAILED (status=2) rather than staying pending forever, so the
+            // System Owner can see it and recover it with PAY_PAYMENT_ONLINE from the dashboard.
+            String failSql = "UPDATE payments SET status=2, updated_at=GETDATE() "
+                    + "WHERE id=@p1 AND organization_code=@p2 AND household_number=@p3 AND status=0";
+            pool.preparedQuery(failSql)
+                    .execute(Tuple.of(paymentId, partnerCode, householdNumber))
+                    .onFailure(err -> onDbError(message, err))
+                    .onSuccess(rows -> {
+                        if (rows.rowCount() == 0) {
+                            replyError(message, "Generated payment was already resolved or is no longer available");
+                            return;
+                        }
+                        audit(payload, "PAYMENT_FAILED", "PAYMENT", String.valueOf(paymentId),
+                                new JsonObject().put("amount", amount).put("channel", "FIELD"));
+                        reply(message, new JsonObject().put("responseCode", "000")
+                                .put("responseMessage", "Payment marked as failed; it can be recovered online from the dashboard"));
+                    });
+            return;
+        }
+        if (paymentId != null) {
+            String update = "UPDATE payments SET officer_code=@p1, matched_fp=@p2, matched_face_uuid=@p3, "
+                    + "latitude=@p4, longitude=@p5, status=1, approved=1, verified_by=@p6, "
+                    + "verified_at=GETDATE(), updated_at=GETDATE() "
+                    + "WHERE id=@p7 AND organization_code=@p8 AND household_number=@p9 AND status=0";
+            pool.preparedQuery(update)
+                    .execute(Tuple.of(String.valueOf(payload.getValue("actorId")),
+                            payload.getString("fingerprintUuid"), payload.getString("faceUuid"),
+                            payload.getString("latitude"), payload.getString("longitude"),
+                            Integer.parseInt(payload.getValue("actorId").toString()), paymentId,
+                            partnerCode, householdNumber))
+                    .onFailure(err -> onDbError(message, err))
+                    .onSuccess(rows -> {
+                        if (rows.rowCount() == 0) {
+                            replyError(message, "Generated payment was already paid or is no longer available");
+                            return;
+                        }
+                        audit(payload, "PAYMENT_COMPLETED", "PAYMENT", String.valueOf(paymentId),
+                                new JsonObject().put("amount", amount).put("channel", "FIELD"));
+                        reply(message, new JsonObject().put("responseCode", "000")
+                                .put("responseMessage", "Generated payment completed successfully"));
+                    });
+            return;
+        }
+        if (!Boolean.TRUE.equals(biometricVerified)) {
+            replyError(message, "A successful biometric verification is required to record a new payment");
+            return;
+        }
         // Exactly one of fingerprintUuid/faceUuid is populated per call, matching whichever method
         // PaymentVerificationActivity actually verified the beneficiary with (see 017_payments_matched_face.sql).
         String sql = "INSERT INTO payments (officer_code, household_number, organization_code, anchor_id, amount, "

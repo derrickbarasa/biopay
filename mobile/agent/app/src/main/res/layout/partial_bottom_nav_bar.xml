@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Shared bottom navigation chrome: 4 destination bar plus a centered, elevated Scan action.
-     Included at the bottom of every top-level tab screen (Home/Households/Activity/More).
+<!-- Shared bottom navigation chrome: 4 destination bar plus a centered, elevated Payment action.
+     Included at the bottom of every top-level tab screen (Home/Households/Payment/Activity/More).
      CoordinatorLayout plus layout_anchor is used specifically because it draws/positions an
      anchored child relative to its anchor deterministically. A plain FrameLayout with a
      negative margin overlap left the FAB's overlapping half hidden behind the nav bar
@@ -31,12 +31,12 @@
         app:menu="@menu/main_navigation" />
 
     <com.google.android.material.floatingactionbutton.FloatingActionButton
-        android:id="@+id/fabScan"
+        android:id="@+id/fabPayment"
         android:layout_width="56dp"
         android:layout_height="56dp"
         android:layout_marginBottom="22dp"
-        android:contentDescription="@string/scan_action_title"
-        android:src="@drawable/ic_fingerprint"
+        android:contentDescription="@string/payment_nav_action"
+        android:src="@drawable/ic_payments"
         app:backgroundTint="@color/bp_primary"
         app:elevation="6dp"
         app:fabCustomSize="56dp"

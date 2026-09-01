@@ -41,11 +41,10 @@
         <activity android:name=".security.SecurityActivity" android:exported="false" android:windowSoftInputMode="stateAlwaysHidden|adjustResize" />
         <activity android:name=".alternates.AlternatesActivity" android:exported="false" />
         <activity android:name=".payments.PaymentsActivity" android:exported="false" />
+        <activity android:name=".payments.GeneratePaymentActivity" android:exported="false" android:windowSoftInputMode="stateAlwaysHidden|adjustResize" />
         <activity android:name=".payments.PaymentVerificationActivity" android:exported="false" />
+        <activity android:name=".payments.PaymentResultActivity" android:exported="false" />
         <activity android:name=".payments.FingerprintVerifyActivity" android:exported="false" />
-        <activity android:name=".payments.VerifySuccessActivity" android:exported="false" />
-        <activity android:name=".payments.DisbursementActivity" android:exported="false" />
-        <activity android:name=".payments.DisbursementReviewActivity" android:exported="false" />
         <activity android:name=".reports.ReportsActivity" android:exported="false" />
         <activity android:name=".location.MyLocationActivity" android:exported="false" />
         <activity android:name=".households.HouseholdListActivity" android:exported="false" />

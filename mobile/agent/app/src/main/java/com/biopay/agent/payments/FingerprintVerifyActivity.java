@@ -42,6 +42,7 @@ public class FingerprintVerifyActivity extends BaseActivity {
     }
 
     public static final String EXTRA_RESULT_MATCHED_UUID = "matched_uuid";
+    public static final int RESULT_VERIFY_FAILED = RESULT_FIRST_USER;
 
     private FingerprintDao fingerprintDao;
     private BiometricDevice device;
@@ -77,7 +78,7 @@ public class FingerprintVerifyActivity extends BaseActivity {
         List<FingerprintDao.StoredTemplate> templates = fingerprintDao.templatesWithUuidForBeneficiary(beneficiaryId);
         if (templates.isEmpty()) {
             Toast.makeText(this, R.string.attendance_no_enrolled_fingerprint, Toast.LENGTH_SHORT).show();
-            finish();
+            failAndFinish();
             return;
         }
         device = BiometricDeviceFactory.create();
@@ -85,7 +86,7 @@ public class FingerprintVerifyActivity extends BaseActivity {
             device.open(this, null);
         } catch (BiometricDeviceException ex) {
             Toast.makeText(this, R.string.attendance_verify_error, Toast.LENGTH_SHORT).show();
-            finish();
+            failAndFinish();
             return;
         } catch (Throwable ex) {
             // See PersonCaptureActivity's matching fix -- a missing/mismatched vendor native
@@ -93,7 +94,7 @@ public class FingerprintVerifyActivity extends BaseActivity {
             // declares; caught broadly here for the same reason.
             Log.e(TAG, "BiometricDevice.open() failed unexpectedly", ex);
             Toast.makeText(this, R.string.attendance_verify_error, Toast.LENGTH_SHORT).show();
-            finish();
+            failAndFinish();
             return;
         }
         attemptVerify(templates, 0);
@@ -104,7 +105,7 @@ public class FingerprintVerifyActivity extends BaseActivity {
         if (index >= templates.size()) {
             device.close();
             Toast.makeText(this, R.string.attendance_no_match, Toast.LENGTH_SHORT).show();
-            finish();
+            failAndFinish();
             return;
         }
         device.startVerify(templates.get(index).template, new VerifyCallback() {
@@ -127,8 +128,13 @@ public class FingerprintVerifyActivity extends BaseActivity {
             @Override public void onError(int code, String message) {
                 device.close();
                 Toast.makeText(FingerprintVerifyActivity.this, R.string.attendance_verify_error, Toast.LENGTH_SHORT).show();
-                finish();
+                failAndFinish();
             }
         });
+    }
+
+    private void failAndFinish() {
+        setResult(RESULT_VERIFY_FAILED);
+        finish();
     }
 }

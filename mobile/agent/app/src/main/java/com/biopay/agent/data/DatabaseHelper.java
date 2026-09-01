@@ -18,7 +18,7 @@ import android.database.sqlite.SQLiteOpenHelper;
 public class DatabaseHelper extends SQLiteOpenHelper {
 
     private static final String DB_NAME = "biopay_agent.db";
-    private static final int DB_VERSION = 8;
+    private static final int DB_VERSION = 10;
 
     /** Every offline-captured row starts PENDING and flips to SYNCED once the server accepts it. */
     public static final int SYNC_PENDING = 0;
@@ -112,6 +112,8 @@ public class DatabaseHelper extends SQLiteOpenHelper {
                 "literacy VARCHAR," +
                 "youth_literacy VARCHAR," +
                 "eligibility VARCHAR," +
+                "vulnerability_statuses VARCHAR," +
+                "legal_status VARCHAR," +
                 "ineligibility VARCHAR," +
                 "ineligibility_other_reason VARCHAR," +
                 "nominee_reason VARCHAR," +
@@ -187,6 +189,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
                 "partner_code VARCHAR," +
                 "household_number VARCHAR," +
                 "household_name VARCHAR," +
+                "village_code VARCHAR," +
                 "amount NUMERIC," +
                 "matched_fingerprint_uuid VARCHAR," +
                 "matched_face_uuid VARCHAR," +
@@ -261,6 +264,15 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         }
         if (oldVersion < 8) {
             createVerificationEventsTable(db);
+        }
+        if (oldVersion < 9) {
+            // Generated payments carry their household's village so the field payment picker
+            // remains useful even when only the payment catalogue is available offline.
+            db.execSQL("ALTER TABLE payments ADD COLUMN village_code VARCHAR");
+        }
+        if (oldVersion < 10) {
+            db.execSQL("ALTER TABLE households ADD COLUMN vulnerability_statuses VARCHAR");
+            db.execSQL("ALTER TABLE households ADD COLUMN legal_status VARCHAR");
         }
     }
 

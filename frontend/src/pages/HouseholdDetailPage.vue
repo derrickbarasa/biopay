@@ -5,6 +5,12 @@ import { apiClient, dispatch } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
 import { downloadCsv, toCsv } from '@/utils/csv'
+import {
+  LEGAL_STATUS_OPTIONS,
+  VULNERABILITY_OPTIONS,
+  legalStatusLabel,
+  vulnerabilityLabel,
+} from '@/constants/householdClassifications'
 
 // Dedicated, full-page household view (replaces the old popup dialog). Renders
 // every field the GET_HOUSEHOLD / GET_ALTERNATES endpoints currently return.
@@ -100,8 +106,8 @@ const infoFields = computed(() => {
     { label: 'Household size', value: d.householdSize ?? '—' },
     { label: 'Female dependants', value: d.femaleDependants ?? '—' },
     { label: 'Male dependants', value: d.maleDependants ?? '—' },
-    { label: 'Vulnerability status', value: d.vulnerabilityStatus || '—' },
-    { label: 'Legal status', value: d.legalStatus || '—' },
+    { label: 'Vulnerability categories', value: (d.vulnerabilityStatuses ?? []).map(vulnerabilityLabel).join(', ') || 'Not recorded' },
+    { label: 'Legal status', value: legalStatusLabel(d.legalStatus) },
     { label: 'Review status', value: d.reviewStatus || 'PENDING' },
     { label: 'State', value: stateNameByCode.value.get(d.stateCode) || d.stateCode || '—' },
     { label: 'County', value: countyNameByCode.value.get(d.countyCode) || d.countyCode || '—' },
@@ -296,6 +302,7 @@ const editing = ref(false)
 const editForm = ref({
   householdName: '', age: null as number | null, gender: '', maritalStatus: '', phoneNumber: '',
   householdSize: null as number | null, stateCode: '', countyCode: '', locationCode: '', villageCode: '',
+  vulnerabilityStatuses: [] as string[], legalStatus: '',
 })
 
 // Bound to each geo select's own change event (not a watcher on the whole form),
@@ -319,6 +326,8 @@ function openEdit() {
     countyCode: d.countyCode ?? '',
     locationCode: d.payamCode ?? '',
     villageCode: d.bomaCode ?? '',
+    vulnerabilityStatuses: d.vulnerabilityStatuses ?? [],
+    legalStatus: d.legalStatus ?? '',
   }
   editDialog.value = true
 }
@@ -339,6 +348,8 @@ async function saveEdit() {
       phoneNumber: editForm.value.phoneNumber || undefined,
       householdSize: editForm.value.householdSize ?? undefined,
       bomaCode: editForm.value.villageCode || undefined,
+      vulnerabilityStatuses: editForm.value.vulnerabilityStatuses,
+      legalStatus: editForm.value.legalStatus || undefined,
     })
     toast.success('Household updated')
     editDialog.value = false
@@ -687,6 +698,26 @@ onMounted(() => { load(); loadNameLookups() })
           <v-text-field v-model="editForm.maritalStatus" label="Marital status" />
           <v-text-field v-model="editForm.phoneNumber" label="Phone number" />
           <v-text-field v-model.number="editForm.householdSize" label="Household size" type="number" />
+          <v-select
+            v-model="editForm.vulnerabilityStatuses"
+            :items="VULNERABILITY_OPTIONS"
+            item-title="title"
+            item-value="value"
+            label="Vulnerability categories"
+            hint="Select every support need that applies"
+            persistent-hint
+            multiple
+            chips
+            closable-chips
+          />
+          <v-select
+            v-model="editForm.legalStatus"
+            :items="LEGAL_STATUS_OPTIONS"
+            item-title="title"
+            item-value="value"
+            label="Legal status"
+            clearable
+          />
           <div class="text-caption text-medium-emphasis mt-2 mb-1">Location</div>
           <v-row dense>
             <v-col cols="6"><v-select v-model="editForm.stateCode" :items="states" item-title="name" item-value="code" label="State" density="compact" @update:model-value="onEditStateChange" /></v-col>

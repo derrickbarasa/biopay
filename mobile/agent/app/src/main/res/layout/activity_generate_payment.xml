@@ -1,0 +1,154 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fitsSystemWindows="true"
+    android:orientation="vertical">
+
+    <com.google.android.material.appbar.MaterialToolbar
+        style="@style/BioPay.Toolbar"
+        android:title="@string/generated_payment_title" />
+
+    <androidx.core.widget.NestedScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:fillViewport="true">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingStart="16dp"
+            android:paddingTop="8dp"
+            android:paddingEnd="16dp"
+            android:paddingBottom="24dp">
+
+            <TextView style="@style/BioPay.SupportingText" android:text="@string/generated_payment_description" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+                <TextView
+                    android:id="@+id/tvPendingCount"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_badge_teal"
+                    android:paddingStart="12dp"
+                    android:paddingTop="6dp"
+                    android:paddingEnd="12dp"
+                    android:paddingBottom="6dp"
+                    android:textColor="@color/bp_primary_dark"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
+                <Space android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" />
+                <ProgressBar
+                    android:id="@+id/paymentSyncProgress"
+                    style="?android:attr/progressBarStyleSmall"
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:layout_marginEnd="8dp"
+                    android:visibility="gone" />
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnSyncPayments"
+                    style="@style/Widget.Material3.Button.TextButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="44dp"
+                    android:text="@string/generated_payment_sync"
+                    android:textAllCaps="false"
+                    app:icon="@drawable/ic_sync" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/paymentFormContent"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <com.google.android.material.textfield.TextInputLayout
+                    style="@style/BioPay.FormField"
+                    android:layout_marginTop="18dp"
+                    android:hint="@string/generated_payment_search_label"
+                    app:endIconMode="dropdown_menu"
+                    app:helperText="@string/generated_payment_search_help">
+
+                    <com.google.android.material.textfield.MaterialAutoCompleteTextView
+                        android:id="@+id/searchPendingPayments"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:inputType="text"
+                        android:maxLines="1" />
+                </com.google.android.material.textfield.TextInputLayout>
+
+                <com.google.android.material.card.MaterialCardView
+                    android:id="@+id/paymentEmptyState"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="12dp"
+                    android:visibility="gone"
+                    app:cardBackgroundColor="@color/bp_primary_container"
+                    app:cardCornerRadius="@dimen/bp_radius_surface"
+                    app:cardElevation="0dp">
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:padding="14dp">
+                        <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/generated_payment_empty_title" android:textColor="@color/bp_on_primary_container" android:textSize="15sp" android:textStyle="bold" />
+                        <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="3dp" android:text="@string/generated_payment_empty_body" android:textColor="@color/bp_on_primary_container" android:textSize="13sp" />
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+
+                <com.google.android.material.card.MaterialCardView
+                    android:id="@+id/paymentDetails"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:visibility="visible"
+                    app:cardBackgroundColor="@color/bp_surface"
+                    app:cardCornerRadius="@dimen/bp_radius_surface"
+                    app:cardElevation="0dp"
+                    app:strokeColor="@color/bp_outline_variant"
+                    app:strokeWidth="1dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:padding="16dp">
+
+                        <TextView style="@style/BioPay.SectionHeader" android:layout_marginTop="0dp" android:text="@string/generated_payment_details" />
+
+                        <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/generated_payment_household_name" android:textColor="@color/bp_text_secondary" android:textSize="12sp" />
+                        <TextView android:id="@+id/fieldHouseholdName" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="2dp" android:textColor="@color/bp_text_primary" android:textSize="16sp" android:textStyle="bold" />
+                        <View style="@style/BioPay.RowDivider" android:layout_marginTop="14dp" android:layout_marginBottom="14dp" />
+                        <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/generated_payment_registration_number" android:textColor="@color/bp_text_secondary" android:textSize="12sp" />
+                        <TextView android:id="@+id/fieldRegistrationNumber" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="2dp" android:textColor="@color/bp_text_primary" android:textSize="16sp" android:textStyle="bold" />
+                        <View style="@style/BioPay.RowDivider" android:layout_marginTop="14dp" android:layout_marginBottom="14dp" />
+                        <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/generated_payment_village" android:textColor="@color/bp_text_secondary" android:textSize="12sp" />
+                        <TextView android:id="@+id/fieldVillage" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="2dp" android:textColor="@color/bp_text_primary" android:textSize="16sp" android:textStyle="bold" />
+                        <View style="@style/BioPay.RowDivider" android:layout_marginTop="14dp" android:layout_marginBottom="14dp" />
+                        <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/generated_payment_amount" android:textColor="@color/bp_text_secondary" android:textSize="12sp" />
+                        <TextView android:id="@+id/fieldAmount" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="2dp" android:textColor="@color/bp_primary_dark" android:textSize="20sp" android:textStyle="bold" />
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnProceedVerification"
+                    style="@style/BioPay.PrimaryButton"
+                    android:layout_marginTop="20dp"
+                    android:enabled="false"
+                    android:text="@string/generated_payment_proceed"
+                    app:icon="@drawable/ic_chevron_right"
+                    app:iconGravity="textEnd" />
+            </LinearLayout>
+
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+
+    <include layout="@layout/partial_bottom_nav_bar" />
+</LinearLayout>

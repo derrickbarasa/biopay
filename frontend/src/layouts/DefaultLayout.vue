@@ -316,7 +316,19 @@ function onNavClick(event: MouseEvent | KeyboardEvent, to: string) {
 .app-drawer :deep(.logout-divider) { border-color: rgba(255, 255, 255, .42); opacity: 1; margin-top: 8px; }
 .app-bar { background: rgba(255, 255, 255, .94) !important; backdrop-filter: blur(12px); }
 .app-bar :deep(.v-breadcrumbs) { font-size: .82rem; padding-inline: 4px; }
-.dashboard-main { background: #f8fafc; min-height: 100vh; }
+.dashboard-main {
+  height: 100dvh;
+  min-height: 100vh;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  scrollbar-width: thin;
+  scrollbar-color: #94a3b8 transparent;
+  background: #f8fafc;
+}
+.dashboard-main::-webkit-scrollbar { display: block; width: 9px; }
+.dashboard-main::-webkit-scrollbar-track { background: transparent; }
+.dashboard-main::-webkit-scrollbar-thumb { border: 3px solid transparent; border-radius: 999px; background: #94a3b8; background-clip: padding-box; }
+.dashboard-main::-webkit-scrollbar-thumb:hover { background: #64748b; background-clip: padding-box; }
 .archived-gate { display: flex; justify-content: center; padding-top: 8vh; }
 @media (max-width: 600px) {
   .role-chip, .user-name { display: none; }

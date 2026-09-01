@@ -2059,3 +2059,233 @@ A later session bundled `progress.md`'s own "orange buttons" entry above into th
 - **Not part of this session's real work:** `mobile/agent/settings.gradle.kts` and `mobile/agent/gradle/wrapper/gradle-wrapper.properties` (Gradle 8.9 → 8.14.5, `foojay-resolver-convention` plugin added) are IDE/Gradle-sync artifacts, not intentional feature work. `frontend/package-lock.json` shows no actual diff against HEAD despite a same-day mtime (`package.json` has no dependency change) — an incidental re-lock. `.github/modernize/**` and every `.idea/`/`.gradle/` path are gitignored noise, unrelated to this session.
 - **Verified this pass:** `npx vue-tsc -b --noEmit` in `frontend/` is clean against the current working tree (exit 0). Not run through a live browser session — that's the one gap in verification for this entry.
 - **`package-lock.json`: `package.json` itself has no dependency change** (same version pins as before), so this 9:24am touch is very likely just a re-lock from an `npm install`/`npm ci` run, not a deliberate dependency bump.
+
+### 2026-08-31 — Dashboard operations-ledger redesign
+
+- Rebuilt `frontend/src/pages/DashboardPage.vue` around a compact, role-aware summary. System/Anchor Administrators and Organisation Administrators now receive a shared core of payment, voucher, household and biometric information, while organisation, officer, approval and alternate cards appear only when the current scope and permissions allow them.
+- Replaced the oversized full-width organisation bar chart and duplicate totals table with an `Organisation performance` ranking panel: the top six organisations use restrained 6px proportional tracks alongside exact total, cash and voucher values. This keeps comparison readable without letting one bar dominate the page.
+- Balanced the summary into eight cards for a fully privileged Anchor Administrator (two complete rows at wide desktop widths), added cash-transfer/voucher counts to the disbursed-value card, and retained module/permission checks for every conditional metric and action.
+- Reorganized the remaining content into two six-month trend panels plus a compact recent-activity panel. Added role scope and last-updated context, clearer empty states, tabular number alignment, responsive 4/3/2/1-column metric behavior, and reduced-motion-safe styling.
+- Corrected the dashboard's Generate Payment Cycle action to route directly to `/app/payroll/generate`, matching the extracted generation page.
+- Added `PRODUCT.md`, `DESIGN.md`, and `.impeccable/design.json` so the product scope and incumbent BioPay visual system are durable for future UI work.
+- Verified in an authenticated browser session at 1440px desktop and 390px mobile widths with no horizontal overflow. `npm.cmd run build` in `frontend/` is clean (`vue-tsc -b` and Vite production build). The Impeccable detector's only warning (layout animation on the ranked track width) was removed before the final build.
+
+### 2026-08-31 — Restored scrolling across authenticated pages
+
+- Reported immediately after the dashboard redesign: authenticated pages appeared unable to scroll. Live inspection confirmed that the document was taller than the viewport but wheel input left the document scroll position at `0`; the global stylesheet also hides all browser scrollbars, removing the drag-handle fallback.
+- Fixed the shared shell in `frontend/src/layouts/DefaultLayout.vue`, not an individual page: `.dashboard-main` is now the explicit `100dvh` vertical scroll container with contained overscroll behavior and a thin visible neutral scrollbar. The sidebar and app bar remain stable while routed page content scrolls.
+- Verified against the authenticated Dashboard and Households pages: wheel input moved `.dashboard-main.scrollTop` from `0` to `420` and `0` to `280` respectively. Production `vue-tsc -b` + Vite build passes, and the Impeccable detector reports no findings for `DefaultLayout.vue`.
+
+### 2026-08-31 — Dashboard aligned to the supplied compact anchor reference
+
+- Removed the redundant dashboard copy requested by the user: the `Programme summary` and `Six-month trends` headings/subtitles and the introductory `Monitor programme flow...` sentence no longer consume vertical space.
+- Reduced `Welcome back, ...` to a compact 18.75px desktop / 15.87px mobile heading and restored the small horizontal BioPay logo beside the operational header actions.
+- Reworked the Anchor/System metric selection and order to match the supplied reference using only real backend fields: Organizations, Households, Value disbursed, Payments completed, Pending approvals, Active officers, Registered fingerprints, Total generated, Alternates registered, and Latest payroll. Wide desktop renders five equal cards per row; Organisation Administrators receive the corresponding organisation-scoped subset according to modules and permissions.
+- Tightened the cards to 92px minimum height with small uppercase labels, circular tonal icons, exact supporting values, and two balanced rows. The two six-month charts now sit directly below the cards without an extra section header.
+- Restored the full `Amount generated by organisation` table as the final dashboard section, including cash-transfer, voucher, and combined totals for every accessible organisation. The compact ranking and recent-activity panels remain above it as the visual overview.
+- Verified live in the authenticated Anchor session at 1440px and 390px: 10 cards / five desktop columns, no removed copy remains, the table renders at the bottom, mobile collapses to one column with no horizontal overflow, and the shared page scroller remains active. Production `vue-tsc -b` + Vite build passes; the final layout detector reports no findings.
+
+### 2026-08-31 — Independent calendar periods and comparison series for dashboard charts
+
+- Expanded the payment-volume chart from cash-only to two real tenant-scoped series: cash payments and redeemed vouchers. Expanded the registration chart from households-only to households and alternates.
+- Added an independent compact calendar period picker to the top-right of each chart card. Both default to the current month, while each can separately show Today (hourly), Week (Monday–Sunday by day), Month (calendar days), or Year (calendar months).
+- Updated `Dashboard.java` to whitelist the four period values, apply current-period SQL date bounds, preserve Anchor/System/Organisation scope, and return merged zero-compatible cash/voucher and household/alternate buckets. Redeemed vouchers are placed using their redemption timestamp, with the creation timestamp retained as a legacy fallback.
+- Extended `LineChart.vue` to render two accessible comparison lines, combined hover details, a shared scale, and reduced x-axis label density for the 24-hour and 28–31-day views.
+- Kept the chart cards compact: legends and selected-period totals sit in each card header, loading is local to the card, and a failed chart filter does not hide the rest of the dashboard.
+- Verification: `npm.cmd run build` passes (`vue-tsc -b` and Vite); a clean backend target removal was blocked by a Windows file lock, then `mvn test` completed successfully with all 16 tests passing. The modified `Dashboard.class` timestamp confirms the service source was compiled. Automated Impeccable scanning could not run because no Python runtime is installed, so fixed-height, overflow, responsive control width, and dense-axis behavior were checked manually. The public local site rendered without console errors; the protected dashboard route was not available in the selected browser session for authenticated visual QA.
+
+### 2026-08-31 — Calendar selection for historical dashboard periods
+
+- Replaced each chart card's name-only period select with a real calendar popover. Its compact header button displays the chosen period (for example `August 2026` or `24–30 Aug 2026`), while the popover combines Day/Week/Month/Year grouping with a navigable date calendar.
+- Payment and registration calendars remain independent. Selecting a date immediately reloads only that card; changing its grouping reinterprets the same selected date as the corresponding day, Monday–Sunday week, calendar month, or calendar year. Request sequencing prevents a slower previous selection from overwriting the latest chart.
+- Added `referenceDate` to both dashboard chart requests. `Dashboard.java` validates it as an ISO date, passes it as a prepared-query parameter, and calculates bucket boundaries from that selected date instead of `GETDATE()`. Invalid or absent dates safely fall back to today for older clients.
+- Updated client-side zero-filled bucket generation to use the selected historical date as well, keeping labels and returned SQL buckets aligned for past days, weeks, months, and years.
+- Verification: frontend production build passes; backend `mvn test` passes all 16 tests and the rebuilt `Dashboard.class` is newer than its modified source. The final Impeccable layout scan reports no findings for the dashboard, calendar picker, or chart component.
+
+### 2026-08-31 — Simplified inline chart dates and persistent graph display
+
+- Replaced the card-like calendar popover with two compact inline controls in each chart header: a Day/Week/Month/Year grouping select and a native calendar date field. The field is initialized with today's full ISO date and opens the platform calendar directly, without another nested card or menu surface.
+- Kept payment and registration dates independent and retained the selected-date backend filtering introduced above.
+- Removed the conditional empty-state replacement that hid the entire chart when every value in a period was zero. Both charts now always render their axes and series, so existing data is shown normally and a genuinely empty selected period reads as a zero line rather than a missing graph.
+- Verification: frontend production build passes, all four frontend tests pass, and the final Impeccable layout scan reports no findings.
+
+### 2026-08-31 — Bar plots now fill their card like the dashboard line charts
+
+- Added a `chartHeight` input to the shared `BarChart` so narrow and wide chart cards are no longer forced to use the same shallow 640×210 aspect ratio. The narrow Review Status card now uses a 300-unit plot height, filling its available vertical space; the much wider Age Group card uses 180 units so it remains proportionate.
+- Removed the Households-page 640px chart-width cap. Wide charts now extend across their complete card like the dashboard line charts, while the shared 54px individual-bar cap and full-axis category distribution remain in place.
+- Verification: frontend production build passes, all four frontend tests pass, and the final Impeccable layout scan reports no findings.
+
+### 2026-08-31 — Distributed categorical bars across the full card
+
+- Corrected the shared `BarChart` spacing after the Review Status chart showed all four narrow bars floating as a small cluster in the card centre. Bar width remains capped at 54px (so small datasets do not create giant blocks), but the gap now expands so the first and last categories use the complete available x-axis.
+- Because the correction is in the shared component, it also applies to age groups and any future categorical bar chart rather than adding a one-off Households-page override.
+- Verification: frontend production build passes, all four frontend tests pass, and the final Impeccable layout scan reports no findings.
+
+### 2026-08-31 — Replaced meaningless status axes with horizontal distributions
+
+- The vulnerability and legal charts showed one `Unspecified` x-axis category because all four loaded households have blank values for those fields. This was missing source data, not a useful categorical comparison, so a Cartesian bar chart was the wrong representation.
+- Added the reusable `DistributionList.vue` and replaced both charts with compact horizontal distributions. Each real status becomes a fully readable row with its exact household count, percentage, and proportional track; long free-text labels wrap safely rather than being truncated on an axis.
+- Blank `Unspecified` source buckets are now presented as `Not recorded` (currently `4 · 100%`), making the data-quality situation explicit without suggesting that “Unspecified” is a meaningful programme status.
+- Verification: frontend production build passes, all four frontend tests pass, and the final Impeccable layout scan reports no findings.
+
+### 2026-08-31 — Removed the chart calendar popup entirely
+
+- Removed the Vuetify date-picker menu that rendered as a card-like `month / No data available` dropdown in the live app. The chart header now contains only a native date input with the browser's calendar control—no menu, popup card, custom calendar surface, or period dropdown.
+- Both charts still initialize in monthly mode using today's date. Choosing any date directly in the calendar switches that chart to the selected day's hourly data and supports navigating to dates in other months and years.
+- While a daily view is active, one small calendar-month icon appears beside the date. It returns the graph to the full month containing the selected date; it is absent during the normal monthly view.
+- Verification: all four frontend tests pass and the full production build (`vue-tsc -b` plus Vite) passes.
+
+### 2026-08-31 — Compact household breakdown charts
+
+- Rebuilt the Households page breakdown grid around chart needs instead of equal oversized cards. Wide screens now use six layout columns: gender occupies two, age groups four, and review/vulnerability/legal status two each. Cards dropped from a forced 300px minimum to 220px, with tighter headers and bodies; tablet and mobile reflow to two and one columns.
+- Changed the gender donut to a fixed side-by-side composition. The donut is 124px and the complete label/count/percentage legend stays in the available right-hand space (for example `Male 2 · 50%`) instead of wrapping underneath; the layout remains side-by-side down to narrow phones with a smaller 108px donut.
+- Replaced the age-group line with a bar chart because age groups are discrete categories, not a continuous time trend. The existing unknown-age note remains separate so missing ages are not silently included in a numeric band.
+- Reworked the shared `BarChart`: bars are capped at 54px and centered as a group rather than expanding to fill the entire card, chart height was reduced, exact counts can display above bars, long category labels are safely shortened with the full value retained in the SVG title/tooltip, and responsive tooltip positioning now uses percentages rather than raw SVG pixels.
+- Added explicit axes to every household bar chart. The y-axis is `Households`; x-axes are `Age group`, `Review status`, `Vulnerability status`, and `Legal status`. Each chart also has a specific accessible label.
+- Verification: frontend production build passes, all four frontend tests pass, and the final Impeccable layout scan reports no findings.
+
+### 2026-08-31 — Simplified month-first chart calendar
+
+- Reworked the chart date interaction again following direct feedback. Removed the separate period select entirely: both graphs now open on the current calendar month and the card header contains one quiet text-style calendar control showing that month.
+- Opening the control shows a compact date picker. Selecting a date immediately changes only that graph to the selected day's hourly data; `View full month` changes it back to the complete month containing that selected date.
+- Removed Week and Year from the dashboard interface so the control presents only the two requested views—month overview and selected day—while the existing backend period validation remains backward-compatible.
+- The charts continue to render even when the selected month or day contains zero activity rather than disappearing behind an empty-state replacement.
+- Verification: frontend production build passes, all four frontend tests pass, and the final Impeccable layout scan reports no findings.
+
+
+for the mobile app we will be doing some changes in the navbar we will be switching the scan button so it will be payment so we can do payments hence now when you click payment you go into that page you can get a title generated payment since according to our backend before you make payment it has to be generate check if so if not we do with what is there,then we can get search box where we will be seraching the names of the household but only for the unpaid household then below we can have the fields, household name,regestration number,village, amount which will be auto filled from the searched name once you search and enter so only the unpaid households should be searched and their detail field there then at the bottom we can get a button proceed to verification where you will be taken to a page where you have to choose the verification method fingerprint or facial  then at the botton we can have the scan button thus once one chooses there method of verification the can be scan and verified after scanning/verification we can get a message lets say john wa the one being verified, john has been successfully paid and we can also add  the amount, you can just create a good message also we can have one for fail incase it happens do that also and after that we can have a button scan another payment which should take you back to the payment page or home which takes you back to the home page. do this update and polish the mobile app again and avoid duplications of the same functions and also the payment history in more we can keep it so that we can keep track of payments
+
+### 2026-08-31 — Readable household bar-chart labels
+
+- Increased the shared household bar-chart tick labels, category names, axis titles, and values from the previous tiny 10px SVG scale to a clear 15–16px scale with stronger contrast and weight.
+- Expanded the chart padding so the larger y-axis labels, category labels, and titles remain fully visible. The age-group chart is slightly taller to preserve useful plotting space after the typography increase.
+- Increased household breakdown card headings to 15px so chart titles remain easy to scan alongside the larger data labels.
+
+### 2026-08-31 — Direct age distribution without fractional axes
+
+- Replaced the age-group vertical bar chart with an ordered horizontal distribution because the data is a small set of whole household counts and does not benefit from a numeric y-axis.
+- Each age band now displays its exact household count, percentage, and proportional track directly. `Not recorded` is included as a sixth row, so the distribution accounts for every loaded household without a separate footnote.
+- The wide age card presents the six rows in two balanced columns and collapses to one column on mobile. Labels use a quieter slate tone, while counts remain dark enough to scan clearly.
+- Enhanced the reusable distribution component with optional source-order preservation, accurate zero-width tracks, and larger readable labels; vulnerability and legal distributions retain their value-sorted order.
+
+### 2026-08-31 — Real household vulnerability and legal classifications
+
+- Replaced free-text classification with one shared controlled taxonomy. Legal status is a single value (Citizen, Refugee, IDP, Asylum seeker, Returnee, Stateless, or Other); vulnerability supports multiple categories (Disability, Elderly-headed, Child-headed, Chronic illness, Pregnant/lactating caregiver, and Single caregiver).
+- Added migration `037_household_classifications.sql`, expanding vulnerability storage for multiple server-validated codes while preserving every existing NULL record as `Not recorded`.
+- Wired classifications through web household creation, detail editing, CSV templates/import, list export, backend create/update/list validation, and Android offline registration/synchronization. Mobile edits now return to the sync queue, and the biometric household upload safely updates an existing record instead of attempting a duplicate insert.
+- Replaced the two free-text filters with controlled dropdowns including `Not recorded`. Breakdown labels now use readable names; vulnerability percentages use household count as their denominator and explain that one household may occur in multiple categories.
+- Added backend classification tests for normalization, deduplication, CSV import, invalid values, and `Not recorded` filters.
+- Verification: frontend TypeScript check, Vite production build, all four frontend tests, all 20 backend tests, final Impeccable layout scan, and both Android debug variants pass. Gradle reports only existing Android/JDK deprecation warnings.
+- Deployment note: apply `database/migrations/037_household_classifications.sql` before using these fields in a deployed environment. Existing households are intentionally not classified automatically; an officer must update them with verified information.
+
+### 2026-08-31 — Mobile generated-payment workflow
+
+- Replaced the elevated center `Scan` navigation action with `Payment`. The new tab opens a dedicated `Generated payment` screen while `More → Payments` remains a read-only payment history.
+- Connected the mobile app to the backend-generated payment catalogue through `SYNC_PAYMENTS`. The payment screen refreshes that catalogue automatically when opened and also provides a visible `Sync payments` retry action.
+- Added the requested unpaid-household search and auto-filled household name, registration number, village, and generated amount. Only generated payments that remain unpaid and have usable beneficiary verification data on the device are offered.
+- Corrected the zero-payment presentation shown during review. The search box, household fields, amount, and disabled `Proceed to verification` action now remain visible with placeholder values; a compact inline notice explains why no household is ready instead of replacing the requested interface with a large empty state.
+- Selecting a household opens a verification step where the officer chooses the collecting member and either fingerprint or face, then uses the shared Scan action. Face matching now shows explicit in-progress feedback and blocks repeated scans.
+- Added success and failure outcomes that both show the household and amount. `Another payment` returns to Generated payment and `Home` returns to the dashboard.
+- Generated payments update their original pending record locally and on the backend rather than creating duplicates. Unsynced completions are preserved offline and uploaded before the catalogue refreshes.
+- Kept payment history under More as a non-interactive register so there is only one payment-entry path.
+- Verification completed: Android Java compilation and a cache-bypassed `assembleMorphoSmart642Debug` APK build pass, mobile unit tests pass, backend Maven tests pass, the Impeccable detector reports no findings, and an independent source review returned `PASS`.
+- Device QA status: the newly built APK installed successfully on `emulator-5554`, but a trustworthy screenshot could not be captured because the emulator's Android System UI/Digital Wellbeing services repeatedly became unresponsive and its quick-boot snapshot reverted the installed package after restart. Invalid black/error captures were removed; the source and APK build remain verified.
+
+### 2026-09-01 — Landing-page image refresh + the real root cause of the nav scrollspy bug (the 2026-08-28 IntersectionObserver fix was gone/replaced and broken)
+
+- **Swapped landing-page photography.** User-supplied PNGs from `Downloads/landing page` (`cash transfer`, `biometric verification`, `deduplication`, `voucher redemption`) replaced the four matching hero-carousel backgrounds in `frontend/public/hero/`; `Downloads/how it works images` (`sync when signal returns`, `verify at disbursment`) replaced two of the four how-it-works carousel photos in `frontend/public/how-it-works/`. `ai-agent.webp`, `register-in-the-field.webp`, and `reconcile-on-the-dashboard.webp` had no supplied replacement and were left as-is. Converted PNG→WEBP with `sharp` (`npm install --no-save sharp` in `frontend/`, used only as a one-off local conversion tool, then removed — `package.json`/lockfile untouched) so page weight stayed in the same ~100-220KB range instead of shipping the original 2-2.5MB PNGs directly. No template/script changes were needed since the new files reuse the exact existing filenames/paths.
+- **Root-caused the nav-highlight bug for real.** User report: clicking Mission/How it works/Platform/Product in `LandingPage.vue` scrolled the page but the *previous* link stayed highlighted orange. The current code (not what the 2026-08-28 entry above describes — that IntersectionObserver approach is gone, replaced at some point with a manual `getBoundingClientRect` + scroll-event/rAF scrollspy) had two independent, uncoordinated offsets: `:global(html) { scroll-padding-top: 6rem }` *and* `.landing-root section, footer { scroll-margin-top: 6rem }` stack additively per the CSS scroll-into-view spec, landing a clicked section's top at ~192px from the viewport top — while the JS scrollspy's activation line was only `nav.offsetHeight + 16` (~68px). The section never crossed the line the spy was watching, so the previously-active link never lost its highlight.
+- **Fix in `frontend/src/pages/LandingPage.vue`:** removed the redundant `scroll-margin-top` block entirely; extracted a single `navActivationLine()` helper (`nav.offsetHeight + 16`) shared by both the scrollspy check and a new `syncNavScrollOffset()` that sets `document.documentElement.style.scrollPaddingTop` from that same measurement at mount and on resize, so the native anchor-scroll target and the JS activation line can never drift apart again. Also added a 2px tolerance on the spy's comparison (a live-measured case showed the scroll settling 0.17px over the exact line and missing its own check) and a `scrollend` listener as a safety net for the case where a smooth anchor-jump settles without a final `scroll` event at its exact rest position.
+- **Verified live** against the already-running local dev server (`localhost:5175`) with real trusted mouse clicks via `claude-in-chrome`, from fresh page loads: Mission → How it works → Platform → Product each scrolled to and correctly highlighted only its own nav link, checked both visually and via `document.querySelector('.nav-links a.active')`. Note for next time: synthetic `element.click()` calls (no real user gesture) do **not** trigger the browser's native anchor-scroll-into-view behavior in this environment and will falsely look like a regression — always drive nav-link tests through real coordinate/ref clicks, not JS-dispatched clicks. `npx vue-tsc --noEmit` passes clean.
+
+### 2026-09-01 — Product showcase aligned with the live dashboard and mobile app
+
+- Rebuilt the landing page's Product showcase to mirror the current authenticated interfaces instead of the older simplified mockups. A short disclosure now makes clear that the interface is representative while the displayed programme data is illustrative.
+- Updated the web preview to use the real dashboard hierarchy: the current sidebar group order and labels, role chip and account treatment, compact heading and actions, and all ten Anchor/System summary cards in their application order. Metric labels and supporting descriptions now use the same language as `DashboardPage.vue`.
+- Replaced the old single-series preview charts with the dashboard's current Cash/Vouchers and Households/Alternates comparisons, including the quiet month calendar control used in the real chart headers.
+- Updated the Android preview to match `activity_home.xml` and the shared bottom navigation: the elevated centre action is now Payment with the payment icon, while Home, Households, Activity, and More retain their current positions. The workspace hero, sync state, operational summary, and payment-status card continue to reflect the live mobile layout.
+- Refined the showcase's responsive composition so the full dashboard and phone remain recognisable at desktop width and stack cleanly on mobile without horizontal overflow.
+- Verification: frontend production build passes; the final Impeccable detector reports no findings; live visual checks at 1440×1000 and 390×844 confirm all ten dashboard cards, the Payment action, zero horizontal overflow, and no browser console errors.
+
+### 2026-09-01 — Complete dashboard and mobile visual representations on the Product showcase
+
+- Expanded the Product showcase dashboard from a summary-only thumbnail into the full operational composition shown in the supplied reference. It now includes all ten summary cards, the complete role-aware sidebar destinations, Refresh/New organisation/Generate payment cycle/Issue voucher actions, organisation performance, recent activity, and the amount-generated table.
+- Added readable Y-axis values and X-axis day labels to both preview graphs. Payment volume uses currency ticks and Cash/Vouchers series; Registrations uses count ticks and Households/Alternates series.
+- Changed the showcase composition to place the dashboard at full width and present the field app as a separate 320px-wide phone, preventing the real interface details from being compressed into illegible thumbnails.
+- Completed the mobile representation with the attached screen's hierarchy and missing visual cues: Peter Deng/1002 identity, notification treatment, rectangular Register household and Sync now controls, enlarged KPI icons, payment total inside the status donut, complete legend, current bottom-navigation icons, and the Payment label beneath its elevated centre action.
+- Verification: the direct Vite production render build passes and the Impeccable detector reports no findings. The expanded dashboard and phone were visually checked at 1440×1000 with no console errors. The repository-wide `npm run build` remains blocked by an unrelated pre-existing `PaymentsPage.vue` type error because `PAY_PAYMENT_ONLINE` is not currently part of `ProcessingCode`; this showcase change does not modify that payment-code path.
+
+### 2026-09-01 — Balanced side-by-side Product showcase
+
+- Returned the dashboard and Android app representations to one coordinated desktop row without reverting to the earlier undersized thumbnails. The dashboard now receives approximately three quarters of the available width and the phone receives a stable 290–300px column, with a compact 24–32px relationship gap.
+- Removed the phone's fixed 656px height and made it scale from its real portrait aspect ratio, keeping its data, donut, controls, icons, and navigation readable while bringing its visual height close to the dashboard frame.
+- Kept responsive behavior honest: the two products remain side by side on desktop and wide laptop layouts, then stack below 1050px where two columns would make the dashboard data illegible.
+- Verification: the direct Vite production render build passes, the layout-scoped Impeccable detector reports no findings, and `git diff --check` reports no whitespace errors in the edited files.
+
+### 2026-09-01 — Equal-height dashboard and phone previews without data loss
+
+- Introduced one responsive `--product-frame-height` shared by the dashboard and mobile frames on desktop, so both product representations now end at the exact same visual baseline. The height scales from 430px to 536px according to the available viewport instead of growing unchecked.
+- Sized the phone from that shared height using its portrait ratio, producing a compact 260–270px phone column beside the flexible dashboard rather than forcing the dashboard to shrink around a large fixed handset.
+- Reduced the complete mobile interface proportionally instead of removing information: workspace typography, internal padding, notification control, quick actions, KPI icons, cards, payment donut, legend, and bottom navigation now share a denser scale that fits the equal-height frame.
+- Preserved every dashboard card, graph axis, operational panel, mobile KPI, payment-status value, and navigation label. Below 1050px, both previews return to their natural aspect ratios and stack for legibility.
+- Verification: the direct Vite production render build passes, the layout-scoped Impeccable detector reports no findings, and the edited files pass `git diff --check`.
+
+### 2026-09-01 — Product showcase reduced to fit one desktop viewport
+
+- Reduced the shared dashboard/phone height from a 536px maximum to 440px, with a responsive 360px minimum on smaller laptops. Together with the Product heading and captions, the complete showcase now fits comfortably within an ordinary desktop viewport.
+- Narrowed the proportional phone column to approximately 176–215px and reduced the dashboard preview typography from an 8px maximum to 6.5px. The phone uses the same proportional density reduction at 6.1px, retaining all interface data and controls.
+- Preserved the equal-height side-by-side composition, every dashboard panel and axis, and every mobile card, legend, value, and navigation item. Tablet and phone layouts continue to stack at the existing breakpoint.
+- Verification: the direct Vite production render build passes, the layout-scoped Impeccable detector reports no findings, and the edited files pass `git diff --check`.
+
+### 2026-09-01 — Mobile Product preview matched to the supplied zero-data screen
+
+- Changed the illustrative field-officer identity from Peter Deng to John Doe while retaining the supplied account number `1002` and synced-device state.
+- Matched the operational summary to the attached mobile reference: Households, Pending sync, Paid, and Payment pending all display `0`, with the correct teal, amber, green, and orange icon treatments and a circular summary icon.
+- Replaced the populated payment chart with the reference's empty-state grey donut and centred `0`. Removed the unrelated Paid/Pending legend so the compact representation shows exactly the information present in the supplied screen.
+- Restored the simple plus icon for Register household and added the peach active-state background behind Home while retaining all five navigation labels and the elevated Payment action.
+- Verification: the direct Vite production render build passes, the final Impeccable detector reports no findings, and the edited files pass `git diff --check`.
+
+### 2026-09-01 — Product mobile preview icon and density correction
+
+- Fixed the empty visual slots highlighted in the supplied screenshot. The notification bell now uses an embedded vector that cannot disappear with font subsetting, while sync, household, Home, Activity, More, and dashboard payment-cycle icons now use glyphs included in the website's bundled Material Design icon subset.
+- Removed the unnecessary simulated operating-system status strip so the Product preview matches the supplied app screen and gives its actual content more room.
+- Tightened the phone's internal spacing, quick-action height, card padding, KPI circles, payment-status donut, and bottom-navigation height. The full hero, operational summary, payment status, and all five navigation destinations now fit inside the compact phone frame without dropping labels or values.
+- Retained the exact zero-data state and identity requested: John Doe, account 1002, synced status, four visible zero-value KPIs, and the centred payment-status zero.
+
+### 2026-09-01 — Compact Product-preview navigation
+
+- Reduced the mobile preview's bottom navigation rail, icon sizes, label type, and internal gaps to match the tighter proportions in the supplied reference.
+- Corrected the nested icon-relative sizing that made the active Home pill disproportionately wide and tall. The pill now scales cleanly against the phone width, while the raised Payment action remains the primary navigation emphasis at a smaller diameter.
+- Kept all five destinations and labels visible, and reclaimed additional vertical room for the Payment status content above the navigation.
+
+### 2026-09-01 — Dashboard-matched mobile preview data
+
+- Replaced the phone preview's zero-value sample state with the same illustrative figures already used by the dashboard preview: 4,286 households, 3,954 completed/paid payments, and 3 pending items.
+- Updated Payment status to show 3,957 total payment records and added a compact paid-versus-pending breakdown. The donut uses the established teal and orange status colours and reflects the same 3,954-to-3 dataset.
+- Kept the new information inside the reduced mobile composition without enlarging the phone or bottom navigation.
+
+### 2026-09-01 — Mobile payment navigation alignment
+
+- Reduced the Product preview's raised Payment control to a 30px-equivalent compact circle and lowered its protrusion above the navigation rail.
+- Reworked the navigation alignment so Home, Households, Payment, Activity, and More labels all share the same baseline and line height. Payment's label now participates in the normal layout instead of being absolutely positioned below the button.
+- Slightly reduced the surrounding icons and active Home pill to keep the complete navigation visually balanced at the phone preview's compact width.
+
+### 2026-09-01 — Fully aligned mobile navigation visuals
+
+- Removed the remaining raised offset from the Product preview's Payment navigation control, placing its visual and label in the same flex alignment as the other four destinations.
+- Reduced the green Payment background from the previous floating action size to a compact 19px-equivalent circle, retaining the selected-action colour without allowing it to dominate or protrude above the navigation rail.
+- Standardized the icon-to-label gap across all five navigation items so both the visual marks and their words align consistently.
+
+### 2026-09-01 — More navigation ellipsis restored
+
+- Replaced the unsupported placeholder glyph in the Product mobile preview's More destination with a crisp three-dot horizontal SVG matching the supplied reference.
+- Sized the ellipsis to the same visual row height as the neighboring navigation icons so the More label remains aligned with the other destinations.
+
+### 2026-09-01 — Permission-gated "Pay Online" payment recovery, end to end from mobile failure to dashboard action
+
+- Added a failed-payment recovery flow: when a generated payment fails field biometric verification, it now moves to a new FAILED status (2) instead of sitting PENDING forever, and the System Owner can recover it from the Payments page with a **Pay Online** action gated by a new `PAY_ONLINE` permission. That permission is deliberately *not* auto-granted to any built-in role (unlike the other dashboard-area permissions in migration 025) — the System Owner has it automatically because that role bypasses permission checks entirely (`TenantScope.isSystemOwner`), and every other role only sees the button once the System Owner explicitly assigns `PAY_ONLINE` to it from the Roles page. This mirrors the existing `ACCESS_*` permission-and-role-assignment pattern rather than inventing a new mechanism.
+- **Database:** added `database/migrations/038_payment_online_recovery.sql` — `payment_channel`/`online_reference` columns on `payments`, backfilled `CASH` for already-paid rows, and seeds the `PAY_ONLINE` permission (system-defined, no role grant). Must be applied via `database/run-migrations.ps1` before this goes live on a deployed database.
+- **Backend:** `PermissionPolicy.java` maps a new `PAY_PAYMENT_ONLINE` action to `PAY_ONLINE`. `Payment.java` gets a `PAY_PAYMENT_ONLINE` handler that only accepts a currently-FAILED payment, flips it to paid with `payment_channel='ONLINE'` and a generated reference, and `PAYMENT_SUMMARY` now also returns `failedCount`/`paidAmount`. `Biometric.java`'s `RECORD_FIELD_PAYMENT` now branches on `biometricVerified` for a generated payment: false moves it to FAILED (status=2) instead of being rejected outright, which is the actual mechanism that gets a payment into the recoverable state — previously a failed field verification was never communicated to the backend at all.
+- **Dashboard:** `PaymentsPage.vue` gained a Failed status filter/chip, a fourth "Failed" summary card, a "Mark as failed" action (existing `ACCESS_PAYMENTS` permission) to reach that state, and the permission-gated "Pay Online" button (`auth.can('PAY_ONLINE')`) that only shows for a FAILED row. `permissionCatalog.ts` registers `PAY_ONLINE` in the Households & alternates group so it's assignable from the Roles page; `processingCodes.ts` types the new `PAY_PAYMENT_ONLINE` code.
+- **Mobile:** `PaymentDao.java` adds `STATUS_FAILED` and `markGeneratedPaymentFailed()`. `PaymentVerificationActivity.java`'s `showFailure()` now actually persists the failure locally and triggers a sync for a generated payment (previously it only navigated to a local failure screen and left the remote payment PENDING with no record anything went wrong). `SyncManager.java` uploads `biometricVerified=false` for a row marked FAILED instead of always claiming success. `PaymentListAdapter.java` plus a new `bg_status_error` drawable/`payment_failed` string show "Failed" distinctly in the on-device payment history under More, instead of a failed row being mislabelled Pending.
+- Verification: backend `mvn test` passes all tests; frontend `vue-tsc -b --noEmit` and `npm run build` are clean (this also fixed the pre-existing `PaymentsPage.vue`/`ProcessingCode` build break noted in the entry above, which was this work's `PAY_PAYMENT_ONLINE` reference landing in `PaymentsPage.vue` before `processingCodes.ts` was updated); an Android debug variant (`compileMorphoSmart642DebugJavaWithJavac`) compiles clean with only pre-existing Java-8-target deprecation warnings. Not verified in a live browser or on-device session this pass — that, and applying migration 038 to a real database, remain open for next time.

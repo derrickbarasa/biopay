@@ -4,7 +4,11 @@ import { computed, ref, useId } from 'vue'
 interface Point { label: string; value: number }
 const props = defineProps<{
   data: Point[]
+  secondaryData?: Point[]
   color?: string
+  secondaryColor?: string
+  seriesLabel?: string
+  secondaryLabel?: string
   valuePrefix?: string
   ariaLabel?: string
   showValues?: boolean
@@ -17,6 +21,7 @@ const hoverIndex = ref<number | null>(null)
 const gradientId = `line-fill-${useId()}`
 
 const stroke = computed(() => props.color ?? '#0D9488')
+const secondaryStroke = computed(() => props.secondaryColor ?? '#F59E0B')
 const innerW = width - padding.left - padding.right
 const innerH = height - padding.top - padding.bottom
 
@@ -29,7 +34,11 @@ function niceStep(max: number) {
   return step * mag
 }
 
-const step = computed(() => niceStep(Math.max(...props.data.map((d) => d.value), 1)))
+const step = computed(() => niceStep(Math.max(
+  ...props.data.map((d) => d.value),
+  ...(props.secondaryData ?? []).map((d) => d.value),
+  1,
+)))
 const niceMax = computed(() => Math.max(step.value * 4, step.value))
 const ticks = computed(() => [0, 1, 2, 3, 4].map((i) => i * step.value).filter((v) => v <= niceMax.value + 0.001))
 
@@ -42,6 +51,17 @@ const points = computed(() => {
   const n = props.data.length
   if (n === 0) return []
   return props.data.map((d, i) => {
+    const x = padding.left + (n === 1 ? innerW / 2 : (i / (n - 1)) * innerW)
+    const y = padding.top + innerH - (d.value / niceMax.value) * innerH
+    return { x, y, ...d }
+  })
+})
+
+const secondaryPoints = computed(() => {
+  const data = props.secondaryData ?? []
+  const n = data.length
+  if (n === 0) return []
+  return data.map((d, i) => {
     const x = padding.left + (n === 1 ? innerW / 2 : (i / (n - 1)) * innerW)
     const y = padding.top + innerH - (d.value / niceMax.value) * innerH
     return { x, y, ...d }
@@ -69,6 +89,7 @@ function smoothPath(pts: { x: number; y: number }[]) {
 }
 
 const linePath = computed(() => smoothPath(points.value))
+const secondaryLinePath = computed(() => smoothPath(secondaryPoints.value))
 
 const areaPath = computed(() => {
   if (points.value.length === 0) return ''
@@ -77,6 +98,13 @@ const areaPath = computed(() => {
   const bottom = padding.top + innerH
   return `${linePath.value} L ${last.x} ${bottom} L ${first.x} ${bottom} Z`
 })
+
+function showAxisLabel(index: number) {
+  const length = points.value.length
+  if (length <= 8) return true
+  const interval = Math.ceil((length - 1) / 7)
+  return index === 0 || index === length - 1 || index % interval === 0
+}
 </script>
 
 <template>
@@ -104,8 +132,9 @@ const areaPath = computed(() => {
         <text :x="padding.left - 10" :y="padding.top + innerH - (t / niceMax) * innerH + 3" text-anchor="end" class="tick-label">{{ formatTick(t) }}</text>
       </g>
 
-      <path :d="areaPath" :fill="`url(#${gradientId})`" stroke="none" />
+      <path v-if="!secondaryData?.length" :d="areaPath" :fill="`url(#${gradientId})`" stroke="none" />
       <path :d="linePath" fill="none" :stroke="stroke" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
+      <path v-if="secondaryPoints.length" :d="secondaryLinePath" fill="none" :stroke="secondaryStroke" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
 
       <g
         v-for="(p, i) in points"
@@ -117,11 +146,12 @@ const areaPath = computed(() => {
         @focus="hoverIndex = i"
         @blur="hoverIndex = null"
       >
-        <title>{{ p.label }}: {{ valuePrefix }}{{ p.value.toLocaleString() }}</title>
+        <title>{{ p.label }}: {{ seriesLabel ?? 'Value' }} {{ valuePrefix }}{{ p.value.toLocaleString() }}<template v-if="secondaryPoints[i]">; {{ secondaryLabel ?? 'Secondary' }} {{ valuePrefix }}{{ secondaryPoints[i].value.toLocaleString() }}</template></title>
         <rect :x="p.x - (innerW / Math.max(points.length - 1, 1)) / 2" :y="padding.top" :width="innerW / Math.max(points.length, 1)" :height="innerH" fill="transparent" />
         <circle :cx="p.x" :cy="p.y" :r="hoverIndex === i ? 5 : 3.5" :fill="stroke" stroke="#fff" stroke-width="1.5" style="pointer-events: none;" />
+        <circle v-if="secondaryPoints[i]" :cx="secondaryPoints[i].x" :cy="secondaryPoints[i].y" :r="hoverIndex === i ? 5 : 3.5" :fill="secondaryStroke" stroke="#fff" stroke-width="1.5" style="pointer-events: none;" />
         <text v-if="showValues" :x="p.x" :y="Math.max(p.y - 10, 14)" text-anchor="middle" class="value-label">{{ p.value.toLocaleString() }}</text>
-        <text :x="p.x" :y="height - 10" text-anchor="middle" class="axis-label">{{ p.label }}</text>
+        <text v-if="showAxisLabel(i)" :x="p.x" :y="height - 10" text-anchor="middle" class="axis-label">{{ p.label }}</text>
       </g>
 
       <line
@@ -139,8 +169,9 @@ const areaPath = computed(() => {
         top: `${(points[hoverIndex].y / height) * 100}%`,
       }"
     >
-      <strong>{{ valuePrefix }}{{ points[hoverIndex].value.toLocaleString() }}</strong>
       <div class="tooltip-label">{{ points[hoverIndex].label }}</div>
+      <strong><i :style="{ background: stroke }" />{{ seriesLabel ?? 'Value' }}: {{ valuePrefix }}{{ points[hoverIndex].value.toLocaleString() }}</strong>
+      <strong v-if="secondaryPoints[hoverIndex]"><i :style="{ background: secondaryStroke }" />{{ secondaryLabel ?? 'Secondary' }}: {{ valuePrefix }}{{ secondaryPoints[hoverIndex].value.toLocaleString() }}</strong>
     </div>
   </div>
 </template>
@@ -167,4 +198,6 @@ const areaPath = computed(() => {
   box-shadow: 0 6px 16px rgba(15, 23, 42, .22);
 }
 .tooltip-label { color: rgba(255, 255, 255, .72); font-size: 11px; }
+.tooltip strong { display: flex; align-items: center; gap: 6px; font-weight: 650; }
+.tooltip i { display: inline-block; width: 7px; height: 7px; border-radius: 50%; }
 </style>

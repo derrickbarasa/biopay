@@ -18,17 +18,7 @@ import java.util.List;
 
 public class PaymentListAdapter extends RecyclerView.Adapter<PaymentListAdapter.ViewHolder> {
 
-    /** Only ever invoked for a PENDING row -- a paid one has nothing left to verify. */
-    public interface OnVerifyClickListener {
-        void onVerifyClick(PaymentDao.LocalPayment payment);
-    }
-
     private final List<PaymentDao.LocalPayment> payments = new ArrayList<>();
-    private final OnVerifyClickListener listener;
-
-    PaymentListAdapter(OnVerifyClickListener listener) {
-        this.listener = listener;
-    }
 
     void submitList(List<PaymentDao.LocalPayment> rows) { payments.clear(); payments.addAll(rows); notifyDataSetChanged(); }
 
@@ -46,11 +36,14 @@ public class PaymentListAdapter extends RecyclerView.Adapter<PaymentListAdapter.
         holder.amount.setText(holder.itemView.getContext().getString(R.string.payment_amount,
                 NumberFormat.getNumberInstance().format(payment.amount)));
         boolean paid = payment.status == PaymentDao.STATUS_PAID;
-        holder.status.setText(paid ? R.string.payment_paid : R.string.payment_pending);
+        boolean failed = payment.status == PaymentDao.STATUS_FAILED;
+        holder.status.setText(failed ? R.string.payment_failed : paid ? R.string.payment_paid : R.string.payment_pending);
         holder.status.setTextColor(ContextCompat.getColor(holder.itemView.getContext(),
-                paid ? R.color.bp_success : R.color.bp_warning));
-        holder.status.setBackgroundResource(paid ? R.drawable.bg_status_success : R.drawable.bg_status_warning);
-        holder.itemView.setOnClickListener(paid ? null : v -> listener.onVerifyClick(payment));
+                failed ? R.color.bp_error : paid ? R.color.bp_success : R.color.bp_warning));
+        holder.status.setBackgroundResource(
+                failed ? R.drawable.bg_status_error : paid ? R.drawable.bg_status_success : R.drawable.bg_status_warning);
+        holder.itemView.setOnClickListener(null);
+        holder.itemView.setClickable(false);
     }
 
     @Override public int getItemCount() { return payments.size(); }

@@ -24,8 +24,7 @@ public class PaymentsActivity extends BaseActivity {
         setContentView(R.layout.activity_payments);
         setupBackToolbar(R.id.toolbar);
         paymentDao = new PaymentDao(this);
-        adapter = new PaymentListAdapter(payment ->
-                startActivity(PaymentVerificationActivity.intentFor(this, payment.householdNumber, payment.amount)));
+        adapter = new PaymentListAdapter();
         RecyclerView recycler = findViewById(R.id.recyclerPayments);
         recycler.setLayoutManager(new LinearLayoutManager(this));
         recycler.setAdapter(adapter);

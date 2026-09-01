@@ -18,7 +18,7 @@ import com.biopay.agent.feed.ActivityFeedActivity;
 import com.biopay.agent.home.HomeActivity;
 import com.biopay.agent.households.HouseholdListActivity;
 import com.biopay.agent.more.MoreActivity;
-import com.biopay.agent.scan.ScanBottomSheetFragment;
+import com.biopay.agent.payments.GeneratePaymentActivity;
 
 import android.content.Intent;
 
@@ -74,15 +74,13 @@ public abstract class BaseActivity extends AppCompatActivity {
         mainNavigationSelectedItemId = selectedItemId;
         navigation.setOnItemSelectedListener(item -> {
             int targetId = item.getItemId();
-            if (targetId == R.id.navScan) {
-                showScanSheet();
-                return false;
-            }
             if (targetId == selectedItemId) {
                 return true;
             }
             Class<?> destination;
-            if (targetId == R.id.navHouseholds) {
+            if (targetId == R.id.navPayment) {
+                destination = GeneratePaymentActivity.class;
+            } else if (targetId == R.id.navHouseholds) {
                 destination = HouseholdListActivity.class;
             } else if (targetId == R.id.navActivityFeed) {
                 destination = ActivityFeedActivity.class;
@@ -110,19 +108,13 @@ public abstract class BaseActivity extends AppCompatActivity {
         }
     }
 
-    /** Wires the floating center action shared by every bottom-nav tab screen to the Scan sheet. */
-    protected void setupScanFab(int fabId) {
+    /** Wires the elevated center action shared by every bottom-nav screen to generated payments. */
+    protected void setupPaymentFab(int fabId) {
         View fab = findViewById(fabId);
         if (fab == null) {
             return;
         }
-        fab.setOnClickListener(v ->
-                showScanSheet());
-    }
-
-    private void showScanSheet() {
-        if (getSupportFragmentManager().findFragmentByTag("scan") == null) {
-            new ScanBottomSheetFragment().show(getSupportFragmentManager(), "scan");
-        }
+        fab.setOnClickListener(v -> startActivity(new Intent(this, GeneratePaymentActivity.class)
+                .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP)));
     }
 }

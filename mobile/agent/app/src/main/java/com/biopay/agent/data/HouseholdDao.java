@@ -24,6 +24,7 @@ public class HouseholdDao {
     }
 
     public int update(String householdNumber, ContentValues values) {
+        values.put("sync_status", DatabaseHelper.SYNC_PENDING);
         SQLiteDatabase db = dbHelper.getWritableDatabase();
         return db.update("households", values, "household_number=?", new String[]{householdNumber});
     }
@@ -111,6 +112,8 @@ public class HouseholdDao {
         public boolean disabledMembers;
         public boolean literate;
         public boolean eligible;
+        public String vulnerabilityStatuses;
+        public String legalStatus;
         public String photoLocalPath;
         public int syncStatus;
 
@@ -137,6 +140,8 @@ public class HouseholdDao {
             h.disabledMembers = c.getInt(c.getColumnIndexOrThrow("disabled_members")) != 0;
             h.literate = "Y".equals(c.getString(c.getColumnIndexOrThrow("literacy")));
             h.eligible = "Y".equals(c.getString(c.getColumnIndexOrThrow("eligibility")));
+            h.vulnerabilityStatuses = c.getString(c.getColumnIndexOrThrow("vulnerability_statuses"));
+            h.legalStatus = c.getString(c.getColumnIndexOrThrow("legal_status"));
             h.photoLocalPath = c.getString(c.getColumnIndexOrThrow("photo_local_path"));
             h.syncStatus = c.getInt(c.getColumnIndexOrThrow("sync_status"));
             return h;

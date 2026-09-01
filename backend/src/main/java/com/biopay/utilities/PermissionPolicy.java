@@ -41,6 +41,9 @@ public final class PermissionPolicy {
             Map.entry("GET_PAYMENTS", "ACCESS_PAYMENTS"), Map.entry("GET_PAYMENT", "ACCESS_PAYMENTS"),
             Map.entry("PAYMENT_SUMMARY", "ACCESS_PAYMENTS"), Map.entry("UPDATE_PAYMENT_STATUS", "ACCESS_PAYMENTS"),
             Map.entry("DELETE_PAYMENT", "ACCESS_PAYMENTS"),
+            // Deliberately its own permission, not folded into ACCESS_PAYMENTS -- see
+            // 038_payment_online_recovery.sql: only the System Owner has it by default.
+            Map.entry("PAY_PAYMENT_ONLINE", "PAY_ONLINE"),
             Map.entry("GET_PAYROLLS", "ACCESS_PAYMENT_CYCLES"), Map.entry("GET_PAYROLL", "ACCESS_PAYMENT_CYCLES"),
             Map.entry("REQUEST_PAYROLL_OTP", "ACCESS_PAYMENT_CYCLES"), Map.entry("GENERATE_PAYROLL", "ACCESS_PAYMENT_CYCLES"),
             Map.entry("APPROVE_PAYROLL", "ACCESS_PAYMENT_CYCLES"), Map.entry("REJECT_PAYROLL", "ACCESS_PAYMENT_CYCLES"),

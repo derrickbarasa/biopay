@@ -12,6 +12,7 @@ import io.vertx.sqlclient.Row;
 import io.vertx.sqlclient.Tuple;
 import com.biopay.databases.Datasource;
 import com.biopay.utilities.FileStore;
+import com.biopay.utilities.HouseholdClassification;
 import com.biopay.utilities.Logging;
 import com.biopay.utilities.OrgModules;
 import com.biopay.utilities.QrSupport;
@@ -118,12 +119,21 @@ public class Household extends AbstractVerticle {
         }
         String requestedHouseholdNumber = payload.getString("householdNumber", "").trim();
         final String householdNumber = requestedHouseholdNumber.isEmpty() ? Utilities.generateCode("HH") : requestedHouseholdNumber;
+        final String vulnerabilityStatuses;
+        final String legalStatus;
+        try {
+            vulnerabilityStatuses = HouseholdClassification.vulnerabilityCsv(payload);
+            legalStatus = HouseholdClassification.legalStatus(payload);
+        } catch (IllegalArgumentException err) {
+            replyError(message, err.getMessage());
+            return;
+        }
 
         String sql = "INSERT INTO households (officer_code, organization_code, household_number, beneficiary_type, "
                 + "household_name, age, marital_status, spouse_name, id_number, phone_number, gender, "
-                + "household_size, female_dependants, male_dependants, state_code, county_code, payam_code, boma_code, "
+                + "household_size, female_dependants, male_dependants, vulnerability_status, legal_status, state_code, county_code, payam_code, boma_code, "
                 + "latitude, longitude, status, created_by, created_at, updated_at) "
-                + "VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,@p12,@p13,@p14,@p15,@p16,@p17,@p18,@p19,@p20,@p21,@p22,GETDATE(),GETDATE())";
+                + "VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,@p12,@p13,@p14,@p15,@p16,@p17,@p18,@p19,@p20,@p21,@p22,@p23,@p24,GETDATE(),GETDATE())";
 
         pool.preparedQuery(sql)
                 .execute(Tuple.of(
@@ -139,6 +149,8 @@ public class Household extends AbstractVerticle {
                         payload.getInteger("householdSize"),
                         payload.getInteger("femaleDependants"),
                         payload.getInteger("maleDependants"),
+                        vulnerabilityStatuses,
+                        legalStatus,
                         payload.getString("stateCode"),
                         payload.getString("countyCode"),
                         payload.getString("payamCode"),
@@ -169,18 +181,29 @@ public class Household extends AbstractVerticle {
             replyError(message, "householdNumber is required");
             return;
         }
+        final String vulnerabilityStatuses;
+        final String legalStatus;
+        try {
+            vulnerabilityStatuses = HouseholdClassification.vulnerabilityCsv(payload);
+            legalStatus = HouseholdClassification.legalStatus(payload);
+        } catch (IllegalArgumentException err) {
+            replyError(message, err.getMessage());
+            return;
+        }
 
         String scopeClause = isAnchor(payload)
-                ? " AND (@p10=1 OR organization_code IN (SELECT organization_code FROM organizations WHERE anchor_id=@p11))"
-                : " AND organization_code=@p10";
+                ? " AND (@p12=1 OR organization_code IN (SELECT organization_code FROM organizations WHERE anchor_id=@p13))"
+                : " AND organization_code=@p12";
         String sql = "UPDATE households SET household_name=@p1, age=@p2, marital_status=@p3, phone_number=@p4, "
-                + "gender=@p5, household_size=@p6, boma_code=@p7, updated_by=@p8, updated_at=GETDATE() WHERE household_number=@p9"
+                + "gender=@p5, household_size=@p6, boma_code=@p7, vulnerability_status=@p8, legal_status=@p9, "
+                + "updated_by=@p10, updated_at=GETDATE() WHERE household_number=@p11"
                 + scopeClause;
 
         Tuple params = Tuple.of(
                 payload.getString("householdName"), payload.getInteger("age"), payload.getString("maritalStatus"),
                 payload.getString("phoneNumber"), payload.getString("gender"), payload.getInteger("householdSize"),
-                payload.getString("bomaCode"), String.valueOf(payload.getValue("actorId")), householdNumber);
+                payload.getString("bomaCode"), vulnerabilityStatuses, legalStatus,
+                String.valueOf(payload.getValue("actorId")), householdNumber);
         if (isAnchor(payload)) {
             params = params.addBoolean(isSystemAdmin(payload)).addInteger(TenantScope.anchorId(payload));
         } else {
@@ -598,8 +621,15 @@ public class Household extends AbstractVerticle {
         String villageCode = payload.getString("villageCode", null);
         String gender = payload.getString("gender", null);
         Integer status = payload.getInteger("status");
-        String vulnerabilityStatus = payload.getString("vulnerabilityStatus", null);
-        String legalStatus = payload.getString("legalStatus", null);
+        final String vulnerabilityStatus;
+        final String legalStatus;
+        try {
+            vulnerabilityStatus = HouseholdClassification.filterCode(payload.getValue("vulnerabilityStatus"), true);
+            legalStatus = HouseholdClassification.filterCode(payload.getValue("legalStatus"), false);
+        } catch (IllegalArgumentException err) {
+            replyError(message, err.getMessage());
+            return;
+        }
         String reviewStatus = payload.getString("reviewStatus", null);
         // Registration date range (the "time" filter). created_at is DATETIME; string
         // bounds are implicitly converted, same as Payment#retrieveAll's date_from filter.
@@ -626,7 +656,10 @@ public class Household extends AbstractVerticle {
                 + "AND (@p3 IS NULL OR h.state_code=@p3) AND (@p4 IS NULL OR h.county_code=@p4) "
                 + "AND (@p5 IS NULL OR h.payam_code=@p5) AND (@p6 IS NULL OR h.boma_code=@p6) "
                 + "AND (@p7 IS NULL OR h.gender=@p7) AND (@p8 IS NULL OR h.status=@p8) "
-                + "AND (@p9 IS NULL OR h.vulnerability_status=@p9) AND (@p10 IS NULL OR h.legal_status=@p10) "
+                + "AND (@p9 IS NULL OR (@p9='NOT_RECORDED' AND NULLIF(LTRIM(RTRIM(h.vulnerability_status)),'') IS NULL) "
+                + "OR (@p9<>'NOT_RECORDED' AND CHARINDEX(','+@p9+',', ','+COALESCE(h.vulnerability_status,'')+',')>0)) "
+                + "AND (@p10 IS NULL OR (@p10='NOT_RECORDED' AND NULLIF(LTRIM(RTRIM(h.legal_status)),'') IS NULL) "
+                + "OR (@p10<>'NOT_RECORDED' AND h.legal_status=@p10)) "
                 + "AND (@p11 IS NULL OR h.created_at >= @p11) AND (@p12 IS NULL OR h.created_at <= @p12) "
                 + "AND (@p15 IS NULL OR h.review_status=@p15) "
                 + "AND (@p17 IS NULL OR p.anchor_id=@p17) "
@@ -671,6 +704,7 @@ public class Household extends AbstractVerticle {
                 // vulnerability_status / legal_status arrive with migration 009; guard the
                 // read so listing still works if the migration hasn't been applied yet.
                 .put("vulnerabilityStatus", strSafe(r, "vulnerability_status"))
+                .put("vulnerabilityStatuses", HouseholdClassification.vulnerabilityArray(strSafe(r, "vulnerability_status")))
                 .put("legalStatus", strSafe(r, "legal_status"))
                 .put("reviewStatus", strSafe(r, "review_status"))
                 .put("rejectionReason", strSafe(r, "rejection_reason"))
@@ -758,18 +792,29 @@ public class Household extends AbstractVerticle {
             return;
         }
         String householdNumber = Utilities.generateCode("HH");
+        final String vulnerabilityStatuses;
+        final String legalStatus;
+        try {
+            vulnerabilityStatuses = HouseholdClassification.vulnerabilityCsv(row.getValue("vulnerabilityStatuses"));
+            legalStatus = HouseholdClassification.legalStatus(row);
+        } catch (IllegalArgumentException err) {
+            errors.add(new JsonObject().put("row", index + 1).put("message", err.getMessage()));
+            processUploadRow(message, rows, index + 1, partnerCode, village, actorId, fileName, created, errors);
+            return;
+        }
 
         String sql = "INSERT INTO households (officer_code, organization_code, household_number, beneficiary_type, "
                 + "household_name, age, marital_status, spouse_name, id_number, phone_number, gender, "
-                + "household_size, female_dependants, male_dependants, state_code, county_code, payam_code, boma_code, "
+                + "household_size, female_dependants, male_dependants, vulnerability_status, legal_status, state_code, county_code, payam_code, boma_code, "
                 + "status, created_by, created_at, updated_at) "
-                + "VALUES (@p1,@p2,@p3,'1',@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,@p12,@p13,@p14,@p15,@p16,@p17,1,@p18,GETDATE(),GETDATE())";
+                + "VALUES (@p1,@p2,@p3,'1',@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,@p12,@p13,@p14,@p15,@p16,@p17,@p18,@p19,1,@p20,GETDATE(),GETDATE())";
         pool.preparedQuery(sql)
                 .execute(Tuple.of(
                         String.valueOf(actorId), partnerCode, householdNumber, householdName,
                         row.getInteger("age"), row.getString("maritalStatus"), row.getString("spouseName"),
                         row.getString("idNumber"), row.getString("phoneNumber"), row.getString("gender"),
                         row.getInteger("householdSize"), row.getInteger("femaleDependants"), row.getInteger("maleDependants"),
+                        vulnerabilityStatuses, legalStatus,
                         Rows.str(village, "state_code"), Rows.str(village, "county_code"),
                         Rows.str(village, "location_code"), Rows.str(village, "village_code"),
                         String.valueOf(actorId)))

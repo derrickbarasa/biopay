@@ -46,6 +46,11 @@ public class HouseholdFormActivity extends BaseActivity {
 
     private static final String EXTRA_HOUSEHOLD_NUMBER = "household_number";
     private static final String[] GENDER_OPTIONS = {"Male", "Female"};
+    private static final String[] LEGAL_STATUS_LABELS = {
+            "Not recorded", "Citizen", "Refugee", "Internally displaced person (IDP)",
+            "Asylum seeker", "Returnee", "Stateless", "Other"};
+    private static final String[] LEGAL_STATUS_CODES = {
+            "", "CITIZEN", "REFUGEE", "IDP", "ASYLUM_SEEKER", "RETURNEE", "STATELESS", "OTHER"};
 
     private static final String OPTION_FINGERPRINT = "FINGERPRINT";
     private static final String OPTION_FACE = "FACE";
@@ -111,8 +116,14 @@ public class HouseholdFormActivity extends BaseActivity {
     private EditText etMaleDependants;
     private EditText etFemaleDependants;
     private CheckBox cbDisabledMembers;
+    private CheckBox cbElderlyHeaded;
+    private CheckBox cbChildHeaded;
+    private CheckBox cbChronicIllness;
+    private CheckBox cbPregnantLactating;
+    private CheckBox cbSingleCaregiver;
     private CheckBox cbLiteracy;
     private CheckBox cbEligible;
+    private AutoCompleteTextView spinnerLegalStatus;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -151,12 +162,22 @@ public class HouseholdFormActivity extends BaseActivity {
         etMaleDependants = findViewById(R.id.etMaleDependants);
         etFemaleDependants = findViewById(R.id.etFemaleDependants);
         cbDisabledMembers = findViewById(R.id.cbDisabledMembers);
+        cbElderlyHeaded = findViewById(R.id.cbElderlyHeaded);
+        cbChildHeaded = findViewById(R.id.cbChildHeaded);
+        cbChronicIllness = findViewById(R.id.cbChronicIllness);
+        cbPregnantLactating = findViewById(R.id.cbPregnantLactating);
+        cbSingleCaregiver = findViewById(R.id.cbSingleCaregiver);
         cbLiteracy = findViewById(R.id.cbLiteracy);
         cbEligible = findViewById(R.id.cbEligible);
+        spinnerLegalStatus = findViewById(R.id.spinnerLegalStatus);
 
         spinnerGender.setAdapter(new ArrayAdapter<>(this,
                 android.R.layout.simple_dropdown_item_1line, GENDER_OPTIONS));
         spinnerGender.setText(GENDER_OPTIONS[0], false);
+
+        spinnerLegalStatus.setAdapter(new ArrayAdapter<>(this,
+                android.R.layout.simple_dropdown_item_1line, LEGAL_STATUS_LABELS));
+        spinnerLegalStatus.setText(LEGAL_STATUS_LABELS[0], false);
 
         spinnerRegistrationMethod.setAdapter(new ArrayAdapter<>(this,
                 android.R.layout.simple_dropdown_item_1line, registrationLabels));
@@ -287,9 +308,18 @@ public class HouseholdFormActivity extends BaseActivity {
         etHouseholdSize.setText(household.householdSize == null ? "" : String.valueOf(household.householdSize));
         etMaleDependants.setText(household.maleDependants == null ? "" : String.valueOf(household.maleDependants));
         etFemaleDependants.setText(household.femaleDependants == null ? "" : String.valueOf(household.femaleDependants));
-        cbDisabledMembers.setChecked(household.disabledMembers);
+        cbDisabledMembers.setChecked(household.disabledMembers
+                || hasCsvCode(household.vulnerabilityStatuses, "DISABILITY"));
+        cbElderlyHeaded.setChecked(hasCsvCode(household.vulnerabilityStatuses, "ELDERLY_HEADED"));
+        cbChildHeaded.setChecked(hasCsvCode(household.vulnerabilityStatuses, "CHILD_HEADED"));
+        cbChronicIllness.setChecked(hasCsvCode(household.vulnerabilityStatuses, "CHRONIC_ILLNESS"));
+        cbPregnantLactating.setChecked(hasCsvCode(household.vulnerabilityStatuses, "PREGNANT_OR_LACTATING"));
+        cbSingleCaregiver.setChecked(hasCsvCode(household.vulnerabilityStatuses, "SINGLE_CAREGIVER"));
         cbLiteracy.setChecked(household.literate);
         cbEligible.setChecked(household.eligible);
+        int legalIndex = household.legalStatus == null ? 0
+                : java.util.Arrays.asList(LEGAL_STATUS_CODES).indexOf(household.legalStatus);
+        spinnerLegalStatus.setText(LEGAL_STATUS_LABELS[Math.max(0, legalIndex)], false);
     }
 
     /**
@@ -356,6 +386,14 @@ public class HouseholdFormActivity extends BaseActivity {
         return value != null && !value.trim().isEmpty();
     }
 
+    private static boolean hasCsvCode(String csv, String code) {
+        if (!hasText(csv)) return false;
+        for (String value : csv.split(",")) {
+            if (code.equals(value.trim())) return true;
+        }
+        return false;
+    }
+
     private void save() {
         String householdName = etHouseholdName.getText().toString().trim();
         if (householdName.isEmpty()) {
@@ -385,6 +423,17 @@ public class HouseholdFormActivity extends BaseActivity {
         values.put("male_dependants", parseIntOrNull(etMaleDependants.getText().toString()));
         values.put("female_dependants", parseIntOrNull(etFemaleDependants.getText().toString()));
         values.put("disabled_members", cbDisabledMembers.isChecked() ? 1 : 0);
+        List<String> vulnerabilityStatuses = new ArrayList<>();
+        if (cbDisabledMembers.isChecked()) vulnerabilityStatuses.add("DISABILITY");
+        if (cbElderlyHeaded.isChecked()) vulnerabilityStatuses.add("ELDERLY_HEADED");
+        if (cbChildHeaded.isChecked()) vulnerabilityStatuses.add("CHILD_HEADED");
+        if (cbChronicIllness.isChecked()) vulnerabilityStatuses.add("CHRONIC_ILLNESS");
+        if (cbPregnantLactating.isChecked()) vulnerabilityStatuses.add("PREGNANT_OR_LACTATING");
+        if (cbSingleCaregiver.isChecked()) vulnerabilityStatuses.add("SINGLE_CAREGIVER");
+        values.put("vulnerability_statuses", android.text.TextUtils.join(",", vulnerabilityStatuses));
+        int legalIndex = java.util.Arrays.asList(LEGAL_STATUS_LABELS)
+                .indexOf(spinnerLegalStatus.getText().toString());
+        values.put("legal_status", LEGAL_STATUS_CODES[Math.max(0, legalIndex)]);
         values.put("literacy", cbLiteracy.isChecked() ? "Y" : "N");
         values.put("eligibility", cbEligible.isChecked() ? "Y" : "N");
 

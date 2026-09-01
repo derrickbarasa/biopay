@@ -7,15 +7,20 @@
 -- partner_code/organization_code is left out of the column list entirely --
 -- it's always NULL here regardless, and the column is nullable, so omitting
 -- it sidesteps needing to know which name it currently has.
-IF NOT EXISTS (SELECT 1 FROM roles WHERE role_name='System Owner' AND anchor_id IS NULL)
+--
+-- Keyed on role_scope='SYSTEM' + anchor_id IS NULL rather than role_name: migration 034
+-- later renames this role 'System Owner' -> 'Super Admin', and looking it up by the old
+-- name here would no longer find it on a database where 034 already ran, inserting a
+-- second, duplicate system role and repointing every system-admin user onto it.
+IF NOT EXISTS (SELECT 1 FROM roles WHERE role_scope='SYSTEM' AND anchor_id IS NULL)
     INSERT INTO roles (role_name, description, anchor_id, role_scope, status, created_at)
     VALUES ('System Owner', 'Platform owner with permanent access to every BioPay feature and tenant', NULL, 'SYSTEM', 1, GETDATE());
 GO
 
 UPDATE roles
 SET description='Platform owner with permanent access to every BioPay feature and tenant',
-    role_scope='SYSTEM', status=1, updated_at=GETDATE()
-WHERE role_name='System Owner' AND anchor_id IS NULL;
+    status=1, updated_at=GETDATE()
+WHERE role_scope='SYSTEM' AND anchor_id IS NULL;
 
 UPDATE roles
 SET description='Full operational and administrative access within one anchor and its organisations',
@@ -28,7 +33,7 @@ SET description='Full operational and administrative access within one organisat
 WHERE role_name='Organisation Administrator' AND anchor_id IS NULL;
 GO
 
-DECLARE @systemOwnerRole INT = (SELECT TOP 1 id FROM roles WHERE role_name='System Owner' AND anchor_id IS NULL AND status=1);
+DECLARE @systemOwnerRole INT = (SELECT TOP 1 id FROM roles WHERE role_scope='SYSTEM' AND anchor_id IS NULL AND status=1);
 DECLARE @anchorAdminRole INT = (SELECT TOP 1 id FROM roles WHERE role_name='Anchor Administrator' AND anchor_id IS NULL AND status=1);
 DECLARE @organisationAdminRole INT = (SELECT TOP 1 id FROM roles WHERE role_name='Organisation Administrator' AND anchor_id IS NULL AND status=1);
 
@@ -60,7 +65,7 @@ GO
 
 -- The system role records the complete policy even though the application also enforces
 -- an immutable system-owner bypass at its authorization boundary.
-DECLARE @systemOwnerRole2 INT = (SELECT TOP 1 id FROM roles WHERE role_name='System Owner' AND anchor_id IS NULL AND status=1);
+DECLARE @systemOwnerRole2 INT = (SELECT TOP 1 id FROM roles WHERE role_scope='SYSTEM' AND anchor_id IS NULL AND status=1);
 INSERT INTO role_permissions (role_id, permission_id, status, created_at)
 SELECT @systemOwnerRole2, p.id, 1, GETDATE()
 FROM permissions p

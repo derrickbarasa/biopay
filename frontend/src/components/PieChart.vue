@@ -69,17 +69,21 @@ const slices = computed(() => {
 </template>
 
 <style scoped>
-.pie-wrap { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
-.pie-svg-wrap { position: relative; width: 148px; height: 148px; flex-shrink: 0; }
+.pie-wrap { display: grid; grid-template-columns: 124px minmax(0, 1fr); align-items: center; gap: 16px; width: 100%; }
+.pie-svg-wrap { position: relative; width: 124px; height: 124px; }
 .pie-svg { width: 100%; height: 100%; }
 .pie-svg path { transition: fill-opacity 150ms ease; cursor: default; }
 .pie-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; pointer-events: none; }
 .pie-total { font-size: 1.15rem; font-weight: 750; color: #0f172a; line-height: 1.1; }
 .pie-total-label { font-size: .65rem; color: #94a3b8; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
-.legend { display: flex; flex-direction: column; gap: 6px; font-size: .78rem; min-width: 140px; }
+.legend { min-width: 0; display: flex; flex-direction: column; gap: 8px; font-size: .78rem; }
 .legend-row { display: flex; align-items: center; gap: 8px; transition: opacity 150ms ease; cursor: default; }
 .legend-row.dim { opacity: 0.4; }
 .swatch { width: 9px; height: 9px; border-radius: 3px; flex-shrink: 0; }
-.legend-label { flex: 1; color: #334155; }
-.legend-value { color: #64748b; font-variant-numeric: tabular-nums; font-size: .74rem; }
+.legend-label { min-width: 0; flex: 1; overflow-wrap: anywhere; color: #334155; }
+.legend-value { color: #64748b; font-variant-numeric: tabular-nums; font-size: .74rem; white-space: nowrap; }
+@media (max-width: 380px) {
+  .pie-wrap { grid-template-columns: 108px minmax(0, 1fr); gap: 12px; }
+  .pie-svg-wrap { width: 108px; height: 108px; }
+}
 </style>

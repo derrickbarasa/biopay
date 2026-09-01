@@ -48,7 +48,7 @@ public class HomeActivity extends BaseActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_home);
         setupMainNavigation(R.id.bottomNavigation, R.id.navHome);
-        setupScanFab(R.id.fabScan);
+        setupPaymentFab(R.id.fabPayment);
 
         sessionManager = new SessionManager(this);
         databaseHelper = DatabaseHelper.get(this);

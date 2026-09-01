@@ -37,7 +37,7 @@ public class HouseholdListActivity extends BaseActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_household_list);
         setupMainNavigation(R.id.bottomNavigation, R.id.navHouseholds);
-        setupScanFab(R.id.fabScan);
+        setupPaymentFab(R.id.fabPayment);
 
         householdDao = new HouseholdDao(this);
         fingerprintDao = new FingerprintDao(this);

@@ -55,11 +55,12 @@
     <string name="nav_home">Home</string>
     <string name="nav_settings">Settings</string>
     <string name="nav_households">Households</string>
-    <string name="nav_scan">Scan</string>
+    <string name="nav_payment">Payment</string>
     <string name="nav_activity">Activity</string>
     <string name="nav_more">More</string>
 
     <string name="scan_action_title">Scan</string>
+    <string name="payment_nav_action">Start a payment</string>
     <string name="scan_sheet_fingerprint">Fingerprint Verification</string>
     <string name="scan_sheet_fingerprint_body">Verify a household member using a registered fingerprint</string>
     <string name="scan_sheet_face">Face Verification</string>
@@ -155,43 +156,6 @@
     <string name="fingerprint_verify_title">Fingerprint Verification</string>
     <string name="fingerprint_verify_instruction">Keep the finger still until verification completes.</string>
 
-    <string name="verify_success_title">Identity Verified</string>
-    <string name="verify_success_verified_using">Verified using %1$s</string>
-    <string name="verify_success_continue">Continue to Disbursement</string>
-
-    <string name="disbursement_title">Disbursement</string>
-    <string name="disbursement_verified_chip">Verified</string>
-    <string name="disbursement_entitlement">Entitlement</string>
-    <string name="disbursement_intervention_type">Intervention type</string>
-    <string name="disbursement_amount">Amount / Value</string>
-    <string name="disbursement_checklist_location">Location captured</string>
-    <string name="disbursement_checklist_verified">Identity verified</string>
-    <string name="disbursement_checklist_offline">Offline transaction</string>
-    <string name="disbursement_review_action">Review Disbursement</string>
-
-    <string name="disbursement_review_title">Review Disbursement</string>
-    <string name="disbursement_review_household">Household</string>
-    <string name="disbursement_review_member">Member</string>
-    <string name="disbursement_review_programme">Programme</string>
-    <string name="disbursement_review_value">Value</string>
-    <string name="disbursement_review_verification">Verification</string>
-    <string name="disbursement_review_location">Location</string>
-    <string name="disbursement_review_connectivity">Connectivity</string>
-    <string name="disbursement_review_connectivity_offline">Offline</string>
-    <string name="disbursement_review_officer">Officer</string>
-    <string name="disbursement_review_datetime">Date &amp; Time</string>
-    <string name="disbursement_confirm_action">Confirm Disbursement</string>
-
-    <string name="transaction_success_title">Disbursement Complete</string>
-    <string name="transaction_receipt_id">Transaction ID</string>
-    <string name="transaction_receipt_datetime">Date &amp; Time</string>
-    <string name="transaction_receipt_programme">Programme</string>
-    <string name="transaction_receipt_verification">Verification method</string>
-    <string name="transaction_receipt_location">GPS Location</string>
-    <string name="transaction_receipt_officer">Officer</string>
-    <string name="transaction_saved_offline">Saved on device. Will sync automatically when connectivity returns.</string>
-    <string name="transaction_done">Done</string>
-    <string name="programme_default_label">Cash Assistance</string>
     <string name="household_form_new_title">Register household</string>
     <string name="household_form_edit_title">Edit household</string>
     <string name="household_form_offline_note">Fields are saved locally first and synchronized when the server is available.</string>
@@ -226,6 +190,12 @@
     <string name="field_male_dependants">Male dependants</string>
     <string name="field_female_dependants">Female dependants</string>
     <string name="field_has_disabled_members">Household has members with disabilities</string>
+    <string name="field_elderly_headed">Elderly-headed household</string>
+    <string name="field_child_headed">Child-headed household</string>
+    <string name="field_chronic_illness">Household affected by chronic illness</string>
+    <string name="field_pregnant_lactating">Pregnant or lactating caregiver</string>
+    <string name="field_single_caregiver">Single caregiver</string>
+    <string name="field_legal_status">Legal status</string>
     <string name="field_literate">Household head is literate</string>
     <string name="field_eligible">Eligible for the programme</string>
     <string name="household_continue_to_capture">Continue to capture</string>
@@ -291,13 +261,54 @@
     <string name="payment_amount">Amount %1$s</string>
     <string name="payment_paid">Paid</string>
     <string name="payment_pending">Pending</string>
+    <string name="payment_failed">Failed</string>
     <string name="payment_verify_title">Verify to pay</string>
-    <string name="payment_verify_body">Verify whoever\'s here to collect this payment, using whichever method they\'re enrolled with.</string>
+    <string name="payment_verify_body">Choose the person collecting this payment and one of their enrolled verification methods.</string>
+    <string name="payment_verify_choose_method">Verification method</string>
+    <string name="payment_scan_disabled">Choose a verification method</string>
+    <string name="payment_scan_fingerprint">Scan fingerprint</string>
+    <string name="payment_scan_face">Scan face</string>
+    <string name="payment_verifying_face">Verifying face…</string>
+    <string name="payment_verify_no_methods">No enrolled fingerprint or face is available for this household on this device. Sync or update the household before paying.</string>
     <string name="payment_verify_not_enrolled">Not enrolled with any verification method yet.</string>
     <string name="payment_verify_fingerprint">Fingerprint</string>
     <string name="payment_verify_face">Face</string>
     <string name="payment_verify_recorded">Payment recorded and queued to sync</string>
     <string name="payment_verify_no_face_match">Face did not match. Check the beneficiary and try again.</string>
+
+    <string name="generated_payment_title">Generated payment</string>
+    <string name="generated_payment_description">Select an unpaid household from the latest generated payment cycle.</string>
+    <string name="generated_payment_search_label">Search unpaid household</string>
+    <string name="generated_payment_search_help">Only households with a generated, unpaid payment are shown.</string>
+    <string name="generated_payment_sync">Sync payments</string>
+    <string name="generated_payment_sync_failed">Payments could not be refreshed. Check your connection; saved payments are still available offline.</string>
+    <string name="generated_payment_placeholder">—</string>
+    <string name="generated_payment_details">Payment details</string>
+    <string name="generated_payment_household_name">Household name</string>
+    <string name="generated_payment_registration_number">Registration number</string>
+    <string name="generated_payment_village">Village</string>
+    <string name="generated_payment_village_unknown">Not available</string>
+    <string name="generated_payment_amount">Amount</string>
+    <string name="generated_payment_proceed">Proceed to verification</string>
+    <string name="generated_payment_empty_title">No unpaid household is ready yet</string>
+    <string name="generated_payment_empty_body">Tap Sync payments to check the latest generated cycle. A household appears here only when its unpaid payment and enrolled verification data are available on this device.</string>
+    <plurals name="generated_payment_count">
+        <item quantity="one">%1$d unpaid household</item>
+        <item quantity="other">%1$d unpaid households</item>
+    </plurals>
+    <string name="payment_result_success_title">Payment successful</string>
+    <string name="payment_result_success_message">%1$s was verified successfully and the payment was recorded for %2$s.</string>
+    <string name="payment_result_amount_paid">%1$s paid</string>
+    <string name="payment_result_amount_not_paid">%1$s not paid</string>
+    <string name="payment_result_verified_using">Verified using %1$s</string>
+    <string name="payment_result_failure_title">Payment not completed</string>
+    <string name="payment_result_fingerprint_failed">The fingerprint did not match the selected beneficiary. No payment was recorded.</string>
+    <string name="payment_result_face_failed">The face did not match the selected beneficiary. No payment was recorded.</string>
+    <string name="payment_result_face_error">Face verification could not be completed. Check the camera and lighting, then try again.</string>
+    <string name="payment_result_unavailable">This generated payment is no longer available or was already paid. Sync and choose another payment.</string>
+    <string name="payment_result_failure_help">Review the beneficiary and verification method before trying again.</string>
+    <string name="payment_result_another">Another payment</string>
+    <string name="payment_result_home">Home</string>
 
     <string name="voucher_title">Voucher redemption</string>
     <string name="voucher_subtitle">Choose an issued voucher and verify the household fingerprint before redemption.</string>

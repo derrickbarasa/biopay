@@ -6,6 +6,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
 import { useAnchorScope } from '@/composables/useAnchorScope'
 import { useOrgCascade } from '@/composables/useOrgCascade'
+import { LEGAL_STATUS_OPTIONS, VULNERABILITY_OPTIONS } from '@/constants/householdClassifications'
 
 // Dedicated full page for "Add Household" (replaces the old in-dialog form on
 // HouseholdsPage). Mirrors the HouseholdDetailPage/PayrollGeneratePage
@@ -50,6 +51,7 @@ const villagesForLocation = (code: string) => (code ? villages.value.filter((v) 
 const form = ref({
   householdName: '', age: null as number | null, gender: '', phoneNumber: '',
   householdSize: null as number | null, stateCode: '', countyCode: '', locationCode: '', villageCode: '',
+  vulnerabilityStatuses: [] as string[], legalStatus: '',
   organisationCode: null as string | null,
 })
 
@@ -119,6 +121,8 @@ async function save() {
     await dispatch('CREATE_HOUSEHOLD', {
       householdName: form.value.householdName, age: form.value.age, gender: form.value.gender,
       phoneNumber: form.value.phoneNumber, householdSize: form.value.householdSize,
+      vulnerabilityStatuses: form.value.vulnerabilityStatuses,
+      legalStatus: form.value.legalStatus || undefined,
       stateCode: form.value.stateCode, countyCode: form.value.countyCode,
       payamCode: form.value.locationCode, bomaCode: form.value.villageCode,
       organisationCode: form.value.organisationCode || undefined,
@@ -167,6 +171,32 @@ onMounted(() => {
           <v-col cols="12" sm="4"><v-text-field v-model.number="form.householdSize" label="Household size" type="number" /></v-col>
         </v-row>
         <v-text-field v-model="form.phoneNumber" label="Phone number" />
+        <v-row>
+          <v-col cols="12" md="7">
+            <v-select
+              v-model="form.vulnerabilityStatuses"
+              :items="VULNERABILITY_OPTIONS"
+              item-title="title"
+              item-value="value"
+              label="Vulnerability categories"
+              hint="Select every support need that applies"
+              persistent-hint
+              multiple
+              chips
+              closable-chips
+            />
+          </v-col>
+          <v-col cols="12" md="5">
+            <v-select
+              v-model="form.legalStatus"
+              :items="LEGAL_STATUS_OPTIONS"
+              item-title="title"
+              item-value="value"
+              label="Legal status"
+              clearable
+            />
+          </v-col>
+        </v-row>
         <div class="text-caption text-medium-emphasis mt-2 mb-1">Location</div>
         <v-row dense>
           <v-col cols="6" sm="3"><v-select v-model="form.stateCode" :items="states" item-title="name" item-value="code" label="State" density="compact" @update:model-value="onStateChange" /></v-col>

@@ -15,6 +15,10 @@ import com.biopay.utilities.Logging;
 import com.biopay.utilities.Rows;
 import com.biopay.utilities.TenantScope;
 
+import java.time.LocalDate;
+import java.util.Map;
+import java.util.TreeMap;
+
 /**
  * Role-scoped dashboard KPIs and time-series chart data. An anchor admin
  * sees everything under their anchor_id (joining through organizations.anchor_id
@@ -260,59 +264,170 @@ public class Dashboard extends AbstractVerticle {
                 .map(rows -> rows.size() == 0 ? 0 : Rows.intVal(rows.iterator().next(), "v"));
     }
 
-    // ---- DASHBOARD_PAYMENTS_CHART (monthly volume + count) -------------------------
+    // ---- Dashboard charts ----------------------------------------------------------
+
+    private static String chartPeriod(JsonObject payload) {
+        String period = payload.getString("period", "month").toLowerCase();
+        return switch (period) {
+            case "day", "week", "year" -> period;
+            default -> "month";
+        };
+    }
+
+    private static String chartReferenceDate(JsonObject payload) {
+        try {
+            return LocalDate.parse(payload.getString("referenceDate", "")).toString();
+        } catch (RuntimeException ignored) {
+            return LocalDate.now().toString();
+        }
+    }
+
+    private static String chartBucket(String period, String column) {
+        return switch (period) {
+            case "day" -> "RIGHT('0' + CAST(DATEPART(hour, " + column + ") AS VARCHAR(2)), 2)";
+            case "year" -> "CONVERT(VARCHAR(7), " + column + ", 120)";
+            default -> "CONVERT(VARCHAR(10), " + column + ", 120)";
+        };
+    }
+
+    private static String chartRange(String period, String column) {
+        String selectedDate = "CONVERT(date, @p2)";
+        String monthStart = "DATEFROMPARTS(YEAR(" + selectedDate + "), MONTH(" + selectedDate + "), 1)";
+        String yearStart = "DATEFROMPARTS(YEAR(" + selectedDate + "), 1, 1)";
+        String weekStart = "DATEADD(day, -(DATEDIFF(day, '19000101', " + selectedDate + ") % 7), " + selectedDate + ")";
+        return switch (period) {
+            case "day" -> column + " >= " + selectedDate + " AND " + column + " < DATEADD(day, 1, " + selectedDate + ")";
+            case "week" -> column + " >= " + weekStart + " AND " + column + " < DATEADD(day, 7, " + weekStart + ")";
+            case "year" -> column + " >= " + yearStart + " AND " + column + " < DATEADD(year, 1, " + yearStart + ")";
+            default -> column + " >= " + monthStart + " AND " + column + " < DATEADD(month, 1, " + monthStart + ")";
+        };
+    }
+
+    private Future<JsonArray> amountSeries(String sql, Tuple params) {
+        return pool.preparedQuery(sql).execute(params).map(rows -> {
+            JsonArray series = new JsonArray();
+            for (Row row : rows) {
+                series.add(new JsonObject()
+                        .put("period", Rows.str(row, "bucket"))
+                        .put("count", Rows.intVal(row, "cnt"))
+                        .put("amount", Rows.dbl(row, "total")));
+            }
+            return series;
+        });
+    }
+
+    private Future<JsonArray> countSeries(String sql, Tuple params) {
+        return pool.preparedQuery(sql).execute(params).map(rows -> {
+            JsonArray series = new JsonArray();
+            for (Row row : rows) {
+                series.add(new JsonObject()
+                        .put("period", Rows.str(row, "bucket"))
+                        .put("count", Rows.intVal(row, "cnt")));
+            }
+            return series;
+        });
+    }
+
+    private static JsonObject bucket(Map<String, JsonObject> buckets, String period) {
+        return buckets.computeIfAbsent(period, key -> new JsonObject().put("period", key));
+    }
+
+    // ---- DASHBOARD_PAYMENTS_CHART (cash + redeemed voucher value) -----------------
 
     private void paymentsChart(Message<Object> message) {
         JsonObject payload = new JsonObject(message.body().toString());
+        String period = chartPeriod(payload);
+        String referenceDate = chartReferenceDate(payload);
         String partnerCode = isAnchor(payload) ? null : payload.getString("partnerCode", "");
         Object anchorIdVal = payload.getValue("anchorId");
         Integer anchorId = isSystemAdmin(payload) || anchorIdVal == null ? null : Integer.parseInt(anchorIdVal.toString());
+        Tuple params = isAnchor(payload) ? Tuple.of(anchorId, referenceDate) : Tuple.of(partnerCode, referenceDate);
 
-        String sql = isAnchor(payload)
-                ? "SELECT CONVERT(VARCHAR(7), created_at, 120) AS bucket, COUNT(*) AS cnt, ISNULL(SUM(amount),0) AS total "
-                        + "FROM payments WHERE (@p1 IS NULL OR anchor_id=@p1) GROUP BY CONVERT(VARCHAR(7), created_at, 120) ORDER BY bucket"
-                : "SELECT CONVERT(VARCHAR(7), created_at, 120) AS bucket, COUNT(*) AS cnt, ISNULL(SUM(amount),0) AS total "
-                        + "FROM payments WHERE organization_code=@p1 GROUP BY CONVERT(VARCHAR(7), created_at, 120) ORDER BY bucket";
+        String cashBucket = chartBucket(period, "pay.created_at");
+        String cashScope = isAnchor(payload) ? "(@p1 IS NULL OR pay.anchor_id=@p1)" : "pay.organization_code=@p1";
+        String cashSql = "SELECT " + cashBucket + " AS bucket, COUNT(*) AS cnt, ISNULL(SUM(pay.amount),0) AS total "
+                + "FROM payments pay WHERE " + cashScope + " AND " + chartRange(period, "pay.created_at")
+                + " GROUP BY " + cashBucket + " ORDER BY bucket";
 
-        pool.preparedQuery(sql)
-                .execute(isAnchor(payload) ? Tuple.of(anchorId) : Tuple.of(partnerCode))
+        String voucherDate = "COALESCE(v.redeemed_at, v.created_at)";
+        String voucherBucket = chartBucket(period, voucherDate);
+        String voucherScope = isAnchor(payload) ? "(@p1 IS NULL OR v.anchor_id=@p1)" : "v.organization_code=@p1";
+        String voucherSql = "SELECT " + voucherBucket + " AS bucket, COUNT(*) AS cnt, ISNULL(SUM(v.amount),0) AS total "
+                + "FROM vouchers v WHERE " + voucherScope + " AND v.status='REDEEMED' AND " + chartRange(period, voucherDate)
+                + " GROUP BY " + voucherBucket + " ORDER BY bucket";
+
+        Future.all(amountSeries(cashSql, params), amountSeries(voucherSql, params))
                 .onFailure(err -> onDbError(message, err))
-                .onSuccess(rows -> {
-                    JsonArray series = new JsonArray();
-                    for (Row r : rows) {
-                        series.add(new JsonObject()
-                                .put("period", Rows.str(r, "bucket"))
-                                .put("count", Rows.intVal(r, "cnt"))
-                                .put("amount", Rows.dbl(r, "total")));
+                .onSuccess(result -> {
+                    Map<String, JsonObject> buckets = new TreeMap<>();
+                    for (Object item : (JsonArray) result.resultAt(0)) {
+                        JsonObject row = (JsonObject) item;
+                        bucket(buckets, row.getString("period"))
+                                .put("cashCount", row.getInteger("count", 0))
+                                .put("cashAmount", row.getDouble("amount", 0d));
                     }
+                    for (Object item : (JsonArray) result.resultAt(1)) {
+                        JsonObject row = (JsonObject) item;
+                        bucket(buckets, row.getString("period"))
+                                .put("voucherCount", row.getInteger("count", 0))
+                                .put("voucherAmount", row.getDouble("amount", 0d));
+                    }
+                    JsonArray series = new JsonArray();
+                    buckets.values().forEach(row -> series.add(row
+                            .put("cashCount", row.getInteger("cashCount", 0))
+                            .put("cashAmount", row.getDouble("cashAmount", 0d))
+                            .put("voucherCount", row.getInteger("voucherCount", 0))
+                            .put("voucherAmount", row.getDouble("voucherAmount", 0d))));
                     reply(message, new JsonObject().put("responseCode", "000").put("responseMessage", "OK").put("results", series));
                 });
     }
 
-    // ---- DASHBOARD_HOUSEHOLDS_CHART (monthly registration trend) -------------------
+    // ---- DASHBOARD_HOUSEHOLDS_CHART (households + alternates) ----------------------
 
     private void householdsChart(Message<Object> message) {
         JsonObject payload = new JsonObject(message.body().toString());
-
-        String sql = isAnchor(payload)
-                ? "SELECT CONVERT(VARCHAR(7), h.created_at, 120) AS bucket, COUNT(*) AS cnt "
-                        + "FROM households h JOIN organizations p ON p.organization_code=h.organization_code "
-                        + "WHERE (@p1 IS NULL OR p.anchor_id=@p1) GROUP BY CONVERT(VARCHAR(7), h.created_at, 120) ORDER BY bucket"
-                : "SELECT CONVERT(VARCHAR(7), created_at, 120) AS bucket, COUNT(*) AS cnt "
-                        + "FROM households WHERE organization_code=@p1 GROUP BY CONVERT(VARCHAR(7), created_at, 120) ORDER BY bucket";
+        String period = chartPeriod(payload);
+        String referenceDate = chartReferenceDate(payload);
         Object anchorIdVal = payload.getValue("anchorId");
         Integer anchorId = isSystemAdmin(payload) || anchorIdVal == null ? null : Integer.parseInt(anchorIdVal.toString());
+        Tuple params = isAnchor(payload)
+                ? Tuple.of(anchorId, referenceDate)
+                : Tuple.of(payload.getString("partnerCode", ""), referenceDate);
 
-        pool.preparedQuery(sql)
-                .execute(isAnchor(payload) ? Tuple.of(anchorId) : Tuple.of(payload.getString("partnerCode", "")))
+        String householdBucket = chartBucket(period, "h.created_at");
+        String householdFrom = isAnchor(payload)
+                ? "FROM households h JOIN organizations p ON p.organization_code=h.organization_code "
+                : "FROM households h ";
+        String householdScope = isAnchor(payload) ? "(@p1 IS NULL OR p.anchor_id=@p1)" : "h.organization_code=@p1";
+        String householdSql = "SELECT " + householdBucket + " AS bucket, COUNT(*) AS cnt " + householdFrom
+                + "WHERE " + householdScope + " AND " + chartRange(period, "h.created_at")
+                + " GROUP BY " + householdBucket + " ORDER BY bucket";
+
+        String alternateBucket = chartBucket(period, "a.created_at");
+        String alternateFrom = isAnchor(payload)
+                ? "FROM alternates a JOIN organizations p ON p.organization_code=a.organization_code "
+                : "FROM alternates a ";
+        String alternateScope = isAnchor(payload) ? "(@p1 IS NULL OR p.anchor_id=@p1)" : "a.organization_code=@p1";
+        String alternateSql = "SELECT " + alternateBucket + " AS bucket, COUNT(*) AS cnt " + alternateFrom
+                + "WHERE " + alternateScope + " AND " + chartRange(period, "a.created_at")
+                + " GROUP BY " + alternateBucket + " ORDER BY bucket";
+
+        Future.all(countSeries(householdSql, params), countSeries(alternateSql, params))
                 .onFailure(err -> onDbError(message, err))
-                .onSuccess(rows -> {
-                    JsonArray series = new JsonArray();
-                    for (Row r : rows) {
-                        series.add(new JsonObject()
-                                .put("period", Rows.str(r, "bucket"))
-                                .put("count", Rows.intVal(r, "cnt")));
+                .onSuccess(result -> {
+                    Map<String, JsonObject> buckets = new TreeMap<>();
+                    for (Object item : (JsonArray) result.resultAt(0)) {
+                        JsonObject row = (JsonObject) item;
+                        bucket(buckets, row.getString("period")).put("householdCount", row.getInteger("count", 0));
                     }
+                    for (Object item : (JsonArray) result.resultAt(1)) {
+                        JsonObject row = (JsonObject) item;
+                        bucket(buckets, row.getString("period")).put("alternateCount", row.getInteger("count", 0));
+                    }
+                    JsonArray series = new JsonArray();
+                    buckets.values().forEach(row -> series.add(row
+                            .put("householdCount", row.getInteger("householdCount", 0))
+                            .put("alternateCount", row.getInteger("alternateCount", 0))));
                     reply(message, new JsonObject().put("responseCode", "000").put("responseMessage", "OK").put("results", series));
                 });
     }

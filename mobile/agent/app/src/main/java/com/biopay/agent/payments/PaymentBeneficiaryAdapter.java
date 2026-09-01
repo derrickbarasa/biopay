@@ -20,8 +20,7 @@ import java.util.List;
 public class PaymentBeneficiaryAdapter extends RecyclerView.Adapter<PaymentBeneficiaryAdapter.ViewHolder> {
 
     public interface OnVerifyListener {
-        void onVerifyFingerprint(Beneficiary beneficiary);
-        void onVerifyFace(Beneficiary beneficiary);
+        void onMethodSelected(Beneficiary beneficiary, boolean fingerprint);
     }
 
     public static class Row {
@@ -38,6 +37,8 @@ public class PaymentBeneficiaryAdapter extends RecyclerView.Adapter<PaymentBenef
 
     private final List<Row> rows = new ArrayList<>();
     private final OnVerifyListener listener;
+    private String selectedBeneficiaryId;
+    private Boolean fingerprintSelected;
 
     public PaymentBeneficiaryAdapter(OnVerifyListener listener) {
         this.listener = listener;
@@ -67,11 +68,24 @@ public class PaymentBeneficiaryAdapter extends RecyclerView.Adapter<PaymentBenef
         holder.verifyButtonRow.setVisibility(anyEnrolled ? View.VISIBLE : View.GONE);
 
         holder.btnVerifyFingerprint.setVisibility(row.hasFingerprint ? View.VISIBLE : View.GONE);
-        holder.btnVerifyFingerprint.setOnClickListener(v -> listener.onVerifyFingerprint(row.beneficiary));
+        holder.btnVerifyFingerprint.setCheckable(true);
+        holder.btnVerifyFingerprint.setChecked(row.beneficiary.beneficiaryId.equals(selectedBeneficiaryId)
+                && Boolean.TRUE.equals(fingerprintSelected));
+        holder.btnVerifyFingerprint.setOnClickListener(v -> select(row.beneficiary, true));
 
         holder.btnVerifyFace.setVisibility(row.hasFace ? View.VISIBLE : View.GONE);
-        holder.btnVerifyFace.setOnClickListener(v -> listener.onVerifyFace(row.beneficiary));
+        holder.btnVerifyFace.setCheckable(true);
+        holder.btnVerifyFace.setChecked(row.beneficiary.beneficiaryId.equals(selectedBeneficiaryId)
+                && Boolean.FALSE.equals(fingerprintSelected));
+        holder.btnVerifyFace.setOnClickListener(v -> select(row.beneficiary, false));
         holder.tvFaceAccuracyNotice.setVisibility(row.hasFace ? View.VISIBLE : View.GONE);
+    }
+
+    private void select(Beneficiary beneficiary, boolean fingerprint) {
+        selectedBeneficiaryId = beneficiary.beneficiaryId;
+        fingerprintSelected = fingerprint;
+        notifyDataSetChanged();
+        listener.onMethodSelected(beneficiary, fingerprint);
     }
 
     @Override

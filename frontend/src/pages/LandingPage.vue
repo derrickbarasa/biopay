@@ -16,11 +16,30 @@ let scrollDir: 'up' | 'down' = 'down'
 let lastScrollY = 0
 let navRevealTimer: ReturnType<typeof setTimeout> | null = null
 
+// Single source of truth for "how far below the fixed nav counts as reached",
+// shared by the scroll-spy (activationLine) and the native anchor-scroll offset
+// (html's scroll-padding-top, set by syncNavScrollOffset). They used to be two
+// independent numbers -- CSS scroll-padding-top/scroll-margin-top stacked to
+// ~12rem while the scroll-spy only looked for ~68px -- so clicking a nav link
+// scrolled past the point the spy was watching and the previous link stayed
+// highlighted "active" forever.
+function navActivationLine() {
+  return (siteNav.value?.offsetHeight ?? 0) + 16
+}
+
+function syncNavScrollOffset() {
+  document.documentElement.style.scrollPaddingTop = `${navActivationLine()}px`
+}
+
 function scheduleActiveSectionSync() {
   if (navSpyRafId !== undefined) return
   navSpyRafId = requestAnimationFrame(() => {
     navSpyRafId = undefined
-    const activationLine = (siteNav.value?.offsetHeight ?? 0) + 16
+    // A couple of px of slack: the native anchor-scroll (scroll-padding-top)
+    // and this check both target navActivationLine(), but the scroll can
+    // settle a fraction of a pixel short/over that target, which would
+    // otherwise make a freshly-clicked section fail its own activation check.
+    const activationLine = navActivationLine() + 2
     let currentSection = ''
 
     for (const id of navSections) {
@@ -263,6 +282,10 @@ onMounted(() => {
   window.addEventListener('scroll', trackScrollDir, { passive: true })
   window.addEventListener('scroll', handleNavScroll, { passive: true })
   window.addEventListener('scroll', scheduleActiveSectionSync, { passive: true })
+  // Safety net for the click-a-nav-link case: a smooth anchor jump can settle
+  // without firing a final 'scroll' event at exactly its rest position, so
+  // force one more sync once the browser confirms scrolling has fully stopped.
+  window.addEventListener('scrollend', scheduleActiveSectionSync, { passive: true })
 
   if (reduceMotion || !('IntersectionObserver' in window)) {
     featureCards.forEach((el) => el.classList.add('in'))
@@ -286,6 +309,7 @@ onMounted(() => {
     featureCards.forEach((el) => featureObserver?.observe(el))
   }
 
+  syncNavScrollOffset()
   scheduleActiveSectionSync()
 
   heroTimerReduceMotion = reduceMotion
@@ -294,6 +318,7 @@ onMounted(() => {
   howPaused.value = reduceMotion
   if (!reduceMotion) howRafId = requestAnimationFrame(howTick)
   window.addEventListener('resize', onHowResize, { passive: true })
+  window.addEventListener('resize', syncNavScrollOffset, { passive: true })
   window.addEventListener('resize', scheduleActiveSectionSync, { passive: true })
 })
 
@@ -303,7 +328,9 @@ onBeforeUnmount(() => {
   window.removeEventListener('scroll', trackScrollDir)
   window.removeEventListener('scroll', handleNavScroll)
   window.removeEventListener('scroll', scheduleActiveSectionSync)
+  window.removeEventListener('scrollend', scheduleActiveSectionSync)
   window.removeEventListener('resize', onHowResize)
+  window.removeEventListener('resize', syncNavScrollOffset)
   window.removeEventListener('resize', scheduleActiveSectionSync)
   if (navRevealTimer) clearTimeout(navRevealTimer)
   if (heroTimer) clearInterval(heroTimer)
@@ -595,6 +622,7 @@ onBeforeUnmount(() => {
         <div class="wrap">
           <div class="showcase-heading">
             <h2 class="section-title">One dashboard for oversight, one app for the field</h2>
+            <p>The screens below mirror the interfaces your administrators and field officers use. Only the programme data is illustrative.</p>
           </div>
 
           <div class="product-stage">
@@ -608,13 +636,6 @@ onBeforeUnmount(() => {
                   <aside class="preview-web-nav">
                     <img src="/biopay_logo_horizontal_light.svg" alt="" />
                     <div class="preview-nav-item active"><i class="mdi mdi-view-dashboard-outline"></i>Dashboard</div>
-                    <small>Configs</small>
-                    <div class="preview-nav-item"><i class="mdi mdi-domain"></i>Organizations</div>
-                    <div class="preview-nav-item"><i class="mdi mdi-map-marker-radius"></i>Locations</div>
-                    <small>User management</small>
-                    <div class="preview-nav-item"><i class="mdi mdi-account-multiple-outline"></i>Users</div>
-                    <div class="preview-nav-item"><i class="mdi mdi-shield-account-outline"></i>Roles &amp; permissions</div>
-                    <div class="preview-nav-item"><i class="mdi mdi-account-tie"></i>Field officers</div>
                     <small>Biodata</small>
                     <div class="preview-nav-item"><i class="mdi mdi-home-group"></i>Households</div>
                     <div class="preview-nav-item"><i class="mdi mdi-cash-multiple"></i>Payments</div>
@@ -622,55 +643,97 @@ onBeforeUnmount(() => {
                     <small>Payment generation</small>
                     <div class="preview-nav-item"><i class="mdi mdi-calendar-month-outline"></i>Payment cycles</div>
                     <div class="preview-nav-item"><i class="mdi mdi-ticket-confirmation-outline"></i>Vouchers</div>
+                    <small>Configs</small>
+                    <div class="preview-nav-item"><i class="mdi mdi-bank-outline"></i>Anchors</div>
+                    <div class="preview-nav-item"><i class="mdi mdi-domain"></i>Organizations</div>
+                    <div class="preview-nav-item"><i class="mdi mdi-map-marker-radius"></i>Locations</div>
+                    <small>User management</small>
+                    <div class="preview-nav-item"><i class="mdi mdi-account-multiple-outline"></i>Users</div>
+                    <div class="preview-nav-item"><i class="mdi mdi-account-tie"></i>Field officers</div>
+                    <div class="preview-nav-item"><i class="mdi mdi-shield-account-outline"></i>Roles &amp; permissions</div>
+                    <div class="preview-nav-item"><i class="mdi mdi-credit-card-outline"></i>Subscription</div>
+                    <div class="preview-nav-item"><i class="mdi mdi-cog-outline"></i>Settings</div>
                   </aside>
 
                   <div class="preview-web-app">
                     <div class="preview-web-toolbar">
                       <span><i class="mdi mdi-menu"></i> Dashboard</span>
-                      <div><b>Illustrative preview · Anchor administrator</b><span class="preview-avatar">AO</span></div>
+                      <div><b>Anchor administrator</b><span class="preview-avatar">AM</span><span class="preview-user">Amina M.</span><i class="mdi mdi-chevron-down"></i></div>
                     </div>
                     <div class="preview-web-content">
                       <div class="preview-web-heading">
                         <div>
                           <img src="/biopay_logo_horizontal.svg" alt="" />
                           <strong>Welcome back, Amina</strong>
-                          <span>Track programme activity and keep every disbursement accountable.</span>
                         </div>
-                        <div class="preview-web-actions"><span>Refresh</span><b>Generate payment cycle</b></div>
+                        <div class="preview-web-actions"><span>Refresh</span><b><i class="mdi mdi-plus"></i> New organisation</b><b><i class="mdi mdi-calendar-check"></i> Generate payment cycle</b><b class="secondary-action"><i class="mdi mdi-ticket-confirmation-outline"></i> Issue voucher</b></div>
                       </div>
 
                       <div class="preview-metric-grid">
                         <div class="preview-metric"><span>Organizations</span><strong>12</strong><small>Active programmes</small><i class="mdi mdi-domain"></i></div>
                         <div class="preview-metric green"><span>Households</span><strong>4,286</strong><small>Approved records</small><i class="mdi mdi-home-group"></i></div>
-                        <div class="preview-metric amber"><span>Total value disbursed</span><strong>USD 840K</strong><small>Cash + vouchers</small><i class="mdi mdi-cash-multiple"></i></div>
-                        <div class="preview-metric"><span>Active officers</span><strong>38</strong><small>Currently enabled</small><i class="mdi mdi-account-tie"></i></div>
-                        <div class="preview-metric"><span>Fingerprints</span><strong>6,914</strong><small>Ready to verify</small><i class="mdi mdi-fingerprint"></i></div>
-                        <div class="preview-metric amber"><span>Pending approvals</span><strong>3</strong><small>Awaiting a checker</small><i class="mdi mdi-timer-sand"></i></div>
+                        <div class="preview-metric amber"><span>Value disbursed</span><strong>USD 840K</strong><small>USD 810K cash · USD 30K vouchers</small><i class="mdi mdi-cash-multiple"></i></div>
+                        <div class="preview-metric"><span>Payments completed</span><strong>3,954</strong><small>USD 810K successfully processed</small><i class="mdi mdi-check-circle-outline"></i></div>
+                        <div class="preview-metric amber"><span>Pending approvals</span><strong>3</strong><small>Awaiting a checker</small><i class="mdi mdi-clock-alert-outline"></i></div>
+                        <div class="preview-metric slate"><span>Active officers</span><strong>38</strong><small>Currently enabled</small><i class="mdi mdi-account-check-outline"></i></div>
+                        <div class="preview-metric"><span>Registered fingerprints</span><strong>6,914</strong><small>Across accessible organizations</small><i class="mdi mdi-fingerprint"></i></div>
+                        <div class="preview-metric green"><span>Total generated</span><strong>USD 922K</strong><small>18 payment cycles</small><i class="mdi mdi-chart-line"></i></div>
+                        <div class="preview-metric green"><span>Alternates registered</span><strong>612</strong><small>Approved alternate recipients</small><i class="mdi mdi-account-check-outline"></i></div>
+                        <div class="preview-metric green"><span>Latest payroll</span><strong>Approved</strong><small>PAY-2026-018</small><i class="mdi mdi-calendar-month-outline"></i></div>
                       </div>
 
                       <div class="preview-analytics">
                         <div class="preview-chart-card">
-                          <strong>Payment volume over time</strong>
-                          <svg viewBox="0 0 360 100" preserveAspectRatio="none">
-                            <path class="chart-gridline" d="M0 20H360M0 50H360M0 80H360" />
-                            <path class="chart-area" d="M0 78 55 64 110 70 165 42 220 51 275 29 330 36 360 18V100H0Z" />
-                            <path class="chart-line" d="M0 78 55 64 110 70 165 42 220 51 275 29 330 36 360 18" />
-                          </svg>
+                          <header><div><strong>Payment volume</strong><span><i class="cash-key"></i>Cash <i class="voucher-key"></i>Vouchers</span></div><time>August 2026 <i class="mdi mdi-calendar-month-outline"></i></time></header>
+                          <div class="preview-chart-body">
+                            <div class="preview-y-axis"><span>USD 1.0K</span><span>USD 750</span><span>USD 500</span><span>USD 250</span><span>USD 0</span></div>
+                            <div class="preview-plot">
+                              <svg viewBox="0 0 360 112" preserveAspectRatio="none">
+                                <path class="chart-gridline" d="M0 4H360M0 30H360M0 56H360M0 82H360M0 108H360" />
+                                <path class="chart-line" d="M0 90 55 72 110 79 165 47 220 57 275 31 330 39 360 17" />
+                                <path class="chart-line voucher-line" d="M0 102 55 94 110 97 165 82 220 88 275 69 330 76 360 58" />
+                              </svg>
+                              <div class="preview-x-axis"><span>1</span><span>6</span><span>11</span><span>16</span><span>21</span><span>26</span><span>30</span></div>
+                            </div>
+                          </div>
                         </div>
                         <div class="preview-chart-card">
-                          <strong>Household registration trend</strong>
-                          <svg viewBox="0 0 250 100" preserveAspectRatio="none">
-                            <path class="chart-gridline" d="M0 20H250M0 50H250M0 80H250" />
-                            <path class="chart-line green-line" d="M0 83 42 72 84 66 126 48 168 55 210 31 250 22" />
-                          </svg>
+                          <header><div><strong>Registrations</strong><span><i class="household-key"></i>Households <i class="alternate-key"></i>Alternates</span></div><time>August 2026 <i class="mdi mdi-calendar-month-outline"></i></time></header>
+                          <div class="preview-chart-body">
+                            <div class="preview-y-axis"><span>800</span><span>600</span><span>400</span><span>200</span><span>0</span></div>
+                            <div class="preview-plot">
+                              <svg viewBox="0 0 360 112" preserveAspectRatio="none">
+                                <path class="chart-gridline" d="M0 4H360M0 30H360M0 56H360M0 82H360M0 108H360" />
+                                <path class="chart-line" d="M0 94 58 81 118 74 177 53 237 61 299 34 360 23" />
+                                <path class="chart-line alternate-line" d="M0 103 58 96 118 98 177 83 237 89 299 69 360 75" />
+                              </svg>
+                              <div class="preview-x-axis"><span>1</span><span>6</span><span>11</span><span>16</span><span>21</span><span>26</span><span>30</span></div>
+                            </div>
+                          </div>
                         </div>
                       </div>
 
-                      <div class="preview-activity">
-                        <strong>Recent activity</strong>
-                        <div><span>HH-2026-0412 · Hope Programme</span><b>USD 120</b><em>Paid</em></div>
-                        <div><span>HH-2026-0408 · Community Fund</span><b>USD 75</b><em>Paid</em></div>
+                      <div class="preview-operations">
+                        <section class="preview-ranking">
+                          <header><div><strong>Organisation performance</strong><span>Top organisations by total disbursed</span></div><b>View all <i class="mdi mdi-arrow-right"></i></b></header>
+                          <div class="preview-ranking-row"><em>01</em><div><strong>Bright Future NGO</strong><span>Cash USD 420K · Vouchers USD 18K</span><i style="--share: 100%"></i></div><b>USD 438K</b></div>
+                          <div class="preview-ranking-row"><em>02</em><div><strong>Hope Relief Programme</strong><span>Cash USD 256K · Vouchers USD 8K</span><i style="--share: 60%"></i></div><b>USD 264K</b></div>
+                          <div class="preview-ranking-row"><em>03</em><div><strong>Community Resilience Fund</strong><span>Cash USD 134K · Vouchers USD 4K</span><i style="--share: 32%"></i></div><b>USD 138K</b></div>
+                        </section>
+                        <section class="preview-recent">
+                          <header><strong>Recent activity</strong><span>Latest cash-transfer records</span></header>
+                          <div><i class="mdi mdi-check-circle-outline"></i><span><b>Achieng Household</b><small>Bright Future NGO · Today, 10:42</small></span><strong>USD 120</strong></div>
+                          <div><i class="mdi mdi-check-circle-outline"></i><span><b>Otieno Household</b><small>Hope Relief · Today, 09:18</small></span><strong>USD 85</strong></div>
+                        </section>
                       </div>
+
+                      <section class="preview-totals">
+                        <header><strong>Amount generated by organisation</strong><span>Cash transfers, redeemed vouchers, and combined totals</span></header>
+                        <div class="preview-table-row preview-table-head"><span>Organisation</span><span>Cash transfers</span><span>Vouchers</span><span>Total</span></div>
+                        <div class="preview-table-row"><strong>Bright Future NGO</strong><span>USD 420K</span><span>USD 18K</span><b>USD 438K</b></div>
+                        <div class="preview-table-row"><strong>Hope Relief Programme</strong><span>USD 256K</span><span>USD 8K</span><b>USD 264K</b></div>
+                      </section>
+
                     </div>
                   </div>
                 </div>
@@ -688,52 +751,54 @@ onBeforeUnmount(() => {
                 aria-label="Representative BioPay Android field workspace based on the current app interface"
               >
                 <div class="preview-phone" aria-hidden="true">
-                  <div class="preview-phone-status"><b>9:41</b><span>● ◔ ▰</span></div>
                   <div class="preview-phone-scroll">
                     <section class="preview-phone-hero">
-                      <div class="preview-phone-brand"><img src="/favicon.svg" alt="" /><b>BioPay field workspace</b><i class="mdi mdi-bell-outline"></i></div>
-                      <h3>Hello, Amina</h3>
-                      <p>HOPE-RELIEF-01 · illustrative preview</p>
-                      <div class="preview-sync"><i class="mdi mdi-sync"></i> All local records are synced</div>
-                      <div class="preview-phone-buttons"><b><i class="mdi mdi-account-plus-outline"></i> Register household</b><span><i class="mdi mdi-sync"></i> Sync now</span></div>
+                      <div class="preview-phone-brand">
+                        <img src="/favicon.svg" alt="" />
+                        <b>BioPay field workspace</b>
+                        <svg class="preview-bell" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 20h4" /></svg>
+                      </div>
+                      <h3>Hello, John Doe</h3>
+                      <p>1002</p>
+                      <div class="preview-sync"><i class="mdi mdi-cached"></i> All local records are synced</div>
+                      <div class="preview-phone-buttons"><b><i class="mdi mdi-plus"></i> Register household</b><span><i class="mdi mdi-cached"></i> Sync now</span></div>
                     </section>
 
                     <section class="preview-phone-card preview-summary">
-                      <header><b><i class="mdi mdi-chart-box-outline"></i> Operational summary</b><span>View all ›</span></header>
+                      <header><b><i class="mdi mdi-chart-bar"></i> Operational summary</b><span>View all <i class="mdi mdi-chevron-right"></i></span></header>
                       <div class="preview-phone-kpis">
-                        <div><i class="mdi mdi-home-group"></i><strong>318</strong><span>Households</span></div>
-                        <div class="amber"><i class="mdi mdi-sync"></i><strong>6</strong><span>Pending sync</span></div>
-                        <div class="green"><i class="mdi mdi-cash-check"></i><strong>204</strong><span>Paid</span></div>
-                        <div class="orange"><i class="mdi mdi-cash-clock"></i><strong>12</strong><span>Payment pending</span></div>
+                        <div><i class="mdi mdi-account-multiple-outline"></i><strong>4,286</strong><span>Households</span></div>
+                        <div class="amber"><i class="mdi mdi-autorenew"></i><strong>3</strong><span>Pending sync</span></div>
+                        <div class="green"><i class="mdi mdi-credit-card-outline"></i><strong>3,954</strong><span>Paid</span></div>
+                        <div class="orange"><i class="mdi mdi-credit-card-outline"></i><strong>3</strong><span>Payment pending</span></div>
                       </div>
                     </section>
 
                     <section class="preview-phone-card preview-donut">
-                      <header><b><i class="mdi mdi-chart-donut"></i> Payment status</b></header>
+                      <header><b>Payment status</b></header>
                       <div class="donut-row">
                         <svg class="donut-svg" viewBox="0 0 100 100" aria-hidden="true">
-                          <circle cx="50" cy="50" r="40" fill="none" stroke="#e7eeeb" stroke-width="14" />
-                          <circle cx="50" cy="50" r="40" fill="none" stroke="#0d9488" stroke-width="14" stroke-linecap="round" stroke-dasharray="237.4 251.3" transform="rotate(-90 50 50)" />
+                          <circle cx="50" cy="50" r="36" fill="none" stroke="#cbd5d1" stroke-width="15" />
+                          <circle class="donut-paid" cx="50" cy="50" r="36" fill="none" stroke-width="15" pathLength="100" stroke-dasharray="99.92 0.08" />
+                          <circle class="donut-pending" cx="50" cy="50" r="36" fill="none" stroke-width="15" pathLength="100" stroke-dasharray="0.08 99.92" stroke-dashoffset="-99.92" />
+                          <text x="50" y="54" text-anchor="middle">3,957</text>
                         </svg>
-                        <div class="donut-legend">
-                          <span><i class="donut-dot green"></i>Paid<b>204</b></span>
-                          <span><i class="donut-dot amber"></i>Pending<b>12</b></span>
-                        </div>
                       </div>
+                      <div class="donut-breakdown"><span><i class="paid-dot"></i><b>3,954</b> Paid</span><span><i class="pending-dot"></i><b>3</b> Pending</span></div>
                     </section>
                   </div>
                   <nav class="preview-phone-nav">
                     <div class="active"><i class="mdi mdi-home-outline"></i><span>Home</span></div>
-                    <div><i class="mdi mdi-home-group"></i><span>Households</span></div>
-                    <b><i class="mdi mdi-fingerprint"></i></b>
-                    <div><i class="mdi mdi-bell-outline"></i><span>Activity</span></div>
-                    <div><i class="mdi mdi-dots-horizontal"></i><span>More</span></div>
+                    <div><i class="mdi mdi-account-multiple-outline"></i><span>Households</span></div>
+                    <b aria-label="Payment"><i class="mdi mdi-credit-card-outline"></i><span>Payment</span></b>
+                    <div><i class="mdi mdi-history"></i><span>Activity</span></div>
+                    <div><svg class="preview-more-icon" viewBox="0 0 18 8" aria-hidden="true"><rect x="1" y="2" width="4" height="4" rx="0.5" /><rect x="7" y="2" width="4" height="4" rx="0.5" /><rect x="13" y="2" width="4" height="4" rx="0.5" /></svg><span>More</span></div>
                   </nav>
                 </div>
               </div>
               <figcaption>
                 <span>Field agent app</span>
-                The field agent app is offline-first and built to run all day on one battery.
+                The Android field workspace keeps registration, generated payments, verification, activity and sync within reach—even offline.
               </figcaption>
             </figure>
           </div>
@@ -904,12 +969,9 @@ onBeforeUnmount(() => {
 
 :global(html) {
   scroll-behavior: smooth;
-  scroll-padding-top: 6rem;
-}
-
-.landing-root section,
-.landing-root footer {
-  scroll-margin-top: 6rem;
+  /* Fallback before JS measures the real nav height (syncNavScrollOffset) --
+     kept close to that measured value so there's no flash of a wrong offset. */
+  scroll-padding-top: 4.5rem;
 }
 
 .landing-root h1, .landing-root h2, .landing-root h3, .landing-root h4 {
@@ -1477,13 +1539,15 @@ onBeforeUnmount(() => {
   justify-content: space-between;
   gap: var(--space-5);
 }
+.landing-root .showcase-heading .section-title { max-width: 21ch; }
+.landing-root .showcase-heading p { max-width: 48ch; color: var(--color-text-muted); line-height: 1.6; }
 .landing-root .product-stage {
-  --product-preview-height: clamp(360px, 32vw, 460px);
+  --product-frame-height: clamp(360px, 33vw, 440px);
   display: grid;
-  grid-template-columns: minmax(0, 3fr) minmax(190px, 0.9fr);
+  grid-template-columns: minmax(0, 1fr) minmax(180px, 230px);
   align-items: start;
-  gap: clamp(2rem, 4vw, 4rem);
-  width: min(100%, 1080px);
+  gap: clamp(1.5rem, 2.5vw, 2rem);
+  width: min(100%, 1180px);
   margin: var(--space-5) auto 0;
   background: transparent;
 }
@@ -1498,10 +1562,11 @@ onBeforeUnmount(() => {
   box-shadow: 0 30px 70px -34px rgba(2, 23, 20, 0.72);
 }
 .landing-root .dashboard-frame {
-  height: var(--product-preview-height);
+  width: 100%;
+  height: var(--product-frame-height);
   border-radius: 12px;
   color: #17201e;
-  font-size: clamp(5px, 0.55vw, 8px);
+  font-size: clamp(2.75px, 0.52vw, 6.5px);
 }
 .landing-root .product-view-mobile {
   position: static;
@@ -1511,8 +1576,8 @@ onBeforeUnmount(() => {
   align-items: center;
 }
 .landing-root .mobile-frame {
-  width: min(100%, 230px);
-  height: var(--product-preview-height);
+  width: min(100%, calc(var(--product-frame-height) * 0.488));
+  height: var(--product-frame-height);
   border: 7px solid #111716;
   border-radius: 34px;
   box-shadow: 0 34px 72px -28px rgba(2, 23, 20, 0.82);
@@ -1568,29 +1633,31 @@ onBeforeUnmount(() => {
 }
 .landing-root .preview-web-toolbar > span { display: flex; align-items: center; gap: 0.8em; font-weight: 700; }
 .landing-root .preview-web-toolbar > div { display: flex; align-items: center; gap: 1em; }
-.landing-root .preview-web-toolbar b { color: #a94c00; font-size: 0.88em; }
+.landing-root .preview-web-toolbar b { padding: 0.45em 0.75em; border-radius: 999px; background: #fff7ed; color: #a94c00; font-size: 0.82em; }
 .landing-root .preview-avatar { width: 2.5em; height: 2.5em; border-radius: 50%; display: grid; place-items: center; background: #006b5b; color: #fff; font-weight: 700; }
-.landing-root .preview-web-content { padding: 1.7em 2em 2em; }
+.landing-root .preview-user { color: #0f172a; font-weight: 600; }
+.landing-root .preview-web-content { padding: 1.25em 1.5em 1.5em; }
 .landing-root .preview-web-heading { display: flex; justify-content: space-between; align-items: start; gap: 1.5em; }
 .landing-root .preview-web-heading > div:first-child { display: grid; }
-.landing-root .preview-web-heading img { width: 9.5em; margin-bottom: 0.8em; }
+.landing-root .preview-web-heading img { width: 8.5em; margin-bottom: 0.45em; }
 .landing-root .preview-web-heading strong { color: #0f172a; font-size: 1.65em; letter-spacing: -0.02em; }
 .landing-root .preview-web-heading span { margin-top: 0.35em; color: #64748b; }
 .landing-root .preview-web-actions { display: flex; align-items: center; gap: 0.65em; white-space: nowrap; }
 .landing-root .preview-web-actions span,
 .landing-root .preview-web-actions b { padding: 0.7em 1em; border-radius: 6px; }
 .landing-root .preview-web-actions span { color: #0f766e; }
-.landing-root .preview-web-actions b { background: #e87918; color: #fff; font-size: 1em; }
-.landing-root .preview-metric-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1em; margin-top: 1.5em; }
+.landing-root .preview-web-actions b { display: inline-flex; align-items: center; gap: 0.35em; background: #f59e0b; color: #0f172a; font-size: 0.92em; }
+.landing-root .preview-web-actions b.secondary-action { background: #fff7ed; color: #c2410c; }
+.landing-root .preview-metric-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0.75em; margin-top: 1em; }
 .landing-root .preview-metric {
   position: relative;
-  min-height: 8.9em;
+  min-height: 7.8em;
   overflow: hidden;
   display: grid;
-  align-content: center;
-  padding: 1.3em 5.2em 1.3em 1.4em;
+  align-content: start;
+  padding: 1.1em 4.2em 1em 1.1em;
   border: 1px solid #dfe7e4;
-  border-radius: 10px;
+  border-radius: 14px;
   background: #fff;
 }
 .landing-root .preview-metric > span { overflow: hidden; color: #64748b; font-size: 0.82em; font-weight: 700; letter-spacing: 0.04em; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
@@ -1598,79 +1665,125 @@ onBeforeUnmount(() => {
 .landing-root .preview-metric small { margin-top: 0.3em; color: #64748b; font-size: 0.8em; }
 .landing-root .preview-metric > i {
   position: absolute;
-  top: 50%;
-  right: 1.1em;
-  width: 3.4em;
-  height: 3.4em;
+  top: 1.05em;
+  right: 1em;
+  width: 3em;
+  height: 3em;
   border-radius: 50%;
   display: grid;
   place-items: center;
   background: #d8f3ec;
   color: #006b5b;
   font-size: 1.25em;
-  transform: translateY(-50%);
 }
 .landing-root .preview-metric.green > i { background: #d7f5e3; color: #18794e; }
 .landing-root .preview-metric.amber > i { background: #ffe2c3; color: #a94c00; }
-.landing-root .preview-analytics { display: grid; grid-template-columns: 1.45fr 1fr; gap: 1em; margin-top: 1em; }
+.landing-root .preview-metric.slate > i { background: #f1f5f9; color: #475569; }
+.landing-root .preview-analytics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.75em; margin-top: 0.75em; }
 .landing-root .preview-chart-card { min-width: 0; padding: 1.15em 1.3em 0.8em; border: 1px solid #dfe7e4; border-radius: 10px; background: #fff; }
-.landing-root .preview-chart-card > strong { color: #0f172a; font-size: 1.05em; }
-.landing-root .preview-chart-card svg { display: block; width: 100%; height: 9em; margin-top: 0.7em; overflow: visible; }
+.landing-root .preview-chart-card header { display: flex; align-items: start; justify-content: space-between; gap: 1em; }
+.landing-root .preview-chart-card header > div { display: grid; gap: 0.45em; }
+.landing-root .preview-chart-card header strong { color: #0f172a; font-size: 1.05em; }
+.landing-root .preview-chart-card header span { display: flex; align-items: center; gap: 0.45em; color: #64748b; font-size: 0.72em; }
+.landing-root .preview-chart-card header span i { width: 0.65em; height: 0.65em; border-radius: 50%; background: #0d9488; }
+.landing-root .preview-chart-card header span i.voucher-key { margin-left: 0.45em; background: #f59e0b; }
+.landing-root .preview-chart-card header span i.alternate-key { margin-left: 0.45em; background: #10b981; }
+.landing-root .preview-chart-card time { display: flex; align-items: center; gap: 0.45em; white-space: nowrap; color: #0f766e; font-size: 0.75em; font-style: normal; font-weight: 700; }
+.landing-root .preview-chart-body { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 0.8em; margin-top: 0.65em; }
+.landing-root .preview-y-axis { height: 12.8em; display: flex; flex-direction: column; justify-content: space-between; align-items: end; padding-bottom: 1.7em; color: #64748b; font-size: 0.72em; font-variant-numeric: tabular-nums; }
+.landing-root .preview-plot { min-width: 0; }
+.landing-root .preview-chart-card svg { display: block; width: 100%; height: 11.2em; overflow: visible; }
+.landing-root .preview-x-axis { display: flex; justify-content: space-between; padding-top: 0.45em; color: #64748b; font-size: 0.72em; font-variant-numeric: tabular-nums; }
 .landing-root .chart-gridline { fill: none; stroke: #e7eeeb; stroke-width: 1; }
-.landing-root .chart-area { fill: rgba(13, 148, 136, 0.13); stroke: none; }
 .landing-root .chart-line { fill: none; stroke: #0d9488; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
-.landing-root .green-line { stroke: #18794e; }
-.landing-root .preview-activity { margin-top: 1em; padding: 1.1em 1.3em; border: 1px solid #dfe7e4; border-radius: 10px; background: #fff; }
-.landing-root .preview-activity > strong { display: block; margin-bottom: 0.65em; color: #0f172a; font-size: 1.05em; }
-.landing-root .preview-activity > div { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 1.2em; padding: 0.45em 0; border-top: 1px solid #edf1ef; color: #52615d; }
-.landing-root .preview-activity b { color: #17201e; }
-.landing-root .preview-activity em { padding: 0.25em 0.65em; border-radius: 999px; background: #d7f5e3; color: #18794e; font-style: normal; font-weight: 700; }
+.landing-root .voucher-line { stroke: #f59e0b; }
+.landing-root .alternate-line { stroke: #10b981; }
+.landing-root .preview-operations { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(0, 0.95fr); gap: 0.75em; margin-top: 0.75em; }
+.landing-root .preview-ranking,
+.landing-root .preview-recent,
+.landing-root .preview-totals { min-width: 0; padding: 1.1em 1.3em; border: 1px solid #dfe7e4; border-radius: 10px; background: #fff; }
+.landing-root .preview-ranking > header,
+.landing-root .preview-recent > header { display: flex; align-items: start; justify-content: space-between; gap: 1em; }
+.landing-root .preview-ranking header > div,
+.landing-root .preview-recent > header { display: grid; }
+.landing-root .preview-ranking header strong,
+.landing-root .preview-recent header strong,
+.landing-root .preview-totals header strong { color: #0f172a; font-size: 1.05em; }
+.landing-root .preview-ranking header span,
+.landing-root .preview-recent header span,
+.landing-root .preview-totals header span { margin-top: 0.25em; color: #64748b; font-size: 0.75em; }
+.landing-root .preview-ranking header > b { color: #0f766e; font-size: 0.78em; white-space: nowrap; }
+.landing-root .preview-ranking-row { display: grid; grid-template-columns: 2.2em minmax(0, 1fr) auto; align-items: center; gap: 0.8em; padding-top: 0.85em; }
+.landing-root .preview-ranking-row em { color: #64748b; font-style: normal; font-variant-numeric: tabular-nums; }
+.landing-root .preview-ranking-row > div { min-width: 0; display: grid; gap: 0.2em; }
+.landing-root .preview-ranking-row > div strong { overflow: hidden; color: #0f172a; text-overflow: ellipsis; white-space: nowrap; }
+.landing-root .preview-ranking-row > div span { color: #64748b; font-size: 0.72em; }
+.landing-root .preview-ranking-row > div i { width: var(--share); height: 0.45em; margin-top: 0.25em; border-radius: 999px; background: #0d9488; }
+.landing-root .preview-ranking-row > b { color: #0f172a; font-variant-numeric: tabular-nums; }
+.landing-root .preview-recent > div { display: grid; grid-template-columns: 2.5em minmax(0, 1fr) auto; align-items: center; gap: 0.8em; padding: 1em 0; border-top: 1px solid #edf1ef; }
+.landing-root .preview-recent > div:first-of-type { margin-top: 0.65em; }
+.landing-root .preview-recent > div > i { display: grid; place-items: center; width: 2.5em; height: 2.5em; border-radius: 50%; background: #ecfdf5; color: #15803d; }
+.landing-root .preview-recent > div > span { min-width: 0; display: grid; }
+.landing-root .preview-recent small { overflow: hidden; margin-top: 0.2em; color: #64748b; text-overflow: ellipsis; white-space: nowrap; }
+.landing-root .preview-recent > div > strong { font-variant-numeric: tabular-nums; }
+.landing-root .preview-totals { margin-top: 0.75em; }
+.landing-root .preview-totals header { display: grid; margin-bottom: 0.7em; }
+.landing-root .preview-table-row { display: grid; grid-template-columns: minmax(0, 1.5fr) repeat(3, minmax(0, 0.7fr)); gap: 1em; padding: 0.65em 0; border-top: 1px solid #edf1ef; font-variant-numeric: tabular-nums; }
+.landing-root .preview-table-row > :not(:first-child) { text-align: right; }
+.landing-root .preview-table-head { color: #64748b; font-size: 0.72em; font-weight: 700; }
 
 /* The phone preview mirrors activity_home.xml, including its offline state,
-   field-task hierarchy and anchored fingerprint action. */
-.landing-root .preview-phone { height: 100%; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; background: #f5f8f7; color: #17201e; font-size: clamp(5.8px, 0.52vw, 7.5px); line-height: 1.25; }
-.landing-root .preview-phone-status { display: flex; justify-content: space-between; padding: 1.2em 2.5em 0.8em; background: #006b5b; color: #fff; }
-.landing-root .preview-phone-scroll { min-height: 0; overflow: hidden; padding: 1.4em; }
-.landing-root .preview-phone-hero { padding: 2em; border-radius: 15px; background: #006b5b; color: #fff; }
+   field-task hierarchy and anchored Payment action. */
+.landing-root .preview-phone { height: 100%; display: grid; grid-template-rows: minmax(0, 1fr) auto; background: #f5f8f7; color: #17201e; font-size: 6.5px; line-height: 1.25; }
+.landing-root .preview-phone-scroll { min-height: 0; overflow: hidden; padding: 0.85em; }
+.landing-root .preview-phone-hero { padding: 1.35em; border-radius: 11px; background: #006b5b; color: #fff; }
 .landing-root .preview-phone-brand { display: flex; align-items: center; gap: 0.9em; }
-.landing-root .preview-phone-brand img { width: 3.5em; height: 3.5em; }
+.landing-root .preview-phone-brand img { width: 3.1em; height: 3.1em; }
 .landing-root .preview-phone-brand b { flex: 1; font-size: 1.2em; }
-.landing-root .preview-phone-brand i { font-size: 2em; }
-.landing-root .preview-phone-hero h3 { margin-top: 1.2em; color: #fff; font-size: 2.6em; letter-spacing: -0.02em; }
+.landing-root .preview-phone-brand > .preview-bell { box-sizing: content-box; width: 1.55em; height: 1.55em; padding: 0.78em; border-radius: 50%; background: rgba(255,255,255,.16); fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.landing-root .preview-phone-hero h3 { margin-top: 0.8em; color: #fff; font-size: 2.35em; letter-spacing: -0.02em; }
 .landing-root .preview-phone-hero p { margin-top: 0.25em; color: rgba(255, 255, 255, 0.8); font-size: 1.1em; }
-.landing-root .preview-sync { display: flex; gap: 0.6em; align-items: center; margin-top: 1.1em; font-size: 1.05em; }
-.landing-root .preview-phone-buttons { display: grid; grid-template-columns: 1.45fr 1fr; gap: 0.8em; margin-top: 1.5em; }
+.landing-root .preview-sync { display: flex; gap: 0.6em; align-items: center; margin-top: 0.8em; font-size: 1.05em; }
+.landing-root .preview-phone-buttons { display: grid; grid-template-columns: 1.45fr 1fr; gap: 0.7em; margin-top: 0.85em; }
 .landing-root .preview-phone-buttons b,
-.landing-root .preview-phone-buttons span { display: flex; align-items: center; justify-content: center; gap: 0.55em; min-height: 3.7em; border-radius: 999px; }
+.landing-root .preview-phone-buttons span { display: flex; align-items: center; justify-content: center; gap: 0.55em; min-height: 3.9em; padding-inline: 0.7em; border-radius: 7px; text-align: center; }
 .landing-root .preview-phone-buttons b { background: #fff; color: #004d42; }
 .landing-root .preview-phone-buttons span { border: 1px solid rgba(255, 255, 255, 0.78); color: #fff; font-weight: 700; }
-.landing-root .preview-phone-card { margin-top: 1.35em; padding: 1.4em; border-radius: 14px; background: #fff; box-shadow: 0 8px 20px -18px rgba(23, 32, 30, 0.7); }
+.landing-root .preview-phone-card { margin-top: 0.85em; padding: 1em; border: 1px solid #cbd5d1; border-radius: 9px; background: #fff; }
 .landing-root .preview-phone-card header { display: flex; align-items: center; justify-content: space-between; }
 .landing-root .preview-phone-card header b { display: flex; align-items: center; gap: 0.6em; font-size: 1.25em; }
-.landing-root .preview-phone-card header b i { color: #006b5b; font-size: 1.4em; }
+.landing-root .preview-phone-card header b i { display: grid; place-items: center; width: 3em; height: 3em; border-radius: 50%; background: #e6f8f3; color: #006b5b; font-size: 1.3em; }
 .landing-root .preview-phone-card header > span { color: #006b5b; font-weight: 700; }
-.landing-root .preview-phone-kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.4em; margin-top: 1.3em; }
+.landing-root .preview-phone-card header > span i { vertical-align: middle; }
+.landing-root .preview-phone-kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.25em; margin-top: 0.65em; }
 .landing-root .preview-phone-kpis > div { display: grid; justify-items: center; text-align: center; }
-.landing-root .preview-phone-kpis i { width: 3em; height: 3em; border-radius: 50%; display: grid; place-items: center; background: #d8f3ec; color: #006b5b; font-size: 1.3em; }
-.landing-root .preview-phone-kpis strong { margin-top: 0.55em; font-size: 1.7em; }
+.landing-root .preview-phone-kpis i { width: 3.2em; height: 3.2em; border-radius: 50%; display: grid; place-items: center; background: #d8f3ec; color: #006b5b; font-size: 1.45em; }
+.landing-root .preview-phone-kpis strong { margin-top: 0.35em; font-size: 1.65em; }
 .landing-root .preview-phone-kpis span { color: #52615d; font-size: 0.85em; }
 .landing-root .preview-phone-kpis .amber i { background: #fff1d6; color: #a65300; }
 .landing-root .preview-phone-kpis .green i { background: #d7f5e3; color: #18794e; }
 .landing-root .preview-phone-kpis .orange i { background: #ffe2c3; color: #a94c00; }
-.landing-root .donut-row { display: flex; align-items: center; gap: 1.4em; margin-top: 1.1em; }
-.landing-root .donut-svg { flex: 0 0 auto; width: 4.4em; height: 4.4em; }
-.landing-root .donut-legend { display: grid; gap: 0.6em; }
-.landing-root .donut-legend span { display: flex; align-items: center; gap: 0.55em; color: #52615d; font-size: 0.92em; }
-.landing-root .donut-legend b { margin-left: auto; color: #0f172a; font-size: 1.05em; }
-.landing-root .donut-dot { width: 0.7em; height: 0.7em; border-radius: 50%; background: #0d9488; }
-.landing-root .donut-dot.amber { background: #e2a33d; }
-.landing-root .preview-phone-nav { position: relative; min-height: 7em; display: grid; grid-template-columns: repeat(5, 1fr); align-items: center; padding: 0.8em 0.7em 0.55em; background: #fff; box-shadow: 0 -8px 20px -18px rgba(23, 32, 30, 0.8); }
-.landing-root .preview-phone-nav > div { display: grid; justify-items: center; gap: 0.3em; color: #52615d; }
-.landing-root .preview-phone-nav > div i { font-size: 1.8em; }
-.landing-root .preview-phone-nav > div span { font-size: 0.78em; }
+.landing-root .donut-row { display: flex; align-items: center; justify-content: center; margin-top: 0.75em; }
+.landing-root .donut-svg { flex: 0 0 auto; width: 12.25em; height: 12.25em; }
+.landing-root .donut-svg text { fill: #0f172a; font-size: 13px; font-weight: 700; }
+.landing-root .donut-svg .donut-paid { stroke: #00866f; transform: rotate(-90deg); transform-origin: center; }
+.landing-root .donut-svg .donut-pending { stroke: #e97917; transform: rotate(-90deg); transform-origin: center; }
+.landing-root .donut-breakdown { display: flex; justify-content: center; gap: 1em; color: #52615d; font-size: 0.78em; }
+.landing-root .donut-breakdown span { display: inline-flex; align-items: center; gap: 0.3em; white-space: nowrap; }
+.landing-root .donut-breakdown i { width: 0.65em; height: 0.65em; border-radius: 50%; }
+.landing-root .donut-breakdown .paid-dot { background: #00866f; }
+.landing-root .donut-breakdown .pending-dot { background: #e97917; }
+.landing-root .donut-breakdown b { color: #17201e; }
+.landing-root .preview-phone-nav { position: relative; min-height: 5.8em; display: grid; grid-template-columns: repeat(5, 1fr); align-items: stretch; padding: 0.3em 0.45em 0.55em; background: #fff; box-shadow: 0 -8px 20px -18px rgba(23, 32, 30, 0.8); }
+.landing-root .preview-phone-nav > div { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 0.18em; color: #52615d; }
+.landing-root .preview-phone-nav > div i { font-size: 1.45em; line-height: 1; }
+.landing-root .preview-phone-nav .preview-more-icon { width: 1.65em; height: 1.45em; fill: currentColor; }
+.landing-root .preview-phone-nav > div span { font-size: 0.82em; line-height: 1; text-align: center; }
 .landing-root .preview-phone-nav > div.active { color: #006b5b; font-weight: 700; }
-.landing-root .preview-phone-nav > b { width: 5.2em; height: 5.2em; margin: -3em auto 0; border-radius: 50%; display: grid; place-items: center; background: #006b5b; color: #fff; box-shadow: 0 12px 22px -12px rgba(0, 77, 66, 0.8); }
-.landing-root .preview-phone-nav > b i { font-size: 2.2em; }
+.landing-root .preview-phone-nav > div.active i { width: 3.5em; height: 1.85em; border-radius: 999px; display: grid; place-items: center; background: #ffe4c2; }
+.landing-root .preview-phone-nav > b { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 0.18em; color: #17201e; font-weight: 400; }
+.landing-root .preview-phone-nav > b i { width: 2em; height: 2em; border-radius: 50%; display: grid; place-items: center; background: #006b5b; color: #fff; box-shadow: 0 6px 12px -9px rgba(0, 77, 66, 0.8); font-size: 1.45em; line-height: 1; }
+.landing-root .preview-phone-nav > b span { color: #17201e; font-size: 0.82em; font-weight: 400; line-height: 1; text-align: center; }
 .landing-root .product-view figcaption {
   max-width: 58ch;
   margin-top: 1rem;
@@ -1685,19 +1798,19 @@ onBeforeUnmount(() => {
   color: var(--color-text);
   font-weight: 700;
 }
-.landing-root .product-view-mobile figcaption { width: min(100%, 230px); max-width: none; }
+.landing-root .product-view-mobile figcaption { width: min(100%, 300px); max-width: none; }
 
-@media (max-width: 900px) {
+@media (max-width: 1050px) {
   .landing-root .showcase-heading { align-items: start; flex-direction: column; gap: var(--space-2); }
   .landing-root .product-stage {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
     gap: var(--space-5);
     width: min(100%, 720px);
   }
-  .landing-root .dashboard-frame { height: auto; aspect-ratio: 1.7; }
   .landing-root .mobile-frame,
-  .landing-root .product-view-mobile figcaption { width: min(62%, 230px); }
-  .landing-root .mobile-frame { height: auto; aspect-ratio: 0.52; }
+  .landing-root .product-view-mobile figcaption { width: min(86%, 300px); }
+  .landing-root .dashboard-frame { height: auto; aspect-ratio: 1.64; }
+  .landing-root .mobile-frame { height: auto; aspect-ratio: 0.488; }
 }
 
 @media (max-width: 700px) {
@@ -1707,7 +1820,7 @@ onBeforeUnmount(() => {
   }
   .landing-root .product-view-dashboard { max-width: 680px; margin-inline: auto; }
   .landing-root .mobile-frame,
-  .landing-root .product-view-mobile figcaption { width: min(72%, 240px); }
+  .landing-root .product-view-mobile figcaption { width: min(92%, 300px); }
 }
 
 /* Request a demo */

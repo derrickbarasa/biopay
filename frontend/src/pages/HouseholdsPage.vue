@@ -9,8 +9,14 @@ import { useAnchorScope } from '@/composables/useAnchorScope'
 import { useOrgCascade } from '@/composables/useOrgCascade'
 import { downloadCsv, parseCsv, toCsv } from '@/utils/csv'
 import BarChart from '@/components/BarChart.vue'
-import LineChart from '@/components/LineChart.vue'
+import DistributionList from '@/components/DistributionList.vue'
 import PieChart from '@/components/PieChart.vue'
+import {
+  LEGAL_STATUS_FILTER_OPTIONS,
+  VULNERABILITY_FILTER_OPTIONS,
+  legalStatusLabel,
+  vulnerabilityLabel,
+} from '@/constants/householdClassifications'
 
 interface HouseholdRow {
   householdNumber: string
@@ -22,6 +28,7 @@ interface HouseholdRow {
   householdSize?: number
   bomaCode?: string
   vulnerabilityStatus?: string
+  vulnerabilityStatuses?: string[]
   legalStatus?: string
   reviewStatus?: string
   rejectionReason?: string
@@ -123,7 +130,7 @@ const genderBreakdown = computed(() => {
 const ageBreakdown = computed(() => {
   const buckets = [
     { label: '0-17', value: 0 }, { label: '18-34', value: 0 }, { label: '35-49', value: 0 },
-    { label: '50-64', value: 0 }, { label: '65+', value: 0 }, { label: 'Unknown', value: 0 },
+    { label: '50-64', value: 0 }, { label: '65+', value: 0 }, { label: 'Not recorded', value: 0 },
   ]
   for (const h of households.value) {
     const a = h.age
@@ -137,9 +144,6 @@ const ageBreakdown = computed(() => {
   return buckets
 })
 
-const ageChartData = computed(() => ageBreakdown.value.slice(0, 5))
-const unknownAgeCount = computed(() => ageBreakdown.value[5]?.value ?? 0)
-
 // "By status" now reflects the review workflow (pending/checked/approved/rejected)
 // rather than the active/inactive account flag, per the current product ask.
 const statusBreakdown = computed(() => REVIEW_STATUSES.map((s) => ({
@@ -149,17 +153,32 @@ const statusBreakdown = computed(() => REVIEW_STATUSES.map((s) => ({
 
 // Groups the loaded rows by a free-text attribute (vulnerability / legal status),
 // counting blanks as "Unspecified". Used for the two attribute breakdown charts.
-function groupByAttribute(pick: (h: HouseholdRow) => string | undefined) {
+function groupByAttribute(pick: (h: HouseholdRow) => string | undefined, label: (value?: string) => string = (value) => value || 'Not recorded') {
   const counts = new Map<string, number>()
   for (const h of households.value) {
     const key = (pick(h) || 'Unspecified').trim() || 'Unspecified'
-    counts.set(key, (counts.get(key) ?? 0) + 1)
+    const display = label(key === 'Unspecified' ? undefined : key)
+    counts.set(display, (counts.get(display) ?? 0) + 1)
   }
   return Array.from(counts, ([label, value]) => ({ label, value }))
 }
 
-const vulnerabilityBreakdown = computed(() => groupByAttribute((h) => h.vulnerabilityStatus))
-const legalBreakdown = computed(() => groupByAttribute((h) => h.legalStatus))
+const vulnerabilityBreakdown = computed(() => {
+  const counts = new Map<string, number>()
+  for (const household of households.value) {
+    const categories = household.vulnerabilityStatuses ?? []
+    if (!categories.length) {
+      counts.set('Not recorded', (counts.get('Not recorded') ?? 0) + 1)
+      continue
+    }
+    for (const category of categories) {
+      const label = vulnerabilityLabel(category)
+      counts.set(label, (counts.get(label) ?? 0) + 1)
+    }
+  }
+  return Array.from(counts, ([label, value]) => ({ label, value }))
+})
+const legalBreakdown = computed(() => groupByAttribute((h) => h.legalStatus, legalStatusLabel))
 
 const countiesForState = (stateCode: string) => stateCode ? counties.value.filter((c) => c.stateCode === stateCode) : counties.value
 const locationsForCounty = (countyCode: string) => countyCode ? locations.value.filter((l) => l.countyCode === countyCode) : locations.value
@@ -224,6 +243,8 @@ watch(() => filters.value.organisationCode, load)
 watch(() => filters.value.gender, load)
 watch(() => filters.value.status, load)
 watch(() => filters.value.reviewStatus, load)
+watch(() => filters.value.vulnerabilityStatus, load)
+watch(() => filters.value.legalStatus, load)
 watch(() => filters.value.dateFrom, load)
 watch(() => filters.value.dateTo, load)
 
@@ -244,10 +265,12 @@ function exportCsv() {
     return
   }
   const csv = toCsv(
-    ['Household #', 'Head of Household', 'Organization', 'Age', 'Gender', 'Phone', 'Size', 'Village', 'Vouchers', 'Payment Cycles', 'Status', 'Review Status'],
+    ['Household #', 'Head of Household', 'Organization', 'Age', 'Gender', 'Phone', 'Size', 'Village', 'Vulnerability categories', 'Legal status', 'Vouchers', 'Payment Cycles', 'Status', 'Review Status'],
     households.value.map((h) => [
       h.householdNumber, h.householdName, orgName(h.organisationCode), h.age ?? '', h.gender ?? '',
-      h.phoneNumber ?? '', h.householdSize ?? '', villageName(h.bomaCode), h.voucherCount ?? 0, h.paymentCycleCount ?? 0,
+      h.phoneNumber ?? '', h.householdSize ?? '', villageName(h.bomaCode),
+      (h.vulnerabilityStatuses ?? []).map(vulnerabilityLabel).join(' | '), legalStatusLabel(h.legalStatus),
+      h.voucherCount ?? 0, h.paymentCycleCount ?? 0,
       h.status === 1 ? 'Active' : 'Inactive', h.reviewStatus ?? 'PENDING',
     ]),
   )
@@ -335,6 +358,8 @@ const OPTIONAL_TEMPLATE_FIELDS: { key: string; label: string; sample: string }[]
   { key: 'householdSize', label: 'Household size', sample: '5' },
   { key: 'femaleDependants', label: 'Female dependants', sample: '2' },
   { key: 'maleDependants', label: 'Male dependants', sample: '1' },
+  { key: 'vulnerabilityStatuses', label: 'Vulnerability categories', sample: 'DISABILITY|ELDERLY_HEADED' },
+  { key: 'legalStatus', label: 'Legal status', sample: 'CITIZEN' },
 ]
 const templateFields = ref<string[]>(OPTIONAL_TEMPLATE_FIELDS.map((f) => f.key))
 const templateDownloaded = ref(false)
@@ -387,6 +412,8 @@ async function submitBulk() {
       householdSize: r.householdSize ? Number(r.householdSize) : undefined,
       femaleDependants: r.femaleDependants ? Number(r.femaleDependants) : undefined,
       maleDependants: r.maleDependants ? Number(r.maleDependants) : undefined,
+      vulnerabilityStatuses: r.vulnerabilityStatuses || undefined,
+      legalStatus: r.legalStatus || undefined,
     }))
     const res = await dispatch<{ successCount: number; failureCount: number; errors: { row: number; message: string }[] }>(
       'BULK_UPLOAD_HOUSEHOLDS',
@@ -424,29 +451,29 @@ async function submitBulk() {
       <v-card class="breakdown-card" variant="flat" border>
         <v-card-title class="breakdown-title">By age group</v-card-title>
         <v-card-text class="breakdown-body age-breakdown-body">
-          <LineChart
-            :data="ageChartData"
+          <DistributionList
+            class="age-distribution"
+            :data="ageBreakdown"
             color="#0F766E"
-            aria-label="Household heads by age group"
-            show-values
+            aria-label="Household heads by age group, showing household counts and percentages"
+            preserve-order
           />
-          <div v-if="unknownAgeCount" class="age-data-note">
-            <v-icon icon="mdi-information-outline" size="16" />
-            {{ unknownAgeCount.toLocaleString() }} {{ unknownAgeCount === 1 ? 'household has' : 'households have' }} no age recorded
-          </div>
         </v-card-text>
       </v-card>
       <v-card class="breakdown-card" variant="flat" border>
         <v-card-title class="breakdown-title">By status</v-card-title>
-        <v-card-text class="breakdown-body"><BarChart :data="statusBreakdown" color="#F59E0B" /></v-card-text>
+        <v-card-text class="breakdown-body"><BarChart :data="statusBreakdown" color="#F59E0B" x-axis-label="Review status" y-axis-label="Households" aria-label="Households by review status" show-values :chart-height="300" /></v-card-text>
       </v-card>
       <v-card class="breakdown-card" variant="flat" border>
         <v-card-title class="breakdown-title">By vulnerability status</v-card-title>
-        <v-card-text class="breakdown-body"><BarChart :data="vulnerabilityBreakdown" color="#16A34A" /></v-card-text>
+        <v-card-text class="breakdown-body breakdown-body-stacked">
+          <DistributionList :data="vulnerabilityBreakdown" :total-value="households.length" color="#16A34A" aria-label="Households by vulnerability status" />
+          <div class="distribution-note">A household may appear in more than one category.</div>
+        </v-card-text>
       </v-card>
       <v-card class="breakdown-card" variant="flat" border>
         <v-card-title class="breakdown-title">By legal status</v-card-title>
-        <v-card-text class="breakdown-body"><BarChart :data="legalBreakdown" color="#0F766E" /></v-card-text>
+        <v-card-text class="breakdown-body"><DistributionList :data="legalBreakdown" color="#0F766E" aria-label="Households by legal status" /></v-card-text>
       </v-card>
     </div>
 
@@ -481,15 +508,17 @@ async function submitBulk() {
             <v-select v-model="filters.reviewStatus" :items="REVIEW_STATUSES" label="Review status" clearable hide-details density="compact" />
           </v-col>
           <v-col cols="6" sm="3" md="2">
-            <v-text-field
-              v-model="filters.vulnerabilityStatus" label="Vulnerability status"
-              clearable hide-details density="compact" @update:model-value="onSearchInput" @click:clear="load"
+            <v-select
+              v-model="filters.vulnerabilityStatus" :items="VULNERABILITY_FILTER_OPTIONS"
+              item-title="title" item-value="value" label="Vulnerability category"
+              clearable hide-details density="compact"
             />
           </v-col>
           <v-col cols="6" sm="3" md="2">
-            <v-text-field
-              v-model="filters.legalStatus" label="Legal status"
-              clearable hide-details density="compact" @update:model-value="onSearchInput" @click:clear="load"
+            <v-select
+              v-model="filters.legalStatus" :items="LEGAL_STATUS_FILTER_OPTIONS"
+              item-title="title" item-value="value" label="Legal status"
+              clearable hide-details density="compact"
             />
           </v-col>
           <v-col cols="6" sm="3" md="2">
@@ -631,29 +660,32 @@ async function submitBulk() {
 .section-heading { font-size: .95rem; font-weight: 700; color: #0f172a; }
 .breakdown-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 14px;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 12px;
   align-items: stretch;
 }
+.breakdown-card:nth-child(1) { grid-column: span 2; }
+.breakdown-card:nth-child(2) { grid-column: span 4; }
+.breakdown-card:nth-child(n + 3) { grid-column: span 2; }
 .breakdown-card {
   display: flex;
   flex-direction: column;
-  min-height: 300px;
+  min-height: 220px;
   overflow: visible;
 }
 .breakdown-title {
   flex: none;
-  font-size: .82rem !important;
+  font-size: .95rem !important;
   font-weight: 700;
   color: #0f172a;
-  padding: 14px 16px 4px !important;
+  padding: 12px 14px 2px !important;
   min-height: auto !important;
 }
 .breakdown-body {
   flex: 1;
   display: flex;
   align-items: center;
-  padding: 4px 16px 14px !important;
+  padding: 2px 14px 10px !important;
   min-height: 0;
   overflow: visible;
 }
@@ -661,24 +693,22 @@ async function submitBulk() {
 .breakdown-body > :deep(.pie-wrap) {
   width: 100%;
 }
-.age-breakdown-body { flex-direction: column; justify-content: center; }
-.age-data-note {
-  align-self: stretch;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  margin-top: 2px;
-  color: #166534;
-  font-size: .75rem;
-  line-height: 1.35;
-  text-align: center;
+.breakdown-body > :deep(.chart-wrap) { margin-inline: auto; }
+.breakdown-body-stacked { flex-direction: column; justify-content: center; gap: 12px; }
+.distribution-note { align-self: stretch; color: #64748b; font-size: .75rem; line-height: 1.35; }
+.age-breakdown-body { justify-content: center; }
+.age-distribution {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 30px;
+  row-gap: 16px;
 }
-@media (max-width: 900px) {
+@media (max-width: 1050px) {
   .breakdown-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .breakdown-card:nth-child(n) { grid-column: span 1; }
 }
 @media (max-width: 600px) {
   .breakdown-grid { grid-template-columns: 1fr; }
-  .breakdown-card { min-height: 280px; }
+  .breakdown-card { min-height: 210px; }
+  .age-distribution { grid-template-columns: 1fr; }
 }
 </style>
