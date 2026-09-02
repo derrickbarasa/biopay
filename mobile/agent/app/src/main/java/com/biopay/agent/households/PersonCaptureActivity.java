@@ -38,6 +38,7 @@ import org.json.JSONArray;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
 
@@ -145,6 +146,10 @@ public class PersonCaptureActivity extends BaseActivity {
             setResult(RESULT_OK);
             finish();
         });
+        findViewById(R.id.btnFinishLater).setOnClickListener(v -> {
+            setResult(RESULT_OK);
+            finish();
+        });
 
         Intent intent = getIntent();
         householdNumber = intent.getStringExtra(EXTRA_HOUSEHOLD_NUMBER);
@@ -233,14 +238,8 @@ public class PersonCaptureActivity extends BaseActivity {
             @Override public void onPreviewFrame(Bitmap frame) { }
 
             @Override public void onCaptured(byte[] template, Bitmap finalImage) {
-                device.close();
-                dialog.dismiss();
-                fingerprintDao.save(String.valueOf(sessionManager.getUserId()), sessionManager.getPartnerCode(),
-                        beneficiaryType, beneficiaryId, 1, UUID.randomUUID().toString(), template,
-                        device.getDeviceId());
-                fingerprintCaptured = true;
-                tvFingerprintRowStatus.setText(R.string.person_capture_captured);
-                updateDoneState();
+                progress.setText(R.string.person_capture_checking_duplicate);
+                checkDuplicateThenSave(device, template, dialog);
             }
 
             @Override public void onError(int errorCode, String message) {
@@ -250,6 +249,47 @@ public class PersonCaptureActivity extends BaseActivity {
                         getString(R.string.person_capture_failed, message), Toast.LENGTH_LONG).show();
             }
         });
+    }
+
+    /** Runs after a fresh capture, before it's persisted: compares the new template against
+     *  every other beneficiary's stored fingerprint (offline, no extra live scan) so the same
+     *  finger can't be enrolled under two different people. Reused the {@code device} connection
+     *  the capture just opened rather than reopening it. */
+    private void checkDuplicateThenSave(BiometricDevice device, byte[] template, AlertDialog dialog) {
+        List<FingerprintDao.BeneficiaryTemplate> others = fingerprintDao.templatesExcludingBeneficiary(beneficiaryId);
+        new Thread(() -> {
+            boolean duplicate = false;
+            boolean checkFailed = false;
+            for (FingerprintDao.BeneficiaryTemplate other : others) {
+                BiometricDevice.MatchResult result = device.templatesMatch(template, other.template);
+                if (result == BiometricDevice.MatchResult.MATCHED) {
+                    duplicate = true;
+                    break;
+                } else if (result == BiometricDevice.MatchResult.ERROR) {
+                    checkFailed = true;
+                    break;
+                }
+            }
+            boolean isDuplicate = duplicate;
+            boolean hadError = checkFailed;
+            runOnUiThread(() -> {
+                device.close();
+                dialog.dismiss();
+                if (isDuplicate) {
+                    Toast.makeText(this, R.string.person_capture_fingerprint_duplicate, Toast.LENGTH_LONG).show();
+                } else if (hadError) {
+                    Toast.makeText(this, R.string.person_capture_fingerprint_check_failed, Toast.LENGTH_LONG).show();
+                } else {
+                    fingerprintDao.save(String.valueOf(sessionManager.getUserId()), sessionManager.getPartnerCode(),
+                            beneficiaryType, beneficiaryId, 1, UUID.randomUUID().toString(), template,
+                            device.getDeviceId());
+                    fingerprintCaptured = true;
+                    tvFingerprintRowStatus.setText(R.string.person_capture_captured);
+                    updateDoneState();
+                    Toast.makeText(this, R.string.person_capture_fingerprint_success, Toast.LENGTH_SHORT).show();
+                }
+            });
+        }).start();
     }
 
     // ---- Face capture (real embedding pipeline; still an explicitly unvalidated prototype --

@@ -185,7 +185,8 @@ public class PaymentVerificationActivity extends BaseActivity {
                         showFailure(getString(R.string.payment_result_face_failed));
                     } else {
                         new com.biopay.agent.data.VerificationEventDao(this)
-                                .record(householdNumber, beneficiary.beneficiaryId, beneficiary.name, "Face");
+                                .record(new SessionManager(this).getPartnerCode(),
+                                        householdNumber, beneficiary.beneficiaryId, beneficiary.name, "Face");
                         completePayment(beneficiary, getString(R.string.settings_face_title), null, result.uuid);
                     }
                 });
@@ -217,7 +218,7 @@ public class PaymentVerificationActivity extends BaseActivity {
             showFailure(getString(R.string.payment_result_unavailable));
             return;
         }
-        SyncScheduler.triggerNow(this);
+        SyncScheduler.triggerAutomaticNow(this);
         startActivity(PaymentResultActivity.successIntent(this, beneficiary.name, householdName, amount, method));
         finish();
     }
@@ -227,7 +228,7 @@ public class PaymentVerificationActivity extends BaseActivity {
         // paymentId never reached the server, so there's nothing there to mark FAILED.
         if (paymentId != null && paymentId >= 0) {
             new PaymentDao(this).markGeneratedPaymentFailed(paymentId);
-            SyncScheduler.triggerNow(this);
+            SyncScheduler.triggerAutomaticNow(this);
         }
         startActivity(PaymentResultActivity.failureIntent(this, message, householdName, amount));
     }

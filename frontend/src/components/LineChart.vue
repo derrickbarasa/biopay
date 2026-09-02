@@ -11,7 +11,6 @@ const props = defineProps<{
   secondaryLabel?: string
   valuePrefix?: string
   ariaLabel?: string
-  showValues?: boolean
 }>()
 
 const width = 640
@@ -25,21 +24,27 @@ const secondaryStroke = computed(() => props.secondaryColor ?? '#F59E0B')
 const innerW = width - padding.left - padding.right
 const innerH = height - padding.top - padding.bottom
 
+// Rounds UP to the next "nice" step (1/2/5/10 x a power of ten) so that
+// step * 4 is guaranteed >= max -- rounding to the *nearest* nice step can
+// undershoot the actual max, pushing points past the top of the plot.
 function niceStep(max: number) {
   if (max <= 0) return 1
   const rough = max / 4
   const mag = 10 ** Math.floor(Math.log10(rough))
   const norm = rough / mag
-  const step = norm < 1.5 ? 1 : norm < 3 ? 2 : norm < 7 ? 5 : 10
+  const step = norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 5 ? 5 : 10
   return step * mag
 }
 
-const step = computed(() => niceStep(Math.max(
+const maxValue = computed(() => Math.max(
   ...props.data.map((d) => d.value),
   ...(props.secondaryData ?? []).map((d) => d.value),
-  1,
-)))
-const niceMax = computed(() => Math.max(step.value * 4, step.value))
+  0,
+))
+const step = computed(() => niceStep(Math.max(maxValue.value, 1)))
+// Safety net: even if a floating-point edge case in niceStep ever undershot,
+// the scale still can't end up shorter than the tallest point it must plot.
+const niceMax = computed(() => Math.max(step.value * 4, step.value, maxValue.value))
 const ticks = computed(() => [0, 1, 2, 3, 4].map((i) => i * step.value).filter((v) => v <= niceMax.value + 0.001))
 
 function formatTick(v: number) {
@@ -47,56 +52,39 @@ function formatTick(v: number) {
   return `${props.valuePrefix ?? ''}${abbreviated}`
 }
 
-const points = computed(() => {
-  const n = props.data.length
-  if (n === 0) return []
-  return props.data.map((d, i) => {
-    const x = padding.left + (n === 1 ? innerW / 2 : (i / (n - 1)) * innerW)
-    const y = padding.top + innerH - (d.value / niceMax.value) * innerH
-    return { x, y, ...d }
-  })
-})
-
-const secondaryPoints = computed(() => {
-  const data = props.secondaryData ?? []
+function plot(data: Point[]) {
   const n = data.length
   if (n === 0) return []
   return data.map((d, i) => {
     const x = padding.left + (n === 1 ? innerW / 2 : (i / (n - 1)) * innerW)
-    const y = padding.top + innerH - (d.value / niceMax.value) * innerH
+    const clamped = Math.min(Math.max(d.value, 0), niceMax.value)
+    const y = padding.top + innerH - (clamped / niceMax.value) * innerH
     return { x, y, ...d }
   })
-})
-
-// Smooth the polyline into a Catmull-Rom-derived cubic Bezier path so the
-// trend reads as a curve rather than sharp mechanical joints.
-function smoothPath(pts: { x: number; y: number }[]) {
-  if (pts.length === 0) return ''
-  if (pts.length === 1) return `M ${pts[0].x} ${pts[0].y}`
-  let d = `M ${pts[0].x} ${pts[0].y}`
-  for (let i = 0; i < pts.length - 1; i++) {
-    const p0 = pts[i === 0 ? 0 : i - 1]
-    const p1 = pts[i]
-    const p2 = pts[i + 1]
-    const p3 = pts[i + 2 < pts.length ? i + 2 : i + 1]
-    const c1x = p1.x + (p2.x - p0.x) / 6
-    const c1y = p1.y + (p2.y - p0.y) / 6
-    const c2x = p2.x - (p3.x - p1.x) / 6
-    const c2y = p2.y - (p3.y - p1.y) / 6
-    d += ` C ${c1x} ${c1y} ${c2x} ${c2y} ${p2.x} ${p2.y}`
-  }
-  return d
 }
 
-const linePath = computed(() => smoothPath(points.value))
-const secondaryLinePath = computed(() => smoothPath(secondaryPoints.value))
+const points = computed(() => plot(props.data))
+const secondaryPoints = computed(() => plot(props.secondaryData ?? []))
+
+// A plain polyline -- not a smoothed spline. Registration/alternate counts
+// are sparse low-integer values (mostly 0, the odd 1 or 2); a Catmull-Rom
+// curve through points like that overshoots past sharp peaks and can dip
+// below the baseline between them. Straight segments can't stray outside
+// the range of the two points they connect, so the trend line stays honest.
+function linePath(pts: { x: number; y: number }[]) {
+  if (pts.length === 0) return ''
+  return pts.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ')
+}
+
+const path = computed(() => linePath(points.value))
+const secondaryPath = computed(() => linePath(secondaryPoints.value))
 
 const areaPath = computed(() => {
   if (points.value.length === 0) return ''
   const last = points.value[points.value.length - 1]
   const first = points.value[0]
   const bottom = padding.top + innerH
-  return `${linePath.value} L ${last.x} ${bottom} L ${first.x} ${bottom} Z`
+  return `${path.value} L ${last.x} ${bottom} L ${first.x} ${bottom} Z`
 })
 
 function showAxisLabel(index: number) {
@@ -133,8 +121,8 @@ function showAxisLabel(index: number) {
       </g>
 
       <path v-if="!secondaryData?.length" :d="areaPath" :fill="`url(#${gradientId})`" stroke="none" />
-      <path :d="linePath" fill="none" :stroke="stroke" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
-      <path v-if="secondaryPoints.length" :d="secondaryLinePath" fill="none" :stroke="secondaryStroke" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
+      <path :d="path" fill="none" :stroke="stroke" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+      <path v-if="secondaryPoints.length" :d="secondaryPath" fill="none" :stroke="secondaryStroke" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
 
       <g
         v-for="(p, i) in points"
@@ -148,9 +136,8 @@ function showAxisLabel(index: number) {
       >
         <title>{{ p.label }}: {{ seriesLabel ?? 'Value' }} {{ valuePrefix }}{{ p.value.toLocaleString() }}<template v-if="secondaryPoints[i]">; {{ secondaryLabel ?? 'Secondary' }} {{ valuePrefix }}{{ secondaryPoints[i].value.toLocaleString() }}</template></title>
         <rect :x="p.x - (innerW / Math.max(points.length - 1, 1)) / 2" :y="padding.top" :width="innerW / Math.max(points.length, 1)" :height="innerH" fill="transparent" />
-        <circle :cx="p.x" :cy="p.y" :r="hoverIndex === i ? 5 : 3.5" :fill="stroke" stroke="#fff" stroke-width="1.5" style="pointer-events: none;" />
-        <circle v-if="secondaryPoints[i]" :cx="secondaryPoints[i].x" :cy="secondaryPoints[i].y" :r="hoverIndex === i ? 5 : 3.5" :fill="secondaryStroke" stroke="#fff" stroke-width="1.5" style="pointer-events: none;" />
-        <text v-if="showValues" :x="p.x" :y="Math.max(p.y - 10, 14)" text-anchor="middle" class="value-label">{{ p.value.toLocaleString() }}</text>
+        <circle :cx="p.x" :cy="p.y" :r="hoverIndex === i ? 5.5 : 4" :fill="stroke" stroke="#fff" stroke-width="1.5" style="pointer-events: none;" />
+        <circle v-if="secondaryPoints[i]" :cx="secondaryPoints[i].x" :cy="secondaryPoints[i].y" :r="hoverIndex === i ? 5.5 : 4" :fill="secondaryStroke" stroke="#fff" stroke-width="1.5" style="pointer-events: none;" />
         <text v-if="showAxisLabel(i)" :x="p.x" :y="height - 10" text-anchor="middle" class="axis-label">{{ p.label }}</text>
       </g>
 
@@ -181,7 +168,6 @@ function showAxisLabel(index: number) {
 .chart-svg { display: block; width: 100%; height: auto; overflow: visible; }
 .tick-label { font-size: 10px; fill: #94a3b8; font-variant-numeric: tabular-nums; }
 .axis-label { font-size: 10px; fill: #64748b; }
-.value-label { font-size: 11px; font-weight: 700; fill: #334155; font-variant-numeric: tabular-nums; }
 .chart-point { outline: none; }
 .chart-point:focus circle { stroke: #0f172a; stroke-width: 2.5; }
 .tooltip {

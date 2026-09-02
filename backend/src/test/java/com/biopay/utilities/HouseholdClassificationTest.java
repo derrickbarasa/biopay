@@ -20,6 +20,11 @@ class HouseholdClassificationTest {
                 HouseholdClassification.vulnerabilityCsv("CHRONIC_ILLNESS|SINGLE_CAREGIVER"));
     }
 
+    @Test void acceptsAndroidListDisplayForm() {
+        assertEquals("DISABILITY,ELDERLY_HEADED",
+                HouseholdClassification.vulnerabilityCsv("[DISABILITY, ELDERLY_HEADED]"));
+    }
+
     @Test void rejectsUncontrolledValues() {
         assertThrows(IllegalArgumentException.class,
                 () -> HouseholdClassification.vulnerabilityCsv("UNKNOWN_CATEGORY"));

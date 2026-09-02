@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.graphics.Bitmap;
 import android.os.Handler;
 import android.os.Looper;
+import android.util.Log;
 import android.widget.ImageView;
 
 import com.biopay.agent.biometric.BiometricDevice;
@@ -45,6 +46,7 @@ import java.util.Observer;
  */
 public class MorphoDeviceAdapter implements BiometricDevice, Observer {
 
+    private static final String TAG = "MorphoDeviceAdapter";
     private static final int TIMEOUT_SECONDS = 30;
 
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
@@ -168,6 +170,32 @@ public class MorphoDeviceAdapter implements BiometricDevice, Observer {
                 postVerifyError(ret);
             }
         }).start();
+    }
+
+    @Override
+    public MatchResult templatesMatch(byte[] templateA, byte[] templateB) {
+        if (morphoDevice == null) return MatchResult.ERROR;
+
+        Template candidate = new Template();
+        candidate.setData(templateA);
+        candidate.setDataIndex(0);
+        candidate.setTemplateType(TemplateType.MORPHO_PK_ISO_FMR_2011);
+        TemplateList candidateList = new TemplateList();
+        candidateList.putTemplate(candidate);
+
+        Template reference = new Template();
+        reference.setData(templateB);
+        reference.setDataIndex(0);
+        reference.setTemplateType(TemplateType.MORPHO_PK_ISO_FMR_2011);
+        TemplateList referenceList = new TemplateList();
+        referenceList.putTemplate(reference);
+
+        // far=5: same raw value startVerify() above uses -- 6.15.3.0 has no FalseAcceptanceRate enum.
+        int ret = morphoDevice.verifyMatch(5, candidateList, referenceList, Integer.valueOf(0));
+        if (ret == ErrorCodes.MORPHO_OK) return MatchResult.MATCHED;
+        if (ret == ErrorCodes.MORPHOERR_NO_HIT) return MatchResult.NO_MATCH;
+        Log.e(TAG, "templatesMatch: unexpected verifyMatch return code " + ret);
+        return MatchResult.ERROR;
     }
 
     @Override

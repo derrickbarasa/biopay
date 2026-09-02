@@ -43,6 +43,7 @@ public class Household extends AbstractVerticle {
         eventBus.consumer("GET_HOUSEHOLD", this::getOne);
         eventBus.consumer("GET_HOUSEHOLDS", this::retrieveAll);
         eventBus.consumer("GET_HOUSEHOLD_HISTORY", this::history);
+        eventBus.consumer("GET_HOUSEHOLD_LOCATIONS", this::retrieveDistinctLocations);
         eventBus.consumer("GET_HOUSEHOLD_VOUCHER", this::voucher);
         eventBus.consumer("CHECK_HOUSEHOLD_DUPLICATE", this::checkDuplicate);
         eventBus.consumer("BULK_UPLOAD_HOUSEHOLDS", this::bulkUpload);
@@ -682,6 +683,85 @@ public class Household extends AbstractVerticle {
                             .put("responseMessage", results.isEmpty() ? "No households found" : "Households found")
                             .put("page", page)
                             .put("pageSize", pageSize)
+                            .put("results", results));
+                });
+    }
+
+    // ---- GET_HOUSEHOLD_LOCATIONS { level: STATE|COUNTY|LOCATION|VILLAGE } ---------
+    // The geo hierarchy (geo_states/geo_counties/geo_locations/geo_villages, see
+    // Geography#list) is an anchor-curated catalogue that a household's own
+    // state_code/county_code/payam_code/boma_code columns are NOT foreign-keyed to --
+    // HouseholdFormActivity's manual-entry path (mobile) stores the officer's typed
+    // place name directly in those columns with no backend geo node created for it.
+    // A dashboard location filter sourced only from the geo_* catalogue therefore
+    // never offers, and never matches, a manually-typed location. This instead lists
+    // the distinct values actually present on households in scope -- resolving a
+    // friendly name from the matching geo_* row when the stored value happens to be
+    // an official code, and falling back to the raw stored value (which for a manual
+    // entry already IS the place name) otherwise.
+
+    private void retrieveDistinctLocations(Message<Object> message) {
+        JsonObject payload = new JsonObject(message.body().toString());
+        String level = payload.getString("level", "").trim().toUpperCase();
+
+        String householdColumn;
+        String parentColumn;
+        String parentField;
+        String geoTable;
+        String geoCodeColumn;
+        switch (level) {
+            case "STATE":
+                householdColumn = "state_code"; parentColumn = null; parentField = null;
+                geoTable = "geo_states"; geoCodeColumn = "state_code";
+                break;
+            case "COUNTY":
+                householdColumn = "county_code"; parentColumn = "state_code"; parentField = "stateCode";
+                geoTable = "geo_counties"; geoCodeColumn = "county_code";
+                break;
+            case "LOCATION":
+                householdColumn = "payam_code"; parentColumn = "county_code"; parentField = "countyCode";
+                geoTable = "geo_locations"; geoCodeColumn = "location_code";
+                break;
+            case "VILLAGE":
+                householdColumn = "boma_code"; parentColumn = "payam_code"; parentField = "locationCode";
+                geoTable = "geo_villages"; geoCodeColumn = "village_code";
+                break;
+            default:
+                replyError(message, "A valid level (STATE, COUNTY, LOCATION, VILLAGE) is required");
+                return;
+        }
+
+        String partnerCode = scopedPartnerCode(payload);
+        Object anchorIdVal = payload.getValue("anchorId");
+        Integer anchorId = anchorIdVal == null ? null : Integer.parseInt(anchorIdVal.toString());
+        final String responseParentField = parentField;
+
+        String sql = "SELECT DISTINCT h." + householdColumn + " AS code, "
+                + (parentColumn == null ? "CAST(NULL AS NVARCHAR(50)) AS parent_code, " : "h." + parentColumn + " AS parent_code, ")
+                + "COALESCE(g.name, h." + householdColumn + ") AS name "
+                + "FROM households h JOIN organizations o ON o.organization_code = h.organization_code "
+                + "LEFT JOIN " + geoTable + " g ON g.anchor_id = o.anchor_id AND g." + geoCodeColumn + " = h." + householdColumn + " "
+                + "WHERE h." + householdColumn + " IS NOT NULL AND LTRIM(RTRIM(h." + householdColumn + ")) <> '' "
+                + "AND (@p1 IS NULL OR h.organization_code=@p1) "
+                + "AND (@p2 IS NULL OR o.anchor_id=@p2) "
+                + "ORDER BY name";
+        Tuple params = Tuple.of(partnerCode == null || partnerCode.isEmpty() ? null : partnerCode, anchorId);
+
+        pool.preparedQuery(sql)
+                .execute(params)
+                .onFailure(err -> onDbError(message, err))
+                .onSuccess(rows -> {
+                    JsonArray results = new JsonArray();
+                    for (Row r : rows) {
+                        JsonObject obj = new JsonObject()
+                                .put("code", Rows.str(r, "code"))
+                                .put("name", Rows.str(r, "name"));
+                        if (responseParentField != null) obj.put(responseParentField, Rows.str(r, "parent_code"));
+                        results.add(obj);
+                    }
+                    reply(message, new JsonObject()
+                            .put("responseCode", "000")
+                            .put("responseMessage", results.isEmpty() ? "No results found" : "Results found")
                             .put("results", results));
                 });
     }

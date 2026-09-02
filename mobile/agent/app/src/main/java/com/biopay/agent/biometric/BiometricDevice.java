@@ -56,6 +56,20 @@ public interface BiometricDevice {
      */
     void startVerify(byte[] candidateTemplate, VerifyCallback callback);
 
+    /**
+     * Offline 1:1 comparison of two already-captured templates -- no live scan, no hardware
+     * interaction beyond the open connection. Used right after an enrollment capture to check
+     * the new template against every previously enrolled one, so the same finger cannot end up
+     * stored under two different people. Synchronous; call off the main thread. The device must
+     * be {@link #open}, same as {@link #startCapture}/{@link #startVerify}.
+     */
+    MatchResult templatesMatch(byte[] templateA, byte[] templateB);
+
+    /** Result of {@link #templatesMatch}. */
+    enum MatchResult {
+        MATCHED, NO_MATCH, ERROR
+    }
+
     /** Aborts whatever capture/verify is currently in flight, if any. */
     void cancelLiveAcquisition();
 

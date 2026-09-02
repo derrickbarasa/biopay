@@ -15,6 +15,7 @@ import com.biopay.agent.biometric.BiometricDeviceFactory;
 import com.biopay.agent.biometric.VerifyCallback;
 import com.biopay.agent.data.FingerprintDao;
 import com.biopay.agent.data.VerificationEventDao;
+import com.biopay.agent.session.SessionManager;
 import com.biopay.agent.ui.BaseActivity;
 
 import java.util.List;
@@ -114,7 +115,8 @@ public class FingerprintVerifyActivity extends BaseActivity {
             @Override public void onMatched(int score) {
                 device.close();
                 new VerificationEventDao(FingerprintVerifyActivity.this)
-                        .record(householdNumber, beneficiaryId, personName, "Fingerprint");
+                        .record(new SessionManager(FingerprintVerifyActivity.this).getPartnerCode(),
+                                householdNumber, beneficiaryId, personName, "Fingerprint");
                 Intent result = new Intent();
                 result.putExtra(EXTRA_RESULT_MATCHED_UUID, templates.get(index).uuid);
                 setResult(RESULT_OK, result);

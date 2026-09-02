@@ -292,7 +292,7 @@ const alternatePeriodTotal = computed(() => alternatesSeries.value.reduce((total
           <v-progress-linear v-if="registrationChartLoading" indeterminate color="primary" class="chart-loading" />
           <div class="panel-heading">
             <div>
-              <h3>Registrations</h3>
+              <h3>Registration trend</h3>
               <div class="chart-legend"><span class="legend-household">Households</span><span class="legend-alternate">Alternates</span></div>
             </div>
             <div class="chart-card-actions">
@@ -303,7 +303,7 @@ const alternatePeriodTotal = computed(() => alternatesSeries.value.reduce((total
           <v-alert v-if="registrationChartError" type="error" variant="tonal" density="compact" class="chart-error">{{ registrationChartError }}</v-alert>
           <LineChart
             :data="householdsSeries" :secondary-data="alternatesSeries" series-label="Households" secondary-label="Alternates"
-            color="#15803D" secondary-color="#0EA5E9" :aria-label="`Household and alternate registrations for the selected ${registrationPeriod}`"
+            color="#15803D" secondary-color="#0EA5E9" :aria-label="`Household and alternate registration trend for the selected ${registrationPeriod}`"
           />
         </v-card>
       </section>

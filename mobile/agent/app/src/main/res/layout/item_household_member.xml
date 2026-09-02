@@ -3,9 +3,6 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:background="?attr/selectableItemBackground"
-    android:clickable="true"
-    android:focusable="true"
     android:gravity="center_vertical"
     android:minHeight="60dp"
     android:orientation="horizontal"
@@ -63,10 +60,4 @@
         android:contentDescription="@string/settings_face_title"
         android:src="@drawable/ic_face" />
 
-    <ImageView
-        android:layout_width="18dp"
-        android:layout_height="18dp"
-        android:contentDescription="@null"
-        android:src="@drawable/ic_chevron_right"
-        app:tint="@color/bp_outline" />
 </LinearLayout>

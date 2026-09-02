@@ -175,9 +175,9 @@ public class Organization extends AbstractVerticle {
                                         eventBus.send("EMAIL", new JsonObject()
                                                 .put("mailTo", authorisedEmail)
                                                 .put("subject", "Your BioPay Organisation Administrator Account")
-                                                .put("msg", "Dear " + firstName + ",<br />" + name + " has been created in BioPay. "
-                                                        + "Your temporary password is <strong>" + temporaryPassword
-                                                        + "</strong>. You'll be asked to set a new password the first time you sign in."));
+                                                .put("msg", com.biopay.utilities.EmailTemplates.firstTimePasswordEmail(
+                                                        firstName, name + "'s BioPay Organisation Administrator account", temporaryPassword))
+                                                .put("inlineImages", com.biopay.utilities.EmailTemplates.logoInlineImages()));
                                         saveModules(partnerId, modules)
                                                 .onComplete(ar -> reply(message, new JsonObject()
                                                         .put("responseCode", "000")

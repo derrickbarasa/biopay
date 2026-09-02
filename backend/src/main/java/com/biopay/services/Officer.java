@@ -109,9 +109,9 @@ public class Officer extends AbstractVerticle {
                     eventBus.send("EMAIL", new JsonObject()
                             .put("mailTo", email)
                             .put("subject", "Your BioPay Field Agent Account")
-                            .put("msg", "Dear " + firstName + ",<br />Your temporary password is <strong>" + tempPassword
-                                    + "</strong>. Please change it after first login on the BioPay app.")
-                            .toString());
+                            .put("msg", com.biopay.utilities.EmailTemplates.firstTimePasswordEmail(
+                                    firstName, "Your BioPay Field Agent account", tempPassword))
+                            .put("inlineImages", com.biopay.utilities.EmailTemplates.logoInlineImages()));
                     reply(message, new JsonObject()
                             .put("responseCode", "000")
                             .put("responseMessage", "Officer created successfully. Temporary password sent by email"));

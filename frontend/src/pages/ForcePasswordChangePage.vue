@@ -12,6 +12,7 @@ const newPassword = ref('')
 const confirmPassword = ref('')
 const showOldPassword = ref(false)
 const showNewPassword = ref(false)
+const showConfirmPassword = ref(false)
 const loading = ref(false)
 const errorMessage = ref('')
 
@@ -104,9 +105,17 @@ async function logout() {
                 </template>
               </v-text-field>
               <v-text-field
-                v-model="confirmPassword" label="Confirm new password" type="password"
+                v-model="confirmPassword" label="Confirm new password" :type="showConfirmPassword ? 'text' : 'password'"
                 autocomplete="new-password" class="mt-2"
-              />
+              >
+                <template #append-inner>
+                  <v-btn
+                    :icon="showConfirmPassword ? 'mdi-eye-off' : 'mdi-eye'" variant="text" density="compact"
+                    :aria-label="showConfirmPassword ? 'Hide password' : 'Show password'"
+                    @click="showConfirmPassword = !showConfirmPassword"
+                  />
+                </template>
+              </v-text-field>
               <v-btn type="submit" block size="large" :loading="loading" class="mt-4 btn-accent">
                 Set password and continue
               </v-btn>

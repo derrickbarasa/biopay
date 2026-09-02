@@ -373,9 +373,14 @@ public class Geography extends AbstractVerticle {
         Integer anchorId = anchorIdOf(payload);
         String filterValue = filterField == null ? null : payload.getString(filterField, null);
 
-        String sql = "SELECT * FROM " + table + " WHERE (@p1 IS NULL OR anchor_id=@p1) AND status=1"
-                + (filterColumn == null ? "" : " AND (@p2 IS NULL OR " + filterColumn + "=@p2)")
-                + " ORDER BY name";
+        String stateCatalogueGuard = "geo_states".equals(table)
+                ? " AND t.name NOT LIKE 'E2E Test%'"
+                    + " AND NOT EXISTS (SELECT 1 FROM geo_counties c WHERE c.anchor_id=t.anchor_id"
+                    + " AND c.status=1 AND LOWER(LTRIM(RTRIM(c.name)))=LOWER(LTRIM(RTRIM(t.name))))"
+                : "";
+        String sql = "SELECT t.* FROM " + table + " t WHERE (@p1 IS NULL OR t.anchor_id=@p1) AND t.status=1"
+                + (filterColumn == null ? "" : " AND (@p2 IS NULL OR t." + filterColumn + "=@p2)")
+                + stateCatalogueGuard + " ORDER BY t.name";
         Tuple params = filterColumn == null ? Tuple.of(anchorId) : Tuple.of(anchorId, filterValue);
 
         pool.preparedQuery(sql)

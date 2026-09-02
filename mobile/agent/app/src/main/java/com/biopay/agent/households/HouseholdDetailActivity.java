@@ -71,13 +71,13 @@ public class HouseholdDetailActivity extends BaseActivity {
                     return false;
                 });
 
-        findViewById(R.id.btnAddMember).setOnClickListener(v -> {
+        findViewById(R.id.btnAddAlternate).setOnClickListener(v -> {
             HouseholdDao.Household household = householdDao.findByNumber(householdNumber);
             String method = household == null ? "FINGERPRINT" : household.registrationMethod;
             startActivity(PersonCaptureActivity.addPersonIntent(this, householdNumber, method));
         });
 
-        findViewById(R.id.btnVerifyIdentity).setOnClickListener(v -> {
+        findViewById(R.id.btnCapture).setOnClickListener(v -> {
             HouseholdDao.Household household = householdDao.findByNumber(householdNumber);
             if (household != null) {
                 startActivity(PersonCaptureActivity.captureIntent(this, householdNumber, householdNumber,
@@ -112,9 +112,14 @@ public class HouseholdDetailActivity extends BaseActivity {
                 getString(R.string.household_detail_members_count, memberCount));
 
         ((TextView) findViewById(R.id.tvHeadName)).setText(household.householdName);
-        String bomaName = household.bomaCode == null ? null : geoDao.findBomaName(household.bomaCode);
+        ((TextView) findViewById(R.id.tvState)).setText(
+                displayGeoName(geoDao.findStateName(household.stateCode), household.stateCode));
+        ((TextView) findViewById(R.id.tvCounty)).setText(
+                displayGeoName(geoDao.findCountyName(household.countyCode), household.countyCode));
         ((TextView) findViewById(R.id.tvLocation)).setText(
-                bomaName != null ? bomaName : (household.bomaCode == null || household.bomaCode.isEmpty() ? "-" : household.bomaCode));
+                displayGeoName(geoDao.findPayamName(household.payamCode), household.payamCode));
+        ((TextView) findViewById(R.id.tvVillage)).setText(
+                displayGeoName(geoDao.findBomaName(household.bomaCode), household.bomaCode));
         ((TextView) findViewById(R.id.tvRegistrationMethod)).setText(household.registrationMethod);
 
         ((TextView) findViewById(R.id.tvMembersHeader)).setText(
@@ -148,6 +153,13 @@ public class HouseholdDetailActivity extends BaseActivity {
         entitlement.setText(textRes);
         entitlement.setTextColor(ContextCompat.getColor(this, textColorRes));
         entitlementCard.setCardBackgroundColor(ContextCompat.getColor(this, cardColorRes));
+        findViewById(R.id.btnCapture).setVisibility(
+                status == HouseholdStatus.INCOMPLETE ? View.VISIBLE : View.GONE);
+    }
+
+    private static String displayGeoName(String resolvedName, String storedValue) {
+        if (resolvedName != null && !resolvedName.trim().isEmpty()) return resolvedName;
+        return storedValue == null || storedValue.trim().isEmpty() ? "-" : storedValue;
     }
 
     private void renderMembers(HouseholdDao.Household household, List<AlternateDao.Alternate> alternates) {
@@ -156,24 +168,20 @@ public class HouseholdDetailActivity extends BaseActivity {
         LayoutInflater inflater = LayoutInflater.from(this);
 
         addMemberRow(container, inflater, household.householdName, getString(R.string.household_detail_head_role),
-                fingerprintDao.countForBeneficiary(householdNumber) > 0, faceDao.existsForBeneficiary(householdNumber),
-                v -> startActivity(PersonCaptureActivity.captureIntent(this, householdNumber, householdNumber,
-                        Beneficiary.TYPE_HOUSEHOLD_HEAD, household.householdName, household.registrationMethod)));
+                fingerprintDao.countForBeneficiary(householdNumber) > 0,
+                faceDao.existsForBeneficiary(householdNumber));
 
         for (AlternateDao.Alternate alternate : alternates) {
             String role = alternate.relationship != null ? alternate.relationship
                     : getString(R.string.household_detail_alternate_role);
             addMemberRow(container, inflater, alternate.alternateName, role,
                     fingerprintDao.countForBeneficiary(alternate.alternateNumber) > 0,
-                    faceDao.existsForBeneficiary(alternate.alternateNumber),
-                    v -> startActivity(PersonCaptureActivity.captureIntent(this, householdNumber,
-                            alternate.alternateNumber, Beneficiary.TYPE_ALTERNATE,
-                            alternate.alternateName, household.registrationMethod)));
+                    faceDao.existsForBeneficiary(alternate.alternateNumber));
         }
     }
 
     private void addMemberRow(android.widget.LinearLayout container, LayoutInflater inflater, String name,
-            String role, boolean hasFingerprint, boolean hasFace, View.OnClickListener onClick) {
+            String role, boolean hasFingerprint, boolean hasFace) {
         View row = inflater.inflate(R.layout.item_household_member, container, false);
         ((TextView) row.findViewById(R.id.tvMemberName)).setText(name);
         ((TextView) row.findViewById(R.id.tvMemberRole)).setText(role);
@@ -181,7 +189,6 @@ public class HouseholdDetailActivity extends BaseActivity {
         fingerprintIcon.setColorFilter(ContextCompat.getColor(this, hasFingerprint ? R.color.bp_success : R.color.bp_disabled));
         ImageView faceIcon = row.findViewById(R.id.ivMemberFace);
         faceIcon.setColorFilter(ContextCompat.getColor(this, hasFace ? R.color.bp_success : R.color.bp_disabled));
-        row.setOnClickListener(onClick);
         if (container.getChildCount() > 0) {
             View divider = new View(this);
             divider.setLayoutParams(new android.widget.LinearLayout.LayoutParams(

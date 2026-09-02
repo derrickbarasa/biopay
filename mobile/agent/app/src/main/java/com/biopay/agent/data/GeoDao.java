@@ -60,8 +60,64 @@ public class GeoDao {
         db.insertWithOnConflict("bomas", null, values, SQLiteDatabase.CONFLICT_REPLACE);
     }
 
+    /** Saves an officer-entered hierarchy into the same local reference tables that back the
+     * dropdowns. Names intentionally double as local codes: household geo columns already store
+     * manual names as their fallback values, so this makes old and new manual records resolvable
+     * without inventing server-side geography identifiers. */
+    public void rememberManualHierarchy(String state, String county, String payam, String boma) {
+        state = clean(state);
+        county = clean(county);
+        payam = clean(payam);
+        boma = clean(boma);
+        // A hierarchy must at least establish State -> County. This prevents an old household
+        // with a shifted value such as state="Nairobi", county="" from polluting the State
+        // dropdown. Numeric household codes such as 6000/6100 are references, not place names.
+        if (!looksLikePlaceName(state) || !looksLikePlaceName(county)) return;
+
+        SQLiteDatabase db = dbHelper.getWritableDatabase();
+        db.beginTransaction();
+        try {
+            upsertState(state, state);
+            upsertCounty(county, state, county);
+            if (looksLikePlaceName(payam)) upsertPayam(payam, county, payam);
+            if (looksLikePlaceName(boma) && looksLikePlaceName(payam)) {
+                upsertBoma(boma, payam, boma);
+            }
+            db.setTransactionSuccessful();
+        } finally {
+            db.endTransaction();
+        }
+    }
+
+    private static String clean(String value) {
+        return value == null ? "" : value.trim();
+    }
+
+    private static boolean looksLikePlaceName(String value) {
+        if (value == null || value.trim().isEmpty()) return false;
+        for (int i = 0; i < value.length(); i++) {
+            if (Character.isLetter(value.charAt(i))) return true;
+        }
+        return false;
+    }
+
     public List<GeoNode> listStates() {
+        pruneInvalidStateOptions();
         return query("states", "state_code", "state_name", null, null);
+    }
+
+    /** Defensive picker cleanup: a synced catalogue entry that is already used as a county by a
+     * household is not a state. Running this before display also prevents a later sync from
+     * reintroducing legacy/test rows after the schema migration has completed. */
+    private void pruneInvalidStateOptions() {
+        SQLiteDatabase db = dbHelper.getWritableDatabase();
+        db.execSQL("DELETE FROM states WHERE state_name IS NULL OR TRIM(state_name)='' "
+                + "OR state_name NOT GLOB '*[A-Za-z]*' "
+                + "OR LOWER(TRIM(state_name)) LIKE 'e2e test%' "
+                + "OR LOWER(TRIM(state_name)) IN ("
+                + "SELECT LOWER(TRIM(county_name)) FROM counties WHERE county_name IS NOT NULL "
+                + "UNION SELECT LOWER(TRIM(county_code)) FROM households "
+                + "WHERE county_code IS NOT NULL AND TRIM(county_code)<>'')");
     }
 
     public List<GeoNode> listCounties(String stateCode) {

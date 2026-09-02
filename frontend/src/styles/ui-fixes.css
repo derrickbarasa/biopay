@@ -52,3 +52,19 @@
   gap: 2px;
   white-space: nowrap;
 }
+
+/* Vuetify's field label carries `contain: layout paint`, which -- per the
+ * containment spec -- clips the label's rendered glyphs to its own box the
+ * same way `overflow: hidden` would. That box's height comes from a
+ * line-height computed in this app's 'Ubuntu' font (Vuetify ships assuming
+ * Roboto), and at some fractional device-pixel ratios / OS display-scaling
+ * combinations it rounds a hair short of Ubuntu's actual rendered glyph
+ * height -- the same class of sub-pixel rounding this file already works
+ * around for field borders above -- slicing the tops off letters like the
+ * "F" in "First name" (reported cut off in the officer/user creation
+ * dialogs). Paint containment here is a performance/isolation optimization,
+ * not a deliberate clip, so dropping it removes the clipping everywhere a
+ * field label appears without changing layout. */
+.v-label.v-field-label {
+  contain: layout;
+}

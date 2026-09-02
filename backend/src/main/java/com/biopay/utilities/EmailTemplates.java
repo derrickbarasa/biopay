@@ -94,6 +94,41 @@ public final class EmailTemplates {
         return shell(body);
     }
 
+    /**
+     * A newly-issued first-time password, presented the same way {@link #otpEmail} presents a
+     * code -- one selectable monospace block -- so whoever created this account (anchor,
+     * organisation, dashboard user or field officer) can copy it in one motion. Sent instead of
+     * an OTP on account creation; the recipient already proved ownership of this inbox just by
+     * receiving it, so the first sign-in with this password skips the verification-code step
+     * entirely and goes straight to a forced password change (see {@code Auth#loginUser}).
+     */
+    public static String firstTimePasswordEmail(String recipientName, String accountLabel, String password) {
+        String greeting = recipientName == null || recipientName.trim().isEmpty() ? "" : "Dear " + recipientName + ",<br>";
+        String body =
+                "<h1 style=\"margin:0 0 10px;font-size:21px;line-height:1.35;color:#0f172a;font-weight:700;\">"
+                        + "Your account is ready</h1>"
+                        + "<p style=\"margin:0 0 28px;font-size:14px;line-height:1.6;color:#64748b;\">"
+                        + greeting + accountLabel + " has been created in BioPay. Use the temporary password below "
+                        + "to sign in &mdash; no verification code is needed this first time.</p>"
+                        + "<table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" align=\"center\" "
+                        + "style=\"margin:0 auto 28px;\"><tr><td align=\"center\" bgcolor=\"#f0fdfa\" "
+                        + "style=\"background-color:#f0fdfa;border:1.5px solid #99e6da;border-radius:12px;"
+                        + "padding:18px 28px;\">"
+                        + "<span style=\"display:inline-block;font-family:'Courier New',Courier,monospace;"
+                        + "font-size:26px;font-weight:700;letter-spacing:3px;color:#0f172a;\">"
+                        + password
+                        + "</span>"
+                        + "</td></tr></table>"
+                        + "<p style=\"margin:0 0 6px;font-size:13px;line-height:1.6;color:#64748b;\">"
+                        + "Right after signing in you'll be asked to choose your own password before continuing "
+                        + "&mdash; from then on, every sign-in will ask for a fresh verification code as usual.</p>"
+                        + "<p style=\"margin:0;font-size:13px;line-height:1.6;color:#64748b;\">"
+                        + "Didn't expect this account? You can safely ignore this email &mdash; it hasn't been used, "
+                        + "and no one can sign in without this password.</p>";
+
+        return shell(body);
+    }
+
     /** Wraps arbitrary body HTML in the branded header/footer used by every BioPay email. */
     private static String shell(String bodyHtml) {
         int year = java.time.Year.now().getValue();

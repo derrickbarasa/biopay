@@ -35,7 +35,15 @@ public final class HouseholdClassification {
         } else {
             String text = raw.toString().trim();
             if (text.isEmpty()) return null;
-            values = List.of(text.split("[,|]"));
+            // Some Android JSON implementations serialize a Java List as its display form
+            // (for example "[DISABILITY, ELDERLY_HEADED]") rather than as a JSON array.
+            // Accept that representation so valid offline records cannot become stuck.
+            if (text.startsWith("[") && text.endsWith("]")) {
+                String contents = text.substring(1, text.length() - 1).trim();
+                values = contents.isEmpty() ? List.of() : List.of(contents.split("[,|]"));
+            } else {
+                values = List.of(text.split("[,|]"));
+            }
         }
 
         LinkedHashSet<String> normalized = new LinkedHashSet<>();

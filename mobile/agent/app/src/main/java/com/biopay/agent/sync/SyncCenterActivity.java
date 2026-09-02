@@ -9,6 +9,7 @@ import android.widget.TextView;
 
 import com.biopay.agent.R;
 import com.biopay.agent.data.DatabaseHelper;
+import com.biopay.agent.session.SessionManager;
 import com.biopay.agent.ui.BaseActivity;
 
 /**
@@ -18,6 +19,7 @@ import com.biopay.agent.ui.BaseActivity;
 public class SyncCenterActivity extends BaseActivity {
 
     private DatabaseHelper databaseHelper;
+    private SessionManager sessionManager;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -25,10 +27,14 @@ public class SyncCenterActivity extends BaseActivity {
         setContentView(R.layout.activity_sync_center);
         setupBackToolbar(R.id.toolbar);
         databaseHelper = DatabaseHelper.get(this);
+        sessionManager = new SessionManager(this);
 
         findViewById(R.id.btnSyncNow).setOnClickListener(v -> {
-            SyncScheduler.triggerNow(this);
-            refresh();
+            v.setEnabled(false);
+            SyncFeedback.observe(this, this, v, SyncScheduler.triggerNow(this), () -> {
+                v.setEnabled(true);
+                refresh();
+            });
         });
     }
 
@@ -44,10 +50,11 @@ public class SyncCenterActivity extends BaseActivity {
         ((TextView) findViewById(R.id.tvConnectionStatus)).setText(
                 online ? R.string.sync_center_connected : R.string.sync_center_offline);
 
-        int households = databaseHelper.countPendingHouseholds();
-        int members = databaseHelper.countPendingMembers();
-        int transactions = databaseHelper.countPendingTransactions();
-        int total = databaseHelper.countPendingSyncWork();
+        String partnerCode = sessionManager.getPartnerCode();
+        int households = databaseHelper.countPendingHouseholds(partnerCode);
+        int members = databaseHelper.countPendingMembers(partnerCode);
+        int transactions = databaseHelper.countPendingTransactions(partnerCode);
+        int total = databaseHelper.countPendingSyncWork(partnerCode);
 
         ((TextView) findViewById(R.id.tvPendingHeader)).setText(
                 total > 0

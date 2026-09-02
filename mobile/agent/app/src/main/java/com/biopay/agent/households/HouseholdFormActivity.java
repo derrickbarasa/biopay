@@ -36,8 +36,8 @@ import java.util.Locale;
 
 /**
  * Add or edit a household -- the form behind {@code activity_household_form.xml}. Registering a
- * new household saves the base record locally, then hands off to {@link PersonCaptureActivity}
- * to actually capture the household head's chosen biometric method(s) -- previously
+ * new household saves the base record locally, then offers {@link PersonCaptureActivity}
+ * to capture the household head's chosen biometric method(s), which may be completed later -- previously
  * "registration method" was just a stored label with no real capture step anywhere in the app.
  * Editing an existing household additionally shows who's been captured so far and lets the
  * officer complete a missing capture or add another person, via the same activity.
@@ -415,10 +415,18 @@ public class HouseholdFormActivity extends BaseActivity {
         // database/migrations/006_geo_hierarchy.sql), so a name is just as valid a value as a code
         // and is what most officers actually know for their area.
         boolean manualEntry = locationManualGroup.getVisibility() == View.VISIBLE;
-        values.put("state_code", manualEntry ? etStateName.getText().toString().trim() : selectedStateCode);
-        values.put("county_code", manualEntry ? etCountyName.getText().toString().trim() : selectedCountyCode);
-        values.put("payam_code", manualEntry ? etPayamName.getText().toString().trim() : selectedPayamCode);
-        values.put("boma_code", manualEntry ? etBomaName.getText().toString().trim() : selectedBomaCode);
+        String manualState = etStateName.getText().toString().trim();
+        String manualCounty = etCountyName.getText().toString().trim();
+        String manualPayam = etPayamName.getText().toString().trim();
+        String manualBoma = etBomaName.getText().toString().trim();
+        values.put("state_code", manualEntry ? manualState : selectedStateCode);
+        values.put("county_code", manualEntry ? manualCounty : selectedCountyCode);
+        values.put("payam_code", manualEntry ? manualPayam : selectedPayamCode);
+        values.put("boma_code", manualEntry ? manualBoma : selectedBomaCode);
+        if (manualEntry) {
+            geoDao.rememberManualHierarchy(manualState, manualCounty, manualPayam, manualBoma);
+            loadStates();
+        }
         values.put("household_size", parseIntOrNull(etHouseholdSize.getText().toString()));
         values.put("male_dependants", parseIntOrNull(etMaleDependants.getText().toString()));
         values.put("female_dependants", parseIntOrNull(etFemaleDependants.getText().toString()));
@@ -451,8 +459,8 @@ public class HouseholdFormActivity extends BaseActivity {
             String householdNumber = generateHouseholdNumber();
             values.put("household_number", householdNumber);
             householdDao.insert(values);
-            // Registering isn't done until the head is actually captured -- see
-            // PersonCaptureActivity's javadoc for why that never happened before this.
+            // The base record is complete and durable at this point. Capture is an optional next
+            // step; PersonCaptureActivity exposes "Finish and capture later" for interruptions.
             personCaptureLauncher.launch(PersonCaptureActivity.captureIntent(this, householdNumber,
                     householdNumber, Beneficiary.TYPE_HOUSEHOLD_HEAD, householdName, selectedRegistrationCode()));
         }

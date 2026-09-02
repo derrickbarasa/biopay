@@ -46,6 +46,7 @@ public class Biometric extends AbstractVerticle {
 
         eventBus.consumer("UPLOAD_HOUSEHOLD_BIO", this::uploadHouseholdBio);
         eventBus.consumer("UPLOAD_ALTERNATE_BIO", this::uploadAlternateBio);
+        eventBus.consumer("SYNC_HOUSEHOLDS", this::syncHouseholds);
         eventBus.consumer("ENROLL_FINGERPRINT", this::enrollFingerprint);
         eventBus.consumer("VERIFY_FINGERPRINT", this::verify);
         eventBus.consumer("SYNC_FINGERPRINTS", this::syncFingerprints);
@@ -121,12 +122,15 @@ public class Biometric extends AbstractVerticle {
                 + "WHEN MATCHED THEN UPDATE SET household_name=@p4, age=@p5, gender=@p6, phone_number=@p7, "
                 + "household_size=@p8, vulnerability_status=@p9, legal_status=@p10, state_code=@p11, county_code=@p12, "
                 + "payam_code=@p13, boma_code=@p14, latitude=@p15, longitude=@p16, registration_method=@p20, "
+                + "id_number=@p22, male_dependants=@p23, female_dependants=@p24, "
                 + "updated_by=@p21, updated_at=GETDATE() "
                 + "WHEN NOT MATCHED THEN INSERT (officer_code, organization_code, household_number, household_name, age, "
                 + "gender, phone_number, household_size, vulnerability_status, legal_status, state_code, county_code, payam_code, "
                 + "boma_code, latitude, longitude, duplicate, duplicate_number, matching_score, registration_method, status, "
-                + "created_by, created_at, updated_at, stored_at) "
-                + "VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,@p12,@p13,@p14,@p15,@p16,@p17,@p18,@p19,@p20,1,@p21,GETDATE(),GETDATE(),GETDATE());";
+                + "created_by, id_number, male_dependants, female_dependants, "
+                + "created_at, updated_at, stored_at) "
+                + "VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,@p12,@p13,@p14,@p15,@p16,@p17,@p18,@p19,@p20,1,@p21,"
+                + "@p22,@p23,@p24,GETDATE(),GETDATE(),GETDATE());";
 
         pool.preparedQuery(sql)
                 .execute(Tuple.of(
@@ -139,12 +143,77 @@ public class Biometric extends AbstractVerticle {
                         payload.getString("latitude"), payload.getString("longitude"),
                         payload.getInteger("duplicate", 0), payload.getString("duplicateNumber"),
                         payload.getString("matchingScore"), payload.getString("registrationMethod", "FINGERPRINT"),
-                        String.valueOf(payload.getValue("actorId"))))
+                        String.valueOf(payload.getValue("actorId")), payload.getString("idNumber"),
+                        payload.getInteger("maleDependants"), payload.getInteger("femaleDependants")))
                 .onFailure(err -> onDbError(message, err))
                 .onSuccess(rows -> reply(message, new JsonObject()
                         .put("responseCode", "000")
                         .put("responseMessage", "Household synced successfully")
                         .put("householdNumber", householdNumber)));
+    }
+
+    // ---- SYNC_HOUSEHOLDS (organisation-wide offline bundle) -----------------------
+
+    /** Returns every active household and alternate for the logged-in organisation. Both Android
+     * hardware flavours use this same endpoint, so records move through the server rather than
+     * relying on device-to-device connectivity. */
+    private void syncHouseholds(Message<Object> message) {
+        JsonObject payload = new JsonObject(message.body().toString());
+        String partnerCode = partnerCodeOf(payload);
+        if (partnerCode.isEmpty()) {
+            replyError(message, "This action requires a supervisor session");
+            return;
+        }
+        pool.preparedQuery("SELECT * FROM households WHERE organization_code=@p1 AND status=1 ORDER BY created_at")
+                .execute(Tuple.of(partnerCode))
+                .onFailure(err -> onDbError(message, err))
+                .onSuccess(householdRows -> pool.preparedQuery(
+                                "SELECT * FROM alternates WHERE organization_code=@p1 AND status=1 ORDER BY created_at")
+                        .execute(Tuple.of(partnerCode))
+                        .onFailure(err -> onDbError(message, err))
+                        .onSuccess(alternateRows -> {
+                            JsonArray households = new JsonArray();
+                            for (Row r : householdRows) {
+                                households.add(new JsonObject()
+                                        .put("householdNumber", Rows.str(r, "household_number"))
+                                        .put("householdName", Rows.str(r, "household_name"))
+                                        .put("registrationMethod", Rows.str(r, "registration_method"))
+                                        .put("idNumber", Rows.str(r, "id_number"))
+                                        .put("phoneNumber", Rows.str(r, "phone_number"))
+                                        .put("age", Rows.intVal(r, "age"))
+                                        .put("gender", Rows.str(r, "gender"))
+                                        .put("householdSize", Rows.intVal(r, "household_size"))
+                                        .put("maleDependants", Rows.intVal(r, "male_dependants"))
+                                        .put("femaleDependants", Rows.intVal(r, "female_dependants"))
+                                        .put("disabledMembers", 0)
+                                        .put("literacy", (String) null)
+                                        .put("eligibility", (String) null)
+                                        .put("vulnerabilityStatuses", Rows.str(r, "vulnerability_status"))
+                                        .put("legalStatus", Rows.str(r, "legal_status"))
+                                        .put("stateCode", Rows.str(r, "state_code"))
+                                        .put("countyCode", Rows.str(r, "county_code"))
+                                        .put("payamCode", Rows.str(r, "payam_code"))
+                                        .put("bomaCode", Rows.str(r, "boma_code"))
+                                        .put("latitude", Rows.str(r, "latitude"))
+                                        .put("longitude", Rows.str(r, "longitude")));
+                            }
+                            JsonArray alternates = new JsonArray();
+                            for (Row r : alternateRows) {
+                                alternates.add(new JsonObject()
+                                        .put("alternateNumber", Rows.str(r, "alternate_number"))
+                                        .put("householdNumber", Rows.str(r, "household_number"))
+                                        .put("alternateName", Rows.str(r, "alternate_name"))
+                                        .put("registrationMethod", Rows.str(r, "registration_method"))
+                                        .put("relationship", Rows.str(r, "relationship"))
+                                        .put("idNumber", Rows.str(r, "id_number"))
+                                        .put("phoneNumber", Rows.str(r, "phone_number"))
+                                        .put("age", Rows.intVal(r, "age"))
+                                        .put("gender", Rows.str(r, "gender")));
+                            }
+                            reply(message, new JsonObject().put("responseCode", "000")
+                                    .put("responseMessage", "OK")
+                                    .put("households", households).put("alternates", alternates));
+                        }));
     }
 
     // ---- UPLOAD_ALTERNATE_BIO -----------------------------------------------------
@@ -159,10 +228,15 @@ public class Biometric extends AbstractVerticle {
         }
         String alternateNumber = payload.getString("alternateNumber", Utilities.generateCode("ALT"));
 
-        String sql = "INSERT INTO alternates (officer_code, household_number, organization_code, alternate_number, "
+        String sql = "MERGE alternates AS target "
+                + "USING (SELECT @p3 AS organization_code, @p4 AS alternate_number) AS source "
+                + "ON target.organization_code=source.organization_code AND target.alternate_number=source.alternate_number "
+                + "WHEN MATCHED THEN UPDATE SET household_number=@p2, alternate_name=@p5, relationship=@p6, "
+                + "age=@p7, phone_number=@p8, gender=@p9, registration_method=@p13, updated_by=@p14, updated_at=GETDATE() "
+                + "WHEN NOT MATCHED THEN INSERT (officer_code, household_number, organization_code, alternate_number, "
                 + "alternate_name, relationship, age, phone_number, gender, duplicate, duplicate_number, matching_score, "
                 + "registration_method, status, created_by, created_at, stored_at) "
-                + "VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,@p12,@p13,1,@p14,GETDATE(),GETDATE())";
+                + "VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,@p12,@p13,1,@p14,GETDATE(),GETDATE());";
 
         pool.preparedQuery(sql)
                 .execute(Tuple.of(
@@ -203,12 +277,14 @@ public class Biometric extends AbstractVerticle {
             return;
         }
 
-        String sql = "INSERT INTO fingerprints (officer_code, beneficiary_type, beneficiary_id, fingerprint_number, "
+        String uuid = payload.getString("uuid", Utilities.newUuid()).trim();
+        String sql = "IF NOT EXISTS (SELECT 1 FROM fingerprints WHERE uuid=@p5) "
+                + "INSERT INTO fingerprints (officer_code, beneficiary_type, beneficiary_id, fingerprint_number, "
                 + "uuid, fingerprint, organization_code, status, created_by, created_at, stored_at) "
                 + "VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,1,@p8,GETDATE(),GETDATE())";
         pool.preparedQuery(sql)
                 .execute(Tuple.of(String.valueOf(payload.getValue("actorId")), beneficiaryType, beneficiaryId,
-                        fingerNumber, Utilities.newUuid(), encryptedTemplate, partnerCode,
+                        fingerNumber, uuid, encryptedTemplate, partnerCode,
                         String.valueOf(payload.getValue("actorId"))))
                 .onFailure(err -> onDbError(message, err))
                 .onSuccess(rows -> reply(message, new JsonObject()
@@ -295,6 +371,7 @@ public class Biometric extends AbstractVerticle {
                             continue;
                         }
                         results.add(new JsonObject()
+                                .put("uuid", Rows.str(r, "uuid"))
                                 .put("beneficiaryId", Rows.str(r, "beneficiary_id"))
                                 .put("beneficiaryType", Rows.intVal(r, "beneficiary_type"))
                                 .put("fingerNumber", Rows.intVal(r, "fingerprint_number"))

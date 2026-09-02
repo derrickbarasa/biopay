@@ -184,15 +184,24 @@ const countiesForState = (stateCode: string) => stateCode ? counties.value.filte
 const locationsForCounty = (countyCode: string) => countyCode ? locations.value.filter((l) => l.countyCode === countyCode) : locations.value
 const villagesForLocation = (locationCode: string) => locationCode ? villages.value.filter((v) => v.locationCode === locationCode) : villages.value
 
+// Sourced from GET_HOUSEHOLD_LOCATIONS, not GET_STATES/COUNTIES/LOCATIONS/VILLAGES: those
+// read the anchor's curated geo_states/geo_counties/... catalogue, which a household's own
+// state_code/county_code/payam_code/boma_code columns are NOT tied to -- a household
+// registered via mobile's manual-entry path stores the officer's typed place name directly
+// in those columns with no catalogue node ever created for it. Filtering (and the "Village"
+// column's name lookup below) against the catalogue therefore silently missed those
+// households. Sourcing the dropdowns/lookup from the households actually on file instead
+// fixes that and keeps the two in sync by construction.
 async function loadGeo() {
+  const targetAnchorId = auth.isSystemAdmin ? selectedAnchorId.value : undefined
   try {
     const requests: Promise<any>[] = [
-      dispatch<{ results: GeoNode[] }>('GET_STATES'),
-      dispatch<{ results: GeoNode[] }>('GET_COUNTIES'),
-      dispatch<{ results: GeoNode[] }>('GET_LOCATIONS'),
-      dispatch<{ results: GeoNode[] }>('GET_VILLAGES'),
+      dispatch<{ results: GeoNode[] }>('GET_HOUSEHOLD_LOCATIONS', { level: 'STATE', targetAnchorId }),
+      dispatch<{ results: GeoNode[] }>('GET_HOUSEHOLD_LOCATIONS', { level: 'COUNTY', targetAnchorId }),
+      dispatch<{ results: GeoNode[] }>('GET_HOUSEHOLD_LOCATIONS', { level: 'LOCATION', targetAnchorId }),
+      dispatch<{ results: GeoNode[] }>('GET_HOUSEHOLD_LOCATIONS', { level: 'VILLAGE', targetAnchorId }),
     ]
-    requests.push(dispatch<{ results: typeof organizations.value }>('GET_ORGANIZATIONS', { targetAnchorId: auth.isSystemAdmin ? selectedAnchorId.value : undefined }))
+    requests.push(dispatch<{ results: typeof organizations.value }>('GET_ORGANIZATIONS', { targetAnchorId }))
     const [s, c, l, v, o] = await Promise.all(requests)
     states.value = s.results
     counties.value = c.results

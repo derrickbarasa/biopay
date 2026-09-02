@@ -1,48 +1,26 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Shared bottom navigation chrome: 4 destination bar plus a centered, elevated Payment action.
-     Included at the bottom of every top-level tab screen (Home/Households/Payment/Activity/More).
-     CoordinatorLayout plus layout_anchor is used specifically because it draws/positions an
-     anchored child relative to its anchor deterministically. A plain FrameLayout with a
-     negative margin overlap left the FAB's overlapping half hidden behind the nav bar
-     regardless of elevation and bringChildToFront (Material's FAB elevation handling did not
-     cooperate), so do not simplify this back to a FrameLayout without re-verifying on-device. -->
-<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<!-- Shared bottom navigation chrome: the 5 top-level destinations (Home/Households/Payment/
+     Activity/More). Included at the bottom of every top-level tab screen. Payment previously
+     had an elevated, overlapping FAB shortcut straight into the pay flow, but its tap target
+     covered the plain Payment item underneath, so a normal tap on "Payment" landed on the pay
+     flow instead of the payments list it's supposed to open first; removed in favor of the
+     single ordinary nav item below. -->
+<com.google.android.material.bottomnavigation.BottomNavigationView
+    xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/bottomNavigation"
     android:layout_width="match_parent"
-    android:layout_height="wrap_content"
-    android:clipChildren="false"
-    android:clipToPadding="false">
-
-    <com.google.android.material.bottomnavigation.BottomNavigationView
-        android:id="@+id/bottomNavigation"
-        android:layout_width="match_parent"
-        android:layout_height="@dimen/main_navigation_height"
-        android:background="@color/bp_surface"
-        android:minHeight="@dimen/main_navigation_height"
-        app:itemHorizontalTranslationEnabled="false"
-        app:itemIconSize="22dp"
-        app:itemIconTint="@color/navigation_item_color"
-        app:itemPaddingBottom="8dp"
-        app:itemPaddingTop="8dp"
-        app:itemTextAppearanceActive="@style/BioPay.NavigationLabel.Active"
-        app:itemTextAppearanceInactive="@style/BioPay.NavigationLabel"
-        app:itemTextColor="@color/navigation_item_color"
-        app:labelVisibilityMode="labeled"
-        app:menu="@menu/main_navigation" />
-
-    <com.google.android.material.floatingactionbutton.FloatingActionButton
-        android:id="@+id/fabPayment"
-        android:layout_width="56dp"
-        android:layout_height="56dp"
-        android:layout_marginBottom="22dp"
-        android:contentDescription="@string/payment_nav_action"
-        android:src="@drawable/ic_payments"
-        app:backgroundTint="@color/bp_primary"
-        app:elevation="6dp"
-        app:fabCustomSize="56dp"
-        app:layout_anchor="@id/bottomNavigation"
-        app:layout_anchorGravity="top|center_horizontal"
-        app:maxImageSize="26dp"
-        app:shapeAppearanceOverlay="@style/ShapeAppearanceOverlay.BioPay.Circle"
-        app:tint="@color/bp_on_primary" />
-</androidx.coordinatorlayout.widget.CoordinatorLayout>
+    android:layout_height="@dimen/main_navigation_height"
+    android:background="@color/bp_surface"
+    android:minHeight="@dimen/main_navigation_height"
+    app:itemActiveIndicatorStyle="@style/BioPay.NavigationActiveIndicator"
+    app:itemHorizontalTranslationEnabled="false"
+    app:itemIconSize="22dp"
+    app:itemIconTint="@color/navigation_item_color"
+    app:itemPaddingBottom="4dp"
+    app:itemPaddingTop="4dp"
+    app:itemTextAppearanceActive="@style/BioPay.NavigationLabel.Active"
+    app:itemTextAppearanceInactive="@style/BioPay.NavigationLabel"
+    app:itemTextColor="@color/navigation_item_color"
+    app:labelVisibilityMode="labeled"
+    app:menu="@menu/main_navigation" />

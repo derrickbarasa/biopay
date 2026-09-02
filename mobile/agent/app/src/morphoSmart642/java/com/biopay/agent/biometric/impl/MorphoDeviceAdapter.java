@@ -1,15 +1,27 @@
 package com.biopay.agent.biometric.impl;
 
 import android.app.Activity;
+import android.content.ComponentName;
+import android.content.Context;
+import android.content.Intent;
+import android.content.ServiceConnection;
 import android.graphics.Bitmap;
+import android.hardware.usb.UsbDevice;
+import android.hardware.usb.UsbManager;
 import android.os.Handler;
+import android.os.IBinder;
 import android.os.Looper;
+import android.os.RemoteException;
+import android.os.Build;
+import android.os.SystemClock;
+import android.util.Log;
 import android.widget.ImageView;
 
 import com.biopay.agent.biometric.BiometricDevice;
 import com.biopay.agent.biometric.BiometricDeviceException;
 import com.biopay.agent.biometric.CaptureCallback;
 import com.biopay.agent.biometric.VerifyCallback;
+import com.idemia.peripherals.PeripheralsPowerInterface;
 import com.morpho.android.usb.USBManager;
 import com.morpho.morphosmart.sdk.CallbackMask;
 import com.morpho.morphosmart.sdk.CallbackMessage;
@@ -31,8 +43,14 @@ import com.morpho.morphosmart.sdk.TemplateList;
 import com.morpho.morphosmart.sdk.TemplateType;
 
 import java.nio.ByteBuffer;
+import java.util.Map;
 import java.util.Observable;
 import java.util.Observer;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * {@link BiometricDevice} backed by IDEMIA/Morpho SDK 6.42.0.0, ported from
@@ -41,16 +59,23 @@ import java.util.Observer;
  * wrapper -- the capture/verify parameter choices below are exactly what
  * dca used.
  *
- * <p>Not yet ported: dca's optional AIDL binding to
- * {@code com.idemia.peripherals.PeripheralsPowerInterface} for
- * MorphoTablet-specific sensor power/USB-role control. That hardware-
- * specific extra sits on top of this class (it gates whether the sensor is
- * powered before {@link #open} is even attempted) and will be added as an
- * opt-in helper once the core capture/verify path is verified end-to-end.
+ * <p>Also binds IDEMIA's Peripheral Management AIDL service
+ * ({@code com.idemia.peripherals.PeripheralsPowerInterface}, see
+ * {@link #powerOnFingerprintPeripherals}) before every {@link #isAvailable}
+ * and {@link #open} call. On ID Screen / ID Screen 60 tablets the fingerprint
+ * sensor's power rail and host USB port default off to save battery, so
+ * without this the SDK's own USB enumeration never sees the sensor at all --
+ * it isn't a cable/pairing problem, the port is simply unpowered.
  */
 public class MorphoDeviceAdapter implements BiometricDevice, Observer {
 
+    private static final String TAG = "MorphoDeviceAdapter";
     private static final int TIMEOUT_SECONDS = 30;
+    private static final long PERIPHERALS_BIND_TIMEOUT_MS = 2000;
+    private static final int ENUMERATION_ATTEMPTS = 12;
+    private static final long ENUMERATION_RETRY_MS = 250;
+    private static final int IDEMIA_USB_VENDOR_ID = 8797;
+    private static final int IDEMIA_CBM_E3_PRODUCT_ID = 8;
 
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private MorphoDevice morphoDevice;
@@ -68,23 +93,33 @@ public class MorphoDeviceAdapter implements BiometricDevice, Observer {
 
     @Override
     public String getDisplayName() {
-        return "MorphoSmart 6.42 (USB)";
+        return "IDEMIA embedded scanner (SDK 6.42)";
     }
 
     @Override
     public boolean isAvailable(Activity activity) {
         try {
-            USBManager.getInstance().initialize(activity, "com.morpho.morphosample.USB_ACTION", true);
-            MorphoDevice probe = new MorphoDevice();
-            CustomInteger nbUsbDevice = new CustomInteger();
-            int ret = probe.initUsbDevicesNameEnum(nbUsbDevice);
-            return ret == ErrorCodes.MORPHO_OK && nbUsbDevice.getValueOf() >= 1;
+            powerOnFingerprintPeripherals(activity);
+            for (int attempt = 1; attempt <= ENUMERATION_ATTEMPTS; attempt++) {
+                USBManager.getInstance().initialize(activity, "com.biopay.agent.USB_ACTION", true);
+                MorphoDevice probe = new MorphoDevice();
+                CustomInteger nbUsbDevice = new CustomInteger();
+                int ret = probe.initUsbDevicesNameEnum(nbUsbDevice);
+                Log.i(TAG, "Scanner enumeration attempt " + attempt + ": ret=" + ret
+                        + ", devices=" + nbUsbDevice.getValueOf());
+                if (ret == ErrorCodes.MORPHO_OK && nbUsbDevice.getValueOf() >= 1) {
+                    return true;
+                }
+                SystemClock.sleep(ENUMERATION_RETRY_MS);
+            }
+            return false;
         } catch (Throwable ex) {
             // USBManager's static initializer loads the vendor .so on first touch of this class --
             // on a device/APK combination missing that native library (e.g. no matching ABI, or no
             // real Morpho hardware ever plugged in) that throws UnsatisfiedLinkError, an Error, not
             // an Exception. This is a best-effort check per the BiometricDevice contract, so it must
             // degrade to "not available" instead of crashing whatever screen called it.
+            Log.e(TAG, "Scanner availability check failed", ex);
             return false;
         }
     }
@@ -92,10 +127,19 @@ public class MorphoDeviceAdapter implements BiometricDevice, Observer {
     @Override
     public void open(Activity activity, ImageView previewView) throws BiometricDeviceException {
         this.previewView = previewView;
-        USBManager.getInstance().initialize(activity, "com.morpho.morphosample.USB_ACTION", true);
+        powerOnFingerprintPeripherals(activity);
+        USBManager.getInstance().initialize(activity, "com.biopay.agent.USB_ACTION", true);
         MorphoDevice device = new MorphoDevice();
         CustomInteger nbUsbDevice = new CustomInteger();
-        int ret = device.initUsbDevicesNameEnum(nbUsbDevice);
+        int ret = ErrorCodes.MORPHOERR_UNAVAILABLE;
+        for (int attempt = 1; attempt <= ENUMERATION_ATTEMPTS; attempt++) {
+            USBManager.getInstance().initialize(activity, "com.biopay.agent.USB_ACTION", true);
+            ret = device.initUsbDevicesNameEnum(nbUsbDevice);
+            if (ret == ErrorCodes.MORPHO_OK && nbUsbDevice.getValueOf() >= 1) {
+                break;
+            }
+            SystemClock.sleep(ENUMERATION_RETRY_MS);
+        }
         if (ret != ErrorCodes.MORPHO_OK) {
             throw new BiometricDeviceException("Error initialising USB device", ret);
         }
@@ -109,6 +153,111 @@ public class MorphoDeviceAdapter implements BiometricDevice, Observer {
             throw new BiometricDeviceException("Error opening USB device", ret);
         }
         morphoDevice = device;
+    }
+
+    /**
+     * Binds IDEMIA's Peripheral Management AIDL service and switches on the fingerprint sensor and
+     * host USB port power rails, then unbinds. The switches are system-level hardware state (see
+     * the guide's own "improves battery life" framing for why they default off), not tied to the
+     * binding's lifetime, so a short bind-call-unbind round trip per call is sufficient -- no need
+     * to hold the binding open across a whole capture/verify session.
+     *
+     * <p>Best-effort and silent: on hardware/firmware without this service (an emulator, a non-ID-
+     * Screen device, or the {@code morphoSmart615} tablet flavor's own path) this simply no-ops, so
+     * USB enumeration proceeds exactly as it did before this method existed.
+     */
+    private void powerOnFingerprintPeripherals(Activity activity) {
+        CountDownLatch connected = new CountDownLatch(1);
+        AtomicReference<PeripheralsPowerInterface> peripheralsRef = new AtomicReference<>();
+        ExecutorService callbackExecutor = Executors.newSingleThreadExecutor();
+        ServiceConnection connection = new ServiceConnection() {
+            @Override
+            public void onServiceConnected(ComponentName name, IBinder service) {
+                peripheralsRef.set(PeripheralsPowerInterface.Stub.asInterface(service));
+                connected.countDown();
+            }
+
+            @Override
+            public void onServiceDisconnected(ComponentName name) {
+                peripheralsRef.set(null);
+            }
+        };
+
+        Intent aidlIntent = new Intent("idemia.intent.action.CONN_PERIPHERALS_SERVICE_AIDL");
+        aidlIntent.setPackage("com.android.settings");
+
+        boolean bound;
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                // The legacy overload dispatches onServiceConnected on the main thread. Most
+                // callers invoke this method from that thread, so waiting on the latch would
+                // prevent the callback from ever running. ID Screen firmware is Android 10+;
+                // its executor overload lets the binder callback arrive independently.
+                bound = activity.bindService(aidlIntent, Context.BIND_AUTO_CREATE,
+                        callbackExecutor, connection);
+            } else {
+                bound = activity.bindService(aidlIntent, connection, Context.BIND_AUTO_CREATE);
+            }
+        } catch (Exception ex) {
+            Log.w(TAG, "Peripheral Management service unavailable, skipping sensor power-on", ex);
+            callbackExecutor.shutdownNow();
+            return;
+        }
+        if (!bound) {
+            Log.w(TAG, "Peripheral Management service did not bind");
+            callbackExecutor.shutdownNow();
+            return;
+        }
+
+        try {
+            connected.await(PERIPHERALS_BIND_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+            PeripheralsPowerInterface peripherals = peripheralsRef.get();
+            if (peripherals != null) {
+                boolean fingerprintWasOn = peripherals.getFingerPrintSwitch();
+                if (fingerprintWasOn && !hasEmbeddedScannerOnUsb(activity)) {
+                    // ID Screen firmware can leave the sysfs switch reading "1" after the
+                    // embedded module has dropped off USB. Rewriting "1" alone does not reset
+                    // that stale hardware state; cycle only when the expected 8797:0008 device
+                    // is genuinely absent so an active scanner session is never interrupted.
+                    peripherals.setFingerPrintSwitch(false);
+                    // The ID Screen controller needs time to remove the internal USB device
+                    // before power is applied again. A short pulse can leave the firmware's
+                    // UI switch ON while the scanner itself remains absent.
+                    SystemClock.sleep(1000);
+                }
+                boolean fingerprintSet = peripherals.setFingerPrintSwitch(true);
+                boolean hostUsbSet = peripherals.setHostUsbPortSwitch(true);
+                // Reading the proc-backed switch immediately races the kernel driver, and USB
+                // enumeration cannot start until the internal module has completed its boot.
+                SystemClock.sleep(1000);
+                Log.i(TAG, "Embedded scanner power: fingerprintSet=" + fingerprintSet
+                        + ", fingerprintOn=" + peripherals.getFingerPrintSwitch()
+                        + ", hostUsbSet=" + hostUsbSet
+                        + ", hostUsbOn=" + peripherals.getHostUsbPortSwitch());
+            } else {
+                Log.w(TAG, "Peripheral Management service callback timed out");
+            }
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+        } catch (RemoteException ex) {
+            Log.w(TAG, "Failed to power on fingerprint sensor/host USB port", ex);
+        } finally {
+            activity.unbindService(connection);
+            callbackExecutor.shutdownNow();
+        }
+    }
+
+    private boolean hasEmbeddedScannerOnUsb(Activity activity) {
+        UsbManager usbManager = (UsbManager) activity.getSystemService(Context.USB_SERVICE);
+        if (usbManager == null) return false;
+        for (Map.Entry<String, UsbDevice> entry : usbManager.getDeviceList().entrySet()) {
+            UsbDevice device = entry.getValue();
+            if (device.getVendorId() == IDEMIA_USB_VENDOR_ID
+                    && device.getProductId() == IDEMIA_CBM_E3_PRODUCT_ID) {
+                return true;
+            }
+        }
+        return false;
     }
 
     @Override
@@ -180,6 +329,29 @@ public class MorphoDeviceAdapter implements BiometricDevice, Observer {
                 postVerifyError(ret);
             }
         }).start();
+    }
+
+    @Override
+    public MatchResult templatesMatch(byte[] templateA, byte[] templateB) {
+        if (morphoDevice == null) return MatchResult.ERROR;
+
+        Template candidate = new Template();
+        candidate.setData(templateA);
+        candidate.setTemplateType(TemplateType.MORPHO_PK_ISO_FMR_2011);
+        TemplateList candidateList = new TemplateList();
+        candidateList.putTemplate(candidate);
+
+        Template reference = new Template();
+        reference.setData(templateB);
+        reference.setTemplateType(TemplateType.MORPHO_PK_ISO_FMR_2011);
+        TemplateList referenceList = new TemplateList();
+        referenceList.putTemplate(reference);
+
+        int ret = morphoDevice.verifyMatch(FalseAcceptanceRate.MORPHO_FAR_5, candidateList, referenceList, new CustomInteger());
+        if (ret == ErrorCodes.MORPHO_OK) return MatchResult.MATCHED;
+        if (ret == ErrorCodes.MORPHOERR_NO_HIT) return MatchResult.NO_MATCH;
+        Log.e(TAG, "templatesMatch: unexpected verifyMatch return code " + ret);
+        return MatchResult.ERROR;
     }
 
     @Override

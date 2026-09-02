@@ -1,12 +1,9 @@
 package com.biopay.agent.face;
 
-import android.os.Build;
 import android.security.keystore.KeyGenParameterSpec;
 import android.security.keystore.KeyProperties;
 import android.util.Base64;
 import android.util.Log;
-
-import androidx.annotation.RequiresApi;
 
 import java.security.GeneralSecurityException;
 import java.security.KeyStore;
@@ -38,21 +35,18 @@ public final class FaceEmbeddingCipher {
 
     private FaceEmbeddingCipher() { }
 
-    /** True on API 23+, where {@link KeyGenParameterSpec} (Keystore-backed symmetric keys) is
-     *  available. Below that, callers must fall back to storing plaintext with the row explicitly
-     *  marked unencrypted (see FaceDao) rather than crashing or silently losing data. */
+    /** {@link KeyGenParameterSpec} (Keystore-backed symmetric keys) is available on every device
+     *  this app runs on now that minSdk is 24 -- kept as a method (rather than inlined at call
+     *  sites) so FaceDao's plaintext-fallback branch stays a single well-named check. */
     public static boolean isSupported() {
-        return Build.VERSION.SDK_INT >= Build.VERSION_CODES.M;
+        return true;
     }
 
-    /** @return Base64(iv || ciphertext+tag), or null if encryption isn't supported/available on
-     *  this device -- callers must handle that by storing plaintext and marking the row as such. */
+    /** @return Base64(iv || ciphertext+tag), or null if encryption fails -- callers must handle
+     *  that by storing plaintext and marking the row as such. */
     public static String encrypt(String plaintext) {
-        // Written as a literal inline SDK_INT check (not a call to isSupported()) so lint's NewApi
-        // flow analysis can prove the guarded getOrCreateKey() call below is safe.
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return null;
         try {
-            byte[] combined = encryptWithKey(getOrCreateKeyApi23(), plaintext.getBytes("UTF-8"));
+            byte[] combined = encryptWithKey(getOrCreateKey(), plaintext.getBytes("UTF-8"));
             return Base64.encodeToString(combined, Base64.NO_WRAP);
         } catch (GeneralSecurityException | java.io.UnsupportedEncodingException ex) {
             Log.e(TAG, "Encryption failed, caller must fall back to plaintext storage: " + ex.getMessage());
@@ -60,16 +54,10 @@ public final class FaceEmbeddingCipher {
         }
     }
 
-    /** Only ever called for rows FaceDao marked {@code embedding_encrypted=1}, which encrypt()
-     *  only ever produces on API 23+ -- so a sub-23 device reaching here means corrupt/foreign
-     *  data, not a normal code path. */
     public static String decrypt(String base64CipherText) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
-            throw new IllegalStateException("Encrypted face row found on a device below API 23");
-        }
         try {
             byte[] combined = Base64.decode(base64CipherText, Base64.NO_WRAP);
-            return new String(decryptWithKey(getOrCreateKeyApi23(), combined), "UTF-8");
+            return new String(decryptWithKey(getOrCreateKey(), combined), "UTF-8");
         } catch (GeneralSecurityException | java.io.UnsupportedEncodingException | IllegalArgumentException ex) {
             throw new IllegalStateException("Failed to decrypt stored face embedding", ex);
         }
@@ -104,8 +92,7 @@ public final class FaceEmbeddingCipher {
 
     // ---- Android Keystore key management -------------------------------------------------------
 
-    @RequiresApi(Build.VERSION_CODES.M)
-    private static SecretKey getOrCreateKeyApi23() throws GeneralSecurityException {
+    private static SecretKey getOrCreateKey() throws GeneralSecurityException {
         try {
             KeyStore keyStore = KeyStore.getInstance(KEYSTORE_PROVIDER);
             keyStore.load(null);

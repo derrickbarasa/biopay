@@ -22,9 +22,12 @@ fun readDotEnvValue(file: File, key: String): String? {
 
 val backendDotEnv = rootProject.layout.projectDirectory.file("../../backend/.env").asFile
 val dotEnvApiBaseUrl = readDotEnvValue(backendDotEnv, "BIOPAY_MOBILE_API_BASE_URL")
+val fallbackApiBaseUrl = dotEnvApiBaseUrl
+    ?: providers.environmentVariable("BIOPAY_MOBILE_API_BASE_URL").orNull
+    ?: "http://10.0.2.2:7730/biopay"
 val configuredApiBaseUrl = providers.gradleProperty("biopayApiBaseUrl")
-    .orElse(providers.environmentVariable("BIOPAY_MOBILE_API_BASE_URL"))
-    .orElse(dotEnvApiBaseUrl ?: "http://10.0.2.2:7730/biopay")
+    // Keep the repository's explicit mobile endpoint ahead of a stale machine-wide value.
+    .orElse(fallbackApiBaseUrl)
     .get()
 
 android {
@@ -33,7 +36,7 @@ android {
 
     defaultConfig {
         applicationId = "com.biopay.agent"
-        minSdk = 21
+        minSdk = 24
         targetSdk = 35
         versionCode = 2
         versionName = "1.1"
@@ -55,7 +58,7 @@ android {
         create("morphoSmart642") {
             dimension = "biometricDevice"
             versionNameSuffix = "-morpho642"
-            buildConfigField("String", "BIOMETRIC_DEVICE_LABEL", "\"MorphoSmart 6.42 (USB)\"")
+            buildConfigField("String", "BIOMETRIC_DEVICE_LABEL", "\"IDEMIA embedded scanner (SDK 6.42)\"")
         }
         create("morphoSmart615") {
             dimension = "biometricDevice"
@@ -93,6 +96,7 @@ android {
     buildFeatures {
         viewBinding = true
         buildConfig = true
+        aidl = true
     }
 }
 

@@ -65,6 +65,7 @@ public class SyncManager {
         allSucceeded &= syncGeography();
         allSucceeded &= syncHouseholds();
         allSucceeded &= syncAlternates();
+        allSucceeded &= syncHouseholdCatalogue();
         allSucceeded &= syncFingerprints();
         allSucceeded &= syncFaces();
         allSucceeded &= syncImages();
@@ -181,13 +182,21 @@ public class SyncManager {
                 params.put("age", h.age);
                 params.put("gender", h.gender);
                 params.put("phoneNumber", h.phoneNumber);
+                params.put("idNumber", h.idNumber);
                 params.put("householdSize", h.householdSize);
+                params.put("maleDependants", h.maleDependants);
+                params.put("femaleDependants", h.femaleDependants);
+                params.put("disabledMembers", h.disabledMembers ? 1 : 0);
+                params.put("literacy", h.literate ? "Y" : "N");
+                params.put("eligibility", h.eligible ? "Y" : "N");
                 params.put("vulnerabilityStatuses", csvValues(h.vulnerabilityStatuses));
                 params.put("legalStatus", h.legalStatus);
                 params.put("stateCode", h.stateCode);
                 params.put("countyCode", h.countyCode);
                 params.put("payamCode", h.payamCode);
                 params.put("bomaCode", h.bomaCode);
+                params.put("latitude", h.latitude);
+                params.put("longitude", h.longitude);
                 params.put("duplicate", 0);
                 params.put("registrationMethod", h.registrationMethod);
                 ApiClient.get(context).dispatchSync("UPLOAD_HOUSEHOLD_BIO", params);
@@ -232,6 +241,43 @@ public class SyncManager {
         return allOk;
     }
 
+    /** Pulls the organisation's complete beneficiary registry after local uploads. A second
+     * tablet logged into the same organisation therefore receives records captured by the first
+     * while pending local edits are protected by each DAO's upsert guard. */
+    private boolean syncHouseholdCatalogue() {
+        try {
+            org.json.JSONObject response = ApiClient.get(context)
+                    .dispatchSync("SYNC_HOUSEHOLDS", new HashMap<>());
+            String supervisorId = String.valueOf(new SessionManager(context).getUserId());
+            String partnerCode = new SessionManager(context).getPartnerCode();
+            org.json.JSONArray households = response.optJSONArray("households");
+            if (households != null) {
+                for (int i = 0; i < households.length(); i++) {
+                    org.json.JSONObject row = households.getJSONObject(i);
+                    householdDao.upsertSynced(row, supervisorId, partnerCode);
+                    String state = row.optString("stateCode", "");
+                    String county = row.optString("countyCode", "");
+                    String payam = row.optString("payamCode", "");
+                    String boma = row.optString("bomaCode", "");
+                    // Cross-device manual locations are useful in the picker, but older rows may
+                    // contain raw numeric codes or a shifted county in the state field. GeoDao
+                    // accepts only a coherent, name-based State -> County hierarchy.
+                    geoDao.rememberManualHierarchy(state, county, payam, boma);
+                }
+            }
+            org.json.JSONArray alternates = response.optJSONArray("alternates");
+            if (alternates != null) {
+                for (int i = 0; i < alternates.length(); i++) {
+                    alternateDao.upsertSynced(alternates.getJSONObject(i), supervisorId, partnerCode);
+                }
+            }
+            return true;
+        } catch (Exception ex) {
+            Log.w(TAG, "Household catalogue sync failed: " + ex.getMessage());
+            return false;
+        }
+    }
+
     private boolean syncFingerprints() {
         boolean allOk = true;
         for (FingerprintDao.PendingFingerprint p : fingerprintDao.listPending()) {
@@ -240,6 +286,7 @@ public class SyncManager {
                 params.put("beneficiaryId", p.beneficiaryId);
                 params.put("beneficiaryType", p.beneficiaryType);
                 params.put("fingerNumber", p.fingerNumber);
+                params.put("uuid", p.uuid);
                 params.put("templateData", Base64.encodeToString(p.template, Base64.NO_WRAP));
                 // The server assigns its own uuid to the enrolled row rather than accepting ours;
                 // matched_fp on payments/attendances is a plain informational column (never
@@ -251,6 +298,22 @@ public class SyncManager {
                 Log.w(TAG, "Fingerprint sync failed for " + p.uuid + ": " + ex.getMessage());
                 allOk = false;
             }
+        }
+
+        try {
+            org.json.JSONArray rows = ApiClient.get(context)
+                    .dispatchSync("SYNC_FINGERPRINTS", new HashMap<>()).optJSONArray("results");
+            if (rows != null) {
+                for (int i = 0; i < rows.length(); i++) {
+                    org.json.JSONObject row = rows.getJSONObject(i);
+                    fingerprintDao.insertSynced(row.optInt("beneficiaryType", 1),
+                            row.getString("beneficiaryId"), row.optInt("fingerNumber", 1),
+                            row.getString("uuid"), Base64.decode(row.getString("templateData"), Base64.NO_WRAP));
+                }
+            }
+        } catch (Exception ex) {
+            Log.w(TAG, "Fingerprint catalogue sync failed: " + ex.getMessage());
+            allOk = false;
         }
         return allOk;
     }

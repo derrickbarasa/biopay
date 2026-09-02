@@ -18,7 +18,7 @@ import com.biopay.agent.feed.ActivityFeedActivity;
 import com.biopay.agent.home.HomeActivity;
 import com.biopay.agent.households.HouseholdListActivity;
 import com.biopay.agent.more.MoreActivity;
-import com.biopay.agent.payments.GeneratePaymentActivity;
+import com.biopay.agent.payments.PaymentsActivity;
 
 import android.content.Intent;
 
@@ -79,7 +79,7 @@ public abstract class BaseActivity extends AppCompatActivity {
             }
             Class<?> destination;
             if (targetId == R.id.navPayment) {
-                destination = GeneratePaymentActivity.class;
+                destination = PaymentsActivity.class;
             } else if (targetId == R.id.navHouseholds) {
                 destination = HouseholdListActivity.class;
             } else if (targetId == R.id.navActivityFeed) {
@@ -106,15 +106,5 @@ public abstract class BaseActivity extends AppCompatActivity {
                 && mainNavigation.getSelectedItemId() != mainNavigationSelectedItemId) {
             mainNavigation.setSelectedItemId(mainNavigationSelectedItemId);
         }
-    }
-
-    /** Wires the elevated center action shared by every bottom-nav screen to generated payments. */
-    protected void setupPaymentFab(int fabId) {
-        View fab = findViewById(fabId);
-        if (fab == null) {
-            return;
-        }
-        fab.setOnClickListener(v -> startActivity(new Intent(this, GeneratePaymentActivity.class)
-                .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP)));
     }
 }

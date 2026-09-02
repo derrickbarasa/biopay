@@ -109,7 +109,7 @@ public class Payroll extends AbstractVerticle {
         String periodStart = payload.getString("periodStart", "");
         String periodEnd = payload.getString("periodEnd", "");
         Double amountPerHousehold = payload.getDouble("amountPerHousehold");
-        String otpCode = payload.getString("otpCode", "");
+        String otpCode = payload.getString("otpCode", "").trim();
         String currency = payload.getString("currency", "USD").trim().toUpperCase();
         Double exchangeRateVal = payload.getDouble("exchangeRate", 1.0);
         double exchangeRate = exchangeRateVal == null ? 1.0 : exchangeRateVal;
@@ -243,10 +243,10 @@ public class Payroll extends AbstractVerticle {
         // row within the single INSERT...SELECT (a bound Tuple parameter would repeat the same
         // value for all rows and collide after the first).
         String sql = "INSERT INTO payments (household_number, household_name, gender, boma_code, organization_code, anchor_id, "
-                + "payment_cycle_id, cycle, payment_cycle, date_from, date_to, amount, status, approved, uuid, currency, exchange_rate, "
+                + "payment_cycle_id, cycle, date_from, date_to, amount, status, approved, uuid, currency, exchange_rate, "
                 + "created_by, created_at) "
                 + "SELECT household_number, household_name, gender, boma_code, @p1, @p2, "
-                + "@p3, @p4, @p4, @p5, @p6, @p7, 0, 0, CONVERT(VARCHAR(50), NEWID()), @p9, @p10, @p8, GETDATE() "
+                + "@p3, @p4, @p5, @p6, @p7, 0, 0, CONVERT(VARCHAR(50), NEWID()), @p9, @p10, @p8, GETDATE() "
                 + "FROM households WHERE organization_code=@p1 AND status=1 AND household_number IN ("
                 + inClause(11, householdNumbers.size()) + ")";
         Object anchorId = anchorIdVal == null ? null : Integer.parseInt(anchorIdVal.toString());

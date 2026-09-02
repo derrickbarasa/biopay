@@ -13,6 +13,7 @@ const token = (route.query.token as string) || ''
 const password = ref('')
 const confirmPassword = ref('')
 const showPassword = ref(false)
+const showConfirmPassword = ref(false)
 const loading = ref(false)
 const errorMessage = ref('')
 
@@ -87,8 +88,12 @@ async function handleSubmit() {
                   </v-text-field>
                   <v-text-field
                     v-model="confirmPassword" label="Confirm new password" prepend-inner-icon="mdi-lock-check-outline"
-                    :type="showPassword ? 'text' : 'password'" :rules="[rules.required]" class="mt-2" autocomplete="new-password"
-                  />
+                    :type="showConfirmPassword ? 'text' : 'password'" :rules="[rules.required]" class="mt-2" autocomplete="new-password"
+                  >
+                    <template #append-inner>
+                      <v-btn :icon="showConfirmPassword ? 'mdi-eye-off' : 'mdi-eye'" variant="text" density="compact" :aria-label="showConfirmPassword ? 'Hide password' : 'Show password'" @click="showConfirmPassword = !showConfirmPassword" />
+                    </template>
+                  </v-text-field>
                   <v-btn type="submit" block color="primary" size="large" :loading="loading" :disabled="!token" class="mt-4">
                     Reset password
                   </v-btn>

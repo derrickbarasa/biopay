@@ -28,7 +28,6 @@ public class ActivityFeedActivity extends BaseActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_activity_feed);
         setupMainNavigation(R.id.bottomNavigation, R.id.navActivityFeed);
-        setupPaymentFab(R.id.fabPayment);
 
         activityDao = new ActivityDao(this);
         adapter = new ActivityFeedAdapter();

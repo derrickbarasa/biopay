@@ -30,6 +30,7 @@ import com.biopay.agent.security.SecurityActivity;
 import com.biopay.agent.session.SessionManager;
 import com.biopay.agent.sync.SyncAlertsManager;
 import com.biopay.agent.sync.SyncScheduler;
+import com.biopay.agent.sync.SyncFeedback;
 import com.biopay.agent.ui.BaseActivity;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.materialswitch.MaterialSwitch;
@@ -84,7 +85,11 @@ public class SettingsActivity extends BaseActivity {
 
         findViewById(R.id.btnTestConnection).setOnClickListener(view -> testConnection());
         findViewById(R.id.btnSyncNow).setOnClickListener(view -> {
-            SyncScheduler.triggerNow(this);
+            view.setEnabled(false);
+            SyncFeedback.observe(this, this, view, SyncScheduler.triggerNow(this), () -> {
+                view.setEnabled(true);
+                setupDataAndStorage();
+            });
             show(R.string.settings_sync_queued);
         });
         findViewById(R.id.btnSendFeedback).setOnClickListener(view -> sendFeedback());
@@ -195,15 +200,26 @@ public class SettingsActivity extends BaseActivity {
     }
 
     private void refreshScannerStatus() {
-        boolean available = BiometricDeviceFactory.create().isAvailable(this);
-        tvScannerStatus.setText(available ? R.string.settings_scanner_connected : R.string.settings_scanner_disconnected);
-        tvScannerStatus.setBackgroundResource(available ? R.drawable.bg_status_success : R.drawable.bg_status_warning);
-        tvScannerStatus.setTextColor(ContextCompat.getColor(this, available ? R.color.bp_success : R.color.bp_warning));
+        findViewById(R.id.btnTestScanner).setEnabled(false);
+        new Thread(() -> {
+            boolean available = BiometricDeviceFactory.create().isAvailable(this);
+            runOnUiThread(() -> {
+                tvScannerStatus.setText(available
+                        ? R.string.settings_scanner_connected
+                        : R.string.settings_scanner_disconnected);
+                tvScannerStatus.setBackgroundResource(available
+                        ? R.drawable.bg_status_success
+                        : R.drawable.bg_status_warning);
+                tvScannerStatus.setTextColor(ContextCompat.getColor(this,
+                        available ? R.color.bp_success : R.color.bp_warning));
+                findViewById(R.id.btnTestScanner).setEnabled(true);
+            });
+        }, "biopay-scanner-check").start();
     }
 
     private void setupDataAndStorage() {
         int households = new HouseholdDao(this).countAll();
-        int pending = DatabaseHelper.get(this).countPendingSyncWork();
+        int pending = DatabaseHelper.get(this).countPendingSyncWork(new SessionManager(this).getPartnerCode());
         ((TextView) findViewById(R.id.tvStorageHouseholds)).setText(
                 getString(R.string.settings_storage_households, households));
         ((TextView) findViewById(R.id.tvStoragePendingSync)).setText(

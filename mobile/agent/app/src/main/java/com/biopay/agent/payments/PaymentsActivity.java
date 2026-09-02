@@ -1,5 +1,6 @@
 package com.biopay.agent.payments;
 
+import android.content.Intent;
 import android.os.Bundle;
 import android.view.View;
 import android.widget.TextView;
@@ -13,7 +14,7 @@ import com.biopay.agent.ui.BaseActivity;
 
 import java.util.List;
 
-/** Filterable offline payment register. */
+/** Filterable offline payment register; also the entry point into starting a new payment. */
 public class PaymentsActivity extends BaseActivity {
     private PaymentDao paymentDao;
     private PaymentListAdapter adapter;
@@ -22,7 +23,9 @@ public class PaymentsActivity extends BaseActivity {
     @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_payments);
-        setupBackToolbar(R.id.toolbar);
+        setupMainNavigation(R.id.bottomNavigation, R.id.navPayment);
+        findViewById(R.id.btnPay).setOnClickListener(v ->
+                startActivity(new Intent(this, GeneratePaymentActivity.class)));
         paymentDao = new PaymentDao(this);
         adapter = new PaymentListAdapter();
         RecyclerView recycler = findViewById(R.id.recyclerPayments);

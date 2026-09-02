@@ -7,8 +7,11 @@
     android:orientation="vertical">
 
     <com.google.android.material.appbar.MaterialToolbar
+        android:id="@+id/toolbar"
         style="@style/BioPay.Toolbar"
-        android:title="@string/generated_payment_title" />
+        android:title="@string/generated_payment_title"
+        app:navigationIcon="@drawable/ic_arrow_back"
+        app:navigationIconTint="@color/bp_text_primary" />
 
     <androidx.core.widget.NestedScrollView
         android:layout_width="match_parent"
@@ -25,7 +28,8 @@
             android:paddingEnd="16dp"
             android:paddingBottom="24dp">
 
-            <TextView style="@style/BioPay.SupportingText" android:text="@string/generated_payment_description" />
+            <TextView style="@style/BioPay.ScreenTitle" android:text="@string/generated_payment_title" />
+            <TextView style="@style/BioPay.SupportingText" android:layout_marginTop="4dp" android:text="@string/generated_payment_description" />
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -70,17 +74,23 @@
                 android:orientation="vertical">
 
                 <com.google.android.material.textfield.TextInputLayout
+                    android:id="@+id/searchFieldLayout"
                     style="@style/BioPay.FormField"
                     android:layout_marginTop="18dp"
                     android:hint="@string/generated_payment_search_label"
-                    app:endIconMode="dropdown_menu"
-                    app:helperText="@string/generated_payment_search_help">
+                    app:endIconDrawable="@drawable/ic_chevron_down"
+                    app:endIconMode="custom"
+                    app:endIconTint="@color/bp_outline">
 
-                    <com.google.android.material.textfield.MaterialAutoCompleteTextView
+                    <com.google.android.material.textfield.TextInputEditText
                         android:id="@+id/searchPendingPayments"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:inputType="text"
+                        android:clickable="true"
+                        android:cursorVisible="false"
+                        android:focusable="false"
+                        android:focusableInTouchMode="false"
+                        android:inputType="none"
                         android:maxLines="1" />
                 </com.google.android.material.textfield.TextInputLayout>
 
@@ -149,6 +159,4 @@
 
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>
-
-    <include layout="@layout/partial_bottom_nav_bar" />
 </LinearLayout>

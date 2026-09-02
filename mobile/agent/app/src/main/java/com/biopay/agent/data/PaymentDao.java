@@ -8,13 +8,17 @@ import android.database.sqlite.SQLiteDatabase;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.biopay.agent.session.SessionManager;
+
 /**
  * Local read/write access to the offline `payments` table. Rows here are
  * field-recorded payments (post biometric verification, see
  * RECORD_FIELD_PAYMENT on the backend) plus a local cache of payroll-cycle
  * payments downloaded via SYNC_PAYMENTS/BIOMETRIC_LOGIN for the officer's
  * organisation -- {@link #status} distinguishes PENDING (0), PAID (1) and
- * FAILED (2) for the Reports screen's paid/unpaid split.
+ * FAILED (2) for the Reports screen's paid/unpaid split. Listing/aggregate
+ * reads are scoped to the logged-in officer's own organisation (see
+ * {@link HouseholdDao} for why).
  */
 public class PaymentDao {
 
@@ -25,9 +29,11 @@ public class PaymentDao {
     public static final int STATUS_FAILED = 2;
 
     private final DatabaseHelper dbHelper;
+    private final String partnerCode;
 
     public PaymentDao(Context context) {
         dbHelper = DatabaseHelper.get(context);
+        partnerCode = new SessionManager(context).getPartnerCode();
     }
 
     /** Exactly one of matchedFingerprintUuid/matchedFaceUuid should be non-null -- whichever
@@ -88,8 +94,8 @@ public class PaymentDao {
 
     public List<LocalPayment> listByStatus(Integer status) {
         List<LocalPayment> results = new ArrayList<>();
-        String where = status == null ? "" : " WHERE p.status=?";
-        String[] args = status == null ? null : new String[]{String.valueOf(status)};
+        String where = status == null ? " WHERE p.partner_code=?" : " WHERE p.partner_code=? AND p.status=?";
+        String[] args = status == null ? new String[]{partnerCode} : new String[]{partnerCode, String.valueOf(status)};
         String sql = "SELECT p.*, COALESCE(NULLIF(p.household_name,''), h.household_name, p.household_number) display_name, "
                 + "COALESCE(b.boma_name, NULLIF(p.village_code,''), NULLIF(h.boma_code,''), '') display_village "
                 + "FROM payments p LEFT JOIN households h ON h.household_number=p.household_number "
@@ -166,22 +172,22 @@ public class PaymentDao {
      * actually been marked paid, regardless of which cycle/session recorded it. */
     public boolean hasPaidPayment(String householdNumber) {
         try (Cursor cursor = dbHelper.getReadableDatabase().query("payments", new String[]{"COUNT(*)"},
-                "household_number=? AND status=?",
-                new String[]{householdNumber, String.valueOf(STATUS_PAID)}, null, null, null)) {
+                "household_number=? AND status=? AND partner_code=?",
+                new String[]{householdNumber, String.valueOf(STATUS_PAID), partnerCode}, null, null, null)) {
             return cursor.moveToFirst() && cursor.getInt(0) > 0;
         }
     }
 
     public int countByStatus(int status) {
         try (Cursor cursor = dbHelper.getReadableDatabase().query("payments", new String[]{"COUNT(*)"},
-                "status=?", new String[]{String.valueOf(status)}, null, null, null)) {
+                "status=? AND partner_code=?", new String[]{String.valueOf(status), partnerCode}, null, null, null)) {
             return cursor.moveToFirst() ? cursor.getInt(0) : 0;
         }
     }
 
     public double totalAmountByStatus(int status) {
         try (Cursor cursor = dbHelper.getReadableDatabase().query("payments", new String[]{"IFNULL(SUM(amount),0)"},
-                "status=?", new String[]{String.valueOf(status)}, null, null, null)) {
+                "status=? AND partner_code=?", new String[]{String.valueOf(status), partnerCode}, null, null, null)) {
             return cursor.moveToFirst() ? cursor.getDouble(0) : 0;
         }
     }

@@ -18,7 +18,7 @@ import android.database.sqlite.SQLiteOpenHelper;
 public class DatabaseHelper extends SQLiteOpenHelper {
 
     private static final String DB_NAME = "biopay_agent.db";
-    private static final int DB_VERSION = 10;
+    private static final int DB_VERSION = 14;
 
     /** Every offline-captured row starts PENDING and flips to SYNCED once the server accepts it. */
     public static final int SYNC_PENDING = 0;
@@ -38,42 +38,48 @@ public class DatabaseHelper extends SQLiteOpenHelper {
     }
 
     /**
-     * Counts every locally-created record handled by {@code SyncManager}. Keeping this
-     * aggregation beside the schema prevents dashboard screens from presenting a false
-     * "synced" state when, for example, a face, photo, attendance, or voucher is pending.
+     * Counts every locally-created record handled by {@code SyncManager}, scoped to the
+     * logged-in officer's own organisation -- keeping this aggregation beside the schema
+     * prevents dashboard screens from presenting a false "synced" state when, for example, a
+     * face, photo, attendance, or voucher is pending. {@code vouchers} carries no partner_code
+     * of its own, so it's scoped through the household it belongs to instead.
      */
-    public int countPendingSyncWork() {
+    public int countPendingSyncWork(String partnerCode) {
         String sql = "SELECT " +
-                "(SELECT COUNT(*) FROM households WHERE sync_status=0) + " +
-                "(SELECT COUNT(*) FROM alternates WHERE sync_status=0) + " +
-                "(SELECT COUNT(*) FROM fingerprints WHERE sync_status=0) + " +
-                "(SELECT COUNT(*) FROM faces WHERE sync_status=0) + " +
-                "(SELECT COUNT(*) FROM images WHERE sync_status=0) + " +
-                "(SELECT COUNT(*) FROM attendances WHERE sync_status=0) + " +
-                "(SELECT COUNT(*) FROM payments WHERE sync_status=0) + " +
-                "(SELECT COUNT(*) FROM vouchers " +
-                " WHERE status='REDEEMED' AND redemption_sync_status=0)";
-        try (Cursor cursor = getReadableDatabase().rawQuery(sql, null)) {
+                "(SELECT COUNT(*) FROM households WHERE sync_status=0 AND partner_code=?) + " +
+                "(SELECT COUNT(*) FROM alternates WHERE sync_status=0 AND partner_code=?) + " +
+                "(SELECT COUNT(*) FROM fingerprints WHERE sync_status=0 AND partner_code=?) + " +
+                "(SELECT COUNT(*) FROM faces WHERE sync_status=0 AND partner_code=?) + " +
+                "(SELECT COUNT(*) FROM images WHERE sync_status=0 AND partner_code=?) + " +
+                "(SELECT COUNT(*) FROM attendances WHERE sync_status=0 AND partner_code=?) + " +
+                "(SELECT COUNT(*) FROM payments WHERE sync_status=0 AND partner_code=?) + " +
+                "(SELECT COUNT(*) FROM vouchers v " +
+                " WHERE v.status='REDEEMED' AND v.redemption_sync_status=0 " +
+                " AND EXISTS (SELECT 1 FROM households h WHERE h.household_number=v.household_number AND h.partner_code=?))";
+        String[] args = new String[]{partnerCode, partnerCode, partnerCode, partnerCode,
+                partnerCode, partnerCode, partnerCode, partnerCode};
+        try (Cursor cursor = getReadableDatabase().rawQuery(sql, args)) {
             return cursor.moveToFirst() ? cursor.getInt(0) : 0;
         }
     }
 
     /** Per-table breakdown backing the Sync Center screen's pending-record counts. */
-    public int countPendingHouseholds() {
-        return countPendingIn("households");
+    public int countPendingHouseholds(String partnerCode) {
+        return countPendingIn("households", partnerCode);
     }
 
-    public int countPendingMembers() {
-        return countPendingIn("alternates");
+    public int countPendingMembers(String partnerCode) {
+        return countPendingIn("alternates", partnerCode);
     }
 
-    public int countPendingTransactions() {
-        return countPendingIn("payments");
+    public int countPendingTransactions(String partnerCode) {
+        return countPendingIn("payments", partnerCode);
     }
 
-    private int countPendingIn(String table) {
-        try (Cursor cursor = getReadableDatabase()
-                .rawQuery("SELECT COUNT(*) FROM " + table + " WHERE sync_status=0", null)) {
+    private int countPendingIn(String table, String partnerCode) {
+        try (Cursor cursor = getReadableDatabase().rawQuery(
+                "SELECT COUNT(*) FROM " + table + " WHERE sync_status=0 AND partner_code=?",
+                new String[]{partnerCode})) {
             return cursor.moveToFirst() ? cursor.getInt(0) : 0;
         }
     }
@@ -274,6 +280,45 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             db.execSQL("ALTER TABLE households ADD COLUMN vulnerability_statuses VARCHAR");
             db.execSQL("ALTER TABLE households ADD COLUMN legal_status VARCHAR");
         }
+        if (oldVersion < 11) {
+            cleanInvalidGeoHierarchy(db);
+        }
+        if (oldVersion < 12) {
+            cleanMisclassifiedStates(db);
+        }
+        if (oldVersion < 13) {
+            cleanMisclassifiedStates(db);
+        }
+        if (oldVersion < 14) {
+            // Scopes the Activity feed's verification entries to the logged-in officer's own
+            // organisation, matching every other org-owned table -- see ActivityDao#listAll.
+            db.execSQL("ALTER TABLE verification_events ADD COLUMN partner_code VARCHAR");
+        }
+    }
+
+    /** Removes household codes and incomplete manual entries that older sync builds could insert
+     * into the State picker. Authoritative geography is downloaded again on the next sync. */
+    private static void cleanInvalidGeoHierarchy(SQLiteDatabase db) {
+        db.execSQL("DELETE FROM states WHERE state_name IS NULL OR TRIM(state_name)='' "
+                + "OR state_name NOT GLOB '*[A-Za-z]*'");
+        db.execSQL("DELETE FROM counties WHERE state_code NOT IN (SELECT state_code FROM states)");
+        db.execSQL("DELETE FROM payams WHERE county_code NOT IN (SELECT county_code FROM counties)");
+        db.execSQL("DELETE FROM bomas WHERE payam_code NOT IN (SELECT payam_code FROM payams)");
+        db.execSQL("DELETE FROM states WHERE state_code NOT IN "
+                + "(SELECT DISTINCT state_code FROM counties WHERE state_code IS NOT NULL)");
+    }
+
+    /** A name that is already an active county in this local hierarchy cannot also be offered as
+     * a state. Test fixtures are likewise not field-registration choices. */
+    private static void cleanMisclassifiedStates(SQLiteDatabase db) {
+        db.execSQL("DELETE FROM states WHERE LOWER(TRIM(state_name)) IN "
+                + "(SELECT LOWER(TRIM(county_name)) FROM counties WHERE county_name IS NOT NULL "
+                + "UNION SELECT LOWER(TRIM(county_code)) FROM households "
+                + "WHERE county_code IS NOT NULL AND TRIM(county_code)<>'') "
+                + "OR LOWER(TRIM(state_name)) LIKE 'e2e test%'");
+        db.execSQL("DELETE FROM counties WHERE state_code NOT IN (SELECT state_code FROM states)");
+        db.execSQL("DELETE FROM payams WHERE county_code NOT IN (SELECT county_code FROM counties)");
+        db.execSQL("DELETE FROM bomas WHERE payam_code NOT IN (SELECT payam_code FROM payams)");
     }
 
     /**
@@ -300,6 +345,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
     private static void createVerificationEventsTable(SQLiteDatabase db) {
         db.execSQL("CREATE TABLE IF NOT EXISTS verification_events (" +
                 "id INTEGER PRIMARY KEY AUTOINCREMENT," +
+                "partner_code VARCHAR," +
                 "household_number VARCHAR," +
                 "beneficiary_id VARCHAR," +
                 "person_name VARCHAR," +

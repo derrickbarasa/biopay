@@ -116,6 +116,19 @@
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
+            <TextView
+                style="@style/BioPay.SupportingText"
+                android:layout_marginTop="8dp"
+                android:text="@string/person_capture_later_note" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnFinishLater"
+                style="@style/Widget.Material3.Button.TextButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="@string/person_capture_finish_later" />
+
             <LinearLayout
                 android:id="@+id/doneSection"
                 android:layout_width="match_parent"

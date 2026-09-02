@@ -98,8 +98,23 @@
                     </LinearLayout>
                     <View style="@style/BioPay.RowDivider" android:layout_marginTop="10dp" android:layout_marginBottom="10dp" android:layout_marginStart="0dp" android:layout_marginEnd="0dp" />
                     <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
+                        <TextView style="@style/BioPay.SummaryLabel" android:text="@string/household_detail_state" />
+                        <TextView android:id="@+id/tvState" style="@style/BioPay.SummaryValue" />
+                    </LinearLayout>
+                    <View style="@style/BioPay.RowDivider" android:layout_marginTop="10dp" android:layout_marginBottom="10dp" android:layout_marginStart="0dp" android:layout_marginEnd="0dp" />
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
+                        <TextView style="@style/BioPay.SummaryLabel" android:text="@string/household_detail_county" />
+                        <TextView android:id="@+id/tvCounty" style="@style/BioPay.SummaryValue" />
+                    </LinearLayout>
+                    <View style="@style/BioPay.RowDivider" android:layout_marginTop="10dp" android:layout_marginBottom="10dp" android:layout_marginStart="0dp" android:layout_marginEnd="0dp" />
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
                         <TextView style="@style/BioPay.SummaryLabel" android:text="@string/household_detail_location" />
                         <TextView android:id="@+id/tvLocation" style="@style/BioPay.SummaryValue" />
+                    </LinearLayout>
+                    <View style="@style/BioPay.RowDivider" android:layout_marginTop="10dp" android:layout_marginBottom="10dp" android:layout_marginStart="0dp" android:layout_marginEnd="0dp" />
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
+                        <TextView style="@style/BioPay.SummaryLabel" android:text="@string/household_detail_village" />
+                        <TextView android:id="@+id/tvVillage" style="@style/BioPay.SummaryValue" />
                     </LinearLayout>
                     <View style="@style/BioPay.RowDivider" android:layout_marginTop="10dp" android:layout_marginBottom="10dp" android:layout_marginStart="0dp" android:layout_marginEnd="0dp" />
                     <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
@@ -132,16 +147,6 @@
                         android:layout_height="wrap_content"
                         android:orientation="vertical" />
 
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/btnAddMember"
-                        style="@style/Widget.Material3.Button.TextButton"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="4dp"
-                        android:layout_marginBottom="8dp"
-                        android:text="@string/household_detail_add_member"
-                        android:textAllCaps="false"
-                        app:icon="@drawable/ic_add" />
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
@@ -171,13 +176,33 @@
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnVerifyIdentity"
-                style="@style/BioPay.PrimaryButton"
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
                 android:layout_marginTop="20dp"
-                android:text="@string/home_quick_verify_identity"
-                app:backgroundTint="@color/bp_primary"
-                app:icon="@drawable/ic_fingerprint" />
+                android:orientation="horizontal">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnCapture"
+                    style="@style/BioPay.PrimaryButton"
+                    android:layout_width="0dp"
+                    android:layout_height="56dp"
+                    android:layout_marginEnd="6dp"
+                    android:layout_weight="1"
+                    android:text="@string/household_detail_capture"
+                    app:backgroundTint="@color/bp_primary"
+                    app:icon="@drawable/ic_fingerprint" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnAddAlternate"
+                    style="@style/BioPay.SecondaryButton"
+                    android:layout_width="0dp"
+                    android:layout_height="56dp"
+                    android:layout_marginStart="6dp"
+                    android:layout_weight="1"
+                    android:text="@string/household_detail_add_alternate"
+                    app:icon="@drawable/ic_add" />
+            </LinearLayout>
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>
 </LinearLayout>

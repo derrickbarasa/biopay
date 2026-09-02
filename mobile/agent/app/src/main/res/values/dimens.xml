@@ -8,6 +8,11 @@
     <dimen name="home_content_horizontal_padding">12dp</dimen>
     <dimen name="home_content_top_padding">16dp</dimen>
     <dimen name="home_hero_padding">16dp</dimen>
-    <dimen name="main_navigation_height">76dp</dimen>
+    <dimen name="main_navigation_height">56dp</dimen>
     <dimen name="main_navigation_label_size">11sp</dimen>
+    <!-- Material's default gap between a nav item's icon and its label (mtrl_navigation_bar_item_default_margin)
+         is 8dp, which read as a wide, disconnected gap once the bar was tightened. Overriding this
+         library dimen (same name; app resources win over the AAR's) is the only way to close it,
+         since BottomNavigationView exposes no public attribute for this spacing. -->
+    <dimen name="mtrl_navigation_bar_item_default_margin">3dp</dimen>
 </resources>

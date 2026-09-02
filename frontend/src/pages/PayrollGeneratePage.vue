@@ -79,13 +79,22 @@ function clearGeoFilters() {
   geo.value = { stateCode: null, countyCode: null, locationCode: null, villageCode: null }
 }
 
+// Sourced from GET_HOUSEHOLD_LOCATIONS, not GET_STATES/COUNTIES/LOCATIONS/VILLAGES: those
+// read the anchor's curated geo_states/geo_counties/... catalogue, which a household's own
+// state_code/county_code/payam_code/boma_code columns are NOT tied to -- a household
+// registered via mobile's manual-entry path stores the officer's typed place name directly
+// in those columns with no catalogue node ever created for it. Filtering against the
+// catalogue therefore silently offered/matched nothing for those households. Sourcing the
+// dropdowns from the households actually on file (scoped to the chosen organisation, same as
+// the household list itself) fixes that and keeps the two in sync by construction.
 async function loadGeoLookups() {
+  const scope = { organisationCode: genForm.value.organisationCode || undefined }
   try {
     const [s, c, l, v] = await Promise.all([
-      dispatch<{ results: GeoNode[] }>('GET_STATES'),
-      dispatch<{ results: GeoNode[] }>('GET_COUNTIES'),
-      dispatch<{ results: GeoNode[] }>('GET_LOCATIONS'),
-      dispatch<{ results: GeoNode[] }>('GET_VILLAGES'),
+      dispatch<{ results: GeoNode[] }>('GET_HOUSEHOLD_LOCATIONS', { level: 'STATE', ...scope }),
+      dispatch<{ results: GeoNode[] }>('GET_HOUSEHOLD_LOCATIONS', { level: 'COUNTY', ...scope }),
+      dispatch<{ results: GeoNode[] }>('GET_HOUSEHOLD_LOCATIONS', { level: 'LOCATION', ...scope }),
+      dispatch<{ results: GeoNode[] }>('GET_HOUSEHOLD_LOCATIONS', { level: 'VILLAGE', ...scope }),
     ])
     states.value = s.results
     counties.value = c.results
@@ -152,6 +161,14 @@ watch(
   () => { if (!auth.isAnchor || genForm.value.organisationCode) loadHouseholdOptions() },
 )
 
+// The location dropdowns are scoped to the chosen organisation (see loadGeoLookups above), so
+// switching organisation needs a fresh fetch -- and any filter already picked under the old
+// organisation is very likely meaningless (or plain absent) under the new one.
+watch(() => genForm.value.organisationCode, () => {
+  clearGeoFilters()
+  loadGeoLookups()
+})
+
 // Adds every household currently matching the geography/organisation filter
 // above to the selection (union, not overwrite), so a maker can build up a
 // cycle across several villages -- e.g. "select all" for Village A, then
@@ -210,12 +227,18 @@ const otpSent = ref(false)
 const sendingOtp = ref(false)
 const generating = ref(false)
 
+// Also used to resend: the send button stays available (not hidden once otpSent), matching
+// PayrollPage's own approve dialog. Requesting again supersedes the previous code -- the
+// backend always verifies against the most recently issued one -- so the stale entry is
+// cleared here to avoid submitting a code that can no longer succeed.
 async function sendGenerateOtp() {
   sendingOtp.value = true
   try {
     await dispatch('REQUEST_PAYROLL_OTP', { action: 'GENERATE', actorEmail: auth.user?.email })
+    genForm.value.otpCode = ''
+    const wasResend = otpSent.value
     otpSent.value = true
-    toast.success('Verification code sent to ' + auth.user?.email)
+    toast.success((wasResend ? 'New verification code sent to ' : 'Verification code sent to ') + auth.user?.email)
   } catch (err) {
     toast.error(err instanceof Error ? err.message : 'Failed to send code')
   } finally {
@@ -232,6 +255,7 @@ async function confirmGenerate() {
   try {
     await dispatch('GENERATE_PAYROLL', {
       ...genForm.value,
+      otpCode: genForm.value.otpCode.trim(),
       organisationCode: genForm.value.organisationCode || undefined,
       targetAnchorId: auth.isSystemAdmin ? dialogAnchorId.value ?? undefined : undefined,
     })
@@ -414,6 +438,11 @@ onMounted(() => {
           <v-btn v-if="!otpSent" color="secondary" block :loading="sendingOtp" @click="sendGenerateOtp">Send Verification Code</v-btn>
           <template v-else>
             <v-text-field v-model="genForm.otpCode" label="Verification code" placeholder="6-digit code" maxlength="6" />
+            <div class="d-flex justify-end mb-3">
+              <v-btn variant="text" size="small" color="secondary" :loading="sendingOtp" @click="sendGenerateOtp">
+                Resend code
+              </v-btn>
+            </div>
             <v-btn color="secondary" block :loading="generating" :disabled="!genForm.otpCode" @click="confirmGenerate">
               Confirm & Generate
             </v-btn>

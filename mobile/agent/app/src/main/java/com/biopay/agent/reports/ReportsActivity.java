@@ -11,6 +11,7 @@ import com.biopay.agent.data.DatabaseHelper;
 import com.biopay.agent.data.HouseholdDao;
 import com.biopay.agent.data.PaymentDao;
 import com.biopay.agent.home.SimpleDonutChartView;
+import com.biopay.agent.session.SessionManager;
 import com.biopay.agent.ui.BaseActivity;
 
 import java.text.NumberFormat;
@@ -22,6 +23,7 @@ public class ReportsActivity extends BaseActivity {
     private AlternateDao alternateDao;
     private PaymentDao paymentDao;
     private DatabaseHelper databaseHelper;
+    private SessionManager sessionManager;
 
     @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -31,6 +33,7 @@ public class ReportsActivity extends BaseActivity {
         alternateDao = new AlternateDao(this);
         paymentDao = new PaymentDao(this);
         databaseHelper = DatabaseHelper.get(this);
+        sessionManager = new SessionManager(this);
     }
 
     @Override protected void onResume() {
@@ -41,7 +44,7 @@ public class ReportsActivity extends BaseActivity {
     private void refresh() {
         int paidCount = paymentDao.countByStatus(PaymentDao.STATUS_PAID);
         int pendingCount = paymentDao.countByStatus(PaymentDao.STATUS_PENDING);
-        int waitingSync = databaseHelper.countPendingSyncWork();
+        int waitingSync = databaseHelper.countPendingSyncWork(sessionManager.getPartnerCode());
         NumberFormat number = NumberFormat.getNumberInstance();
 
         setText(R.id.tvPaidCount, String.valueOf(paidCount));

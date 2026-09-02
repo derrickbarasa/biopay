@@ -203,7 +203,13 @@ public class Auth extends AbstractVerticle {
                     String partnerCode = "ORGANISATION".equalsIgnoreCase(scope) ? Rows.str(r, "organization_code") : null;
                     boolean totpEnabled = Boolean.TRUE.equals(r.getBoolean("totp_enabled"));
                     boolean emailOtpEnabled = !Boolean.FALSE.equals(r.getBoolean("email_otp_enabled"));
-                    if (otpRequired()) {
+                    boolean mustChangePassword = Boolean.TRUE.equals(r.getBoolean("must_change_password"));
+                    // A first-time, system-generated password already proved this inbox is theirs --
+                    // it was only ever delivered by email -- so this one login skips the OTP step and
+                    // goes straight to a session, forcing a password change before anything else is
+                    // reachable (see the frontend's mustChangePassword router guard). Every login after
+                    // that clears the flag and goes through the normal OTP challenge below.
+                    if (otpRequired() && !mustChangePassword) {
                         startOtpChallenge(message, id, scope, anchorId, partnerCode, email, totpEnabled, emailOtpEnabled);
                     } else {
                         // Already have the full, just-verified row in hand -- skip the extra

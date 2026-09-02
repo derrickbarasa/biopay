@@ -2,7 +2,7 @@
 <menu xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:id="@+id/navHome" android:icon="@drawable/ic_home" android:title="@string/nav_home" />
     <item android:id="@+id/navHouseholds" android:icon="@drawable/ic_households" android:title="@string/nav_households" />
-    <item android:id="@+id/navPayment" android:icon="@drawable/ic_nav_spacer" android:title="@string/nav_payment" />
+    <item android:id="@+id/navPayment" android:icon="@drawable/ic_payments" android:title="@string/nav_payment" />
     <item android:id="@+id/navActivityFeed" android:icon="@drawable/ic_activity" android:title="@string/nav_activity" />
     <item android:id="@+id/navMore" android:icon="@drawable/ic_more" android:title="@string/nav_more" />
 </menu>

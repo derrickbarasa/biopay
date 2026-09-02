@@ -34,11 +34,23 @@
     <string name="home_sync_pending">%1$d record(s) waiting to sync</string>
     <string name="home_overview">Operational summary</string>
     <string name="home_records">Records and reporting</string>
-    <string name="home_chart_title">Payment status</string>
+    <string name="home_chart_title">Payments</string>
     <string name="home_kpi_households">Households</string>
     <string name="home_kpi_pending_sync">Pending sync</string>
     <string name="home_kpi_paid">Paid</string>
     <string name="home_kpi_pending_payment">Payment pending</string>
+    <string name="home_payment_empty_title">No payment assignments</string>
+    <string name="home_payment_empty_body">Sync to check for new assignments from the dashboard.</string>
+    <string name="home_payment_check">Check for payments</string>
+    <string name="home_payment_next">Next household</string>
+    <string name="home_payment_next_meta">%1$s - %2$s</string>
+    <string name="home_payment_start">Start payment</string>
+    <plurals name="home_payment_ready_count">
+        <item quantity="one">%1$d assignment ready</item>
+        <item quantity="other">%1$d assignments ready</item>
+    </plurals>
+    <string name="home_legend_paid">Paid (%1$d)</string>
+    <string name="home_legend_pending">Pending (%1$d)</string>
     <string name="menu_logout">Log out</string>
 
     <string name="home_view_all">View all</string>
@@ -60,7 +72,6 @@
     <string name="nav_more">More</string>
 
     <string name="scan_action_title">Scan</string>
-    <string name="payment_nav_action">Start a payment</string>
     <string name="scan_sheet_fingerprint">Fingerprint Verification</string>
     <string name="scan_sheet_fingerprint_body">Verify a household member using a registered fingerprint</string>
     <string name="scan_sheet_face">Face Verification</string>
@@ -87,8 +98,6 @@
     <string name="more_security_body">Change your password</string>
     <string name="more_attendance">Attendance</string>
     <string name="more_attendance_body">Record and review attendance</string>
-    <string name="more_payments">Payments</string>
-    <string name="more_payments_body">Payment history for this device</string>
     <string name="more_vouchers">Vouchers</string>
     <string name="more_vouchers_body">Redeem issued vouchers</string>
     <string name="more_alternates">Alternates</string>
@@ -116,7 +125,7 @@
     <string name="household_list_summary">%1$d household(s) on this device</string>
     <string name="household_empty_title">No households yet</string>
     <string name="household_empty_body">Register the first household or connect and sync assigned records.</string>
-    <string name="household_subtitle">%1$s - Boma %2$s</string>
+    <string name="household_subtitle">%1$s - %2$s</string>
     <string name="household_synced">Synced</string>
     <string name="household_pending_sync">Waiting to sync</string>
     <string name="household_status_paid">Paid</string>
@@ -134,10 +143,14 @@
     <string name="household_detail_head_role">Head of household</string>
     <string name="household_detail_alternate_role">Alternate</string>
     <string name="household_detail_household_card">Household</string>
+    <string name="household_detail_state">State</string>
+    <string name="household_detail_county">County</string>
     <string name="household_detail_location">Location</string>
+    <string name="household_detail_village">Village</string>
     <string name="household_detail_registration_method">Registration method</string>
     <string name="household_detail_members_header">Members (%1$d)</string>
-    <string name="household_detail_add_member">Add member</string>
+    <string name="household_detail_add_alternate">Add alternate</string>
+    <string name="household_detail_capture">Capture</string>
     <string name="household_detail_entitlement">Current status</string>
 
     <string name="intervention_cash">Cash</string>
@@ -165,7 +178,7 @@
     <string name="section_household_breakdown">Household breakdown</string>
     <string name="section_vulnerability_literacy">Eligibility and support needs</string>
     <string name="section_biometric_registration">Registration method</string>
-    <string name="biometric_registration_note">Choose how this household enrolls, then capture the household head (and anyone else you add) before finishing registration.</string>
+    <string name="biometric_registration_note">Choose how this household will enroll. You can capture now or finish the household and capture later.</string>
     <string name="face_accuracy_notice">Face verification accuracy hasn\'t been fully validated yet - fingerprint is more reliable until then.</string>
     <string name="field_household_name">Household name</string>
     <string name="field_id_number">ID number</string>
@@ -220,8 +233,14 @@
     <string name="person_capture_add_confirm">Add and continue</string>
     <string name="person_capture_add_cancel">Cancel</string>
     <string name="person_capture_finish">Finish registration</string>
+    <string name="person_capture_finish_later">Finish and capture later</string>
+    <string name="person_capture_later_note">The household is already saved on this tablet. You can safely finish now and capture biometrics later from the household record.</string>
     <string name="person_capture_done">%1$s captured</string>
     <string name="person_capture_failed">Capture problem: %1$s</string>
+    <string name="person_capture_checking_duplicate">Checking fingerprint…</string>
+    <string name="person_capture_fingerprint_success">Fingerprint captured successfully</string>
+    <string name="person_capture_fingerprint_duplicate">Fingerprint capture failed: this fingerprint is already registered to another person</string>
+    <string name="person_capture_fingerprint_check_failed">Fingerprint capture failed: could not verify against existing records. Please try again</string>
 
     <string name="attendance_title">Attendance</string>
     <string name="attendance_description">Choose a household, then verify the person clocking in or out.</string>
@@ -252,6 +271,7 @@
 
     <string name="payment_title">Payments</string>
     <string name="payment_description">Review paid and pending household payments available offline.</string>
+    <string name="payment_pay_action">Pay</string>
     <string name="payment_filter_all">All</string>
     <string name="payment_filter_paid">Paid</string>
     <string name="payment_filter_pending">Pending</string>
@@ -278,8 +298,11 @@
 
     <string name="generated_payment_title">Generated payment</string>
     <string name="generated_payment_description">Select an unpaid household from the latest generated payment cycle.</string>
-    <string name="generated_payment_search_label">Search unpaid household</string>
-    <string name="generated_payment_search_help">Only households with a generated, unpaid payment are shown.</string>
+    <string name="generated_payment_search_label">Choose household</string>
+    <string name="household_picker_title">Choose household</string>
+    <string name="household_picker_search_hint">Search by name, registration number or village</string>
+    <string name="household_picker_empty_none_pending">No unpaid household is ready yet. Tap Sync payments and try again.</string>
+    <string name="household_picker_empty_no_match">No household matches your search.</string>
     <string name="generated_payment_sync">Sync payments</string>
     <string name="generated_payment_sync_failed">Payments could not be refreshed. Check your connection; saved payments are still available offline.</string>
     <string name="generated_payment_placeholder">—</string>
@@ -361,7 +384,10 @@
     <string name="settings_test_connection">Test connection</string>
     <string name="settings_connection_ok">BioPay server is reachable.</string>
     <string name="settings_sync_now">Sync now</string>
-    <string name="settings_sync_queued">Sync queued. It will run when a network is available.</string>
+    <string name="settings_sync_queued">Sync started. BioPay will report whether the server accepted the records.</string>
+    <string name="sync_running">Connecting to BioPay and sending records…</string>
+    <string name="sync_completed">Sync complete. All captured records reached BioPay.</string>
+    <string name="sync_failed_server">The tablet has a network, but the BioPay server could not complete the sync. Check the configured server address, backend service, firewall, and Wi-Fi, then try again. %1$d record(s) remain.</string>
 
     <string name="settings_biometrics">Biometrics</string>
     <string name="settings_enabled_methods_fingerprint">Your organisation has fingerprint registration enabled.</string>

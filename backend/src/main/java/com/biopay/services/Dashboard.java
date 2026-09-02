@@ -88,7 +88,7 @@ public class Dashboard extends AbstractVerticle {
                 "SELECT COUNT(*) AS v FROM alternates a JOIN organizations p ON p.organization_code=a.organization_code "
                         + "WHERE (@p1 IS NULL OR p.anchor_id=@p1) AND a.status=1", Tuple.of(anchorId));
         Future<Row> paymentsAgg = pool.preparedQuery(
-                        "SELECT COUNT(*) AS cnt, ISNULL(SUM(amount),0) AS total FROM payments WHERE (@p1 IS NULL OR anchor_id=@p1)")
+                        "SELECT COUNT(*) AS cnt, ISNULL(SUM(amount),0) AS total FROM payments WHERE (@p1 IS NULL OR anchor_id=@p1) AND status=1")
                 .execute(Tuple.of(anchorId))
                 .map(rows -> rows.iterator().next());
         Future<Row> voucherAgg = pool.preparedQuery(
@@ -101,7 +101,7 @@ public class Dashboard extends AbstractVerticle {
                 "SELECT COUNT(*) AS v FROM field_officers WHERE (@p1 IS NULL OR anchor_id=@p1) AND active='1'", Tuple.of(anchorId));
         Future<Integer> registeredFingerprints = scalarInt(
                 "SELECT COUNT(*) AS v FROM fingerprints f JOIN organizations p ON p.organization_code=f.organization_code "
-                        + "WHERE (@p1 IS NULL OR p.anchor_id=@p1)", Tuple.of(anchorId));
+                        + "WHERE (@p1 IS NULL OR p.anchor_id=@p1) AND f.status=1", Tuple.of(anchorId));
         Future<Integer> pendingPayrolls = scalarInt(
                 "SELECT COUNT(*) AS v FROM payment_cycles WHERE (@p1 IS NULL OR anchor_id=@p1) AND status='PENDING_APPROVAL'", Tuple.of(anchorId));
         Future<Row> generatedPayrolls = pool.preparedQuery(
@@ -138,7 +138,7 @@ public class Dashboard extends AbstractVerticle {
                         "SELECT p.organization_code AS code, p.name AS name, "
                                 + "ISNULL(pay.total,0) AS paymentsAmount, ISNULL(vch.total,0) AS voucherAmount "
                                 + "FROM organizations p "
-                                + "LEFT JOIN (SELECT organization_code, SUM(amount) AS total FROM payments WHERE (@p1 IS NULL OR anchor_id=@p1) GROUP BY organization_code) pay "
+                                + "LEFT JOIN (SELECT organization_code, SUM(amount) AS total FROM payments WHERE (@p1 IS NULL OR anchor_id=@p1) AND status=1 GROUP BY organization_code) pay "
                                 + "  ON pay.organization_code = p.organization_code "
                                 + "LEFT JOIN (SELECT organization_code, SUM(amount) AS total FROM vouchers WHERE (@p1 IS NULL OR anchor_id=@p1) AND status='REDEEMED' GROUP BY organization_code) vch "
                                 + "  ON vch.organization_code = p.organization_code "
@@ -204,7 +204,7 @@ public class Dashboard extends AbstractVerticle {
         Future<Integer> totalAlternates = scalarInt(
                 "SELECT COUNT(*) AS v FROM alternates WHERE organization_code=@p1 AND status=1", Tuple.of(partnerCode));
         Future<Integer> registeredFingerprints = scalarInt(
-                "SELECT COUNT(*) AS v FROM fingerprints WHERE organization_code=@p1", Tuple.of(partnerCode));
+                "SELECT COUNT(*) AS v FROM fingerprints WHERE organization_code=@p1 AND status=1", Tuple.of(partnerCode));
         Future<Row> paymentsAgg = pool.preparedQuery(
                         "SELECT COUNT(*) AS cnt, ISNULL(SUM(amount),0) AS total FROM payments WHERE organization_code=@p1 AND status=1")
                 .execute(Tuple.of(partnerCode))
@@ -346,7 +346,7 @@ public class Dashboard extends AbstractVerticle {
         String cashBucket = chartBucket(period, "pay.created_at");
         String cashScope = isAnchor(payload) ? "(@p1 IS NULL OR pay.anchor_id=@p1)" : "pay.organization_code=@p1";
         String cashSql = "SELECT " + cashBucket + " AS bucket, COUNT(*) AS cnt, ISNULL(SUM(pay.amount),0) AS total "
-                + "FROM payments pay WHERE " + cashScope + " AND " + chartRange(period, "pay.created_at")
+                + "FROM payments pay WHERE " + cashScope + " AND pay.status=1 AND " + chartRange(period, "pay.created_at")
                 + " GROUP BY " + cashBucket + " ORDER BY bucket";
 
         String voucherDate = "COALESCE(v.redeemed_at, v.created_at)";

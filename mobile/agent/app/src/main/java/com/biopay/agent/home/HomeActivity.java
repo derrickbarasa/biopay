@@ -2,12 +2,11 @@ package com.biopay.agent.home;
 
 import android.content.Intent;
 import android.os.Bundle;
+import android.view.View;
 import android.widget.TextView;
 
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
-import androidx.core.content.ContextCompat;
-
 import com.biopay.agent.R;
 import com.biopay.agent.data.DatabaseHelper;
 import com.biopay.agent.data.HouseholdDao;
@@ -16,26 +15,31 @@ import com.biopay.agent.households.HouseholdFormActivity;
 import com.biopay.agent.location.LocationHelper;
 import com.biopay.agent.network.ApiCallback;
 import com.biopay.agent.network.ApiClient;
+import com.biopay.agent.payments.PaymentsActivity;
+import com.biopay.agent.payments.PaymentVerificationActivity;
 import com.biopay.agent.reports.ReportsActivity;
 import com.biopay.agent.session.SessionManager;
 import com.biopay.agent.settings.SettingsActivity;
 import com.biopay.agent.sync.SyncScheduler;
+import com.biopay.agent.sync.SyncFeedback;
 import com.biopay.agent.ui.BaseActivity;
 import com.google.android.material.snackbar.Snackbar;
 
 import org.json.JSONObject;
 
-import java.util.Arrays;
+import java.text.NumberFormat;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
-/** Main menu + at-a-glance dashboard (KPIs and a paid/pending chart), all sourced from local data. */
+/** Main menu + at-a-glance operational dashboard, all sourced from local data. */
 public class HomeActivity extends BaseActivity {
 
     private SessionManager sessionManager;
     private DatabaseHelper databaseHelper;
     private HouseholdDao householdDao;
     private PaymentDao paymentDao;
+    private PaymentDao.LocalPayment nextPayment;
 
     // Requested once here, right after login, rather than inside Attendance/HouseholdForm --
     // this way the permission dialog never interrupts the fingerprint live-verify flow later.
@@ -48,7 +52,6 @@ public class HomeActivity extends BaseActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_home);
         setupMainNavigation(R.id.bottomNavigation, R.id.navHome);
-        setupPaymentFab(R.id.fabPayment);
 
         sessionManager = new SessionManager(this);
         databaseHelper = DatabaseHelper.get(this);
@@ -68,14 +71,28 @@ public class HomeActivity extends BaseActivity {
         // aren't duplicates: the hero's primary actions and the KPI card's own "View all".
         findViewById(R.id.btnQuickRegister).setOnClickListener(v ->
                 startActivity(new Intent(this, HouseholdFormActivity.class)));
-        findViewById(R.id.btnQuickSync).setOnClickListener(v -> {
-            SyncScheduler.triggerNow(this);
-            Snackbar.make(findViewById(R.id.btnQuickSync), R.string.settings_sync_queued, Snackbar.LENGTH_SHORT).show();
-        });
+        findViewById(R.id.btnQuickSync).setOnClickListener(this::triggerManualSync);
         findViewById(R.id.btnNotifications).setOnClickListener(v ->
                 startActivity(new Intent(this, SettingsActivity.class)));
         findViewById(R.id.btnSummaryViewAll).setOnClickListener(v ->
                 startActivity(new Intent(this, ReportsActivity.class)));
+        findViewById(R.id.btnPaymentsViewAll).setOnClickListener(v ->
+                startActivity(new Intent(this, PaymentsActivity.class)));
+        findViewById(R.id.btnCheckPayments).setOnClickListener(this::triggerManualSync);
+        findViewById(R.id.btnStartNextPayment).setOnClickListener(v -> {
+            if (nextPayment == null || nextPayment.remoteId == null) return;
+            startActivity(PaymentVerificationActivity.intentFor(this, nextPayment.remoteId,
+                    nextPayment.householdNumber, nextPayment.amount));
+        });
+    }
+
+    private void triggerManualSync(View anchor) {
+        anchor.setEnabled(false);
+        SyncFeedback.observe(this, this, anchor, SyncScheduler.triggerNow(this), () -> {
+            anchor.setEnabled(true);
+            refreshDashboard();
+        });
+        Snackbar.make(anchor, R.string.settings_sync_queued, Snackbar.LENGTH_SHORT).show();
     }
 
     @Override
@@ -84,7 +101,7 @@ public class HomeActivity extends BaseActivity {
         refreshIdentity();
         refreshDashboard();
         checkSubscriptionGrace();
-        SyncScheduler.triggerNow(this);
+        SyncScheduler.triggerAutomaticNow(this);
     }
 
     /** Mirrors the web dashboard's grace banner (DefaultLayout.vue) for officers who may never
@@ -119,14 +136,11 @@ public class HomeActivity extends BaseActivity {
     private void refreshIdentity() {
         ((TextView) findViewById(R.id.tvWelcome)).setText(
                 getString(R.string.home_welcome, sessionManager.getFullName()));
-        String partnerCode = sessionManager.getPartnerCode();
-        ((TextView) findViewById(R.id.tvOrgLabel)).setText(
-                partnerCode == null || partnerCode.isEmpty() ? sessionManager.getEmail() : partnerCode);
     }
 
     private void refreshDashboard() {
         int householdCount = householdDao.countAll();
-        int pendingSync = databaseHelper.countPendingSyncWork();
+        int pendingSync = databaseHelper.countPendingSyncWork(sessionManager.getPartnerCode());
         int paidCount = paymentDao.countByStatus(PaymentDao.STATUS_PAID);
         int pendingPaymentCount = paymentDao.countByStatus(PaymentDao.STATUS_PENDING);
 
@@ -138,10 +152,24 @@ public class HomeActivity extends BaseActivity {
                 ? getString(R.string.home_sync_clear)
                 : getString(R.string.home_sync_pending, pendingSync));
 
-        SimpleDonutChartView chart = findViewById(R.id.chartPayments);
-        chart.setSlices(Arrays.asList(
-                new SimpleDonutChartView.Slice("Paid", paidCount, ContextCompat.getColor(this, R.color.bp_primary)),
-                new SimpleDonutChartView.Slice("Pending", pendingPaymentCount, ContextCompat.getColor(this, R.color.bp_secondary))),
-                "Total");
+        List<PaymentDao.LocalPayment> readyPayments = paymentDao.listPendingGeneratedPayments();
+        boolean hasReadyPayment = !readyPayments.isEmpty();
+        findViewById(R.id.paymentReadyState).setVisibility(hasReadyPayment ? View.VISIBLE : View.GONE);
+        findViewById(R.id.paymentEmptyState).setVisibility(hasReadyPayment ? View.GONE : View.VISIBLE);
+
+        nextPayment = hasReadyPayment ? readyPayments.get(0) : null;
+        if (nextPayment == null) return;
+
+        ((TextView) findViewById(R.id.tvPaymentReadyCount)).setText(getResources().getQuantityString(
+                R.plurals.home_payment_ready_count, readyPayments.size(), readyPayments.size()));
+        String householdName = nextPayment.householdName == null || nextPayment.householdName.trim().isEmpty()
+                ? nextPayment.householdNumber : nextPayment.householdName.trim();
+        ((TextView) findViewById(R.id.tvNextPaymentName)).setText(householdName);
+        String village = nextPayment.village == null ? "" : nextPayment.village.trim();
+        ((TextView) findViewById(R.id.tvNextPaymentMeta)).setText(village.isEmpty()
+                ? nextPayment.householdNumber
+                : getString(R.string.home_payment_next_meta, nextPayment.householdNumber, village));
+        ((TextView) findViewById(R.id.tvNextPaymentAmount)).setText(getString(
+                R.string.payment_amount, NumberFormat.getNumberInstance().format(nextPayment.amount)));
     }
 }

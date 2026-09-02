@@ -33,6 +33,22 @@ public class FingerprintDao {
         dbHelper.getWritableDatabase().insert("fingerprints", null, values);
     }
 
+    public void insertSynced(int beneficiaryType, String beneficiaryId, int fingerNumber,
+            String uuid, byte[] templateBytes) {
+        try (Cursor cursor = dbHelper.getReadableDatabase().query("fingerprints", new String[]{"1"},
+                "uuid=?", new String[]{uuid}, null, null, null)) {
+            if (cursor.moveToFirst()) return;
+        }
+        ContentValues values = new ContentValues();
+        values.put("beneficiary_type", beneficiaryType);
+        values.put("beneficiary_id", beneficiaryId);
+        values.put("fingerprint_number", fingerNumber);
+        values.put("uuid", uuid);
+        values.put("fingerprint_template", Base64.encodeToString(templateBytes, Base64.NO_WRAP));
+        values.put("sync_status", DatabaseHelper.SYNC_SYNCED);
+        dbHelper.getWritableDatabase().insert("fingerprints", null, values);
+    }
+
     public int countForBeneficiary(String beneficiaryId) {
         try (Cursor cursor = dbHelper.getReadableDatabase().query("fingerprints", new String[]{"COUNT(*)"},
                 "beneficiary_id=?", new String[]{beneficiaryId}, null, null, null)) {
@@ -69,6 +85,29 @@ public class FingerprintDao {
 
     public static class StoredTemplate {
         public String uuid;
+        public byte[] template;
+    }
+
+    /** Every stored template belonging to someone other than {@code beneficiaryId} -- the
+     * candidate pool for the "is this finger already enrolled under a different person?" check
+     * run right after a fresh enrollment capture. */
+    public List<BeneficiaryTemplate> templatesExcludingBeneficiary(String beneficiaryId) {
+        List<BeneficiaryTemplate> templates = new ArrayList<>();
+        try (Cursor cursor = dbHelper.getReadableDatabase().query("fingerprints",
+                new String[]{"beneficiary_id", "fingerprint_template"},
+                "beneficiary_id<>?", new String[]{beneficiaryId}, null, null, null)) {
+            while (cursor.moveToNext()) {
+                BeneficiaryTemplate t = new BeneficiaryTemplate();
+                t.beneficiaryId = cursor.getString(0);
+                t.template = Base64.decode(cursor.getString(1), Base64.NO_WRAP);
+                templates.add(t);
+            }
+        }
+        return templates;
+    }
+
+    public static class BeneficiaryTemplate {
+        public String beneficiaryId;
         public byte[] template;
     }
 

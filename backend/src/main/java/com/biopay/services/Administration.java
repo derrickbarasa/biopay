@@ -1,6 +1,7 @@
 package com.biopay.services;
 
 import com.biopay.databases.Datasource;
+import com.biopay.utilities.EmailTemplates;
 import com.biopay.utilities.Passwords;
 import com.biopay.utilities.Rows;
 import com.biopay.utilities.Utilities;
@@ -113,10 +114,9 @@ public class Administration extends AbstractVerticle {
                     eventBus.send("EMAIL", new JsonObject()
                             .put("mailTo", authorisedEmail)
                             .put("subject", "Your BioPay Anchor Administrator Account")
-                            .put("msg", "Dear " + authorisedName + ",<br />Your anchor has been created in BioPay. "
-                                    + "Your temporary password is <strong>" + temporaryPassword
-                                    + "</strong>. You'll be asked to set a new password the first time you sign in.")
-                            .toString());
+                            .put("msg", EmailTemplates.firstTimePasswordEmail(
+                                    authorisedName, "Your BioPay Anchor Administrator account", temporaryPassword))
+                            .put("inlineImages", EmailTemplates.logoInlineImages()));
                     ok(message, "Anchor and anchor administrator created", new JsonObject().put("anchorId", anchorId));
                 });
     }
@@ -211,10 +211,9 @@ public class Administration extends AbstractVerticle {
                     eventBus.send("EMAIL", new JsonObject()
                             .put("mailTo", email)
                             .put("subject", "Your BioPay Dashboard Account")
-                            .put("msg", "Dear " + firstName + ",<br />Your BioPay dashboard account has been created. "
-                                    + "Your temporary password is <strong>" + tempPassword
-                                    + "</strong>. You'll be asked to set a new password the first time you sign in.")
-                            .toString());
+                            .put("msg", EmailTemplates.firstTimePasswordEmail(
+                                    firstName, "Your BioPay dashboard account", tempPassword))
+                            .put("inlineImages", EmailTemplates.logoInlineImages()));
                     ok(message,"User created. Temporary password sent by email",null);
                 });
     }
@@ -239,10 +238,9 @@ public class Administration extends AbstractVerticle {
                     eventBus.send("EMAIL", new JsonObject()
                             .put("mailTo", email)
                             .put("subject", "Your BioPay Super Admin Account")
-                            .put("msg", "Dear " + firstName + ",<br />A BioPay Super Admin account has been created for you. "
-                                    + "Your temporary password is <strong>" + tempPassword
-                                    + "</strong>. You'll be asked to set a new password the first time you sign in.")
-                            .toString());
+                            .put("msg", EmailTemplates.firstTimePasswordEmail(
+                                    firstName, "Your BioPay Super Admin account", tempPassword))
+                            .put("inlineImages", EmailTemplates.logoInlineImages()));
                     ok(message,"Super Admin created. Temporary password sent by email",null);
                 });
     }

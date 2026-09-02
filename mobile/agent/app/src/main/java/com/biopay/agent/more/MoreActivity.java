@@ -10,7 +10,6 @@ import com.biopay.agent.R;
 import com.biopay.agent.alternates.AlternatesActivity;
 import com.biopay.agent.attendance.AttendanceActivity;
 import com.biopay.agent.location.MyLocationActivity;
-import com.biopay.agent.payments.PaymentsActivity;
 import com.biopay.agent.profile.ProfileActivity;
 import com.biopay.agent.reports.ReportsActivity;
 import com.biopay.agent.security.SecurityActivity;
@@ -30,7 +29,6 @@ public class MoreActivity extends BaseActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_more);
         setupMainNavigation(R.id.bottomNavigation, R.id.navMore);
-        setupPaymentFab(R.id.fabPayment);
 
         bindRow(R.id.rowProfile, R.drawable.ic_profile, R.string.more_profile, R.string.more_profile_body,
                 new Intent(this, ProfileActivity.class));
@@ -42,8 +40,6 @@ public class MoreActivity extends BaseActivity {
                 new Intent(this, SyncCenterActivity.class));
         bindRow(R.id.rowAttendance, R.drawable.ic_attendance, R.string.more_attendance, R.string.more_attendance_body,
                 new Intent(this, AttendanceActivity.class));
-        bindRow(R.id.rowPayments, R.drawable.ic_payments, R.string.more_payments, R.string.more_payments_body,
-                new Intent(this, PaymentsActivity.class));
         bindRow(R.id.rowVouchers, R.drawable.ic_voucher, R.string.more_vouchers, R.string.more_vouchers_body,
                 new Intent(this, VoucherRedemptionActivity.class));
         bindRow(R.id.rowAlternates, R.drawable.ic_alternates, R.string.more_alternates, R.string.more_alternates_body,

@@ -126,6 +126,6 @@ public class VoucherRedemptionActivity extends BaseActivity {
                 location == null ? null : String.valueOf(location.getLongitude()));
         Toast.makeText(this, R.string.voucher_redeemed_queued, Toast.LENGTH_LONG).show();
         showVouchers();
-        SyncScheduler.triggerNow(this);
+        SyncScheduler.triggerAutomaticNow(this);
     }
 }

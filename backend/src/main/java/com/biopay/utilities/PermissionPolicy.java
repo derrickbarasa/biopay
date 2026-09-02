@@ -70,7 +70,7 @@ public final class PermissionPolicy {
         if (Set.of("GET_STATES", "GET_COUNTIES", "GET_LOCATIONS", "GET_VILLAGES").contains(processingCode)) {
             return Set.of("ACCESS_LOCATIONS", "ACCESS_SUPERVISORS", "ACCESS_HOUSEHOLDS", "ACCESS_VOUCHERS");
         }
-        if ("GET_HOUSEHOLDS".equals(processingCode)) {
+        if ("GET_HOUSEHOLDS".equals(processingCode) || "GET_HOUSEHOLD_LOCATIONS".equals(processingCode)) {
             return Set.of("ACCESS_HOUSEHOLDS", "ACCESS_PAYMENT_CYCLES", "ACCESS_VOUCHERS");
         }
         String permission = REQUIRED.get(processingCode);

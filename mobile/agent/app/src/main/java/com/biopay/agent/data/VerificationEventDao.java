@@ -13,8 +13,9 @@ public class VerificationEventDao {
         dbHelper = DatabaseHelper.get(context);
     }
 
-    public void record(String householdNumber, String beneficiaryId, String personName, String method) {
+    public void record(String partnerCode, String householdNumber, String beneficiaryId, String personName, String method) {
         ContentValues values = new ContentValues();
+        values.put("partner_code", partnerCode);
         values.put("household_number", householdNumber);
         values.put("beneficiary_id", beneficiaryId);
         values.put("person_name", personName);
