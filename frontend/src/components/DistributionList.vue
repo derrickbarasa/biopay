@@ -9,6 +9,7 @@ const props = defineProps<{
   ariaLabel?: string
   preserveOrder?: boolean
   totalValue?: number
+  showPercent?: boolean
 }>()
 
 const total = computed(() => props.totalValue ?? props.data.reduce((sum, item) => sum + item.value, 0))
@@ -27,7 +28,9 @@ const rows = computed(() => {
     <div v-for="row in rows" :key="row.label" class="distribution-row">
       <div class="distribution-copy">
         <span>{{ row.displayLabel }}</span>
-        <strong>{{ row.value.toLocaleString() }} &middot; {{ row.percent }}%</strong>
+        <strong>
+          {{ row.value.toLocaleString() }}<template v-if="showPercent !== false"> &middot; {{ row.percent }}%</template>
+        </strong>
       </div>
       <div class="distribution-track" aria-hidden="true">
         <span :style="{ width: `${row.percent}%`, minWidth: row.value ? '2px' : '0', background: row.color ?? color ?? '#0D9488' }" />

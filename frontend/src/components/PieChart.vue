@@ -6,7 +6,9 @@ const props = withDefaults(defineProps<{
   data: Slice[]
   colors?: string[]
   variant?: 'donut' | 'pie'
-}>(), { variant: 'donut' })
+  showLabels?: boolean
+  showLegendPercent?: boolean
+}>(), { variant: 'donut', showLegendPercent: true })
 
 const size = 200
 const radius = 84
@@ -41,7 +43,15 @@ const slices = computed(() => {
       : (fraction >= 0.9999
           ? `${fullCircle} M ${center - (radius - thickness)} ${center} A ${radius - thickness} ${radius - thickness} 0 1 0 ${center + (radius - thickness)} ${center} A ${radius - thickness} ${radius - thickness} 0 1 0 ${center - (radius - thickness)} ${center} Z`
           : `M ${outerStart.x} ${outerStart.y} A ${radius} ${radius} 0 ${largeArc} 1 ${outerEnd.x} ${outerEnd.y} L ${innerStart.x} ${innerStart.y} A ${radius - thickness} ${radius - thickness} 0 ${largeArc} 0 ${innerEnd.x} ${innerEnd.y} Z`)
-    const slice = { path, color: palette.value[i % palette.value.length], percent: Math.round(fraction * 100), ...d }
+    const labelPoint = polar(startAngle + fraction * 180, props.variant === 'pie' ? radius * .62 : radius - thickness / 2)
+    const slice = {
+      path,
+      color: palette.value[i % palette.value.length],
+      percent: Math.round(fraction * 100),
+      labelX: labelPoint.x,
+      labelY: labelPoint.y,
+      ...d,
+    }
     startAngle = endAngle
     return slice
   })
@@ -67,6 +77,15 @@ const slices = computed(() => {
           :fill-opacity="hoverIndex === null || hoverIndex === i ? 1 : 0.35"
           @mouseenter="hoverIndex = i" @mouseleave="hoverIndex = null"
         />
+        <text
+          v-for="(s, i) in slices"
+          v-show="showLabels && s.percent >= 8"
+          :key="`label-${i}`"
+          :x="s.labelX"
+          :y="s.labelY + 4"
+          text-anchor="middle"
+          class="slice-label"
+        >{{ s.percent }}%</text>
       </svg>
       <div v-if="variant === 'donut'" class="pie-center">
         <span class="pie-total">{{ total.toLocaleString() }}</span>
@@ -77,7 +96,9 @@ const slices = computed(() => {
       <div v-for="(s, i) in slices" :key="i" class="legend-row" :class="{ dim: hoverIndex !== null && hoverIndex !== i }" @mouseenter="hoverIndex = i" @mouseleave="hoverIndex = null">
         <span class="swatch" :style="{ background: s.color }" />
         <span class="legend-label">{{ s.label }}</span>
-        <span class="legend-value">{{ s.value.toLocaleString() }} · {{ s.percent }}%</span>
+        <span class="legend-value">
+          {{ s.value.toLocaleString() }}<template v-if="showLegendPercent"> &middot; {{ s.percent }}%</template>
+        </span>
       </div>
       <div v-if="!data.length" class="text-caption text-medium-emphasis">No data</div>
     </div>
@@ -89,6 +110,7 @@ const slices = computed(() => {
 .pie-svg-wrap { position: relative; width: 124px; height: 124px; }
 .pie-svg { width: 100%; height: 100%; }
 .pie-svg path { transition: fill-opacity 150ms ease; cursor: default; }
+.slice-label { fill: #fff; font-size: 14px; font-weight: 750; pointer-events: none; paint-order: stroke; stroke: rgb(15 23 42 / 18%); stroke-width: 1px; }
 .pie-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; pointer-events: none; }
 .pie-total { font-size: 1.15rem; font-weight: 750; color: #0f172a; line-height: 1.1; }
 .pie-total-label { font-size: .65rem; color: #94a3b8; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
