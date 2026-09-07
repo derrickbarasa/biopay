@@ -142,34 +142,39 @@ public class MorphoDeviceAdapter implements BiometricDevice, Observer {
         activeCaptureCallback = null;
 
         new Thread(() -> {
-            TemplateList templateList = new TemplateList();
-            Template template = new Template();
-            template.setData(candidateTemplate);
-            template.setDataIndex(0);
-            template.setTemplateType(TemplateType.MORPHO_PK_ISO_FMR_2011);
-            templateList.putTemplate(template);
+            try {
+                TemplateList templateList = new TemplateList();
+                Template template = new Template();
+                template.setData(candidateTemplate);
+                template.setDataIndex(0);
+                template.setTemplateType(TemplateType.MORPHO_PK_ISO_FMR_2011);
+                templateList.putTemplate(template);
 
-            int callbackCmd = CallbackMask.MORPHO_CALLBACK_IMAGE_CMD.getValue()
-                    ^ CallbackMask.MORPHO_CALLBACK_COMMAND_CMD.getValue();
-            int detectModeChoice = DetectionMode.MORPHO_ENROLL_DETECT_MODE.getValue()
-                    | DetectionMode.MORPHO_FORCE_FINGER_ON_TOP_DETECT_MODE.getValue();
-            ResultMatching resultMatching = new ResultMatching();
+                int callbackCmd = CallbackMask.MORPHO_CALLBACK_IMAGE_CMD.getValue()
+                        ^ CallbackMask.MORPHO_CALLBACK_COMMAND_CMD.getValue();
+                int detectModeChoice = DetectionMode.MORPHO_ENROLL_DETECT_MODE.getValue()
+                        | DetectionMode.MORPHO_FORCE_FINGER_ON_TOP_DETECT_MODE.getValue();
+                ResultMatching resultMatching = new ResultMatching();
 
             // far=5, matchingStrategy=0: 6.15.3.0 has neither FalseAcceptanceRate nor
             // MatchingStrategy enums -- these are the raw values nca's code used.
-            int ret = morphoDevice.verify(TIMEOUT_SECONDS, 5, Coder.MORPHO_DEFAULT_CODER,
-                    detectModeChoice, 0, templateList, callbackCmd, this, resultMatching);
+                int ret = morphoDevice.verify(TIMEOUT_SECONDS, 5, Coder.MORPHO_DEFAULT_CODER,
+                        detectModeChoice, 0, templateList, callbackCmd, this, resultMatching);
 
-            if (ret == ErrorCodes.MORPHO_OK) {
-                postMatched(resultMatching.getMatchingScore());
-            } else if (ret == ErrorCodes.MORPHOERR_NO_HIT) {
-                // 6.15.3.0's ErrorCodes has no MORPHOERR_INVALID_FINGER (unlike 6.42.0.0) --
-                // MORPHOERR_NO_HIT is the only "verified, but no match" code this SDK reports.
-                postNoMatch();
-            } else {
-                postVerifyError(ret);
+                if (ret == ErrorCodes.MORPHO_OK) {
+                    postMatched(resultMatching.getMatchingScore());
+                } else if (ret == ErrorCodes.MORPHOERR_NO_HIT) {
+                    // 6.15.3.0's ErrorCodes has no MORPHOERR_INVALID_FINGER (unlike 6.42.0.0) --
+                    // MORPHOERR_NO_HIT is the only "verified, but no match" code this SDK reports.
+                    postNoMatch();
+                } else {
+                    postVerifyError(ret);
+                }
+            } catch (Throwable ex) {
+                Log.e(TAG, "Fingerprint verification crashed inside the vendor SDK", ex);
+                postVerifyError(ErrorCodes.MORPHOERR_UNAVAILABLE);
             }
-        }).start();
+        }, "morpho-verify").start();
     }
 
     @Override

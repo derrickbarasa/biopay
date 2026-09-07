@@ -56,16 +56,28 @@ public class Dashboard extends AbstractVerticle {
         return TenantScope.managesOrganisations(payload);
     }
 
-    /** The one designated cross-anchor operator (admin@biopay.com) -- sees every
-     *  anchor's totals instead of being scoped to just their own. */
     private static boolean isSystemAdmin(JsonObject payload) {
-        return payload.getBoolean("systemAdmin", false);
+        return TenantScope.isSystemOwner(payload);
+    }
+
+    static boolean hasScope(JsonObject payload) {
+        if (isSystemAdmin(payload)) return true;
+        if (isAnchor(payload)) return TenantScope.anchorId(payload) != null && TenantScope.anchorId(payload) > 0;
+        String code = payload.getString("partnerCode");
+        return code != null && !code.isBlank();
+    }
+
+    private static boolean requireScope(Message<Object> message, JsonObject payload) {
+        if (hasScope(payload)) return true;
+        reply(message, new JsonObject().put("responseCode", "403").put("responseMessage", "Dashboard scope is missing. Sign in again."));
+        return false;
     }
 
     // ---- DASHBOARD_METRICS --------------------------------------------------------
 
     private void metrics(Message<Object> message) {
         JsonObject payload = new JsonObject(message.body().toString());
+        if (!requireScope(message, payload)) return;
         if (isAnchor(payload)) {
             anchorMetrics(message, payload);
         } else {
@@ -77,7 +89,7 @@ public class Dashboard extends AbstractVerticle {
         Object anchorIdVal = payload.getValue("anchorId");
         // A system admin's anchorId param becomes NULL, and every "anchor_id=@p1" below
         // is written as "(@p1 IS NULL OR anchor_id=@p1)" so NULL means "every anchor".
-        Integer anchorId = isSystemAdmin(payload) || anchorIdVal == null ? null : Integer.parseInt(anchorIdVal.toString());
+        Integer anchorId = isSystemAdmin(payload) || anchorIdVal == null ? null : TenantScope.anchorId(payload);
 
         Future<Integer> totalOrganizations = scalarInt(
                 "SELECT COUNT(*) AS v FROM organizations WHERE (@p1 IS NULL OR anchor_id=@p1) AND status=1", Tuple.of(anchorId));
@@ -88,7 +100,7 @@ public class Dashboard extends AbstractVerticle {
                 "SELECT COUNT(*) AS v FROM alternates a JOIN organizations p ON p.organization_code=a.organization_code "
                         + "WHERE (@p1 IS NULL OR p.anchor_id=@p1) AND a.status=1", Tuple.of(anchorId));
         Future<Row> paymentsAgg = pool.preparedQuery(
-                        "SELECT COUNT(*) AS cnt, ISNULL(SUM(amount),0) AS total FROM payments WHERE (@p1 IS NULL OR anchor_id=@p1) AND status=1")
+                        "SELECT COUNT(*) AS cnt, ISNULL(SUM(amount),0) AS total FROM payments WHERE (@p1 IS NULL OR anchor_id=@p1) AND status=1 AND rejected=0")
                 .execute(Tuple.of(anchorId))
                 .map(rows -> rows.iterator().next());
         Future<Row> voucherAgg = pool.preparedQuery(
@@ -110,15 +122,16 @@ public class Dashboard extends AbstractVerticle {
                 .execute(Tuple.of(anchorId))
                 .map(rows -> rows.iterator().next());
         Future<Row> latestPayroll = pool.preparedQuery(
-                        "SELECT TOP 1 * FROM payment_cycles WHERE (@p1 IS NULL OR anchor_id=@p1) ORDER BY created_at DESC")
+                        "SELECT TOP 1 * FROM payment_cycles WHERE (@p1 IS NULL OR anchor_id=@p1) ORDER BY created_at DESC, id DESC")
                 .execute(Tuple.of(anchorId))
                 .map(rows -> rows.size() == 0 ? null : rows.iterator().next());
         Future<JsonArray> recentTransactions = pool.preparedQuery(
                         "SELECT TOP 10 pay.*, h.household_name AS resolved_household_name, "
-                                + "p.name AS organisation_name FROM payments pay "
-                                + "LEFT JOIN households h ON h.household_number=pay.household_number "
+                                + "p.name AS organisation_name, COALESCE(pay.verified_at, pc.disbursed_at, pay.created_at) AS activity_at FROM payments pay "
+                                + "LEFT JOIN payment_cycles pc ON pc.id=pay.payment_cycle_id "
+                                + "LEFT JOIN households h ON h.household_number=pay.household_number AND h.organization_code=pay.organization_code "
                                 + "LEFT JOIN organizations p ON p.organization_code=pay.organization_code "
-                                + "WHERE (@p1 IS NULL OR pay.anchor_id=@p1) ORDER BY pay.created_at DESC")
+                                + "WHERE (@p1 IS NULL OR pay.anchor_id=@p1) ORDER BY activity_at DESC, pay.id DESC")
                 .execute(Tuple.of(anchorId))
                 .map(rows -> {
                     JsonArray arr = new JsonArray();
@@ -130,19 +143,21 @@ public class Dashboard extends AbstractVerticle {
                                 .put("organisationName", Rows.str(r, "organisation_name"))
                                 .put("amount", Rows.dbl(r, "amount"))
                                 .put("status", Rows.intVal(r, "status"))
-                                .put("createdAt", Rows.str(r, "created_at")));
+                                .put("createdAt", Rows.str(r, "created_at"))
+                                .put("activityAt", Rows.str(r, "activity_at"))
+                                .put("rejected", Rows.intVal(r, "rejected") == 1));
                     }
                     return arr;
                 });
         Future<JsonArray> amountsByOrganisation = pool.preparedQuery(
-                        "SELECT p.organization_code AS code, p.name AS name, "
+                        "SELECT p.organization_code AS code, p.name AS name, p.status AS organisation_status, "
                                 + "ISNULL(pay.total,0) AS paymentsAmount, ISNULL(vch.total,0) AS voucherAmount "
                                 + "FROM organizations p "
-                                + "LEFT JOIN (SELECT organization_code, SUM(amount) AS total FROM payments WHERE (@p1 IS NULL OR anchor_id=@p1) AND status=1 GROUP BY organization_code) pay "
+                                + "LEFT JOIN (SELECT organization_code, SUM(amount) AS total FROM payments WHERE (@p1 IS NULL OR anchor_id=@p1) AND status=1 AND rejected=0 GROUP BY organization_code) pay "
                                 + "  ON pay.organization_code = p.organization_code "
                                 + "LEFT JOIN (SELECT organization_code, SUM(amount) AS total FROM vouchers WHERE (@p1 IS NULL OR anchor_id=@p1) AND status='REDEEMED' GROUP BY organization_code) vch "
                                 + "  ON vch.organization_code = p.organization_code "
-                                + "WHERE (@p1 IS NULL OR p.anchor_id=@p1) AND p.status=1 ORDER BY p.name")
+                                + "WHERE (@p1 IS NULL OR p.anchor_id=@p1) ORDER BY p.name")
                 .execute(Tuple.of(anchorId))
                 .map(rows -> {
                     JsonArray arr = new JsonArray();
@@ -152,6 +167,7 @@ public class Dashboard extends AbstractVerticle {
                         arr.add(new JsonObject()
                                 .put("organisationCode", Rows.str(r, "code"))
                                 .put("organisationName", Rows.str(r, "name"))
+                                .put("active", Rows.intVal(r, "organisation_status") == 1)
                                 .put("paymentsAmount", paymentsAmount)
                                 .put("voucherAmount", voucherAmount)
                                 .put("totalAmount", paymentsAmount + voucherAmount));
@@ -206,7 +222,7 @@ public class Dashboard extends AbstractVerticle {
         Future<Integer> registeredFingerprints = scalarInt(
                 "SELECT COUNT(*) AS v FROM fingerprints WHERE organization_code=@p1 AND status=1", Tuple.of(partnerCode));
         Future<Row> paymentsAgg = pool.preparedQuery(
-                        "SELECT COUNT(*) AS cnt, ISNULL(SUM(amount),0) AS total FROM payments WHERE organization_code=@p1 AND status=1")
+                        "SELECT COUNT(*) AS cnt, ISNULL(SUM(amount),0) AS total FROM payments WHERE organization_code=@p1 AND status=1 AND rejected=0")
                 .execute(Tuple.of(partnerCode))
                 .map(rows -> rows.iterator().next());
         Future<Row> voucherAgg = pool.preparedQuery(
@@ -336,17 +352,20 @@ public class Dashboard extends AbstractVerticle {
 
     private void paymentsChart(Message<Object> message) {
         JsonObject payload = new JsonObject(message.body().toString());
+        if (!requireScope(message, payload)) return;
         String period = chartPeriod(payload);
         String referenceDate = chartReferenceDate(payload);
         String partnerCode = isAnchor(payload) ? null : payload.getString("partnerCode", "");
         Object anchorIdVal = payload.getValue("anchorId");
-        Integer anchorId = isSystemAdmin(payload) || anchorIdVal == null ? null : Integer.parseInt(anchorIdVal.toString());
+        Integer anchorId = isSystemAdmin(payload) || anchorIdVal == null ? null : TenantScope.anchorId(payload);
         Tuple params = isAnchor(payload) ? Tuple.of(anchorId, referenceDate) : Tuple.of(partnerCode, referenceDate);
 
-        String cashBucket = chartBucket(period, "pay.created_at");
+        String cashDate = "COALESCE(pay.verified_at, pc.disbursed_at, pay.created_at)";
+        String cashBucket = chartBucket(period, cashDate);
         String cashScope = isAnchor(payload) ? "(@p1 IS NULL OR pay.anchor_id=@p1)" : "pay.organization_code=@p1";
         String cashSql = "SELECT " + cashBucket + " AS bucket, COUNT(*) AS cnt, ISNULL(SUM(pay.amount),0) AS total "
-                + "FROM payments pay WHERE " + cashScope + " AND pay.status=1 AND " + chartRange(period, "pay.created_at")
+                + "FROM payments pay LEFT JOIN payment_cycles pc ON pc.id=pay.payment_cycle_id WHERE " + cashScope
+                + " AND pay.status=1 AND pay.rejected=0 AND " + chartRange(period, cashDate)
                 + " GROUP BY " + cashBucket + " ORDER BY bucket";
 
         String voucherDate = "COALESCE(v.redeemed_at, v.created_at)";
@@ -386,10 +405,11 @@ public class Dashboard extends AbstractVerticle {
 
     private void householdsChart(Message<Object> message) {
         JsonObject payload = new JsonObject(message.body().toString());
+        if (!requireScope(message, payload)) return;
         String period = chartPeriod(payload);
         String referenceDate = chartReferenceDate(payload);
         Object anchorIdVal = payload.getValue("anchorId");
-        Integer anchorId = isSystemAdmin(payload) || anchorIdVal == null ? null : Integer.parseInt(anchorIdVal.toString());
+        Integer anchorId = isSystemAdmin(payload) || anchorIdVal == null ? null : TenantScope.anchorId(payload);
         Tuple params = isAnchor(payload)
                 ? Tuple.of(anchorId, referenceDate)
                 : Tuple.of(payload.getString("partnerCode", ""), referenceDate);

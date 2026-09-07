@@ -57,11 +57,17 @@ final class OtpService {
      * increments attempts and locks it out after {@link #MAX_ATTEMPTS}.
      */
     Future<Boolean> verify(String referenceType, int userId, String code) {
+        return verify(referenceType, "", userId, code);
+    }
+
+    /** Verifies a challenge for one exact approval reference when supplied. */
+    Future<Boolean> verify(String referenceType, String referenceCode, int userId, String code) {
         String codeHash = Hashing.sha256Hex(code);
-        String sql = "SELECT TOP 1 * FROM otp_verifications WHERE reference_type=@p1 AND user_id=@p2 "
+        String sql = "SELECT TOP 1 * FROM otp_verifications WHERE reference_type=@p1 "
+                + "AND (@p2='' OR reference_code=@p2) AND user_id=@p3 "
                 + "AND verified=0 AND expires_at > GETDATE() ORDER BY created_at DESC";
         return pool.preparedQuery(sql)
-                .execute(Tuple.of(referenceType, userId))
+                .execute(Tuple.of(referenceType, referenceCode == null ? "" : referenceCode, userId))
                 .compose(rows -> {
                     if (rows.size() == 0) {
                         return Future.succeededFuture(Boolean.FALSE);

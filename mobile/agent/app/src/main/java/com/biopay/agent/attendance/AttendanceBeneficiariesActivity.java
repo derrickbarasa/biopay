@@ -6,7 +6,6 @@ import android.location.Location;
 import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AlertDialog;
@@ -25,6 +24,7 @@ import com.biopay.agent.data.HouseholdDao;
 import com.biopay.agent.location.LocationHelper;
 import com.biopay.agent.session.SessionManager;
 import com.biopay.agent.ui.BaseActivity;
+import com.biopay.agent.ui.OutcomeFeedback;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 import java.util.ArrayList;
@@ -99,7 +99,7 @@ public class AttendanceBeneficiariesActivity extends BaseActivity {
     private void startVerify(Beneficiary beneficiary, String clock) {
         List<FingerprintDao.StoredTemplate> templates = fingerprintDao.templatesWithUuidForBeneficiary(beneficiary.beneficiaryId);
         if (templates.isEmpty()) {
-            Toast.makeText(this, R.string.attendance_no_enrolled_fingerprint, Toast.LENGTH_SHORT).show();
+            OutcomeFeedback.error(this, R.string.attendance_no_enrolled_fingerprint);
             return;
         }
 
@@ -107,7 +107,7 @@ public class AttendanceBeneficiariesActivity extends BaseActivity {
         try {
             device.open(this, null);
         } catch (BiometricDeviceException ex) {
-            Toast.makeText(this, R.string.attendance_verify_error, Toast.LENGTH_SHORT).show();
+            OutcomeFeedback.error(this, R.string.attendance_verify_error);
             return;
         } catch (Throwable ex) {
             // A missing/mismatched vendor native library throws an unchecked UnsatisfiedLinkError,
@@ -115,7 +115,7 @@ public class AttendanceBeneficiariesActivity extends BaseActivity {
             // matching fix). Caught broadly so a hardware/library problem degrades to the same
             // honest message instead of crashing the app.
             android.util.Log.e("AttendanceBeneficiaries", "BiometricDevice.open() failed unexpectedly", ex);
-            Toast.makeText(this, R.string.attendance_verify_error, Toast.LENGTH_SHORT).show();
+            OutcomeFeedback.error(this, R.string.attendance_verify_error);
             return;
         }
 
@@ -140,7 +140,7 @@ public class AttendanceBeneficiariesActivity extends BaseActivity {
         if (index >= templates.size()) {
             device.close();
             dialog.dismiss();
-            Toast.makeText(this, R.string.attendance_no_match, Toast.LENGTH_SHORT).show();
+            OutcomeFeedback.error(this, R.string.attendance_no_match);
             return;
         }
 
@@ -166,7 +166,7 @@ public class AttendanceBeneficiariesActivity extends BaseActivity {
             public void onError(int errorCode, String message) {
                 device.close();
                 dialog.dismiss();
-                Toast.makeText(AttendanceBeneficiariesActivity.this, R.string.attendance_verify_error, Toast.LENGTH_SHORT).show();
+                OutcomeFeedback.error(AttendanceBeneficiariesActivity.this, R.string.attendance_verify_error);
             }
         });
     }
@@ -179,6 +179,6 @@ public class AttendanceBeneficiariesActivity extends BaseActivity {
         attendanceDao.record(String.valueOf(sessionManager.getUserId()), sessionManager.getPartnerCode(),
                 beneficiary.householdNumber, beneficiary.beneficiaryType, beneficiary.beneficiaryId,
                 matchedFingerprintUuid, clock, null, latitude, longitude, UUID.randomUUID().toString());
-        Toast.makeText(this, R.string.attendance_recorded, Toast.LENGTH_SHORT).show();
+        OutcomeFeedback.success(this, R.string.attendance_recorded);
     }
 }

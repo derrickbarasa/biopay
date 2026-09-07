@@ -13,6 +13,8 @@ export const PUBLIC_PROCESSING_CODES = new Set([
   'SIGNUP_ANCHOR',
   'REQUEST_PASSWORD_RESET',
   'RESET_PASSWORD',
+  'GET_EMAIL_APPROVAL',
+  'CONFIRM_EMAIL_APPROVAL',
 ] as const)
 
 export type ProcessingCode =
@@ -25,6 +27,8 @@ export type ProcessingCode =
   | 'SIGNUP_ANCHOR'
   | 'REQUEST_PASSWORD_RESET'
   | 'RESET_PASSWORD'
+  | 'GET_EMAIL_APPROVAL'
+  | 'CONFIRM_EMAIL_APPROVAL'
   // auth (authenticated)
   | 'LOGOUT'
   | 'CHANGE_PASSWORD'

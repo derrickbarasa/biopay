@@ -5,6 +5,8 @@ describe('processing code routing', () => {
   it('keeps session-establishing calls public', () => {
     expect(PUBLIC_PROCESSING_CODES.has('LOGIN_USER')).toBe(true)
     expect(PUBLIC_PROCESSING_CODES.has('VERIFY_LOGIN_OTP')).toBe(true)
+    expect(PUBLIC_PROCESSING_CODES.has('GET_EMAIL_APPROVAL')).toBe(true)
+    expect(PUBLIC_PROCESSING_CODES.has('CONFIRM_EMAIL_APPROVAL')).toBe(true)
   })
 
   it('does not expose administration calls without JWT authentication', () => {

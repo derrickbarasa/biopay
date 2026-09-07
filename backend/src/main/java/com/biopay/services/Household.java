@@ -133,8 +133,8 @@ public class Household extends AbstractVerticle {
         String sql = "INSERT INTO households (officer_code, organization_code, household_number, beneficiary_type, "
                 + "household_name, age, marital_status, spouse_name, id_number, phone_number, gender, "
                 + "household_size, female_dependants, male_dependants, vulnerability_status, legal_status, state_code, county_code, payam_code, boma_code, "
-                + "latitude, longitude, status, created_by, created_at, updated_at) "
-                + "VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,@p12,@p13,@p14,@p15,@p16,@p17,@p18,@p19,@p20,@p21,@p22,@p23,@p24,GETDATE(),GETDATE())";
+                + "latitude, longitude, review_status, status, created_by, created_at, updated_at) "
+                + "VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,@p12,@p13,@p14,@p15,@p16,@p17,@p18,@p19,@p20,@p21,@p22,'PENDING',@p23,@p24,GETDATE(),GETDATE())";
 
         pool.preparedQuery(sql)
                 .execute(Tuple.of(
@@ -163,14 +163,44 @@ public class Household extends AbstractVerticle {
                 .onFailure(err -> onDbError(message, err))
                 .onSuccess(rows -> {
                     if (rows.rowCount() > 0) {
-                        reply(message, new JsonObject()
+                        JsonObject response = new JsonObject()
                                 .put("responseCode", "000")
-                                .put("responseMessage", "Household registered successfully")
-                                .put("householdNumber", householdNumber));
+                                .put("householdNumber", householdNumber);
+                        JsonObject approvalRequest = new JsonObject()
+                                .put("requestType", "HOUSEHOLD")
+                                .put("referenceCode", householdNumber)
+                                .put("organisationCode", partnerCode)
+                                .put("makerId", payload.getInteger("actorId"))
+                                .put("title", "Household approval")
+                                .put("summary", payload.getString("householdName", "Household").trim()
+                                        + " is waiting for review");
+                        eventBus.<Object>request("CREATE_APPROVAL_REQUEST", approvalRequest).onComplete(notification -> {
+                            int recipientCount = approvalRecipientCount(notification.succeeded() ? notification.result().body() : null);
+                            reply(message, response
+                                    .put("approvalRecipientCount", recipientCount)
+                                    .put("approvalEmailSent", recipientCount > 0)
+                                    .put("responseMessage", recipientCount > 0
+                                            ? "Household registered; the approver has been emailed"
+                                            : "Household registered successfully and is pending approval"));
+                        });
                     } else {
                         replyError(message, "Failed to register household");
                     }
                 });
+    }
+
+    private static int approvalRecipientCount(Object replyBody) {
+        if (replyBody == null) return 0;
+        try {
+            JsonObject response = replyBody instanceof JsonObject
+                    ? (JsonObject) replyBody
+                    : new JsonObject(replyBody.toString());
+            return "000".equals(response.getString("responseCode"))
+                    ? response.getInteger("recipientCount", 0)
+                    : 0;
+        } catch (Exception ignored) {
+            return 0;
+        }
     }
 
     // ---- UPDATE_HOUSEHOLD --------------------------------------------------------
@@ -247,12 +277,23 @@ public class Household extends AbstractVerticle {
                 });
     }
 
-    // ---- SET_HOUSEHOLD_REVIEW_STATUS (PENDING -> CHECKED -> APPROVED/REJECTED) -----
-    // A rejection must carry a reason so the household detail page always has
-    // something to show the officer who registered it.
+    // ---- SET_HOUSEHOLD_REVIEW_STATUS (PENDING -> APPROVED/REJECTED) ------------
+    // Review is a single decision. Legacy CHECKED records are treated as pending
+    // so they can still receive one final decision after this workflow change.
 
-    private static final java.util.Set<String> REVIEW_STATUSES =
-            java.util.Set.of("PENDING", "CHECKED", "APPROVED", "REJECTED");
+    private static final java.util.Set<String> REVIEW_DECISIONS =
+            java.util.Set.of("APPROVED", "REJECTED");
+
+    static String normalizeReviewStatus(String status) {
+        String normalized = strOrEmpty(status).trim().toUpperCase();
+        return "APPROVED".equals(normalized) || "REJECTED".equals(normalized)
+                ? normalized
+                : "PENDING";
+    }
+
+    static boolean isReviewDecision(String status) {
+        return REVIEW_DECISIONS.contains(strOrEmpty(status).trim().toUpperCase());
+    }
 
     private void setReviewStatus(Message<Object> message) {
         JsonObject payload = new JsonObject(message.body().toString());
@@ -264,8 +305,8 @@ public class Household extends AbstractVerticle {
         String reviewStatus = strOrEmpty(payload.getString("reviewStatus")).trim().toUpperCase();
         String rejectionReason = strOrEmpty(payload.getString("rejectionReason")).trim();
 
-        if (householdNumber.isEmpty() || !REVIEW_STATUSES.contains(reviewStatus)) {
-            replyError(message, "householdNumber and a valid reviewStatus (PENDING, CHECKED, APPROVED, REJECTED) are required");
+        if (householdNumber.isEmpty() || !isReviewDecision(reviewStatus)) {
+            replyError(message, "householdNumber and a review decision (APPROVED or REJECTED) are required");
             return;
         }
         if ("REJECTED".equals(reviewStatus) && rejectionReason.isEmpty()) {
@@ -274,7 +315,8 @@ public class Household extends AbstractVerticle {
         }
 
         String sql = "UPDATE households SET review_status=@p1, "
-                + "rejection_reason=@p2, updated_by=@p3, updated_at=GETDATE() WHERE household_number=@p4"
+                + "rejection_reason=@p2, updated_by=@p3, updated_at=GETDATE() WHERE household_number=@p4 "
+                + "AND (review_status IS NULL OR review_status IN ('PENDING','CHECKED'))"
                 + (isAnchor(payload) ? " AND (@p5=1 OR organization_code IN (SELECT organization_code FROM organizations WHERE anchor_id=@p6))" : " AND organization_code=@p5");
         Tuple params = Tuple.of(reviewStatus, "REJECTED".equals(reviewStatus) ? rejectionReason : null,
                 String.valueOf(payload.getValue("actorId")), householdNumber);
@@ -291,7 +333,7 @@ public class Household extends AbstractVerticle {
                     if (rows.rowCount() > 0) {
                         reply(message, new JsonObject().put("responseCode", "000").put("responseMessage", "Household review status updated"));
                     } else {
-                        replyError(message, "Household not found or not in your organisation");
+                        replyError(message, "Household not found, outside your organisation, or already reviewed");
                     }
                 });
     }
@@ -631,7 +673,8 @@ public class Household extends AbstractVerticle {
             replyError(message, err.getMessage());
             return;
         }
-        String reviewStatus = payload.getString("reviewStatus", null);
+        String requestedReviewStatus = payload.getString("reviewStatus", null);
+        String reviewStatus = requestedReviewStatus == null ? null : normalizeReviewStatus(requestedReviewStatus);
         // Registration date range (the "time" filter). created_at is DATETIME; string
         // bounds are implicitly converted, same as Payment#retrieveAll's date_from filter.
         String dateFrom = payload.getString("dateFrom", null);
@@ -662,7 +705,8 @@ public class Household extends AbstractVerticle {
                 + "AND (@p10 IS NULL OR (@p10='NOT_RECORDED' AND NULLIF(LTRIM(RTRIM(h.legal_status)),'') IS NULL) "
                 + "OR (@p10<>'NOT_RECORDED' AND h.legal_status=@p10)) "
                 + "AND (@p11 IS NULL OR h.created_at >= @p11) AND (@p12 IS NULL OR h.created_at <= @p12) "
-                + "AND (@p15 IS NULL OR h.review_status=@p15) "
+                + "AND (@p15 IS NULL OR (@p15='PENDING' AND (h.review_status IS NULL OR h.review_status IN ('PENDING','CHECKED'))) "
+                + "OR (@p15<>'PENDING' AND h.review_status=@p15)) "
                 + "AND (@p17 IS NULL OR p.anchor_id=@p17) "
                 + "ORDER BY h.created_at DESC OFFSET @p13 ROWS FETCH NEXT @p14 ROWS ONLY";
 
@@ -786,7 +830,7 @@ public class Household extends AbstractVerticle {
                 .put("vulnerabilityStatus", strSafe(r, "vulnerability_status"))
                 .put("vulnerabilityStatuses", HouseholdClassification.vulnerabilityArray(strSafe(r, "vulnerability_status")))
                 .put("legalStatus", strSafe(r, "legal_status"))
-                .put("reviewStatus", strSafe(r, "review_status"))
+                .put("reviewStatus", normalizeReviewStatus(strSafe(r, "review_status")))
                 .put("rejectionReason", strSafe(r, "rejection_reason"))
                 .put("stateCode", Rows.str(r, "state_code"))
                 .put("countyCode", Rows.str(r, "county_code"))
@@ -886,8 +930,8 @@ public class Household extends AbstractVerticle {
         String sql = "INSERT INTO households (officer_code, organization_code, household_number, beneficiary_type, "
                 + "household_name, age, marital_status, spouse_name, id_number, phone_number, gender, "
                 + "household_size, female_dependants, male_dependants, vulnerability_status, legal_status, state_code, county_code, payam_code, boma_code, "
-                + "status, created_by, created_at, updated_at) "
-                + "VALUES (@p1,@p2,@p3,'1',@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,@p12,@p13,@p14,@p15,@p16,@p17,@p18,@p19,1,@p20,GETDATE(),GETDATE())";
+                + "review_status, status, created_by, created_at, updated_at) "
+                + "VALUES (@p1,@p2,@p3,'1',@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,@p12,@p13,@p14,@p15,@p16,@p17,@p18,@p19,'PENDING',1,@p20,GETDATE(),GETDATE())";
         pool.preparedQuery(sql)
                 .execute(Tuple.of(
                         String.valueOf(actorId), partnerCode, householdNumber, householdName,

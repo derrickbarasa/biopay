@@ -32,6 +32,7 @@ import com.biopay.agent.sync.SyncAlertsManager;
 import com.biopay.agent.sync.SyncScheduler;
 import com.biopay.agent.sync.SyncFeedback;
 import com.biopay.agent.ui.BaseActivity;
+import com.biopay.agent.ui.OutcomeFeedback;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.materialswitch.MaterialSwitch;
 import com.google.android.material.snackbar.Snackbar;
@@ -167,22 +168,34 @@ public class SettingsActivity extends BaseActivity {
         tvFaceBody.setText(R.string.face_test_running);
         new Thread(() -> {
             String outcome;
+            boolean successful;
             MlKitFaceRecognitionEngine engine = new MlKitFaceRecognitionEngine(this);
             try {
                 byte[] bytes = readFile(imagePath);
                 FaceRecognitionEngine.CaptureResult result = engine.createEmbedding(bytes);
                 outcome = getString(R.string.face_test_embedding_ok,
                         result.embedding.length, result.qualityScore);
+                successful = true;
             } catch (FaceRecognitionException ex) {
                 outcome = getString(R.string.face_test_capture_failed, ex.getMessage());
+                successful = false;
             } catch (IOException ex) {
                 outcome = getString(R.string.face_test_capture_failed, ex.getMessage());
+                successful = false;
             } finally {
                 engine.close();
                 new File(imagePath).delete();
             }
             String finalOutcome = outcome;
-            runOnUiThread(() -> tvFaceBody.setText(finalOutcome));
+            boolean finalSuccessful = successful;
+            runOnUiThread(() -> {
+                tvFaceBody.setText(finalOutcome);
+                if (finalSuccessful) {
+                    OutcomeFeedback.success(this, finalOutcome);
+                } else {
+                    OutcomeFeedback.error(this, finalOutcome);
+                }
+            });
         }).start();
     }
 

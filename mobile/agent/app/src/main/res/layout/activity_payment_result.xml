@@ -66,8 +66,14 @@
                 android:id="@+id/tvResultMessage"
                 style="@style/BioPay.SupportingText"
                 android:layout_marginTop="16dp"
+                android:background="@drawable/bg_status_success"
                 android:gravity="center"
-                android:lineSpacingExtra="3dp" />
+                android:lineSpacingExtra="3dp"
+                android:paddingStart="16dp"
+                android:paddingTop="12dp"
+                android:paddingEnd="16dp"
+                android:paddingBottom="12dp"
+                android:textColor="@color/bp_success" />
             <TextView
                 android:id="@+id/tvResultMethod"
                 android:layout_width="wrap_content"

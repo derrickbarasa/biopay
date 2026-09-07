@@ -129,6 +129,47 @@ public final class EmailTemplates {
         return shell(body);
     }
 
+    /** A secure approval invitation. The link opens a confirmation page; GET alone never approves. */
+    public static String approvalRequestEmail(String recipientName, String title, String referenceCode,
+            String summary, String approvalUrl, int expiryHours) {
+        String greeting = recipientName == null || recipientName.trim().isEmpty()
+                ? ""
+                : "Dear " + escapeHtml(recipientName.trim()) + ",<br>";
+        String safeTitle = title == null || title.isBlank() ? "Approval needed" : escapeHtml(title);
+        String safeSummary = summary == null ? "" : escapeHtml(summary);
+        String body =
+                "<h1 style=\"margin:0 0 10px;font-size:21px;line-height:1.35;color:#0f172a;font-weight:700;\">"
+                        + safeTitle + "</h1>"
+                        + "<p style=\"margin:0 0 22px;font-size:14px;line-height:1.6;color:#64748b;\">"
+                        + greeting + "A BioPay request is waiting for your approval.</p>"
+                        + "<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" "
+                        + "style=\"margin:0 0 24px;text-align:left;background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;\">"
+                        + "<tr><td style=\"padding:16px 18px;\">"
+                        + "<div style=\"font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#64748b;\">Reference</div>"
+                        + "<div style=\"margin-top:4px;font-size:15px;font-weight:700;color:#0f172a;word-break:break-word;\">"
+                        + escapeHtml(referenceCode) + "</div>"
+                        + (safeSummary.isEmpty() ? "" : "<div style=\"margin-top:10px;font-size:13px;line-height:1.55;color:#475569;\">" + safeSummary + "</div>")
+                        + "</td></tr></table>"
+                        + "<table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" align=\"center\" style=\"margin:0 auto 24px;\"><tr>"
+                        + "<td bgcolor=\"#f59e0b\" style=\"background:#f59e0b;border-radius:8px;\">"
+                        + "<a href=\"" + escapeHtml(approvalUrl) + "\" style=\"display:inline-block;padding:13px 22px;font-size:14px;font-weight:700;color:#0f172a;text-decoration:none;\">"
+                        + "Review and approve</a></td></tr></table>"
+                        + "<p style=\"margin:0 0 6px;font-size:13px;line-height:1.6;color:#64748b;\">"
+                        + "The link expires in " + expiryHours + " hours and can only be used once.</p>"
+                        + "<p style=\"margin:0;font-size:13px;line-height:1.6;color:#64748b;\">"
+                        + "You can also sign in to BioPay and approve with a verification code. If you did not expect this request, ignore this email.</p>";
+        return shell(body);
+    }
+
+    static String escapeHtml(String value) {
+        if (value == null) return "";
+        return value.replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;")
+                .replace("\"", "&quot;")
+                .replace("'", "&#39;");
+    }
+
     /** Wraps arbitrary body HTML in the branded header/footer used by every BioPay email. */
     private static String shell(String bodyHtml) {
         int year = java.time.Year.now().getValue();

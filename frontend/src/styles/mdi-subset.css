@@ -94,6 +94,7 @@
 .mdi-lock-check-outline::before { content: "\F16A8"; }
 .mdi-lock-clock::before { content: "\F097F"; }
 .mdi-lock-outline::before { content: "\F0341"; }
+.mdi-login::before { content: "\F0342"; }
 .mdi-logout::before { content: "\F0343"; }
 .mdi-magnify::before { content: "\F0349"; }
 .mdi-map-marker-outline::before { content: "\F07D9"; }
@@ -150,3 +151,7 @@
 .mdi-home-outline::before { content: "\F06A1"; }
 .mdi-map-marker-radius-outline::before { content: "\F12FC"; }
 .mdi-bank-plus::before { content: "\F0DB1"; }
+.mdi-cash-fast::before { content: "\F185C"; }
+.mdi-clipboard-text-search-outline::before { content: "\F1623"; }
+.mdi-close-circle-outline::before { content: "\F015A"; }
+.mdi-delete-outline::before { content: "\F09E7"; }

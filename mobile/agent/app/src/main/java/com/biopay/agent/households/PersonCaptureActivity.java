@@ -10,7 +10,6 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.EditText;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
@@ -31,6 +30,7 @@ import com.biopay.agent.face.FaceRecognitionException;
 import com.biopay.agent.face.MlKitFaceRecognitionEngine;
 import com.biopay.agent.session.SessionManager;
 import com.biopay.agent.ui.BaseActivity;
+import com.biopay.agent.ui.OutcomeFeedback;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 import org.json.JSONArray;
@@ -205,7 +205,7 @@ public class PersonCaptureActivity extends BaseActivity {
         try {
             device.open(this, null);
         } catch (BiometricDeviceException ex) {
-            Toast.makeText(this, R.string.attendance_verify_error, Toast.LENGTH_SHORT).show();
+            OutcomeFeedback.error(this, R.string.attendance_verify_error);
             return;
         } catch (Throwable ex) {
             // The vendor SDK's open() only declares BiometricDeviceException, but a missing/
@@ -217,7 +217,7 @@ public class PersonCaptureActivity extends BaseActivity {
             // exception and share this same latent risk -- out of scope to fix here, but worth
             // hardening the same way if this recurs there.)
             Log.e(TAG, "BiometricDevice.open() failed unexpectedly", ex);
-            Toast.makeText(this, R.string.attendance_verify_error, Toast.LENGTH_SHORT).show();
+            OutcomeFeedback.error(this, R.string.attendance_verify_error);
             return;
         }
         View content = LayoutInflater.from(this).inflate(R.layout.dialog_verify_progress, null);
@@ -245,8 +245,8 @@ public class PersonCaptureActivity extends BaseActivity {
             @Override public void onError(int errorCode, String message) {
                 device.close();
                 dialog.dismiss();
-                Toast.makeText(PersonCaptureActivity.this,
-                        getString(R.string.person_capture_failed, message), Toast.LENGTH_LONG).show();
+                OutcomeFeedback.error(PersonCaptureActivity.this,
+                        getString(R.string.person_capture_failed, message));
             }
         });
     }
@@ -276,9 +276,9 @@ public class PersonCaptureActivity extends BaseActivity {
                 device.close();
                 dialog.dismiss();
                 if (isDuplicate) {
-                    Toast.makeText(this, R.string.person_capture_fingerprint_duplicate, Toast.LENGTH_LONG).show();
+                    OutcomeFeedback.error(this, R.string.person_capture_fingerprint_duplicate);
                 } else if (hadError) {
-                    Toast.makeText(this, R.string.person_capture_fingerprint_check_failed, Toast.LENGTH_LONG).show();
+                    OutcomeFeedback.error(this, R.string.person_capture_fingerprint_check_failed);
                 } else {
                     fingerprintDao.save(String.valueOf(sessionManager.getUserId()), sessionManager.getPartnerCode(),
                             beneficiaryType, beneficiaryId, 1, UUID.randomUUID().toString(), template,
@@ -286,7 +286,7 @@ public class PersonCaptureActivity extends BaseActivity {
                     fingerprintCaptured = true;
                     tvFingerprintRowStatus.setText(R.string.person_capture_captured);
                     updateDoneState();
-                    Toast.makeText(this, R.string.person_capture_fingerprint_success, Toast.LENGTH_SHORT).show();
+                    OutcomeFeedback.success(this, R.string.person_capture_fingerprint_success);
                 }
             });
         }).start();
@@ -310,11 +310,12 @@ public class PersonCaptureActivity extends BaseActivity {
                     faceCaptured = true;
                     tvFaceRowStatus.setText(R.string.person_capture_captured);
                     updateDoneState();
+                    OutcomeFeedback.success(this, R.string.person_capture_face_success);
                 });
             } catch (FaceRecognitionException | IOException | org.json.JSONException ex) {
                 String detail = ex.getMessage();
-                runOnUiThread(() -> Toast.makeText(PersonCaptureActivity.this,
-                        getString(R.string.person_capture_failed, detail), Toast.LENGTH_LONG).show());
+                runOnUiThread(() -> OutcomeFeedback.error(PersonCaptureActivity.this,
+                        getString(R.string.person_capture_failed, detail)));
             } finally {
                 engine.close();
                 new File(imagePath).delete();
@@ -357,7 +358,7 @@ public class PersonCaptureActivity extends BaseActivity {
                 .setPositiveButton(R.string.person_capture_add_confirm, (dialog, which) -> {
                     String name = etName.getText().toString().trim();
                     if (name.isEmpty()) {
-                        Toast.makeText(this, R.string.field_alternate_name, Toast.LENGTH_SHORT).show();
+                        OutcomeFeedback.error(this, R.string.field_alternate_name);
                         return;
                     }
                     String alternateNumber = "ALT" + Long.toString(System.currentTimeMillis(), 36).toUpperCase(Locale.US);

@@ -253,13 +253,17 @@ async function confirmGenerate() {
   }
   generating.value = true
   try {
-    await dispatch('GENERATE_PAYROLL', {
+    // An Anchor Administrator generating for their own organisation is already the
+    // approving authority, so the backend self-checks the cycle instead of leaving it
+    // pending -- see Payroll.java's `generate()`. A System Admin making it on an
+    // organisation's behalf still needs that organisation's own anchor to approve it.
+    const result = await dispatch<{ autoApproved?: boolean }>('GENERATE_PAYROLL', {
       ...genForm.value,
       otpCode: genForm.value.otpCode.trim(),
       organisationCode: genForm.value.organisationCode || undefined,
       targetAnchorId: auth.isSystemAdmin ? dialogAnchorId.value ?? undefined : undefined,
     })
-    toast.success('Payroll cycle generated and pending approval')
+    toast.success(result.autoApproved ? 'Payroll cycle generated and approved' : 'Payroll cycle generated and pending approval')
     goToList()
   } catch (err) {
     toast.error(err instanceof Error ? err.message : 'Failed to generate payroll')

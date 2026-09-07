@@ -304,31 +304,36 @@ public class MorphoDeviceAdapter implements BiometricDevice, Observer {
         activeCaptureCallback = null;
 
         new Thread(() -> {
-            TemplateList templateList = new TemplateList();
-            Template template = new Template();
-            template.setData(candidateTemplate);
-            template.setTemplateType(TemplateType.MORPHO_PK_ISO_FMR_2011);
-            templateList.putTemplate(template);
+            try {
+                TemplateList templateList = new TemplateList();
+                Template template = new Template();
+                template.setData(candidateTemplate);
+                template.setTemplateType(TemplateType.MORPHO_PK_ISO_FMR_2011);
+                templateList.putTemplate(template);
 
-            int callbackCmd = CallbackMask.MORPHO_CALLBACK_IMAGE_CMD.getValue()
-                    | CallbackMask.MORPHO_CALLBACK_COMMAND_CMD.getValue();
-            int detectModeChoice = DetectionMode.MORPHO_ENROLL_DETECT_MODE.getValue()
-                    | DetectionMode.MORPHO_FORCE_FINGER_ON_TOP_DETECT_MODE.getValue();
-            int matchingStrategy = MatchingStrategy.MORPHO_STANDARD_MATCHING_STRATEGY.getValue();
-            ResultMatching resultMatching = new ResultMatching();
+                int callbackCmd = CallbackMask.MORPHO_CALLBACK_IMAGE_CMD.getValue()
+                        | CallbackMask.MORPHO_CALLBACK_COMMAND_CMD.getValue();
+                int detectModeChoice = DetectionMode.MORPHO_ENROLL_DETECT_MODE.getValue()
+                        | DetectionMode.MORPHO_FORCE_FINGER_ON_TOP_DETECT_MODE.getValue();
+                int matchingStrategy = MatchingStrategy.MORPHO_STANDARD_MATCHING_STRATEGY.getValue();
+                ResultMatching resultMatching = new ResultMatching();
 
-            int ret = morphoDevice.verify(TIMEOUT_SECONDS, FalseAcceptanceRate.MORPHO_FAR_5,
-                    Coder.MORPHO_MSO_V9_CODER, detectModeChoice, matchingStrategy, templateList,
-                    callbackCmd, this, resultMatching);
+                int ret = morphoDevice.verify(TIMEOUT_SECONDS, FalseAcceptanceRate.MORPHO_FAR_5,
+                        Coder.MORPHO_MSO_V9_CODER, detectModeChoice, matchingStrategy, templateList,
+                        callbackCmd, this, resultMatching);
 
-            if (ret == ErrorCodes.MORPHO_OK) {
-                postMatched(resultMatching.getMatchingScore());
-            } else if (ret == ErrorCodes.MORPHOERR_INVALID_FINGER || ret == ErrorCodes.MORPHOERR_NO_HIT) {
-                postNoMatch();
-            } else {
-                postVerifyError(ret);
+                if (ret == ErrorCodes.MORPHO_OK) {
+                    postMatched(resultMatching.getMatchingScore());
+                } else if (ret == ErrorCodes.MORPHOERR_INVALID_FINGER || ret == ErrorCodes.MORPHOERR_NO_HIT) {
+                    postNoMatch();
+                } else {
+                    postVerifyError(ret);
+                }
+            } catch (Throwable ex) {
+                Log.e(TAG, "Fingerprint verification crashed inside the vendor SDK", ex);
+                postVerifyError(ErrorCodes.MORPHOERR_UNAVAILABLE);
             }
-        }).start();
+        }, "morpho-verify").start();
     }
 
     @Override

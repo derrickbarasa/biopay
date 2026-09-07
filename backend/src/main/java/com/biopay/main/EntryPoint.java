@@ -21,6 +21,7 @@ import java.util.Set;
 import java.util.HashSet;
 import com.biopay.databases.Datasource;
 import com.biopay.services.Auth;
+import com.biopay.services.Approval;
 import com.biopay.services.Administration;
 import com.biopay.services.Biometric;
 import com.biopay.services.Dashboard;
@@ -85,6 +86,7 @@ public class EntryPoint extends AbstractVerticle {
         deploy(vertx, Organization.class.getName(), options);
         deploy(vertx, Officer.class.getName(), options);
         deploy(vertx, Household.class.getName(), options);
+        deploy(vertx, Approval.class.getName(), options);
         deploy(vertx, Payroll.class.getName(), options);
         deploy(vertx, Payment.class.getName(), options);
         deploy(vertx, Dashboard.class.getName(), options);
@@ -153,6 +155,7 @@ public class EntryPoint extends AbstractVerticle {
                             "LOGIN_USER", "LOGIN_SUPERVISOR", "REFRESH_TOKEN",
                             "REQUEST_LOGIN_OTP", "VERIFY_LOGIN_OTP", "SIGNUP_ANCHOR",
                             "REQUEST_PASSWORD_RESET", "RESET_PASSWORD",
+                            "GET_EMAIL_APPROVAL", "CONFIRM_EMAIL_APPROVAL",
                     };
                     if (!Arrays.asList(publicCodes).contains(processingCode)) {
                         response.setStatusCode(401).end(new JsonObject()

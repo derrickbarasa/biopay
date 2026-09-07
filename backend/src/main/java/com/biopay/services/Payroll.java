@@ -22,8 +22,16 @@ import com.biopay.utilities.Utilities;
  * Payroll cycles: generate (maker) -> approve (checker, anchor-only per the
  * frontend spec's "approve/disburse buttons (anchor only)") -> disburse.
  * Both generation and approval require a fresh EMAIL OTP (see
- * {@link OtpService}); the same person can never be both maker and checker
- * on one cycle, even if both hold the ANCHOR role.
+ * {@link OtpService}).
+ *
+ * <p>The maker-checker separation only applies when the maker is <em>not</em>
+ * the ultimate approving authority for that organisation: a System Admin
+ * generating on an organisation's behalf still needs that organisation's own
+ * Anchor Administrator to approve it. But when an Anchor Administrator
+ * generates a cycle for an organisation under their own anchor, they already
+ * are that approving authority -- see {@link #generate}, which skips
+ * PENDING_APPROVAL and inserts the cycle already APPROVED (self-checked) for
+ * that case, rather than making them approve their own cycle a second time.
  */
 public class Payroll extends AbstractVerticle {
 
@@ -156,15 +164,28 @@ public class Payroll extends AbstractVerticle {
                                 double total = householdCount * amountPerHousehold;
                                 String cycleCode = Utilities.generateCode("PAYROLL");
 
+                                // An Anchor Administrator generating for one of their own organisations
+                                // already IS the approving authority -- see the class javadoc. Skip
+                                // PENDING_APPROVAL and self-check it at creation instead of forcing a
+                                // second approval step (and tripping the maker-cannot-also-approve
+                                // guard in #approve) for a role that can only ever approve its own work
+                                // anyway. A System Admin making it on an organisation's behalf still
+                                // leaves it PENDING_APPROVAL for that organisation's own anchor.
+                                boolean autoApprove = TenantScope.isAnchorAdministrator(payload);
+                                String checkerColumns = autoApprove ? "checker_id, checker_at, " : "";
+                                String checkerValues = autoApprove ? "@p11, GETDATE(), " : "";
+                                String cycleStatus = autoApprove ? "APPROVED" : "PENDING_APPROVAL";
+
                                 // Cycle header + its payment line items must land together --
                                 // a mid-way failure here must not leave a cycle with zero (or
                                 // partial) line items sitting in PENDING_APPROVAL.
                                 pool.withTransaction(client -> {
                                     String sql = "INSERT INTO payment_cycles (cycle_code, organization_code, anchor_id, period_start, period_end, "
                                             + "amount_per_household, household_count, total_amount, currency, exchange_rate, status, maker_id, maker_at, "
-                                            + "otp_verified, created_by, created_at) "
+                                            + checkerColumns + "otp_verified, created_by, created_at) "
                                             + "OUTPUT INSERTED.id "
-                                            + "VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,'PENDING_APPROVAL',@p11,GETDATE(),1,@p12,GETDATE())";
+                                            + "VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,'" + cycleStatus + "',@p11,GETDATE(),"
+                                            + checkerValues + "1,@p12,GETDATE())";
                                     return client.preparedQuery(sql)
                                             .execute(Tuple.of(cycleCode, partnerCode, resolvedAnchorId,
                                                     periodStart, periodEnd, amountPerHousehold, householdCount, total, currency, exchangeRate,
@@ -173,19 +194,62 @@ public class Payroll extends AbstractVerticle {
                                                 int cycleId = Rows.intVal(insertRows.iterator().next(), "id");
                                                 return createLineItems(client, cycleId, cycleCode, partnerCode, resolvedAnchorId,
                                                         periodStart, periodEnd, amountPerHousehold, currency, exchangeRate,
-                                                        actorId(payload), householdNumbers);
+                                                        actorId(payload), householdNumbers)
+                                                        .compose(lineCount -> autoApprove
+                                                                ? client.preparedQuery("UPDATE payments SET approved=1, approved_by=@p1, approved_at=GETDATE() "
+                                                                                + "WHERE payment_cycle_id=@p2 AND rejected=0")
+                                                                        .execute(Tuple.of(actorId(payload), cycleId))
+                                                                        .map(u -> lineCount)
+                                                                : Future.succeededFuture(lineCount));
                                             });
                                 }).onFailure(err -> onDbError(message, err))
-                                  .onSuccess(lineCount -> reply(message, new JsonObject()
-                                          .put("responseCode", "000")
-                                          .put("responseMessage", "Payroll cycle generated and pending approval")
-                                          .put("cycleCode", cycleCode)
-                                          .put("householdCount", householdCount)
-                                          .put("totalAmount", total)
-                                          .put("currency", currency)
-                                          .put("exchangeRate", exchangeRate)));
+                                  .onSuccess(lineCount -> {
+                                      JsonObject response = new JsonObject()
+                                              .put("responseCode", "000")
+                                              .put("cycleCode", cycleCode)
+                                              .put("householdCount", householdCount)
+                                              .put("totalAmount", total)
+                                              .put("currency", currency)
+                                              .put("exchangeRate", exchangeRate)
+                                              .put("autoApproved", autoApprove);
+                                      if (autoApprove) {
+                                          reply(message, response.put("responseMessage", "Payroll cycle generated and approved"));
+                                          return;
+                                      }
+                                      JsonObject approvalRequest = new JsonObject()
+                                              .put("requestType", "PAYROLL")
+                                              .put("referenceCode", cycleCode)
+                                              .put("anchorId", resolvedAnchorId)
+                                              .put("makerId", actorId(payload))
+                                              .put("title", "Payment cycle approval")
+                                              .put("summary", householdCount + " households · " + currency + " "
+                                                      + String.format(java.util.Locale.ROOT, "%,.2f", total) + " total");
+                                      eventBus.<Object>request("CREATE_APPROVAL_REQUEST", approvalRequest).onComplete(notification -> {
+                                          int recipientCount = approvalRecipientCount(notification.succeeded() ? notification.result().body() : null);
+                                          response.put("approvalRecipientCount", recipientCount)
+                                                  .put("approvalEmailSent", recipientCount > 0)
+                                                  .put("responseMessage", recipientCount > 0
+                                                          ? "Payroll cycle generated; the approver has been emailed"
+                                                          : "Payroll cycle generated and pending approval");
+                                          reply(message, response);
+                                      });
+                                  });
                             }));
                 });
+    }
+
+    private static int approvalRecipientCount(Object replyBody) {
+        if (replyBody == null) return 0;
+        try {
+            JsonObject response = replyBody instanceof JsonObject
+                    ? (JsonObject) replyBody
+                    : new JsonObject(replyBody.toString());
+            return "000".equals(response.getString("responseCode"))
+                    ? response.getInteger("recipientCount", 0)
+                    : 0;
+        } catch (Exception ignored) {
+            return 0;
+        }
     }
 
     /** Resolves organisationCode's real anchor server-side rather than trusting whatever
@@ -293,7 +357,7 @@ public class Payroll extends AbstractVerticle {
                         return;
                     }
 
-                    otpService.verify("PAYROLL_APPROVE", actorId(payload), otpCode)
+                    otpService.verify("PAYROLL_APPROVE", cycleCode, actorId(payload), otpCode)
                             .onFailure(err -> onDbError(message, err))
                             .onSuccess(verified -> {
                                 if (!Boolean.TRUE.equals(verified)) {

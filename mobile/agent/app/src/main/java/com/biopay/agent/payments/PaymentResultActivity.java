@@ -47,7 +47,8 @@ public class PaymentResultActivity extends BaseActivity {
         boolean success = getIntent().getBooleanExtra(EXTRA_SUCCESS, false);
         ((TextView) findViewById(R.id.tvResultTitle)).setText(
                 success ? R.string.payment_result_success_title : R.string.payment_result_failure_title);
-        ((TextView) findViewById(R.id.tvResultMessage)).setText(getIntent().getStringExtra(EXTRA_MESSAGE));
+        TextView resultMessage = findViewById(R.id.tvResultMessage);
+        resultMessage.setText(getIntent().getStringExtra(EXTRA_MESSAGE));
         double amount = getIntent().getDoubleExtra(EXTRA_AMOUNT, 0);
         ((TextView) findViewById(R.id.tvResultAmount)).setText(getString(
                 success ? R.string.payment_result_amount_paid : R.string.payment_result_amount_not_paid,
@@ -59,6 +60,8 @@ public class PaymentResultActivity extends BaseActivity {
             method.setText(getString(R.string.payment_result_verified_using,
                     getIntent().getStringExtra(EXTRA_METHOD)));
         } else {
+            resultMessage.setBackgroundResource(R.drawable.bg_error_banner);
+            resultMessage.setTextColor(ContextCompat.getColor(this, R.color.bp_error));
             method.setText(R.string.payment_result_failure_help);
             method.setBackground(null);
             method.setTextColor(ContextCompat.getColor(this, R.color.bp_text_secondary));

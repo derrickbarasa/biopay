@@ -1,6 +1,16 @@
 <script setup lang="ts">
 import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
 
+// Illustrative month-to-date values; the preview follows the live dashboard layout.
+const previewCharts = [
+  { title: 'Payment volume', context: 'completed payments and redeemed vouchers', labels: ['Cash', 'Vouchers'], colors: ['#0d9488', '#f59e0b'],
+    values: [[0, 6000, 2500, 0, 7500, 0, 8000], [0, 0, 500, 0, 500, 0, 1000]], max: 10000,
+    ticks: ['USD 10K', 'USD 7.5K', 'USD 5K', 'USD 2.5K', 'USD 0'], totals: ['USD 24,000.00 / 162 cash payments', 'USD 2,000.00 / 16 vouchers'] },
+  { title: 'Registration trend', context: 'all registrations, including inactive records', labels: ['Households', 'Alternates'], colors: ['#15803d', '#0ea5e9'],
+    values: [[0, 86, 0, 40, 60, 0, 100], [0, 12, 0, 6, 10, 0, 14]], max: 100,
+    ticks: ['100', '75', '50', '25', '0'], totals: ['286 households', '42 alternates'] },
+]
+
 const mobileNavOpen = ref(false)
 const revealRoot = ref<HTMLElement | null>(null)
 const siteNav = ref<HTMLElement | null>(null)
@@ -644,7 +654,6 @@ onBeforeUnmount(() => {
                     <div class="preview-nav-item"><i class="mdi mdi-calendar-month-outline"></i>Payment cycles</div>
                     <div class="preview-nav-item"><i class="mdi mdi-ticket-confirmation-outline"></i>Vouchers</div>
                     <small>Configs</small>
-                    <div class="preview-nav-item"><i class="mdi mdi-bank-outline"></i>Anchors</div>
                     <div class="preview-nav-item"><i class="mdi mdi-domain"></i>Organizations</div>
                     <div class="preview-nav-item"><i class="mdi mdi-map-marker-radius"></i>Locations</div>
                     <small>User management</small>
@@ -666,72 +675,65 @@ onBeforeUnmount(() => {
                           <img src="/biopay_logo_horizontal.svg" alt="" />
                           <strong>Welcome back, Amina</strong>
                         </div>
-                        <div class="preview-web-actions"><span>Refresh</span><b><i class="mdi mdi-plus"></i> New organisation</b><b><i class="mdi mdi-calendar-check"></i> Generate payment cycle</b><b class="secondary-action"><i class="mdi mdi-ticket-confirmation-outline"></i> Issue voucher</b></div>
+                        <div class="preview-web-actions"><span>Refresh</span><b><i class="mdi mdi-plus"></i> New Organization</b><b><i class="mdi mdi-calendar-check"></i> Generate Payment Cycle</b><b class="secondary-action"><i class="mdi mdi-ticket-confirmation-outline"></i> Issue Voucher</b></div>
                       </div>
 
+                      <p class="preview-scope-note">Cards show all-time totals in your access scope. Amounts are source USD values before payout conversion.</p>
                       <div class="preview-metric-grid">
                         <div class="preview-metric"><span>Organizations</span><strong>12</strong><small>Active programmes</small><i class="mdi mdi-domain"></i></div>
-                        <div class="preview-metric green"><span>Households</span><strong>4,286</strong><small>Approved records</small><i class="mdi mdi-home-group"></i></div>
-                        <div class="preview-metric amber"><span>Value disbursed</span><strong>USD 840K</strong><small>USD 810K cash · USD 30K vouchers</small><i class="mdi mdi-cash-multiple"></i></div>
-                        <div class="preview-metric"><span>Payments completed</span><strong>3,954</strong><small>USD 810K successfully processed</small><i class="mdi mdi-check-circle-outline"></i></div>
-                        <div class="preview-metric amber"><span>Pending approvals</span><strong>3</strong><small>Awaiting a checker</small><i class="mdi mdi-clock-alert-outline"></i></div>
+                        <div class="preview-metric green"><span>Households</span><strong>4,286</strong><small>Active beneficiary records; all review statuses</small><i class="mdi mdi-home-group"></i></div>
+                        <div class="preview-metric amber"><span>Value disbursed</span><strong>USD 840,000.00</strong><small>USD 810,000.00 cash · USD 30,000.00 vouchers</small><i class="mdi mdi-cash-multiple"></i></div>
+                        <div class="preview-metric"><span>Vouchers redeemed</span><strong>240</strong><small>USD 30,000.00 redeemed</small><i class="mdi mdi-ticket-confirmation-outline"></i></div>
+                        <div class="preview-metric"><span>Payments completed</span><strong>3,954</strong><small>USD 810,000.00 successfully processed</small><i class="mdi mdi-check-circle-outline"></i></div>
+                        <div class="preview-metric amber"><span>Pending approvals</span><strong>3</strong><small>Payment cycles awaiting a checker</small><i class="mdi mdi-clock-alert-outline"></i></div>
                         <div class="preview-metric slate"><span>Active officers</span><strong>38</strong><small>Currently enabled</small><i class="mdi mdi-account-check-outline"></i></div>
                         <div class="preview-metric"><span>Registered fingerprints</span><strong>6,914</strong><small>Across accessible organizations</small><i class="mdi mdi-fingerprint"></i></div>
-                        <div class="preview-metric green"><span>Total generated</span><strong>USD 922K</strong><small>18 payment cycles</small><i class="mdi mdi-chart-line"></i></div>
-                        <div class="preview-metric green"><span>Alternates registered</span><strong>612</strong><small>Approved alternate recipients</small><i class="mdi mdi-account-check-outline"></i></div>
-                        <div class="preview-metric green"><span>Latest payroll</span><strong>Approved</strong><small>PAY-2026-018</small><i class="mdi mdi-calendar-month-outline"></i></div>
+                        <div class="preview-metric green"><span>Total generated</span><strong>USD 922,000.00</strong><small>18 non-rejected payment cycles</small><i class="mdi mdi-chart-line"></i></div>
+                        <div class="preview-metric green"><span>Alternates registered</span><strong>612</strong><small>Active alternate recipients</small><i class="mdi mdi-account-check-outline"></i></div>
                       </div>
 
                       <div class="preview-analytics">
-                        <div class="preview-chart-card">
-                          <header><div><strong>Payment volume</strong><span><i class="cash-key"></i>Cash <i class="voucher-key"></i>Vouchers</span></div><time>August 2026 <i class="mdi mdi-calendar-month-outline"></i></time></header>
+                        <div v-for="chart in previewCharts" :key="chart.title" class="preview-chart-card">
+                          <header>
+                            <div><strong>{{ chart.title }}</strong><p class="preview-chart-context">September 2026 &middot; {{ chart.context }}</p><span><template v-for="(label, index) in chart.labels" :key="label"><i :style="{ background: chart.colors[index] }"></i>{{ label }}</template></span></div>
+                            <div class="preview-chart-controls"><div class="preview-calendar-row"><b class="preview-period">Month <i class="mdi mdi-chevron-down"></i></b><time>07/09/2026 <i class="mdi mdi-calendar-month-outline"></i></time></div><span v-for="total in chart.totals" :key="total">{{ total }}</span></div>
+                          </header>
                           <div class="preview-chart-body">
-                            <div class="preview-y-axis"><span>USD 1.0K</span><span>USD 750</span><span>USD 500</span><span>USD 250</span><span>USD 0</span></div>
+                            <div class="preview-y-axis"><span v-for="tick in chart.ticks" :key="tick">{{ tick }}</span></div>
                             <div class="preview-plot">
                               <svg viewBox="0 0 360 112" preserveAspectRatio="none">
                                 <path class="chart-gridline" d="M0 4H360M0 30H360M0 56H360M0 82H360M0 108H360" />
-                                <path class="chart-line" d="M0 90 55 72 110 79 165 47 220 57 275 31 330 39 360 17" />
-                                <path class="chart-line voucher-line" d="M0 102 55 94 110 97 165 82 220 88 275 69 330 76 360 58" />
+                                <g v-for="(series, seriesIndex) in chart.values" :key="seriesIndex">
+                                  <rect v-for="(value, day) in series" :key="day" :x="day * (360 / 7) + 11 + seriesIndex * 15" :y="108 - value / chart.max * 104" width="13" :height="value / chart.max * 104" :fill="chart.colors[seriesIndex]" />
+                                </g>
                               </svg>
-                              <div class="preview-x-axis"><span>1</span><span>6</span><span>11</span><span>16</span><span>21</span><span>26</span><span>30</span></div>
+                              <div class="preview-x-axis"><span v-for="day in 7" :key="day">{{ day }}</span></div>
                             </div>
                           </div>
-                        </div>
-                        <div class="preview-chart-card">
-                          <header><div><strong>Registrations</strong><span><i class="household-key"></i>Households <i class="alternate-key"></i>Alternates</span></div><time>August 2026 <i class="mdi mdi-calendar-month-outline"></i></time></header>
-                          <div class="preview-chart-body">
-                            <div class="preview-y-axis"><span>800</span><span>600</span><span>400</span><span>200</span><span>0</span></div>
-                            <div class="preview-plot">
-                              <svg viewBox="0 0 360 112" preserveAspectRatio="none">
-                                <path class="chart-gridline" d="M0 4H360M0 30H360M0 56H360M0 82H360M0 108H360" />
-                                <path class="chart-line" d="M0 94 58 81 118 74 177 53 237 61 299 34 360 23" />
-                                <path class="chart-line alternate-line" d="M0 103 58 96 118 98 177 83 237 89 299 69 360 75" />
-                              </svg>
-                              <div class="preview-x-axis"><span>1</span><span>6</span><span>11</span><span>16</span><span>21</span><span>26</span><span>30</span></div>
-                            </div>
-                          </div>
+                          <p class="preview-chart-hint">Hover, tap or focus a date to see exact values.</p>
+                          <div class="preview-chart-data"><i class="mdi mdi-chevron-right"></i> View all chart data</div>
                         </div>
                       </div>
 
                       <div class="preview-operations">
                         <section class="preview-ranking">
-                          <header><div><strong>Organisation performance</strong><span>Top organisations by total disbursed</span></div><b>View all <i class="mdi mdi-arrow-right"></i></b></header>
-                          <div class="preview-ranking-row"><em>01</em><div><strong>Bright Future NGO</strong><span>Cash USD 420K · Vouchers USD 18K</span><i style="--share: 100%"></i></div><b>USD 438K</b></div>
-                          <div class="preview-ranking-row"><em>02</em><div><strong>Hope Relief Programme</strong><span>Cash USD 256K · Vouchers USD 8K</span><i style="--share: 60%"></i></div><b>USD 264K</b></div>
-                          <div class="preview-ranking-row"><em>03</em><div><strong>Community Resilience Fund</strong><span>Cash USD 134K · Vouchers USD 4K</span><i style="--share: 32%"></i></div><b>USD 138K</b></div>
+                          <header><div><strong>Organisation performance</strong><span>Top 4 organisations by all-time disbursements</span></div><b>View all <i class="mdi mdi-arrow-right"></i></b></header>
+                          <div class="preview-ranking-row"><em>01</em><div><strong>Bright Future NGO</strong><span>Cash USD 420,000.00 · Vouchers USD 18,000.00</span><i style="--share: 100%"></i></div><b>USD 438,000.00</b></div>
+                          <div class="preview-ranking-row"><em>02</em><div><strong>Hope Relief Programme</strong><span>Cash USD 256,000.00 · Vouchers USD 8,000.00</span><i style="--share: 60%"></i></div><b>USD 264,000.00</b></div>
+                          <div class="preview-ranking-row"><em>03</em><div><strong>Community Resilience Fund</strong><span>Cash USD 134,000.00 · Vouchers USD 4,000.00</span><i style="--share: 32%"></i></div><b>USD 138,000.00</b></div>
                         </section>
                         <section class="preview-recent">
-                          <header><strong>Recent activity</strong><span>Latest cash-transfer records</span></header>
-                          <div><i class="mdi mdi-check-circle-outline"></i><span><b>Achieng Household</b><small>Bright Future NGO · Today, 10:42</small></span><strong>USD 120</strong></div>
-                          <div><i class="mdi mdi-check-circle-outline"></i><span><b>Otieno Household</b><small>Hope Relief · Today, 09:18</small></span><strong>USD 85</strong></div>
+                          <header><strong>Recent activity</strong><span>Latest 4 cash-transfer records</span></header>
+                          <div><i class="mdi mdi-check-circle-outline"></i><span><b>Achieng Household</b><small>Bright Future NGO · Paid / Today, 10:42</small></span><strong>USD 120.00</strong></div>
+                          <div><i class="mdi mdi-check-circle-outline"></i><span><b>Otieno Household</b><small>Hope Relief · Paid / Today, 09:18</small></span><strong>USD 85.00</strong></div>
                         </section>
                       </div>
 
                       <section class="preview-totals">
-                        <header><strong>Amount generated by organisation</strong><span>Cash transfers, redeemed vouchers, and combined totals</span></header>
+                        <header><strong>Amount disbursed by organisation</strong><span>All organisations, including inactive ones / completed cash transfers and redeemed vouchers</span></header>
                         <div class="preview-table-row preview-table-head"><span>Organisation</span><span>Cash transfers</span><span>Vouchers</span><span>Total</span></div>
-                        <div class="preview-table-row"><strong>Bright Future NGO</strong><span>USD 420K</span><span>USD 18K</span><b>USD 438K</b></div>
-                        <div class="preview-table-row"><strong>Hope Relief Programme</strong><span>USD 256K</span><span>USD 8K</span><b>USD 264K</b></div>
+                        <div class="preview-table-row"><strong>Bright Future NGO</strong><span>USD 420,000.00</span><span>USD 18,000.00</span><b>USD 438,000.00</b></div>
+                        <div class="preview-table-row"><strong>Hope Relief Programme</strong><span>USD 256,000.00</span><span>USD 8,000.00</span><b>USD 264,000.00</b></div>
                       </section>
 
                     </div>
@@ -759,7 +761,6 @@ onBeforeUnmount(() => {
                         <svg class="preview-bell" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 20h4" /></svg>
                       </div>
                       <h3>Hello, John Doe</h3>
-                      <p>1002</p>
                       <div class="preview-sync"><i class="mdi mdi-cached"></i> All local records are synced</div>
                       <div class="preview-phone-buttons"><b><i class="mdi mdi-plus"></i> Register household</b><span><i class="mdi mdi-cached"></i> Sync now</span></div>
                     </section>
@@ -768,29 +769,27 @@ onBeforeUnmount(() => {
                       <header><b><i class="mdi mdi-chart-bar"></i> Operational summary</b><span>View all <i class="mdi mdi-chevron-right"></i></span></header>
                       <div class="preview-phone-kpis">
                         <div><i class="mdi mdi-account-multiple-outline"></i><strong>4,286</strong><span>Households</span></div>
-                        <div class="amber"><i class="mdi mdi-autorenew"></i><strong>3</strong><span>Pending sync</span></div>
+                        <div class="amber"><i class="mdi mdi-autorenew"></i><strong>0</strong><span>Pending sync</span></div>
                         <div class="green"><i class="mdi mdi-credit-card-outline"></i><strong>3,954</strong><span>Paid</span></div>
                         <div class="orange"><i class="mdi mdi-credit-card-outline"></i><strong>3</strong><span>Payment pending</span></div>
                       </div>
                     </section>
 
-                    <section class="preview-phone-card preview-donut">
-                      <header><b>Payment status</b></header>
-                      <div class="donut-row">
-                        <svg class="donut-svg" viewBox="0 0 100 100" aria-hidden="true">
-                          <circle cx="50" cy="50" r="36" fill="none" stroke="#cbd5d1" stroke-width="15" />
-                          <circle class="donut-paid" cx="50" cy="50" r="36" fill="none" stroke-width="15" pathLength="100" stroke-dasharray="99.92 0.08" />
-                          <circle class="donut-pending" cx="50" cy="50" r="36" fill="none" stroke-width="15" pathLength="100" stroke-dasharray="0.08 99.92" stroke-dashoffset="-99.92" />
-                          <text x="50" y="54" text-anchor="middle">3,957</text>
-                        </svg>
+                    <section class="preview-phone-card preview-payment">
+                      <header><b><i class="mdi mdi-credit-card-outline"></i> Payments</b><span>View all <i class="mdi mdi-chevron-right"></i></span></header>
+                      <p class="preview-assignment-count">3 assignments ready</p>
+                      <div class="preview-next-payment">
+                        <i class="mdi mdi-account-multiple-outline"></i>
+                        <div><span>Next household</span><strong>Achieng Household</strong><span>HH-1002 ? PAY-2026-018</span></div>
+                        <b>USD 120</b>
                       </div>
-                      <div class="donut-breakdown"><span><i class="paid-dot"></i><b>3,954</b> Paid</span><span><i class="pending-dot"></i><b>3</b> Pending</span></div>
+                      <div class="preview-start-payment"><i class="mdi mdi-credit-card-outline"></i> Start payment</div>
                     </section>
                   </div>
                   <nav class="preview-phone-nav">
                     <div class="active"><i class="mdi mdi-home-outline"></i><span>Home</span></div>
                     <div><i class="mdi mdi-account-multiple-outline"></i><span>Households</span></div>
-                    <b aria-label="Payment"><i class="mdi mdi-credit-card-outline"></i><span>Payment</span></b>
+                    <div><i class="mdi mdi-credit-card-outline"></i><span>Payment</span></div>
                     <div><i class="mdi mdi-history"></i><span>Activity</span></div>
                     <div><svg class="preview-more-icon" viewBox="0 0 18 8" aria-hidden="true"><rect x="1" y="2" width="4" height="4" rx="0.5" /><rect x="7" y="2" width="4" height="4" rx="0.5" /><rect x="13" y="2" width="4" height="4" rx="0.5" /></svg><span>More</span></div>
                   </nav>
@@ -1589,13 +1588,13 @@ onBeforeUnmount(() => {
   grid-template-columns: 18% minmax(0, 1fr);
   width: 100%;
   height: 100%;
-  background: #f6f8f7;
+  background: #f8fafc;
   line-height: 1.25;
 }
 .landing-root .preview-web-nav {
   min-width: 0;
   padding: 1.8em 1.1em;
-  background: #075f54;
+  background: #0f766e;
   color: rgba(255, 255, 255, 0.82);
 }
 .landing-root .preview-web-nav > img { width: 78%; margin: 0 auto 2.2em; display: block; }
@@ -1618,8 +1617,8 @@ onBeforeUnmount(() => {
   white-space: nowrap;
 }
 .landing-root .preview-nav-item i { width: 1.2em; font-size: 1.2em; }
-.landing-root .preview-nav-item.active { background: #0d9488; color: #fff; font-weight: 700; }
-.landing-root .preview-web-app { min-width: 0; background: #f8faf9; }
+.landing-root .preview-nav-item.active { background: rgba(255, 255, 255, .12); color: #fff; font-weight: 700; }
+.landing-root .preview-web-app { min-width: 0; background: #f8fafc; }
 .landing-root .preview-web-toolbar {
   height: 7.5%;
   min-height: 28px;
@@ -1660,8 +1659,8 @@ onBeforeUnmount(() => {
   border-radius: 14px;
   background: #fff;
 }
-.landing-root .preview-metric > span { overflow: hidden; color: #64748b; font-size: 0.82em; font-weight: 700; letter-spacing: 0.04em; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
-.landing-root .preview-metric strong { margin-top: 0.3em; color: #0f172a; font-size: 1.75em; letter-spacing: -0.02em; }
+.landing-root .preview-metric > span { overflow-wrap: anywhere; color: #64748b; font-size: 0.82em; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; white-space: normal; }
+.landing-root .preview-metric strong { margin-top: 0.3em; color: #0f172a; font-size: 1.5em; letter-spacing: -0.02em; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
 .landing-root .preview-metric small { margin-top: 0.3em; color: #64748b; font-size: 0.8em; }
 .landing-root .preview-metric > i {
   position: absolute;
@@ -1695,10 +1694,7 @@ onBeforeUnmount(() => {
 .landing-root .preview-chart-card svg { display: block; width: 100%; height: 11.2em; overflow: visible; }
 .landing-root .preview-x-axis { display: flex; justify-content: space-between; padding-top: 0.45em; color: #64748b; font-size: 0.72em; font-variant-numeric: tabular-nums; }
 .landing-root .chart-gridline { fill: none; stroke: #e7eeeb; stroke-width: 1; }
-.landing-root .chart-line { fill: none; stroke: #0d9488; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
-.landing-root .voucher-line { stroke: #f59e0b; }
-.landing-root .alternate-line { stroke: #10b981; }
-.landing-root .preview-operations { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(0, 0.95fr); gap: 0.75em; margin-top: 0.75em; }
+.landing-root .preview-operations { display: grid; align-items: stretch; grid-template-columns: minmax(0, 1.45fr) minmax(0, 0.95fr); gap: 0.75em; margin-top: 0.75em; }
 .landing-root .preview-ranking,
 .landing-root .preview-recent,
 .landing-root .preview-totals { min-width: 0; padding: 1.1em 1.3em; border: 1px solid #dfe7e4; border-radius: 10px; background: #fff; }
@@ -1732,8 +1728,29 @@ onBeforeUnmount(() => {
 .landing-root .preview-table-row > :not(:first-child) { text-align: right; }
 .landing-root .preview-table-head { color: #64748b; font-size: 0.72em; font-weight: 700; }
 
+.landing-root .preview-assignment-count { margin-top: 1em; padding-bottom: 1em; border-bottom: 1px solid #c1ccc8; color: #006b5b; font-weight: 700; }
+.landing-root .preview-next-payment { display: flex; align-items: center; gap: .8em; margin-top: 1em; }
+.landing-root .preview-next-payment > i { display: grid; place-items: center; width: 2.75em; height: 2.75em; border-radius: 50%; background: #d8f3ec; color: #006b5b; font-size: 1.3em; }
+.landing-root .preview-next-payment > div { display: grid; gap: .35em; flex: 1; min-width: 0; }
+.landing-root .preview-next-payment span { color: #52615d; font-size: .9em; }
+.landing-root .preview-next-payment strong { font-size: 1.1em; }
+.landing-root .preview-next-payment > b { color: #006b5b; }
+.landing-root .preview-start-payment { display: flex; align-items: center; justify-content: center; gap: .7em; min-height: 4em; margin-top: 1.25em; border-radius: 7px; background: #006b5b; color: #fff; font-weight: 700; }
+.landing-root .preview-calendar-row { display: flex; align-items: center; gap: .5em; white-space: nowrap; }
+.landing-root .preview-chart-controls { display: grid; justify-items: end; gap: .5em; }
+.landing-root .preview-chart-controls time { padding: .5em; border: 1px solid #cbd5e1; border-radius: .6em; color: #334155; }
+.landing-root .preview-chart-controls > span { font-variant-numeric: tabular-nums; }
+.landing-root .preview-chart-card header span i.household-key { background: #15803d; }
+.landing-root .preview-chart-card header span i.alternate-key { background: #0ea5e9; }
+
+.landing-root .preview-scope-note { margin-top: 1em; color: #64748b; font-size: .85em; }
+.landing-root .preview-chart-context { color: #64748b; font-size: .8em; line-height: 1.4; }
+.landing-root .preview-period { display: flex; align-items: center; gap: .5em; padding: .5em; border: 1px solid #cbd5e1; border-radius: .6em; color: #334155; font-size: .8em; font-weight: 400; }
+.landing-root .preview-chart-hint { margin: .75em 0; color: #475569; font-size: .75em; }
+.landing-root .preview-chart-data { padding-top: .8em; border-top: 1px solid #e2e8f0; color: #0f766e; font-size: .85em; font-weight: 600; }
+
 /* The phone preview mirrors activity_home.xml, including its offline state,
-   field-task hierarchy and anchored Payment action. */
+   payment assignments and five ordinary navigation destinations. */
 .landing-root .preview-phone { height: 100%; display: grid; grid-template-rows: minmax(0, 1fr) auto; background: #f5f8f7; color: #17201e; font-size: 6.5px; line-height: 1.25; }
 .landing-root .preview-phone-scroll { min-height: 0; overflow: hidden; padding: 0.85em; }
 .landing-root .preview-phone-hero { padding: 1.35em; border-radius: 11px; background: #006b5b; color: #fff; }
@@ -1744,7 +1761,7 @@ onBeforeUnmount(() => {
 .landing-root .preview-phone-hero h3 { margin-top: 0.8em; color: #fff; font-size: 2.35em; letter-spacing: -0.02em; }
 .landing-root .preview-phone-hero p { margin-top: 0.25em; color: rgba(255, 255, 255, 0.8); font-size: 1.1em; }
 .landing-root .preview-sync { display: flex; gap: 0.6em; align-items: center; margin-top: 0.8em; font-size: 1.05em; }
-.landing-root .preview-phone-buttons { display: grid; grid-template-columns: 1.45fr 1fr; gap: 0.7em; margin-top: 0.85em; }
+.landing-root .preview-phone-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 0.7em; margin-top: 0.85em; }
 .landing-root .preview-phone-buttons b,
 .landing-root .preview-phone-buttons span { display: flex; align-items: center; justify-content: center; gap: 0.55em; min-height: 3.9em; padding-inline: 0.7em; border-radius: 7px; text-align: center; }
 .landing-root .preview-phone-buttons b { background: #fff; color: #004d42; }
@@ -1763,27 +1780,13 @@ onBeforeUnmount(() => {
 .landing-root .preview-phone-kpis .amber i { background: #fff1d6; color: #a65300; }
 .landing-root .preview-phone-kpis .green i { background: #d7f5e3; color: #18794e; }
 .landing-root .preview-phone-kpis .orange i { background: #ffe2c3; color: #a94c00; }
-.landing-root .donut-row { display: flex; align-items: center; justify-content: center; margin-top: 0.75em; }
-.landing-root .donut-svg { flex: 0 0 auto; width: 12.25em; height: 12.25em; }
-.landing-root .donut-svg text { fill: #0f172a; font-size: 13px; font-weight: 700; }
-.landing-root .donut-svg .donut-paid { stroke: #00866f; transform: rotate(-90deg); transform-origin: center; }
-.landing-root .donut-svg .donut-pending { stroke: #e97917; transform: rotate(-90deg); transform-origin: center; }
-.landing-root .donut-breakdown { display: flex; justify-content: center; gap: 1em; color: #52615d; font-size: 0.78em; }
-.landing-root .donut-breakdown span { display: inline-flex; align-items: center; gap: 0.3em; white-space: nowrap; }
-.landing-root .donut-breakdown i { width: 0.65em; height: 0.65em; border-radius: 50%; }
-.landing-root .donut-breakdown .paid-dot { background: #00866f; }
-.landing-root .donut-breakdown .pending-dot { background: #e97917; }
-.landing-root .donut-breakdown b { color: #17201e; }
 .landing-root .preview-phone-nav { position: relative; min-height: 5.8em; display: grid; grid-template-columns: repeat(5, 1fr); align-items: stretch; padding: 0.3em 0.45em 0.55em; background: #fff; box-shadow: 0 -8px 20px -18px rgba(23, 32, 30, 0.8); }
 .landing-root .preview-phone-nav > div { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 0.18em; color: #52615d; }
 .landing-root .preview-phone-nav > div i { font-size: 1.45em; line-height: 1; }
 .landing-root .preview-phone-nav .preview-more-icon { width: 1.65em; height: 1.45em; fill: currentColor; }
 .landing-root .preview-phone-nav > div span { font-size: 0.82em; line-height: 1; text-align: center; }
 .landing-root .preview-phone-nav > div.active { color: #006b5b; font-weight: 700; }
-.landing-root .preview-phone-nav > div.active i { width: 3.5em; height: 1.85em; border-radius: 999px; display: grid; place-items: center; background: #ffe4c2; }
-.landing-root .preview-phone-nav > b { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 0.18em; color: #17201e; font-weight: 400; }
-.landing-root .preview-phone-nav > b i { width: 2em; height: 2em; border-radius: 50%; display: grid; place-items: center; background: #006b5b; color: #fff; box-shadow: 0 6px 12px -9px rgba(0, 77, 66, 0.8); font-size: 1.45em; line-height: 1; }
-.landing-root .preview-phone-nav > b span { color: #17201e; font-size: 0.82em; font-weight: 400; line-height: 1; text-align: center; }
+.landing-root .preview-phone-nav > div.active i { color: #006b5b; }
 .landing-root .product-view figcaption {
   max-width: 58ch;
   margin-top: 1rem;

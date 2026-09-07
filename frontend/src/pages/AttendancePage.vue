@@ -4,6 +4,7 @@ import { dispatch } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
 import { useAnchorScope } from '@/composables/useAnchorScope'
+import SummaryMetricCard from '@/components/SummaryMetricCard.vue'
 
 interface AttendanceRow {
   householdNumber: string
@@ -47,6 +48,11 @@ const headers = [
 
 const checkInCount = computed(() => records.value.filter((r) => r.clock === 'I').length)
 const checkOutCount = computed(() => records.value.filter((r) => r.clock === 'O').length)
+const checkInShare = computed(() => records.value.length ? checkInCount.value / records.value.length : 0)
+const checkOutShare = computed(() => records.value.length ? checkOutCount.value / records.value.length : 0)
+function attendanceShareLabel(count: number) {
+  return records.value.length ? `${Math.round((count / records.value.length) * 100)}% of filtered records` : 'No attendance recorded'
+}
 
 // Name-not-code lookup, matching the pattern used on Households/Officers.
 const orgNameByCode = computed(() => new Map(organizations.value.map((o) => [o.organisationCode, o.name])))
@@ -123,22 +129,35 @@ function exportCsv() {
     <template v-if="scopeReady">
     <v-row class="mb-2">
       <v-col cols="12" sm="4">
-        <v-card class="pa-4" variant="flat" border>
-          <div class="text-caption text-medium-emphasis">Total Records</div>
-          <div class="text-h5 font-weight-bold">{{ records.length }}</div>
-        </v-card>
+        <SummaryMetricCard
+          label="Total records"
+          :value="records.length"
+          detail="Filtered attendance events"
+          icon="mdi-clipboard-check-outline"
+          tone="teal"
+        />
       </v-col>
       <v-col cols="12" sm="4">
-        <v-card class="pa-4" variant="flat" border>
-          <div class="text-caption text-medium-emphasis">Clocked In</div>
-          <div class="text-h5 font-weight-bold">{{ checkInCount }}</div>
-        </v-card>
+        <SummaryMetricCard
+          label="Clocked in"
+          :value="checkInCount"
+          :detail="attendanceShareLabel(checkInCount)"
+          icon="mdi-login"
+          tone="green"
+          :progress="checkInShare"
+          :progress-label="`${attendanceShareLabel(checkInCount)} clocked in`"
+        />
       </v-col>
       <v-col cols="12" sm="4">
-        <v-card class="pa-4" variant="flat" border>
-          <div class="text-caption text-medium-emphasis">Clocked Out</div>
-          <div class="text-h5 font-weight-bold">{{ checkOutCount }}</div>
-        </v-card>
+        <SummaryMetricCard
+          label="Clocked out"
+          :value="checkOutCount"
+          :detail="attendanceShareLabel(checkOutCount)"
+          icon="mdi-logout"
+          tone="amber"
+          :progress="checkOutShare"
+          :progress-label="`${attendanceShareLabel(checkOutCount)} clocked out`"
+        />
       </v-col>
     </v-row>
 

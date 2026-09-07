@@ -29,6 +29,8 @@ interface PaymentLine {
   uuid: string
   householdNumber: string
   householdName: string
+  gender?: string | null
+  bomaCode?: string | null
   amount: number
   currency?: string
   exchangeRate?: number
@@ -38,6 +40,7 @@ interface PaymentLine {
   approved: number
   rejected?: number | null
   rejectionReason?: string | null
+  createdAt?: string
 }
 
 const auth = useAuthStore()
@@ -58,17 +61,25 @@ const organisationFilter = ref<string | null>(null)
 // so the picker below narrows the view without ever blocking it.
 const scopeReady = computed(() => true)
 
+// Explicit widths (Vuetify applies each as the column's own inline style) instead of letting
+// the table auto-shrink every column to fit the card: without them, a value as long as
+// "PENDING_APPROVAL" or a two-date period got squeezed narrower than its own content and
+// either clipped (the status chip) or wrapped across three lines (the period), and the whole
+// row could end up wider than intended with the Actions column pushed past the visible edge.
+// Fixed widths mean the table is exactly as wide as it needs to be and scrolls horizontally
+// on a narrow viewport instead -- both v-table__wrapper (this table) and .view-table-scroll
+// (the View dialog's table) already provide that scroll container.
 const headers = [
-  { title: 'Cycle', key: 'cycleCode' },
-  { title: 'Organization', key: 'organisationCode' },
-  { title: 'Period', key: 'period' },
-  { title: 'Households', key: 'householdCount' },
-  { title: 'Currency', key: 'currency' },
-  { title: 'Rate', key: 'exchangeRate' },
-  { title: 'Amount Out', key: 'amountOut' },
-  { title: 'Amount In', key: 'amountIn' },
-  { title: 'Status', key: 'status' },
-  { title: 'Actions', key: 'actions', sortable: false, align: 'start' as const },
+  { title: 'Cycle', key: 'cycleCode', width: 190, nowrap: true },
+  { title: 'Organization', key: 'organisationCode', width: 160, nowrap: true },
+  { title: 'Period', key: 'period', width: 190, nowrap: true },
+  { title: 'Households', key: 'householdCount', width: 90 },
+  { title: 'Currency', key: 'currency', width: 90 },
+  { title: 'Rate', key: 'exchangeRate', width: 90 },
+  { title: 'Amount Out', key: 'amountOut', width: 110 },
+  { title: 'Amount In', key: 'amountIn', width: 110 },
+  { title: 'Status', key: 'status', width: 150, nowrap: true },
+  { title: 'Actions', key: 'actions', width: 170, sortable: false, align: 'start' as const, nowrap: true },
 ]
 
 async function load() {
@@ -290,16 +301,23 @@ const viewDialog = ref(false)
 const viewTarget = ref<Cycle | null>(null)
 const viewItems = ref<PaymentLine[]>([])
 const viewLoading = ref(false)
+// Distinct from "loaded fine, zero rows": GET_PAYROLL failing (e.g. the backend being
+// unreachable) also leaves viewItems empty, and conflating the two showed a calm "No
+// households in this cycle" for a cycle that actually does have households whose fetch just
+// failed -- misleading enough to read as a real data problem instead of a request that needs retrying.
+const viewError = ref(false)
 
 async function openView(cycle: Cycle) {
   viewTarget.value = cycle
   viewItems.value = []
+  viewError.value = false
   viewDialog.value = true
   viewLoading.value = true
   try {
     const res = await dispatch<{ payments: PaymentLine[] }>('GET_PAYROLL', { cycleCode: cycle.cycleCode })
     viewItems.value = res.payments ?? []
   } catch (err) {
+    viewError.value = true
     toast.error(err instanceof Error ? err.message : 'Failed to load payments')
   } finally {
     viewLoading.value = false
@@ -317,6 +335,18 @@ function itemStatusColor(item: PaymentLine) {
   if (item.status === 1) return 'success'
   if (item.approved) return 'info'
   return 'warning'
+}
+function genderLabel(gender?: string | null) {
+  if (gender === 'M') return 'Male'
+  if (gender === 'F') return 'Female'
+  return '—'
+}
+// The line-item cycle_code column is anchor/organisation-scoped payment data, not a full
+// household record -- send the maker/checker to the same household detail page HouseholdsPage
+// itself links to, rather than duplicating that record's fields into this dialog.
+function viewHousehold(line: PaymentLine) {
+  viewDialog.value = false
+  router.push({ name: 'household-detail', params: { householdNumber: line.householdNumber } })
 }
 </script>
 
@@ -352,13 +382,14 @@ function itemStatusColor(item: PaymentLine) {
           </v-col>
         </v-row>
       </v-card-text>
-      <v-data-table :headers="headers" :items="cycles" :search="tableSearch" :loading="loading">
+      <v-data-table class="cycles-table" :headers="headers" :items="cycles" :search="tableSearch" :loading="loading">
         <template #item.organisationCode="{ item }">{{ orgName(item.organisationCode) }}</template>
         <template #item.period="{ item }">{{ item.periodStart }} – {{ item.periodEnd }}</template>
+        <template #item.householdCount="{ item }"><span class="num-cell">{{ item.householdCount }}</span></template>
         <template #item.currency="{ item }">{{ item.currency ?? 'USD' }}</template>
-        <template #item.exchangeRate="{ item }">{{ item.exchangeRate ?? 1 }}</template>
-        <template #item.amountOut="{ item }">{{ fmtAmount(item.amountOut ?? item.totalAmount) }}</template>
-        <template #item.amountIn="{ item }">{{ fmtAmount(item.amountIn ?? item.totalAmount) }}</template>
+        <template #item.exchangeRate="{ item }"><span class="num-cell">{{ item.exchangeRate ?? 1 }}</span></template>
+        <template #item.amountOut="{ item }"><span class="num-cell">{{ fmtAmount(item.amountOut ?? item.totalAmount) }}</span></template>
+        <template #item.amountIn="{ item }"><span class="num-cell">{{ fmtAmount(item.amountIn ?? item.totalAmount) }}</span></template>
         <template #item.status="{ item }">
           <v-tooltip v-if="item.status === 'REJECTED' && item.rejectionReason" :text="item.rejectionReason" location="top">
             <template #activator="{ props: tip }">
@@ -367,26 +398,44 @@ function itemStatusColor(item: PaymentLine) {
           </v-tooltip>
           <v-chip v-else size="small" :color="statusColor[item.status] ?? 'grey'" variant="tonal">{{ item.status }}</v-chip>
         </template>
+        <!-- Icon-only actions, each named by a tooltip rather than an inline label: the label
+             text ("Approve", "Disburse", ...) was what pushed this cell past the card's edge --
+             up to four buttons wide before a row even reaches its status-dependent maximum. -->
         <template #item.actions="{ item }">
-          <v-btn icon="mdi-eye-outline" variant="text" size="small" class="mr-1" :aria-label="`View ${item.cycleCode}`" @click="openView(item)" />
-          <template v-if="auth.isAnchor && item.status === 'PENDING_APPROVAL'">
-            <v-btn v-if="auth.can('ACCESS_PAYMENT_CYCLES')" size="small" color="success" variant="tonal" class="mr-1" @click="openApprove(item)">Approve</v-btn>
-            <v-btn v-if="auth.can('ACCESS_PAYMENT_CYCLES')" size="small" color="error" variant="tonal" @click="openReject(item)">Reject</v-btn>
-          </template>
-          <v-btn
-            v-if="!auth.isAnchor && item.status === 'PENDING_APPROVAL' && isMakerOf(item)"
-            size="small" variant="tonal" @click="openApprove(item)"
-          >
-            Review
-          </v-btn>
-          <v-btn v-if="auth.isAnchor && auth.can('ACCESS_PAYMENT_CYCLES') && item.status === 'APPROVED'" size="small" color="secondary" variant="tonal" @click="disburse(item)">
-            Disburse
-          </v-btn>
-          <v-btn
-            v-if="auth.can('ACCESS_PAYMENT_CYCLES') && (item.status === 'DRAFT' || item.status === 'PENDING_APPROVAL')"
-            icon="mdi-delete" variant="text" size="small" color="error"
-            :aria-label="`Delete cycle ${item.cycleCode}`" @click="removeCycle(item)"
-          />
+          <div class="actions-cell">
+            <v-tooltip text="View details" location="top">
+              <template #activator="{ props: tip }">
+                <v-btn v-bind="tip" icon="mdi-eye-outline" variant="text" density="comfortable" size="small" :aria-label="`View ${item.cycleCode}`" @click="openView(item)" />
+              </template>
+            </v-tooltip>
+            <template v-if="auth.isAnchor && item.status === 'PENDING_APPROVAL' && auth.can('ACCESS_PAYMENT_CYCLES')">
+              <v-tooltip text="Approve" location="top">
+                <template #activator="{ props: tip }">
+                  <v-btn v-bind="tip" icon="mdi-check-circle-outline" variant="tonal" color="success" density="comfortable" size="small" :aria-label="`Approve ${item.cycleCode}`" @click="openApprove(item)" />
+                </template>
+              </v-tooltip>
+              <v-tooltip text="Reject" location="top">
+                <template #activator="{ props: tip }">
+                  <v-btn v-bind="tip" icon="mdi-close-circle-outline" variant="tonal" color="error" density="comfortable" size="small" :aria-label="`Reject ${item.cycleCode}`" @click="openReject(item)" />
+                </template>
+              </v-tooltip>
+            </template>
+            <v-tooltip v-if="!auth.isAnchor && item.status === 'PENDING_APPROVAL' && isMakerOf(item)" text="Review" location="top">
+              <template #activator="{ props: tip }">
+                <v-btn v-bind="tip" icon="mdi-clipboard-text-search-outline" variant="tonal" density="comfortable" size="small" :aria-label="`Review ${item.cycleCode}`" @click="openApprove(item)" />
+              </template>
+            </v-tooltip>
+            <v-tooltip v-if="auth.isAnchor && auth.can('ACCESS_PAYMENT_CYCLES') && item.status === 'APPROVED'" text="Disburse" location="top">
+              <template #activator="{ props: tip }">
+                <v-btn v-bind="tip" icon="mdi-cash-fast" variant="tonal" color="secondary" density="comfortable" size="small" :aria-label="`Disburse ${item.cycleCode}`" @click="disburse(item)" />
+              </template>
+            </v-tooltip>
+            <v-tooltip v-if="auth.can('ACCESS_PAYMENT_CYCLES') && (item.status === 'DRAFT' || item.status === 'PENDING_APPROVAL')" text="Delete" location="top">
+              <template #activator="{ props: tip }">
+                <v-btn v-bind="tip" icon="mdi-delete-outline" variant="text" density="comfortable" size="small" color="error" :aria-label="`Delete cycle ${item.cycleCode}`" @click="removeCycle(item)" />
+              </template>
+            </v-tooltip>
+          </div>
         </template>
       </v-data-table>
     </v-card>
@@ -430,8 +479,11 @@ function itemStatusColor(item: PaymentLine) {
           />
 
           <template v-if="auth.isAnchor">
+            <v-alert type="info" variant="tonal" density="compact" class="mb-3">
+              An approval link was emailed when this cycle was submitted. To approve here, request an OTP and enter it below.
+            </v-alert>
             <v-btn color="secondary" block class="mb-3" :loading="sendingApproveOtp" @click="sendApproveOtp">
-              Send Verification Code
+              Send OTP code
             </v-btn>
             <v-text-field v-model="approveOtp" label="Verification code" placeholder="6-digit code" maxlength="6" />
           </template>
@@ -461,42 +513,74 @@ function itemStatusColor(item: PaymentLine) {
       </v-card>
     </v-dialog>
 
-    <!-- View more: read-only line items for any cycle status -->
-    <v-dialog v-model="viewDialog" max-width="640">
+    <!-- View more: full household-level breakdown for any cycle status -->
+    <v-dialog v-model="viewDialog" max-width="820">
       <v-card v-if="viewTarget">
         <dialog-close-button @close="viewDialog = false" />
         <v-card-title>{{ viewTarget.cycleCode }} — Payments</v-card-title>
+        <v-card-subtitle class="pb-0">{{ orgName(viewTarget.organisationCode) }} · {{ viewTarget.periodStart }} – {{ viewTarget.periodEnd }}</v-card-subtitle>
         <v-card-text>
-          <div class="mb-3">
-            {{ viewTarget.householdCount }} households · {{ viewTarget.currency ?? 'USD' }} rate {{ viewTarget.exchangeRate ?? 1 }} ·
-            Out {{ fmtAmount(viewTarget.amountOut ?? viewTarget.totalAmount) }} · In {{ fmtAmount(viewTarget.amountIn ?? viewTarget.totalAmount) }}
+          <dl class="view-summary">
+            <div class="view-summary-item">
+              <dt>Households</dt>
+              <dd class="num-cell">{{ viewTarget.householdCount }}</dd>
+            </div>
+            <div class="view-summary-item">
+              <dt>Currency</dt>
+              <dd>{{ viewTarget.currency ?? 'USD' }} <span class="view-summary-muted">rate {{ viewTarget.exchangeRate ?? 1 }}</span></dd>
+            </div>
+            <div class="view-summary-item">
+              <dt>Amount out</dt>
+              <dd class="num-cell">{{ fmtAmount(viewTarget.amountOut ?? viewTarget.totalAmount) }}</dd>
+            </div>
+            <div class="view-summary-item">
+              <dt>Amount in</dt>
+              <dd class="num-cell">{{ fmtAmount(viewTarget.amountIn ?? viewTarget.totalAmount) }}</dd>
+            </div>
+          </dl>
+
+          <div v-if="viewLoading" class="d-flex justify-center my-6"><v-progress-circular indeterminate color="secondary" /></div>
+          <v-alert v-else-if="viewError" type="error" variant="tonal" density="compact">
+            Couldn't load this cycle's households.
+            <template #append>
+              <v-btn variant="text" size="small" @click="openView(viewTarget)">Retry</v-btn>
+            </template>
+          </v-alert>
+          <v-alert v-else-if="!viewItems.length" type="info" variant="tonal" density="compact">No households in this cycle.</v-alert>
+          <div v-else class="view-table-scroll">
+            <v-table density="compact" style="max-height: 420px; overflow-y: auto">
+              <thead>
+                <tr>
+                  <th>Household</th>
+                  <th>Village</th>
+                  <th>Gender</th>
+                  <th class="text-right">Amount out</th>
+                  <th class="text-right">Amount in</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="line in viewItems" :key="line.id">
+                  <td>
+                    <button type="button" class="household-link" @click="viewHousehold(line)">{{ line.householdName }}</button>
+                    <div class="view-summary-muted">{{ line.householdNumber }}</div>
+                  </td>
+                  <td>{{ line.bomaCode || '—' }}</td>
+                  <td>{{ genderLabel(line.gender) }}</td>
+                  <td class="text-right num-cell">{{ fmtAmount(line.amountOut ?? line.amount) }}</td>
+                  <td class="text-right num-cell">{{ fmtAmount(line.amountIn ?? line.amount) }}</td>
+                  <td>
+                    <v-tooltip v-if="line.rejected && line.rejectionReason" :text="line.rejectionReason" location="top">
+                      <template #activator="{ props: tip }">
+                        <v-chip v-bind="tip" size="small" :color="itemStatusColor(line)" variant="tonal">{{ itemStatusText(line) }}</v-chip>
+                      </template>
+                    </v-tooltip>
+                    <v-chip v-else size="small" :color="itemStatusColor(line)" variant="tonal">{{ itemStatusText(line) }}</v-chip>
+                  </td>
+                </tr>
+              </tbody>
+            </v-table>
           </div>
-          <div v-if="viewLoading" class="d-flex justify-center my-4"><v-progress-circular indeterminate color="secondary" /></div>
-          <v-table v-else density="compact" style="max-height: 360px; overflow-y: auto">
-            <thead>
-              <tr>
-                <th>Household</th>
-                <th class="text-right">Amount out</th>
-                <th class="text-right">Amount in</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="line in viewItems" :key="line.id">
-                <td>{{ line.householdName }} ({{ line.householdNumber }})</td>
-                <td class="text-right">{{ fmtAmount(line.amountOut ?? line.amount) }}</td>
-                <td class="text-right">{{ fmtAmount(line.amountIn ?? line.amount) }}</td>
-                <td>
-                  <v-tooltip v-if="line.rejected && line.rejectionReason" :text="line.rejectionReason" location="top">
-                    <template #activator="{ props: tip }">
-                      <v-chip v-bind="tip" size="small" :color="itemStatusColor(line)" variant="tonal">{{ itemStatusText(line) }}</v-chip>
-                    </template>
-                  </v-tooltip>
-                  <v-chip v-else size="small" :color="itemStatusColor(line)" variant="tonal">{{ itemStatusText(line) }}</v-chip>
-                </td>
-              </tr>
-            </tbody>
-          </v-table>
         </v-card-text>
         <v-card-actions>
           <v-spacer />
@@ -506,3 +590,85 @@ function itemStatusColor(item: PaymentLine) {
     </v-dialog>
   </div>
 </template>
+
+<style scoped>
+/* This table is wider than its card on most screens now that every column has a real,
+   unsqueezed width (see the `headers` comment above), so it scrolls horizontally inside
+   Vuetify's own `.v-table__wrapper` -- but style.css hides scrollbars everywhere by default
+   (deliberately, app-wide) so nothing hints that the Actions column, off to the right, exists
+   at all. DefaultLayout.vue's own `.dashboard-main` already carries this exact override for
+   the app's main vertical scroll for the same reason ("a thin neutral scrollbar so long pages
+   remain discoverable", per DESIGN.md) -- mirrored here for this table's horizontal one. */
+.cycles-table :deep(.v-table__wrapper) {
+  scrollbar-width: thin;
+  scrollbar-color: #94a3b8 transparent;
+}
+.cycles-table :deep(.v-table__wrapper)::-webkit-scrollbar { display: block; height: 9px; }
+.cycles-table :deep(.v-table__wrapper)::-webkit-scrollbar-track { background: transparent; }
+.cycles-table :deep(.v-table__wrapper)::-webkit-scrollbar-thumb { border: 2px solid transparent; border-radius: 999px; background: #94a3b8; background-clip: padding-box; }
+.cycles-table :deep(.v-table__wrapper)::-webkit-scrollbar-thumb:hover { background: #64748b; background-clip: padding-box; }
+
+.actions-cell {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  white-space: nowrap;
+}
+
+/* Amounts, counts and rates line up under a stable width as their digits change --
+   see DESIGN.md's "Data Stays Still" rule. */
+.num-cell {
+  font-variant-numeric: tabular-nums;
+}
+
+.view-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 16px;
+  padding: 12px 14px;
+  margin: 0 0 16px;
+  background: #F8FAFC;
+  border: 1px solid #E2E8F0;
+  border-radius: 10px;
+}
+.view-summary-item { min-width: 0; }
+.view-summary dt {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: #64748B;
+  margin-bottom: 2px;
+}
+.view-summary dd {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #0F172A;
+}
+.view-summary-muted {
+  font-size: 0.78rem;
+  font-weight: 400;
+  color: #64748B;
+}
+
+.view-table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.household-link {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  font-weight: 600;
+  color: #0F766E;
+  cursor: pointer;
+  text-align: left;
+}
+.household-link:hover,
+.household-link:focus-visible {
+  text-decoration: underline;
+}
+</style>

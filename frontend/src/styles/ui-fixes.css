@@ -44,27 +44,39 @@
  * they wrap onto separate lines instead of staying a single horizontal row. Keep every
  * multi-button actions cell as one non-wrapping row app-wide; the table itself already
  * scrolls horizontally (see .table-scroll / v-data-table's own overflow) so nothing is
- * lost by refusing to wrap here. */
+ * lost by refusing to wrap here.
+ *
+ * `white-space: nowrap` plus a plain margin between buttons does this -- an earlier
+ * version of this rule instead set `display: flex` on the <td> (with `gap` for the
+ * spacing), which was the actual bug it was reported to fix (Payment Cycles' Actions
+ * column overflowing past the card border with buttons cut off): a table cell that
+ * isn't `display: table-cell` stops participating in the table's column-width/row-
+ * layout algorithm, so the browser can no longer size the row (or the wrapper's
+ * horizontal scroll extent) around that cell's real content width, and the flexed
+ * cell's content spills out past the table/card instead of scrolling with it. The
+ * margin below is unitless-`!important`-free, so pages that already space their
+ * buttons explicitly with a `mr-1` utility class (which Vuetify generates with
+ * `!important`) are unaffected; pages that had none (relying entirely on the old
+ * flex `gap`) get one back. */
+.v-table td:has(> .v-btn + .v-btn) > .v-btn:not(:last-child),
+.v-data-table td:has(> .v-btn + .v-btn) > .v-btn:not(:last-child) {
+  margin-inline-end: 4px;
+}
 .v-table td:has(> .v-btn + .v-btn),
 .v-data-table td:has(> .v-btn + .v-btn) {
-  display: flex;
-  align-items: center;
-  gap: 2px;
   white-space: nowrap;
 }
 
-/* Vuetify's field label carries `contain: layout paint`, which -- per the
- * containment spec -- clips the label's rendered glyphs to its own box the
- * same way `overflow: hidden` would. That box's height comes from a
- * line-height computed in this app's 'Ubuntu' font (Vuetify ships assuming
- * Roboto), and at some fractional device-pixel ratios / OS display-scaling
- * combinations it rounds a hair short of Ubuntu's actual rendered glyph
- * height -- the same class of sub-pixel rounding this file already works
- * around for field borders above -- slicing the tops off letters like the
- * "F" in "First name" (reported cut off in the officer/user creation
- * dialogs). Paint containment here is a performance/isolation optimization,
- * not a deliberate clip, so dropping it removes the clipping everywhere a
- * field label appears without changing layout. */
-.v-label.v-field-label {
-  contain: layout;
+/* Vuetify sizes and clips floating labels for Roboto. BioPay uses Ubuntu, whose
+ * ascenders can render slightly outside that box at fractional browser/OS
+ * scaling. Removing paint containment alone was insufficient because VLabel's
+ * base rule also keeps `overflow: hidden`. Give every outlined field label a
+ * complete line box and allow its glyphs to paint in the outline notch. This
+ * shared rule covers text fields, selects, autocompletes, file inputs and
+ * textareas across dashboard pages and dialogs. */
+.v-label.v-field-label--floating {
+  contain: none;
+  overflow: visible;
+  text-overflow: clip;
+  line-height: 1.4;
 }

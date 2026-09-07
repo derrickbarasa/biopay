@@ -5,7 +5,6 @@ import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -21,6 +20,7 @@ import com.biopay.agent.data.VoucherDao;
 import com.biopay.agent.location.LocationHelper;
 import com.biopay.agent.sync.SyncScheduler;
 import com.biopay.agent.ui.BaseActivity;
+import com.biopay.agent.ui.OutcomeFeedback;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 import java.util.List;
@@ -59,14 +59,14 @@ public class VoucherRedemptionActivity extends BaseActivity {
         List<FingerprintDao.StoredTemplate> templates =
                 fingerprintDao.templatesWithUuidForBeneficiary(voucher.householdNumber);
         if (templates.isEmpty()) {
-            Toast.makeText(this, R.string.voucher_no_fingerprint, Toast.LENGTH_SHORT).show();
+            OutcomeFeedback.error(this, R.string.voucher_no_fingerprint);
             return;
         }
         BiometricDevice device = BiometricDeviceFactory.create();
         try {
             device.open(this, null);
         } catch (BiometricDeviceException error) {
-            Toast.makeText(this, R.string.attendance_verify_error, Toast.LENGTH_SHORT).show();
+            OutcomeFeedback.error(this, R.string.attendance_verify_error);
             return;
         } catch (Throwable error) {
             // A missing/mismatched vendor native library throws an unchecked UnsatisfiedLinkError,
@@ -74,7 +74,7 @@ public class VoucherRedemptionActivity extends BaseActivity {
             // matching fix). Caught broadly so a hardware/library problem degrades to the same
             // honest message instead of crashing the app.
             android.util.Log.e("VoucherRedemption", "BiometricDevice.open() failed unexpectedly", error);
-            Toast.makeText(this, R.string.attendance_verify_error, Toast.LENGTH_SHORT).show();
+            OutcomeFeedback.error(this, R.string.attendance_verify_error);
             return;
         }
         View content = LayoutInflater.from(this).inflate(R.layout.dialog_verify_progress, null);
@@ -97,7 +97,7 @@ public class VoucherRedemptionActivity extends BaseActivity {
         if (index >= templates.size()) {
             device.close();
             dialog.dismiss();
-            Toast.makeText(this, R.string.attendance_no_match, Toast.LENGTH_SHORT).show();
+            OutcomeFeedback.error(this, R.string.attendance_no_match);
             return;
         }
         device.startVerify(templates.get(index).template, new VerifyCallback() {
@@ -113,8 +113,7 @@ public class VoucherRedemptionActivity extends BaseActivity {
             @Override public void onError(int code, String message) {
                 device.close();
                 dialog.dismiss();
-                Toast.makeText(VoucherRedemptionActivity.this,
-                        R.string.attendance_verify_error, Toast.LENGTH_SHORT).show();
+                OutcomeFeedback.error(VoucherRedemptionActivity.this, R.string.attendance_verify_error);
             }
         });
     }
@@ -124,7 +123,7 @@ public class VoucherRedemptionActivity extends BaseActivity {
         voucherDao.queueRedemption(voucher.code, fingerprint,
                 location == null ? null : String.valueOf(location.getLatitude()),
                 location == null ? null : String.valueOf(location.getLongitude()));
-        Toast.makeText(this, R.string.voucher_redeemed_queued, Toast.LENGTH_LONG).show();
+        OutcomeFeedback.success(this, R.string.voucher_redeemed_queued);
         showVouchers();
         SyncScheduler.triggerAutomaticNow(this);
     }

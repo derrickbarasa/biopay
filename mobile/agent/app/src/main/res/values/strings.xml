@@ -239,6 +239,7 @@
     <string name="person_capture_failed">Capture problem: %1$s</string>
     <string name="person_capture_checking_duplicate">Checking fingerprint…</string>
     <string name="person_capture_fingerprint_success">Fingerprint captured successfully</string>
+    <string name="person_capture_face_success">Face captured successfully</string>
     <string name="person_capture_fingerprint_duplicate">Fingerprint capture failed: this fingerprint is already registered to another person</string>
     <string name="person_capture_fingerprint_check_failed">Fingerprint capture failed: could not verify against existing records. Please try again</string>
 
@@ -254,11 +255,17 @@
     <string name="attendance_clock_in">Clock in</string>
     <string name="attendance_clock_out">Clock out</string>
     <string name="attendance_place_finger">Place the enrolled finger on the scanner.</string>
+    <string name="fingerprint_connecting_scanner">Connecting to fingerprint scanner…</string>
+    <string name="fingerprint_verify_error_detail">The scan could not be completed: %1$s. Check the scanner and try again.</string>
     <string name="attendance_cancel">Cancel scan</string>
     <string name="attendance_recorded">Attendance saved and queued for sync.</string>
     <string name="attendance_no_match">Fingerprint did not match. Check the beneficiary and try again.</string>
     <string name="attendance_no_enrolled_fingerprint">This beneficiary has no enrolled fingerprint.</string>
     <string name="attendance_verify_error">The scanner is unavailable. Check the USB connection and try again.</string>
+    <string name="feedback_failure_title">Action unsuccessful</string>
+    <string name="feedback_success_title">Success</string>
+    <string name="feedback_unknown_error">Something went wrong. Please try again.</string>
+    <string name="feedback_dismiss">Dismiss</string>
 
     <string name="alternate_title">Alternates</string>
     <string name="alternate_description">Alternate beneficiaries linked to households on this device.</string>

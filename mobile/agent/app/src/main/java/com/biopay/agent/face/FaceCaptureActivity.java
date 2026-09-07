@@ -5,7 +5,6 @@ import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.os.Bundle;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
@@ -24,8 +23,8 @@ import androidx.core.content.ContextCompat;
 
 import com.biopay.agent.R;
 import com.biopay.agent.ui.BaseActivity;
+import com.biopay.agent.ui.OutcomeFeedback;
 import com.google.android.material.button.MaterialButton;
-import com.google.android.material.snackbar.Snackbar;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.mlkit.vision.common.InputImage;
 import com.google.mlkit.vision.face.Face;
@@ -65,8 +64,7 @@ public class FaceCaptureActivity extends BaseActivity {
                 if (granted) {
                     startCamera();
                 } else {
-                    Snackbar.make(previewView, R.string.face_capture_permission_denied, Snackbar.LENGTH_LONG).show();
-                    finish();
+                    OutcomeFeedback.error(this, R.string.face_capture_permission_denied);
                 }
             });
 
@@ -102,7 +100,7 @@ public class FaceCaptureActivity extends BaseActivity {
             try {
                 bindCamera(future.get());
             } catch (ExecutionException | InterruptedException ex) {
-                Snackbar.make(previewView, R.string.face_capture_camera_unavailable, Snackbar.LENGTH_LONG).show();
+                OutcomeFeedback.error(this, R.string.face_capture_camera_unavailable);
             }
         }, ContextCompat.getMainExecutor(this));
     }
@@ -186,7 +184,7 @@ public class FaceCaptureActivity extends BaseActivity {
                     @Override
                     public void onError(@NonNull ImageCaptureException exception) {
                         btnCapture.setEnabled(true);
-                        Toast.makeText(FaceCaptureActivity.this, R.string.face_capture_failed, Toast.LENGTH_SHORT).show();
+                        OutcomeFeedback.error(FaceCaptureActivity.this, R.string.face_capture_failed);
                     }
                 });
     }

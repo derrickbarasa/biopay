@@ -8,8 +8,10 @@ import { useConfirm } from '@/composables/useConfirm'
 import { useAnchorScope } from '@/composables/useAnchorScope'
 import { useOrgCascade } from '@/composables/useOrgCascade'
 import { downloadCsv, parseCsv, toCsv } from '@/utils/csv'
-import BarChart from '@/components/BarChart.vue'
+import { householdGenderBreakdown } from '@/utils/gender'
+import { HOUSEHOLD_REVIEW_STATUSES, householdReviewStatus } from '@/utils/householdReview'
 import DistributionList from '@/components/DistributionList.vue'
+import HouseholdReviewActions from '@/components/HouseholdReviewActions.vue'
 import PieChart from '@/components/PieChart.vue'
 import {
   LEGAL_STATUS_FILTER_OPTIONS,
@@ -37,8 +39,8 @@ interface HouseholdRow {
   status: number
 }
 
-const REVIEW_STATUSES: string[] = ['PENDING', 'CHECKED', 'APPROVED', 'REJECTED']
-const reviewStatusColor: Record<string, string> = { PENDING: 'default', CHECKED: 'info', APPROVED: 'success', REJECTED: 'error' }
+const REVIEW_STATUSES: string[] = [...HOUSEHOLD_REVIEW_STATUSES]
+const reviewStatusColor: Record<string, string> = { PENDING: 'default', APPROVED: 'success', REJECTED: 'error' }
 
 interface GeoNode {
   code: string
@@ -113,19 +115,7 @@ function orgName(code?: string) { return (code && orgNameByCode.value.get(code))
 function villageName(code?: string) { return (code && villageNameByCode.value.get(code)) || code || '—' }
 
 // ---- Client-side breakdown graphs over the currently loaded (filtered) rows ----
-const genderBreakdown = computed(() => {
-  const counts = { Male: 0, Female: 0, Other: 0 }
-  for (const h of households.value) {
-    if (h.gender === 'M') counts.Male++
-    else if (h.gender === 'F') counts.Female++
-    else counts.Other++
-  }
-  return [
-    { label: 'Male', value: counts.Male },
-    { label: 'Female', value: counts.Female },
-    { label: 'Other', value: counts.Other },
-  ]
-})
+const genderBreakdown = computed(() => householdGenderBreakdown(households.value))
 
 const ageBreakdown = computed(() => {
   const buckets = [
@@ -144,11 +134,12 @@ const ageBreakdown = computed(() => {
   return buckets
 })
 
-// "By status" now reflects the review workflow (pending/checked/approved/rejected)
-// rather than the active/inactive account flag, per the current product ask.
+// "By status" reflects the review workflow. Legacy CHECKED records stay in the
+// pending count until a reviewer makes the final approve/reject decision.
 const statusBreakdown = computed(() => REVIEW_STATUSES.map((s) => ({
   label: s.charAt(0) + s.slice(1).toLowerCase(),
-  value: households.value.filter((h) => (h.reviewStatus ?? 'PENDING') === s).length,
+  value: households.value.filter((h) => householdReviewStatus(h.reviewStatus) === s).length,
+  color: s === 'APPROVED' ? '#16A34A' : s === 'REJECTED' ? '#DC2626' : '#F59E0B',
 })))
 
 // Groups the loaded rows by a free-text attribute (vulnerability / legal status),
@@ -308,41 +299,6 @@ async function remove(row: HouseholdRow) {
   }
 }
 
-// ---- Review status (PENDING -> CHECKED -> APPROVED/REJECTED) -------------------
-const reviewDialog = ref(false)
-const reviewTarget = ref<HouseholdRow | null>(null)
-const reviewForm = ref({ reviewStatus: 'CHECKED', rejectionReason: '' })
-const reviewSaving = ref(false)
-
-function openReview(row: HouseholdRow) {
-  reviewTarget.value = row
-  reviewForm.value = { reviewStatus: row.reviewStatus ?? 'PENDING', rejectionReason: row.rejectionReason ?? '' }
-  reviewDialog.value = true
-}
-
-async function saveReview() {
-  if (!reviewTarget.value) return
-  if (reviewForm.value.reviewStatus === 'REJECTED' && !reviewForm.value.rejectionReason.trim()) {
-    toast.error('A reason is required when rejecting a household')
-    return
-  }
-  reviewSaving.value = true
-  try {
-    await dispatch('SET_HOUSEHOLD_REVIEW_STATUS', {
-      householdNumber: reviewTarget.value.householdNumber,
-      reviewStatus: reviewForm.value.reviewStatus,
-      rejectionReason: reviewForm.value.reviewStatus === 'REJECTED' ? reviewForm.value.rejectionReason : undefined,
-    })
-    toast.success('Review status updated')
-    reviewDialog.value = false
-    await load()
-  } catch (err) {
-    toast.error(err instanceof Error ? err.message : 'Update failed')
-  } finally {
-    reviewSaving.value = false
-  }
-}
-
 // ---- Import CSV (one template upload = one village's batch) --------------------
 // Renamed from "Bulk Upload" -- same underlying flow, still CSV-based. The template
 // now only includes the fields the user actually selects, rather than always every field.
@@ -453,37 +409,64 @@ async function submitBulk() {
     <template v-if="scopeReady">
     <h2 class="section-heading mb-2">Household breakdown</h2>
     <div class="breakdown-grid mb-4">
-      <v-card class="breakdown-card" variant="flat" border>
-        <v-card-title class="breakdown-title">By gender</v-card-title>
-        <v-card-text class="breakdown-body"><PieChart :data="genderBreakdown" /></v-card-text>
-      </v-card>
-      <v-card class="breakdown-card" variant="flat" border>
-        <v-card-title class="breakdown-title">By age group</v-card-title>
-        <v-card-text class="breakdown-body age-breakdown-body">
-          <DistributionList
-            class="age-distribution"
-            :data="ageBreakdown"
-            color="#0F766E"
-            aria-label="Household heads by age group, showing household counts and percentages"
-            preserve-order
-          />
-        </v-card-text>
-      </v-card>
-      <v-card class="breakdown-card" variant="flat" border>
-        <v-card-title class="breakdown-title">By status</v-card-title>
-        <v-card-text class="breakdown-body"><BarChart :data="statusBreakdown" color="#F59E0B" x-axis-label="Review status" y-axis-label="Households" aria-label="Households by review status" show-values :chart-height="300" /></v-card-text>
-      </v-card>
-      <v-card class="breakdown-card" variant="flat" border>
-        <v-card-title class="breakdown-title">By vulnerability status</v-card-title>
-        <v-card-text class="breakdown-body breakdown-body-stacked">
-          <DistributionList :data="vulnerabilityBreakdown" :total-value="households.length" color="#16A34A" aria-label="Households by vulnerability status" />
-          <div class="distribution-note">A household may appear in more than one category.</div>
-        </v-card-text>
-      </v-card>
-      <v-card class="breakdown-card" variant="flat" border>
-        <v-card-title class="breakdown-title">By legal status</v-card-title>
-        <v-card-text class="breakdown-body"><DistributionList :data="legalBreakdown" color="#0F766E" aria-label="Households by legal status" /></v-card-text>
-      </v-card>
+      <div class="breakdown-column">
+        <v-card class="breakdown-card" variant="flat" border>
+          <v-card-title class="breakdown-title">
+            <span class="breakdown-icon breakdown-icon--teal"><v-icon icon="mdi-account-group-outline" size="18" /></span>
+            <span><strong>By gender</strong><small>Household heads</small></span>
+          </v-card-title>
+          <v-card-text class="breakdown-body"><PieChart :data="genderBreakdown" variant="pie" /></v-card-text>
+        </v-card>
+
+        <v-card class="breakdown-card" variant="flat" border>
+          <v-card-title class="breakdown-title">
+            <span class="breakdown-icon breakdown-icon--amber"><v-icon icon="mdi-check-circle-outline" size="18" /></span>
+            <span><strong>By status</strong><small>Review decisions</small></span>
+          </v-card-title>
+          <v-card-text class="breakdown-body">
+            <PieChart :data="statusBreakdown" :colors="['#F59E0B', '#16A34A', '#DC2626']" />
+          </v-card-text>
+        </v-card>
+      </div>
+
+      <div class="breakdown-column breakdown-column--wide">
+        <v-card class="breakdown-card" variant="flat" border>
+          <v-card-title class="breakdown-title">
+            <span class="breakdown-icon breakdown-icon--blue"><v-icon icon="mdi-calendar" size="18" /></span>
+            <span><strong>By age group</strong><small>Recorded age</small></span>
+          </v-card-title>
+          <v-card-text class="breakdown-body age-breakdown-body">
+            <DistributionList
+              class="age-distribution"
+              :data="ageBreakdown"
+              color="#0F766E"
+              aria-label="Household heads by age group, showing household counts and percentages"
+              preserve-order
+            />
+          </v-card-text>
+        </v-card>
+
+        <v-card class="breakdown-card" variant="flat" border>
+          <v-card-title class="breakdown-title">
+            <span class="breakdown-icon breakdown-icon--teal"><v-icon icon="mdi-shield-check-outline" size="18" /></span>
+            <span><strong>By legal status</strong><small>Legal classification</small></span>
+          </v-card-title>
+          <v-card-text class="breakdown-body"><DistributionList :data="legalBreakdown" color="#0F766E" aria-label="Households by legal status" /></v-card-text>
+        </v-card>
+      </div>
+
+      <div class="breakdown-column">
+        <v-card class="breakdown-card" variant="flat" border>
+          <v-card-title class="breakdown-title">
+            <span class="breakdown-icon breakdown-icon--green"><v-icon icon="mdi-shield-account-outline" size="18" /></span>
+            <span><strong>By vulnerability status</strong><small>Support needs</small></span>
+          </v-card-title>
+          <v-card-text class="breakdown-body breakdown-body-stacked">
+            <DistributionList :data="vulnerabilityBreakdown" :total-value="households.length" color="#16A34A" aria-label="Households by vulnerability status" />
+            <div class="distribution-note">A household may appear in more than one category.</div>
+          </v-card-text>
+        </v-card>
+      </div>
     </div>
 
     <v-card variant="flat" border>
@@ -566,45 +549,34 @@ async function submitBulk() {
         <template #item.organisationCode="{ item }">{{ orgName(item.organisationCode) }}</template>
         <template #item.bomaCode="{ item }">{{ villageName(item.bomaCode) }}</template>
         <template #item.reviewStatus="{ item }">
-          <v-tooltip v-if="item.reviewStatus === 'REJECTED' && item.rejectionReason" :text="item.rejectionReason" location="top">
+          <v-tooltip v-if="householdReviewStatus(item.reviewStatus) === 'REJECTED' && item.rejectionReason" :text="item.rejectionReason" location="top">
             <template #activator="{ props: tip }">
-              <v-chip v-bind="tip" size="small" :color="reviewStatusColor[item.reviewStatus ?? 'PENDING']" variant="tonal">
-                {{ item.reviewStatus ?? 'PENDING' }}
+              <v-chip v-bind="tip" size="small" :color="reviewStatusColor[householdReviewStatus(item.reviewStatus)]" variant="tonal">
+                {{ householdReviewStatus(item.reviewStatus) }}
               </v-chip>
             </template>
           </v-tooltip>
-          <v-chip v-else size="small" :color="reviewStatusColor[item.reviewStatus ?? 'PENDING']" variant="tonal">
-            {{ item.reviewStatus ?? 'PENDING' }}
+          <v-chip v-else size="small" :color="reviewStatusColor[householdReviewStatus(item.reviewStatus)]" variant="tonal">
+            {{ householdReviewStatus(item.reviewStatus) }}
           </v-chip>
         </template>
         <template #item.actions="{ item }">
-          <v-btn icon="mdi-eye" variant="text" size="small" :aria-label="`View household ${item.householdName}`" @click="viewDetail(item)" />
-          <v-btn v-if="auth.can('ACCESS_HOUSEHOLDS')" icon="mdi-clipboard-check-outline" variant="text" size="small" :aria-label="`Review household ${item.householdName}`" @click="openReview(item)" />
-          <v-btn v-if="auth.can('ACCESS_HOUSEHOLDS')" icon="mdi-delete" variant="text" size="small" color="error" :aria-label="`Delete household ${item.householdName}`" @click="remove(item)" />
+          <div class="d-flex align-center ga-1">
+            <v-btn icon="mdi-eye" variant="text" size="small" :aria-label="`View household ${item.householdName}`" @click="viewDetail(item)" />
+            <HouseholdReviewActions
+              v-if="auth.can('ACCESS_HOUSEHOLDS')"
+              :household-number="item.householdNumber"
+              :household-name="item.householdName"
+              :review-status="item.reviewStatus"
+              compact
+              @updated="load"
+            />
+            <v-btn v-if="auth.can('ACCESS_HOUSEHOLDS')" icon="mdi-delete" variant="text" size="small" color="error" :aria-label="`Delete household ${item.householdName}`" @click="remove(item)" />
+          </div>
         </template>
       </v-data-table>
     </v-card>
     </template>
-
-    <v-dialog v-model="reviewDialog" max-width="440">
-      <v-card v-if="reviewTarget">
-        <dialog-close-button @close="reviewDialog = false" />
-        <v-card-title>Review {{ reviewTarget.householdName }}</v-card-title>
-        <v-card-text>
-          <v-select v-model="reviewForm.reviewStatus" :items="REVIEW_STATUSES" label="Review status" />
-          <v-textarea
-            v-if="reviewForm.reviewStatus === 'REJECTED'"
-            v-model="reviewForm.rejectionReason" label="Reason for rejection" rows="3" required
-            hint="Required when rejecting a household" persistent-hint
-          />
-        </v-card-text>
-        <v-card-actions>
-          <v-spacer />
-          <v-btn variant="text" @click="reviewDialog = false">Cancel</v-btn>
-          <v-btn color="secondary" :loading="reviewSaving" @click="saveReview">Save</v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
 
     <v-dialog v-model="bulkDialog" max-width="640">
       <v-card>
@@ -669,55 +641,66 @@ async function submitBulk() {
 .section-heading { font-size: .95rem; font-weight: 700; color: #0f172a; }
 .breakdown-grid {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: minmax(250px, .9fr) minmax(360px, 1.25fr) minmax(280px, 1fr);
   gap: 12px;
-  align-items: stretch;
+  align-items: start;
 }
-.breakdown-card:nth-child(1) { grid-column: span 2; }
-.breakdown-card:nth-child(2) { grid-column: span 4; }
-.breakdown-card:nth-child(n + 3) { grid-column: span 2; }
+.breakdown-column { display: grid; gap: 12px; min-width: 0; }
 .breakdown-card {
-  display: flex;
-  flex-direction: column;
-  min-height: 220px;
-  overflow: visible;
+  overflow: hidden;
+  border-color: #dbe5ec !important;
+  background: #fff;
 }
 .breakdown-title {
-  flex: none;
-  font-size: .95rem !important;
-  font-weight: 700;
-  color: #0f172a;
-  padding: 12px 14px 2px !important;
-  min-height: auto !important;
-}
-.breakdown-body {
-  flex: 1;
   display: flex;
   align-items: center;
-  padding: 2px 14px 10px !important;
+  gap: 10px;
+  padding: 12px 14px 8px !important;
+  min-height: auto !important;
+}
+.breakdown-title > span:last-child { display: grid; gap: 1px; min-width: 0; }
+.breakdown-title strong { color: #0f172a; font-size: .9rem; font-weight: 750; line-height: 1.2; }
+.breakdown-title small { color: #64748b; font-size: .7rem; font-weight: 500; line-height: 1.3; }
+.breakdown-icon {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  border-radius: 8px;
+}
+.breakdown-icon--teal { color: #0f766e; background: #e8f6f4; }
+.breakdown-icon--amber { color: #b45309; background: #fff4dc; }
+.breakdown-icon--blue { color: #0369a1; background: #eaf5fb; }
+.breakdown-icon--green { color: #15803d; background: #eaf8ef; }
+.breakdown-body {
+  display: flex;
+  align-items: center;
+  padding: 4px 14px 14px !important;
   min-height: 0;
-  overflow: visible;
 }
 .breakdown-body > :deep(.chart-wrap),
 .breakdown-body > :deep(.pie-wrap) {
   width: 100%;
 }
 .breakdown-body > :deep(.chart-wrap) { margin-inline: auto; }
-.breakdown-body-stacked { flex-direction: column; justify-content: center; gap: 12px; }
+.breakdown-body-stacked { flex-direction: column; gap: 10px; }
 .distribution-note { align-self: stretch; color: #64748b; font-size: .75rem; line-height: 1.35; }
 .age-breakdown-body { justify-content: center; }
 .age-distribution {
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  column-gap: 30px;
-  row-gap: 16px;
+  column-gap: 22px;
+  row-gap: 12px;
 }
-@media (max-width: 1050px) {
+@media (max-width: 1180px) {
   .breakdown-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .breakdown-card:nth-child(n) { grid-column: span 1; }
+  .breakdown-column:last-child { grid-column: 1 / -1; }
+  .breakdown-column:last-child .breakdown-body > :deep(.distribution) { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 22px; }
 }
 @media (max-width: 600px) {
   .breakdown-grid { grid-template-columns: 1fr; }
-  .breakdown-card { min-height: 210px; }
+  .breakdown-column:last-child { grid-column: auto; }
   .age-distribution { grid-template-columns: 1fr; }
+  .breakdown-column:last-child .breakdown-body > :deep(.distribution) { grid-template-columns: 1fr; }
 }
 </style>

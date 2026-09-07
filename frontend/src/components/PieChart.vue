@@ -2,7 +2,11 @@
 import { computed, ref } from 'vue'
 
 interface Slice { label: string; value: number }
-const props = defineProps<{ data: Slice[]; colors?: string[] }>()
+const props = withDefaults(defineProps<{
+  data: Slice[]
+  colors?: string[]
+  variant?: 'donut' | 'pie'
+}>(), { variant: 'donut' })
 
 const size = 200
 const radius = 84
@@ -29,10 +33,14 @@ const slices = computed(() => {
     const innerStart = polar(endAngle, radius - thickness)
     const innerEnd = polar(startAngle, radius - thickness)
     const largeArc = endAngle - startAngle > 180 ? 1 : 0
-    const path = fraction >= 0.9999
-      ? `M ${center - radius} ${center} A ${radius} ${radius} 0 1 1 ${center + radius} ${center} A ${radius} ${radius} 0 1 1 ${center - radius} ${center}`
-        + ` M ${center - (radius - thickness)} ${center} A ${radius - thickness} ${radius - thickness} 0 1 0 ${center + (radius - thickness)} ${center} A ${radius - thickness} ${radius - thickness} 0 1 0 ${center - (radius - thickness)} ${center} Z`
-      : `M ${outerStart.x} ${outerStart.y} A ${radius} ${radius} 0 ${largeArc} 1 ${outerEnd.x} ${outerEnd.y} L ${innerStart.x} ${innerStart.y} A ${radius - thickness} ${radius - thickness} 0 ${largeArc} 0 ${innerEnd.x} ${innerEnd.y} Z`
+    const fullCircle = `M ${center - radius} ${center} A ${radius} ${radius} 0 1 1 ${center + radius} ${center} A ${radius} ${radius} 0 1 1 ${center - radius} ${center} Z`
+    const path = props.variant === 'pie'
+      ? (fraction >= 0.9999
+          ? fullCircle
+          : `M ${center} ${center} L ${outerStart.x} ${outerStart.y} A ${radius} ${radius} 0 ${largeArc} 1 ${outerEnd.x} ${outerEnd.y} Z`)
+      : (fraction >= 0.9999
+          ? `${fullCircle} M ${center - (radius - thickness)} ${center} A ${radius - thickness} ${radius - thickness} 0 1 0 ${center + (radius - thickness)} ${center} A ${radius - thickness} ${radius - thickness} 0 1 0 ${center - (radius - thickness)} ${center} Z`
+          : `M ${outerStart.x} ${outerStart.y} A ${radius} ${radius} 0 ${largeArc} 1 ${outerEnd.x} ${outerEnd.y} L ${innerStart.x} ${innerStart.y} A ${radius - thickness} ${radius - thickness} 0 ${largeArc} 0 ${innerEnd.x} ${innerEnd.y} Z`)
     const slice = { path, color: palette.value[i % palette.value.length], percent: Math.round(fraction * 100), ...d }
     startAngle = endAngle
     return slice
@@ -43,8 +51,16 @@ const slices = computed(() => {
 <template>
   <div class="pie-wrap">
     <div class="pie-svg-wrap">
-      <svg :viewBox="`0 0 ${size} ${size}`" class="pie-svg" role="img" aria-label="Donut chart">
-        <circle v-if="total === 0" :cx="center" :cy="center" :r="radius - thickness / 2" fill="none" stroke="#EEF2F6" :stroke-width="thickness" />
+      <svg :viewBox="`0 0 ${size} ${size}`" class="pie-svg" role="img" :aria-label="variant === 'pie' ? 'Pie chart' : 'Donut chart'">
+        <circle
+          v-if="total === 0"
+          :cx="center"
+          :cy="center"
+          :r="variant === 'pie' ? radius : radius - thickness / 2"
+          :fill="variant === 'pie' ? '#EEF2F6' : 'none'"
+          :stroke="variant === 'pie' ? 'none' : '#EEF2F6'"
+          :stroke-width="thickness"
+        />
         <path
           v-for="(s, i) in slices" :key="i" :d="s.path" :fill="s.color"
           fill-rule="evenodd"
@@ -52,7 +68,7 @@ const slices = computed(() => {
           @mouseenter="hoverIndex = i" @mouseleave="hoverIndex = null"
         />
       </svg>
-      <div class="pie-center">
+      <div v-if="variant === 'donut'" class="pie-center">
         <span class="pie-total">{{ total.toLocaleString() }}</span>
         <span class="pie-total-label">Total</span>
       </div>

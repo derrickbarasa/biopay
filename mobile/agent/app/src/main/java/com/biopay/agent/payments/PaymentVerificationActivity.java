@@ -71,7 +71,10 @@ public class PaymentVerificationActivity extends BaseActivity {
     private final ActivityResultLauncher<Intent> fingerprintVerifyLauncher =
             registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {
                 if (result.getResultCode() == FingerprintVerifyActivity.RESULT_VERIFY_FAILED) {
-                    showFailure(getString(R.string.payment_result_fingerprint_failed));
+                    String message = result.getData() == null ? null
+                            : result.getData().getStringExtra(FingerprintVerifyActivity.EXTRA_FAILURE_MESSAGE);
+                    showFailure(message == null || message.isEmpty()
+                            ? getString(R.string.payment_result_fingerprint_failed) : message);
                     return;
                 }
                 if (result.getResultCode() != RESULT_OK || result.getData() == null) return;

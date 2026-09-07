@@ -10,6 +10,7 @@ import io.vertx.core.json.JsonObject;
 import io.vertx.mssqlclient.MSSQLPool;
 import io.vertx.sqlclient.Row;
 import io.vertx.sqlclient.RowSet;
+import io.vertx.sqlclient.SqlClient;
 import io.vertx.sqlclient.Tuple;
 import com.biopay.databases.Datasource;
 import com.biopay.utilities.Crypto;
@@ -106,6 +107,11 @@ public class Biometric extends AbstractVerticle {
             return;
         }
         String householdNumber = payload.getString("householdNumber", Utilities.generateCode("HH"));
+        String stateCode = trimmed(payload, "stateCode");
+        String countyCode = trimmed(payload, "countyCode");
+        String locationCode = trimmed(payload, "payamCode");
+        String villageCode = trimmed(payload, "bomaCode");
+        String actor = String.valueOf(payload.getValue("actorId"));
         final String vulnerabilityStatuses;
         final String legalStatus;
         try {
@@ -132,24 +138,93 @@ public class Biometric extends AbstractVerticle {
                 + "VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,@p12,@p13,@p14,@p15,@p16,@p17,@p18,@p19,@p20,1,@p21,"
                 + "@p22,@p23,@p24,GETDATE(),GETDATE(),GETDATE());";
 
-        pool.preparedQuery(sql)
-                .execute(Tuple.of(
-                        String.valueOf(payload.getValue("actorId")), partnerCode, householdNumber,
-                        payload.getString("householdName", "").trim(), payload.getInteger("age"),
-                        payload.getString("gender"), payload.getString("phoneNumber"),
-                        payload.getInteger("householdSize"), vulnerabilityStatuses, legalStatus,
-                        payload.getString("stateCode"), payload.getString("countyCode"),
-                        payload.getString("payamCode"), payload.getString("bomaCode"),
-                        payload.getString("latitude"), payload.getString("longitude"),
-                        payload.getInteger("duplicate", 0), payload.getString("duplicateNumber"),
-                        payload.getString("matchingScore"), payload.getString("registrationMethod", "FINGERPRINT"),
-                        String.valueOf(payload.getValue("actorId")), payload.getString("idNumber"),
-                        payload.getInteger("maleDependants"), payload.getInteger("femaleDependants")))
+        Tuple householdParams = Tuple.of(
+                actor, partnerCode, householdNumber,
+                payload.getString("householdName", "").trim(), payload.getInteger("age"),
+                payload.getString("gender"), payload.getString("phoneNumber"),
+                payload.getInteger("householdSize"), vulnerabilityStatuses, legalStatus,
+                stateCode, countyCode, locationCode, villageCode,
+                payload.getString("latitude"), payload.getString("longitude"),
+                payload.getInteger("duplicate", 0), payload.getString("duplicateNumber"),
+                payload.getString("matchingScore"), payload.getString("registrationMethod", "FINGERPRINT"),
+                actor, payload.getString("idNumber"),
+                payload.getInteger("maleDependants"), payload.getInteger("femaleDependants"));
+
+        pool.preparedQuery("SELECT anchor_id FROM organizations WHERE organization_code=@p1 AND status=1")
+                .execute(Tuple.of(partnerCode))
+                .compose(organizations -> {
+                    if (!organizations.iterator().hasNext()) {
+                        return Future.failedFuture("Organization not found");
+                    }
+                    int anchorId = organizations.iterator().next().getInteger("anchor_id");
+                    return pool.withTransaction(client -> ensureHouseholdGeoHierarchy(client, anchorId,
+                                    stateCode, countyCode, locationCode, villageCode, actor)
+                            .compose(ignored -> client.preparedQuery(sql).execute(householdParams)));
+                })
                 .onFailure(err -> onDbError(message, err))
                 .onSuccess(rows -> reply(message, new JsonObject()
                         .put("responseCode", "000")
                         .put("responseMessage", "Household synced successfully")
                         .put("householdNumber", householdNumber)));
+    }
+
+    private static String trimmed(JsonObject payload, String key) {
+        String value = payload.getString(key);
+        if (value == null) return null;
+        value = value.trim();
+        return value.isEmpty() ? null : value;
+    }
+
+    /**
+     * Mobile manual-location values use the typed label as their stable code. Promote those
+     * values into the anchor's shared catalogue so the web dashboard and other field devices
+     * can resolve and select them. Existing catalogue entries are deliberately left untouched.
+     */
+    private Future<Void> ensureHouseholdGeoHierarchy(SqlClient client, int anchorId,
+            String stateCode, String countyCode, String locationCode, String villageCode, String actor) {
+        Future<Void> chain = Future.succeededFuture();
+
+        if (stateCode != null) {
+            chain = chain.compose(ignored -> mergeGeoNode(client,
+                    "MERGE geo_states WITH (HOLDLOCK) AS target "
+                            + "USING (SELECT @p1 anchor_id, @p2 state_code) source "
+                            + "ON target.anchor_id=source.anchor_id AND target.state_code=source.state_code "
+                            + "WHEN NOT MATCHED THEN INSERT (anchor_id,state_code,name,status,created_by,created_at) "
+                            + "VALUES (@p1,@p2,@p2,1,@p3,GETDATE());",
+                    Tuple.of(anchorId, stateCode, actor)));
+        }
+        if (stateCode != null && countyCode != null) {
+            chain = chain.compose(ignored -> mergeGeoNode(client,
+                    "MERGE geo_counties WITH (HOLDLOCK) AS target "
+                            + "USING (SELECT @p1 anchor_id, @p3 county_code) source "
+                            + "ON target.anchor_id=source.anchor_id AND target.county_code=source.county_code "
+                            + "WHEN NOT MATCHED THEN INSERT (anchor_id,state_code,county_code,name,status,created_by,created_at) "
+                            + "VALUES (@p1,@p2,@p3,@p3,1,@p4,GETDATE());",
+                    Tuple.of(anchorId, stateCode, countyCode, actor)));
+        }
+        if (stateCode != null && countyCode != null && locationCode != null) {
+            chain = chain.compose(ignored -> mergeGeoNode(client,
+                    "MERGE geo_locations WITH (HOLDLOCK) AS target "
+                            + "USING (SELECT @p1 anchor_id, @p4 location_code) source "
+                            + "ON target.anchor_id=source.anchor_id AND target.location_code=source.location_code "
+                            + "WHEN NOT MATCHED THEN INSERT (anchor_id,state_code,county_code,location_code,name,status,created_by,created_at) "
+                            + "VALUES (@p1,@p2,@p3,@p4,@p4,1,@p5,GETDATE());",
+                    Tuple.of(anchorId, stateCode, countyCode, locationCode, actor)));
+        }
+        if (stateCode != null && countyCode != null && locationCode != null && villageCode != null) {
+            chain = chain.compose(ignored -> mergeGeoNode(client,
+                    "MERGE geo_villages WITH (HOLDLOCK) AS target "
+                            + "USING (SELECT @p1 anchor_id, @p5 village_code) source "
+                            + "ON target.anchor_id=source.anchor_id AND target.village_code=source.village_code "
+                            + "WHEN NOT MATCHED THEN INSERT (anchor_id,state_code,county_code,location_code,village_code,name,status,created_by,created_at) "
+                            + "VALUES (@p1,@p2,@p3,@p4,@p5,@p5,1,@p6,GETDATE());",
+                    Tuple.of(anchorId, stateCode, countyCode, locationCode, villageCode, actor)));
+        }
+        return chain;
+    }
+
+    private Future<Void> mergeGeoNode(SqlClient client, String sql, Tuple params) {
+        return client.preparedQuery(sql).execute(params).mapEmpty();
     }
 
     // ---- SYNC_HOUSEHOLDS (organisation-wide offline bundle) -----------------------

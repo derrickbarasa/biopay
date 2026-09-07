@@ -5,7 +5,6 @@ import android.content.Intent;
 import android.os.Bundle;
 import android.util.Log;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import com.biopay.agent.R;
 import com.biopay.agent.attendance.Beneficiary;
@@ -19,6 +18,8 @@ import com.biopay.agent.session.SessionManager;
 import com.biopay.agent.ui.BaseActivity;
 
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
  * Full-screen fingerprint verification -- hosts the exact capture sequence that used to live in
@@ -43,10 +44,13 @@ public class FingerprintVerifyActivity extends BaseActivity {
     }
 
     public static final String EXTRA_RESULT_MATCHED_UUID = "matched_uuid";
+    public static final String EXTRA_FAILURE_MESSAGE = "failure_message";
     public static final int RESULT_VERIFY_FAILED = RESULT_FIRST_USER;
 
     private FingerprintDao fingerprintDao;
     private BiometricDevice device;
+    private final ExecutorService scannerConnectionExecutor = Executors.newSingleThreadExecutor();
+    private volatile boolean sessionEnding;
     private String householdNumber;
     private String beneficiaryId;
     private String personName;
@@ -65,10 +69,8 @@ public class FingerprintVerifyActivity extends BaseActivity {
         ((TextView) findViewById(R.id.tvPersonSubtitle)).setText(getIntent().getStringExtra(EXTRA_SUBTITLE));
 
         findViewById(R.id.btnCancel).setOnClickListener(v -> {
-            if (device != null) {
-                device.cancelLiveAcquisition();
-                device.close();
-            }
+            sessionEnding = true;
+            closeDeviceAsync(true);
             finish();
         });
 
@@ -78,41 +80,61 @@ public class FingerprintVerifyActivity extends BaseActivity {
     private void startVerify() {
         List<FingerprintDao.StoredTemplate> templates = fingerprintDao.templatesWithUuidForBeneficiary(beneficiaryId);
         if (templates.isEmpty()) {
-            Toast.makeText(this, R.string.attendance_no_enrolled_fingerprint, Toast.LENGTH_SHORT).show();
-            failAndFinish();
+            failAndFinish(getString(R.string.attendance_no_enrolled_fingerprint));
             return;
         }
         device = BiometricDeviceFactory.create();
-        try {
-            device.open(this, null);
-        } catch (BiometricDeviceException ex) {
-            Toast.makeText(this, R.string.attendance_verify_error, Toast.LENGTH_SHORT).show();
-            failAndFinish();
-            return;
-        } catch (Throwable ex) {
-            // See PersonCaptureActivity's matching fix -- a missing/mismatched vendor native
-            // library throws an unchecked UnsatisfiedLinkError, not the checked exception open()
-            // declares; caught broadly here for the same reason.
-            Log.e(TAG, "BiometricDevice.open() failed unexpectedly", ex);
-            Toast.makeText(this, R.string.attendance_verify_error, Toast.LENGTH_SHORT).show();
-            failAndFinish();
-            return;
-        }
-        attemptVerify(templates, 0);
+        ((TextView) findViewById(R.id.tvVerifyStatus)).setText(R.string.fingerprint_connecting_scanner);
+
+        // Morpho open() powers the embedded sensor, waits for its AIDL service and retries USB
+        // enumeration. That can take several seconds and must never run on Android's UI thread.
+        scannerConnectionExecutor.execute(() -> {
+            try {
+                device.open(this, null);
+                if (sessionEnding) {
+                    device.close();
+                    return;
+                }
+                runOnUiThread(() -> {
+                    if (!sessionEnding && !isFinishing() && !isDestroyed()) {
+                        attemptVerify(templates, 0);
+                    }
+                });
+            } catch (BiometricDeviceException ex) {
+                Log.e(TAG, "Could not open biometric device", ex);
+                postConnectionFailure();
+            } catch (Throwable ex) {
+                // A missing/mismatched vendor native library throws an unchecked Error.
+                Log.e(TAG, "BiometricDevice.open() failed unexpectedly", ex);
+                postConnectionFailure();
+            }
+        });
+    }
+
+    private void postConnectionFailure() {
+        runOnUiThread(() -> {
+            if (!sessionEnding && !isFinishing() && !isDestroyed()) {
+                failAndFinish(getString(R.string.attendance_verify_error));
+            }
+        });
     }
 
     private void attemptVerify(List<FingerprintDao.StoredTemplate> templates, int index) {
         TextView status = findViewById(R.id.tvVerifyStatus);
         if (index >= templates.size()) {
+            sessionEnding = true;
             device.close();
-            Toast.makeText(this, R.string.attendance_no_match, Toast.LENGTH_SHORT).show();
-            failAndFinish();
+            failAndFinish(getString(R.string.payment_result_fingerprint_failed));
             return;
         }
         device.startVerify(templates.get(index).template, new VerifyCallback() {
-            @Override public void onProgress(String message) { status.setText(message); }
+            @Override public void onProgress(String message) {
+                if (!sessionEnding) status.setText(message);
+            }
 
             @Override public void onMatched(int score) {
+                if (sessionEnding) return;
+                sessionEnding = true;
                 device.close();
                 new VerificationEventDao(FingerprintVerifyActivity.this)
                         .record(new SessionManager(FingerprintVerifyActivity.this).getPartnerCode(),
@@ -124,19 +146,42 @@ public class FingerprintVerifyActivity extends BaseActivity {
             }
 
             @Override public void onNoMatch() {
+                if (sessionEnding) return;
                 attemptVerify(templates, index + 1);
             }
 
             @Override public void onError(int code, String message) {
+                if (sessionEnding) return;
+                sessionEnding = true;
                 device.close();
-                Toast.makeText(FingerprintVerifyActivity.this, R.string.attendance_verify_error, Toast.LENGTH_SHORT).show();
-                failAndFinish();
+                failAndFinish(message == null || message.trim().isEmpty()
+                        ? getString(R.string.attendance_verify_error)
+                        : getString(R.string.fingerprint_verify_error_detail, message));
             }
         });
     }
 
-    private void failAndFinish() {
-        setResult(RESULT_VERIFY_FAILED);
+    private void closeDeviceAsync(boolean cancelFirst) {
+        if (device == null || scannerConnectionExecutor.isShutdown()) return;
+        scannerConnectionExecutor.execute(() -> {
+            if (cancelFirst) device.cancelLiveAcquisition();
+            device.close();
+        });
+    }
+
+    private void failAndFinish(String message) {
+        Intent result = new Intent().putExtra(EXTRA_FAILURE_MESSAGE, message);
+        setResult(RESULT_VERIFY_FAILED, result);
         finish();
+    }
+
+    @Override
+    protected void onDestroy() {
+        sessionEnding = true;
+        closeDeviceAsync(true);
+        // shutdown() lets a close queued behind an in-progress open run before releasing the
+        // executor; the sessionEnding check prevents that completed open from starting a scan.
+        scannerConnectionExecutor.shutdown();
+        super.onDestroy();
     }
 }

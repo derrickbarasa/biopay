@@ -41,6 +41,12 @@ const router = createRouter({
       meta: { requiresGuest: true, title: 'Verify code' },
     },
     {
+      path: '/approval',
+      name: 'email-approval',
+      component: () => import('@/pages/EmailApprovalPage.vue'),
+      meta: { title: 'Approval request' },
+    },
+    {
       path: '/change-password',
       name: 'force-password-change',
       component: () => import('@/pages/ForcePasswordChangePage.vue'),

@@ -254,6 +254,8 @@ public class Payment extends AbstractVerticle {
                 .put("organisationCode", Rows.str(r, "organization_code"))
                 .put("bomaCode", Rows.str(r, "boma_code"))
                 .put("amount", Rows.dbl(r, "amount"))
+                .put("currency", Rows.str(r, "currency"))
+                .put("exchangeRate", Rows.dbl(r, "exchange_rate"))
                 .put("status", Rows.intVal(r, "status"))
                 .put("approved", Rows.intVal(r, "approved"))
                 .put("cycle", Rows.str(r, "cycle"))

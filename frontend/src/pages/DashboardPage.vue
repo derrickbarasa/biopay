@@ -4,8 +4,8 @@ import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { dispatch } from '@/api/client'
 import ChartPeriodPicker from '@/components/ChartPeriodPicker.vue'
-import LineChart from '@/components/LineChart.vue'
-import { formatCurrency, formatCurrencyCompact } from '@/utils/currency'
+import DashboardChart from '@/components/DashboardChart.vue'
+import { dateKey, filledSeries, dashboardCurrency, type ChartPeriod, type ChartPoint } from '@/utils/dashboard'
 
 const auth = useAuthStore()
 const router = useRouter()
@@ -17,13 +17,11 @@ const loadError = ref('')
 const paymentChartError = ref('')
 const registrationChartError = ref('')
 const metrics = ref<Record<string, any>>({})
-const cashSeries = ref<{ label: string; value: number }[]>([])
-const voucherSeries = ref<{ label: string; value: number }[]>([])
-const householdsSeries = ref<{ label: string; value: number }[]>([])
-const alternatesSeries = ref<{ label: string; value: number }[]>([])
+const cashSeries = ref<ChartPoint[]>([])
+const voucherSeries = ref<ChartPoint[]>([])
+const householdsSeries = ref<ChartPoint[]>([])
+const alternatesSeries = ref<ChartPoint[]>([])
 
-type ChartPeriod = 'day' | 'month'
-interface ChartBucket { key: string; label: string }
 
 const paymentPeriod = ref<ChartPeriod>('month')
 const registrationPeriod = ref<ChartPeriod>('month')
@@ -38,28 +36,12 @@ interface MetricCard {
   tone?: 'teal' | 'amber' | 'green' | 'slate'
 }
 
-function dateKey(date: Date) {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
-}
-
-function currentBuckets(period: ChartPeriod, referenceDate: string): ChartBucket[] {
-  const [year, month, day] = referenceDate.split('-').map(Number)
-  const selected = new Date(year, month - 1, day)
-  if (period === 'day') {
-    return Array.from({ length: 24 }, (_, hour) => ({
-      key: String(hour).padStart(2, '0'), label: `${String(hour).padStart(2, '0')}:00`,
-    }))
-  }
-  const days = new Date(selected.getFullYear(), selected.getMonth() + 1, 0).getDate()
-  return Array.from({ length: days }, (_, index) => {
-    const date = new Date(selected.getFullYear(), selected.getMonth(), index + 1)
-    return { key: dateKey(date), label: String(index + 1) }
-  })
-}
-
-function filledSeries<T extends { period: string }>(rows: T[], value: (row: T) => number, period: ChartPeriod, referenceDate: string) {
-  const byPeriod = new Map(rows.map((row) => [row.period, value(row)]))
-  return currentBuckets(period, referenceDate).map((bucket) => ({ label: bucket.label, value: byPeriod.get(bucket.key) ?? 0 }))
+const paymentCounts = ref({ cash: 0, vouchers: 0 })
+const periodCaption = (period: ChartPeriod, date: string) => {
+  const selected = new Date(date + 'T00:00:00')
+  const text = period === 'year' ? selected.getFullYear().toString() : period === 'month'
+    ? selected.toLocaleDateString(undefined, { month: 'long', year: 'numeric' }) : date
+  return period === 'week' ? 'Week containing ' + text : text
 }
 
 let paymentChartRequest = 0
@@ -70,12 +52,21 @@ async function loadPaymentChart() {
   paymentChartLoading.value = true
   paymentChartError.value = ''
   try {
-    const response = await dispatch<{ results: { period: string; cashAmount: number; voucherAmount: number }[] }>(
+    const response = await dispatch<{ results: { period: string; cashAmount: number; voucherAmount: number; cashCount: number; voucherCount: number }[] }>(
       'DASHBOARD_PAYMENTS_CHART', { period, referenceDate },
     )
     if (request !== paymentChartRequest) return
     cashSeries.value = filledSeries(response.results, (row) => Number(row.cashAmount ?? 0), period, referenceDate)
     voucherSeries.value = filledSeries(response.results, (row) => Number(row.voucherAmount ?? 0), period, referenceDate)
+    paymentCounts.value = {
+      cash: filledSeries(response.results, row => Number(row.cashCount ?? 0), period, referenceDate).reduce((sum, point) => sum + point.value, 0),
+      vouchers: filledSeries(response.results, row => Number(row.voucherCount ?? 0), period, referenceDate).reduce((sum, point) => sum + point.value, 0),
+    }
+  } catch (err) {
+    if (request !== paymentChartRequest) return
+    cashSeries.value = []; voucherSeries.value = []
+    paymentCounts.value = { cash: 0, vouchers: 0 }
+    paymentChartError.value = err instanceof Error ? err.message : 'The payment chart could not be loaded.'
   } finally {
     if (request === paymentChartRequest) paymentChartLoading.value = false
   }
@@ -95,47 +86,34 @@ async function loadRegistrationChart() {
     if (request !== registrationChartRequest) return
     householdsSeries.value = filledSeries(response.results, (row) => Number(row.householdCount ?? 0), period, referenceDate)
     alternatesSeries.value = filledSeries(response.results, (row) => Number(row.alternateCount ?? 0), period, referenceDate)
+  } catch (err) {
+    if (request !== registrationChartRequest) return
+    householdsSeries.value = []; alternatesSeries.value = []
+    registrationChartError.value = err instanceof Error ? err.message : 'The registration chart could not be loaded.'
   } finally {
     if (request === registrationChartRequest) registrationChartLoading.value = false
   }
 }
 
-async function load() {
+let metricsRequest = 0
+async function loadMetrics() {
+  const request = ++metricsRequest
   loading.value = true
   loadError.value = ''
   try {
-    const [metricResponse] = await Promise.all([
-      dispatch<{ results: Record<string, any> }>('DASHBOARD_METRICS'),
-      loadPaymentChart(),
-      loadRegistrationChart(),
-    ])
-    metrics.value = metricResponse.results
+    const response = await dispatch<{ results: Record<string, any> }>('DASHBOARD_METRICS')
+    if (request === metricsRequest) metrics.value = response.results
   } catch (err) {
-    loadError.value = err instanceof Error ? err.message : 'The dashboard could not be loaded.'
+    if (request === metricsRequest) loadError.value = err instanceof Error ? err.message : 'The dashboard could not be loaded.'
   } finally {
-    loading.value = false
+    if (request === metricsRequest) loading.value = false
   }
 }
-
+async function load() { await Promise.all([loadMetrics(), loadPaymentChart(), loadRegistrationChart()]) }
 onMounted(load)
-watch([paymentPeriod, paymentDate], () => {
-  loadPaymentChart().catch((err) => {
-    paymentChartError.value = err instanceof Error ? err.message : 'The payment chart could not be loaded.'
-  })
-})
-watch([registrationPeriod, registrationDate], () => {
-  loadRegistrationChart().catch((err) => {
-    registrationChartError.value = err instanceof Error ? err.message : 'The registration chart could not be loaded.'
-  })
-})
-
-function currency(value: number | undefined) {
-  return formatCurrency(value)
-}
-
-function compactCurrency(value: number | undefined) {
-  return formatCurrencyCompact(value)
-}
+watch([paymentPeriod, paymentDate], loadPaymentChart)
+watch([registrationPeriod, registrationDate], loadRegistrationChart)
+const currency = dashboardCurrency
 
 function displayDate(value: unknown) {
   if (!value) return '—'
@@ -158,21 +136,25 @@ const dashboardCards = computed<MetricCard[]>(() => {
   if (auth.can('ACCESS_HOUSEHOLDS')) {
     cards.push({
       label: auth.isAnchor ? 'Households' : 'My households', value: metrics.value.totalHouseholds ?? 0,
-      detail: 'Approved beneficiary records', icon: 'mdi-home-group', tone: 'green',
+      detail: 'Active beneficiary records; all review statuses', icon: 'mdi-home-group', tone: 'green',
     })
   }
   if (auth.hasModule('CASH_TRANSFERS') || auth.hasModule('VOUCHERS')) {
     cards.push({
       label: auth.isAnchor ? 'Value disbursed' : 'Value received',
-      value: compactCurrency(metrics.value.combinedAmount),
+      value: currency(metrics.value.combinedAmount),
       detail: `${currency(cashAmount)} cash · ${currency(metrics.value.voucherRedeemedAmount)} vouchers`,
       icon: 'mdi-cash-multiple', tone: 'amber',
     })
   }
+  if (auth.hasModule('VOUCHERS') && auth.can('ACCESS_VOUCHERS')) {
+    cards.push({ label: 'Vouchers redeemed', value: metrics.value.voucherRedeemedCount ?? 0,
+      detail: currency(metrics.value.voucherRedeemedAmount) + ' redeemed', icon: 'mdi-ticket-confirmation-outline', tone: 'teal' })
+  }
   if (auth.hasModule('CASH_TRANSFERS') && auth.can('ACCESS_PAYMENTS')) {
     cards.push({
       label: auth.isAnchor ? 'Payments completed' : 'Payments received', value: cashCount ?? 0,
-      detail: `${compactCurrency(cashAmount)} successfully processed`,
+      detail: `${currency(cashAmount)} successfully processed`,
       icon: 'mdi-check-circle-outline', tone: 'teal',
     })
   }
@@ -197,7 +179,7 @@ const dashboardCards = computed<MetricCard[]>(() => {
   }
   if (auth.hasModule('CASH_TRANSFERS') && auth.can('ACCESS_PAYMENT_CYCLES')) {
     cards.push({
-      label: 'Total generated', value: compactCurrency(metrics.value.totalGeneratedAmount),
+      label: 'Total generated', value: currency(metrics.value.totalGeneratedAmount),
       detail: `${metrics.value.generatedCycles ?? 0} non-rejected payment cycle${metrics.value.generatedCycles === 1 ? '' : 's'}`,
       icon: 'mdi-chart-line', tone: 'green',
     })
@@ -205,14 +187,7 @@ const dashboardCards = computed<MetricCard[]>(() => {
   if (auth.can('ACCESS_ALTERNATES')) {
     cards.push({
       label: 'Alternates registered', value: metrics.value.totalAlternates ?? 0,
-      detail: 'Approved alternate recipients', icon: 'mdi-account-check-outline', tone: 'green',
-    })
-  }
-  if (auth.hasModule('CASH_TRANSFERS') && auth.can('ACCESS_PAYMENT_CYCLES')) {
-    cards.push({
-      label: 'Latest payroll', value: metrics.value.latestPayroll?.status ?? 'No cycles yet',
-      detail: metrics.value.latestPayroll?.cycleCode ?? 'Generate a cycle to begin',
-      icon: 'mdi-calendar-month-outline', tone: 'green',
+      detail: 'Active alternate recipients', icon: 'mdi-account-check-outline', tone: 'green',
     })
   }
   return cards
@@ -221,7 +196,7 @@ const dashboardCards = computed<MetricCard[]>(() => {
 const orgRanking = computed(() => {
   const rows = [...(metrics.value.amountsByOrganisation ?? [])]
     .sort((a: any, b: any) => Number(b.totalAmount ?? 0) - Number(a.totalAmount ?? 0))
-    .slice(0, 6)
+    .slice(0, 4)
   const max = Math.max(...rows.map((row: any) => Number(row.totalAmount ?? 0)), 1)
   return rows.map((row: any) => ({ ...row, share: (Number(row.totalAmount ?? 0) / max) * 100 }))
 })
@@ -255,14 +230,15 @@ const alternatePeriodTotal = computed(() => alternatesSeries.value.reduce((total
       </div>
     </v-alert>
 
-    <template v-if="!loadError">
-      <section aria-label="Programme summary">
+      <p class="scope-note">Cards show all-time totals in your access scope. Amounts are source USD values before payout conversion.</p>
+      <p v-if="loading" role="status">Loading programme summary...</p>
+      <section v-if="!loading && !loadError" aria-label="Programme summary">
         <div class="metric-grid">
           <article v-for="card in dashboardCards" :key="card.label" class="metric-card" :class="`tone-${card.tone ?? 'teal'}`">
             <div class="metric-icon" aria-hidden="true"><v-icon :icon="card.icon" size="20" /></div>
             <div class="metric-copy">
               <div class="metric-label">{{ card.label }}</div>
-              <div class="metric-value">{{ card.value }}</div>
+              <div class="metric-value" :title="String(card.value)">{{ card.value }}</div>
               <div class="metric-detail">{{ card.detail }}</div>
             </div>
           </article>
@@ -274,53 +250,55 @@ const alternatePeriodTotal = computed(() => alternatesSeries.value.reduce((total
           <v-progress-linear v-if="paymentChartLoading" indeterminate color="primary" class="chart-loading" />
           <div class="panel-heading">
             <div>
-              <h3>Payment volume</h3>
+              <h3>Payment volume</h3><p class="chart-context">{{ periodCaption(paymentPeriod, paymentDate) }} &middot; completed payments and redeemed vouchers</p>
               <div class="chart-legend"><span class="legend-cash">Cash</span><span class="legend-voucher">Vouchers</span></div>
             </div>
             <div class="chart-card-actions">
               <ChartPeriodPicker v-model:period="paymentPeriod" v-model:date="paymentDate" control-label="Choose payment chart date" />
-              <div class="panel-totals"><span>{{ compactCurrency(cashPeriodTotal) }} cash</span><span>{{ compactCurrency(voucherPeriodTotal) }} vouchers</span></div>
+              <div v-if="!paymentChartLoading && !paymentChartError" class="panel-totals"><span>{{ currency(cashPeriodTotal) }} &middot; {{ paymentCounts.cash }} cash payment{{ paymentCounts.cash === 1 ? '' : 's' }}</span><span>{{ currency(voucherPeriodTotal) }} &middot; {{ paymentCounts.vouchers }} voucher{{ paymentCounts.vouchers === 1 ? '' : 's' }}</span></div>
             </div>
           </div>
-          <v-alert v-if="paymentChartError" type="error" variant="tonal" density="compact" class="chart-error">{{ paymentChartError }}</v-alert>
-          <LineChart
-            :data="cashSeries" :secondary-data="voucherSeries" value-prefix="USD " series-label="Cash" secondary-label="Vouchers"
-            color="#0D9488" secondary-color="#F59E0B" :aria-label="`Cash and voucher payment volume for the selected ${paymentPeriod}`"
+          <v-alert v-if="paymentChartError" type="error" variant="tonal" density="compact" class="chart-error">{{ paymentChartError }}<v-btn size="small" variant="text" @click="loadPaymentChart">Retry</v-btn></v-alert>
+          <p v-if="paymentChartLoading" role="status" class="chart-loading-message">Loading payment activity...</p>
+          <DashboardChart
+            v-if="!paymentChartLoading && !paymentChartError" :data="cashSeries" :secondary-data="voucherSeries" money series-label="Cash" secondary-label="Vouchers"
+            color="#0D9488" secondary-color="#F59E0B" :ariaLabel="`Cash and voucher payment volume for ${periodCaption(paymentPeriod, paymentDate)}`"
           />
         </v-card>
         <v-card variant="flat" border class="chart-panel">
           <v-progress-linear v-if="registrationChartLoading" indeterminate color="primary" class="chart-loading" />
           <div class="panel-heading">
             <div>
-              <h3>Registration trend</h3>
+              <h3>Registration trend</h3><p class="chart-context">{{ periodCaption(registrationPeriod, registrationDate) }} &middot; all registrations, including inactive records</p>
               <div class="chart-legend"><span class="legend-household">Households</span><span class="legend-alternate">Alternates</span></div>
             </div>
             <div class="chart-card-actions">
               <ChartPeriodPicker v-model:period="registrationPeriod" v-model:date="registrationDate" control-label="Choose registration chart date" />
-              <div class="panel-totals"><span>{{ householdPeriodTotal }} households</span><span>{{ alternatePeriodTotal }} alternates</span></div>
+              <div v-if="!registrationChartLoading && !registrationChartError" class="panel-totals"><span>{{ householdPeriodTotal }} households</span><span>{{ alternatePeriodTotal }} alternates</span></div>
             </div>
           </div>
-          <v-alert v-if="registrationChartError" type="error" variant="tonal" density="compact" class="chart-error">{{ registrationChartError }}</v-alert>
-          <LineChart
-            :data="householdsSeries" :secondary-data="alternatesSeries" series-label="Households" secondary-label="Alternates"
-            color="#15803D" secondary-color="#0EA5E9" :aria-label="`Household and alternate registration trend for the selected ${registrationPeriod}`"
+          <v-alert v-if="registrationChartError" type="error" variant="tonal" density="compact" class="chart-error">{{ registrationChartError }}<v-btn size="small" variant="text" @click="loadRegistrationChart">Retry</v-btn></v-alert>
+          <p v-if="registrationChartLoading" role="status" class="chart-loading-message">Loading registration activity...</p>
+          <DashboardChart
+            v-if="!registrationChartLoading && !registrationChartError" :data="householdsSeries" :secondary-data="alternatesSeries" series-label="Households" secondary-label="Alternates"
+            color="#15803D" secondary-color="#0EA5E9" :ariaLabel="`Household and alternate registration trend for ${periodCaption(registrationPeriod, registrationDate)}`"
           />
         </v-card>
       </section>
 
-      <section v-if="auth.isAnchor" class="operations-grid" aria-label="Organisation performance and recent activity">
+      <section v-if="auth.isAnchor && !loading && !loadError" class="operations-grid" aria-label="Organisation performance and recent activity">
         <v-card variant="flat" border class="ranking-panel">
           <div class="panel-heading">
-            <div><h2>Organisation performance</h2><span>Top organisations by total disbursed</span></div>
+            <div><h2>Organisation performance</h2><span>Top 4 organisations by all-time disbursements</span></div>
             <v-btn v-if="auth.can('ACCESS_ORGANISATIONS')" size="small" variant="text" append-icon="mdi-arrow-right" @click="router.push('/app/organizations')">View all</v-btn>
           </div>
           <div v-if="orgRanking.length" class="ranking-list">
             <div v-for="(org, index) in orgRanking" :key="org.organisationCode" class="ranking-row">
               <span class="ranking-index">{{ String(index + 1).padStart(2, '0') }}</span>
               <div class="ranking-data">
-                <div class="ranking-copy"><strong>{{ org.organisationName || org.organisationCode }}</strong><span>{{ currency(org.totalAmount) }}</span></div>
+                <div class="ranking-copy"><strong :title="org.organisationName || org.organisationCode">{{ org.organisationName || org.organisationCode }}</strong><span>{{ currency(org.totalAmount) }}</span></div>
                 <div class="ranking-track" aria-hidden="true"><span :style="{ width: `${org.share}%` }" /></div>
-                <div class="ranking-breakdown"><span>Cash {{ compactCurrency(org.paymentsAmount) }}</span><span>Vouchers {{ compactCurrency(org.voucherAmount) }}</span></div>
+                <div class="ranking-breakdown"><span>Cash {{ currency(org.paymentsAmount) }}</span><span>Vouchers {{ currency(org.voucherAmount) }}</span></div>
               </div>
             </div>
           </div>
@@ -328,21 +306,21 @@ const alternatePeriodTotal = computed(() => alternatesSeries.value.reduce((total
         </v-card>
 
         <v-card variant="flat" border class="activity-panel">
-          <div class="panel-heading"><div><h2>Recent activity</h2><span>Latest cash-transfer records</span></div></div>
+          <div class="panel-heading"><div><h2>Recent activity</h2><span>Latest 4 cash-transfer records</span></div><v-btn v-if="auth.can('ACCESS_PAYMENTS')" size="small" variant="text" append-icon="mdi-arrow-right" @click="router.push('/app/payments')">View payments</v-btn></div>
           <div v-if="metrics.recentTransactions?.length" class="activity-list">
-            <div v-for="transaction in metrics.recentTransactions.slice(0, 6)" :key="transaction.id" class="activity-row">
-              <div class="activity-mark" :class="{ pending: transaction.status !== 1 }" aria-hidden="true" />
-              <div class="activity-copy"><strong>{{ transaction.householdName || 'Household' }}</strong><span>{{ transaction.organisationName || transaction.organisationCode }}</span></div>
-              <div class="activity-value"><strong>{{ currency(transaction.amount) }}</strong><span>{{ displayDate(transaction.createdAt) }}</span></div>
+            <div v-for="transaction in metrics.recentTransactions.slice(0, 4)" :key="transaction.id" class="activity-row">
+              <div class="activity-mark" :class="{ pending: transaction.status !== 1 || transaction.rejected }" aria-hidden="true" />
+              <div class="activity-copy"><strong>{{ transaction.householdName || 'Household' }}</strong><span>{{ transaction.organisationName || transaction.organisationCode }} &middot; {{ transaction.rejected ? 'Rejected' : transaction.status === 1 ? 'Paid' : transaction.status === 2 ? 'Failed' : 'Pending' }}</span></div>
+              <div class="activity-value"><strong>{{ currency(transaction.amount) }}</strong><span>{{ displayDate(transaction.activityAt ?? transaction.createdAt) }}</span></div>
             </div>
           </div>
           <div v-else-if="!loading" class="compact-empty"><v-icon icon="mdi-history" size="24" /><div><strong>No recent payment activity</strong><span>Completed and pending transfers will appear here.</span></div></div>
         </v-card>
       </section>
 
-      <v-card v-if="auth.isAnchor && metrics.amountsByOrganisation?.length" variant="flat" border class="totals-panel">
+      <v-card v-if="auth.isAnchor && !loading && !loadError && metrics.amountsByOrganisation?.length" variant="flat" border class="totals-panel">
         <div class="panel-heading totals-heading">
-          <div><h2>Amount generated by organisation</h2><span>Cash transfers, redeemed vouchers, and combined totals</span></div>
+          <div><h2>Amount disbursed by organisation</h2><span>All organisations, including inactive ones &middot; completed cash transfers and redeemed vouchers</span></div>
         </div>
         <div class="table-scroll" tabindex="0" aria-label="Organization disbursement totals">
           <v-table density="compact">
@@ -356,21 +334,24 @@ const alternatePeriodTotal = computed(() => alternatesSeries.value.reduce((total
             </thead>
             <tbody>
               <tr v-for="org in metrics.amountsByOrganisation" :key="org.organisationCode">
-                <td>{{ org.organisationName || org.organisationCode }}</td>
+                <td>{{ org.organisationName || org.organisationCode }}<span v-if="org.active === false"> (Inactive)</span></td>
                 <td class="text-right">{{ currency(org.paymentsAmount) }}</td>
                 <td class="text-right">{{ currency(org.voucherAmount) }}</td>
                 <td class="text-right font-weight-bold">{{ currency(org.totalAmount) }}</td>
               </tr>
             </tbody>
+            <tfoot><tr><th>Total</th><td class="text-right">{{ currency(metrics.totalPaymentsAmount) }}</td><td class="text-right">{{ currency(metrics.voucherRedeemedAmount) }}</td><td class="text-right font-weight-bold">{{ currency(metrics.combinedAmount) }}</td></tr></tfoot>
           </v-table>
         </div>
       </v-card>
-    </template>
   </div>
 </template>
 
 <style scoped>
 /* Compact operations-ledger layout: scan density is intentional. */
+.scope-note { margin: 0 0 12px; color: #64748b; font-size: .75rem; }
+.chart-context { margin-top: 5px; color: #64748b; font-size: .7rem; line-height: 1.4; }
+.chart-loading-message { min-height: 230px; display: grid; place-items: center; color: #64748b; }
 .dashboard-page { color: #0f172a; font-size: .9375rem; }
 .dashboard-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; margin-bottom: 14px; }
 .heading-copy { min-width: 0; }
@@ -387,9 +368,9 @@ const alternatePeriodTotal = computed(() => alternatesSeries.value.reduce((total
 .metric-card.tone-slate { --metric-color: #475569; --metric-soft: #f1f5f9; }
 .metric-icon { grid-column: 2; grid-row: 1; display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; color: var(--metric-color); background: var(--metric-soft); }
 .metric-copy { min-width: 0; }
-.metric-label { color: #64748b; font-size: .61rem; font-weight: 700; letter-spacing: .025em; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.metric-value { margin-top: 4px; color: #0f172a; font-size: clamp(1rem, .94rem + .2vw, 1.16rem); font-weight: 760; letter-spacing: -.025em; line-height: 1.15; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.metric-detail { margin-top: 5px; color: #64748b; font-size: .61rem; line-height: 1.25; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.metric-label { color: #64748b; font-size: .61rem; font-weight: 700; letter-spacing: .025em; text-transform: uppercase; white-space: normal; overflow-wrap: anywhere; }
+.metric-value { margin-top: 4px; color: #0f172a; font-size: clamp(1rem, .94rem + .2vw, 1.16rem); font-weight: 760; letter-spacing: -.025em; line-height: 1.15; font-variant-numeric: tabular-nums; white-space: normal; overflow-wrap: anywhere; }
+.metric-detail { margin-top: 5px; color: #64748b; font-size: .61rem; line-height: 1.25; overflow-wrap: anywhere; }
 .analytics-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 12px; }
 .chart-panel, .ranking-panel, .activity-panel, .totals-panel { border-color: #e2e8f0 !important; border-radius: 14px !important; }
 .chart-panel { position: relative; min-width: 0; overflow: hidden; padding: 16px 16px 8px; }
@@ -397,7 +378,9 @@ const alternatePeriodTotal = computed(() => alternatesSeries.value.reduce((total
 .panel-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding-bottom: 10px; }
 .panel-heading > div { min-width: 0; }
 .panel-heading .panel-total { color: #0f172a; font-size: .82rem; font-weight: 750; font-variant-numeric: tabular-nums; }
-.chart-card-actions { min-width: 150px; display: grid; justify-items: end; gap: 5px; }
+.chart-panel > .panel-heading { flex-wrap: wrap; gap: 8px 12px; }
+.chart-panel > .panel-heading > div:first-child { flex: 1 1 140px; }
+.chart-card-actions { flex: 0 0 auto; margin-left: auto; min-width: 192px; display: grid; justify-items: end; gap: 5px; }
 .panel-totals { display: grid; justify-items: end; gap: 2px; color: #475569; font-size: .67rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .chart-legend { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 5px; color: #64748b; font-size: .65rem; }
 .chart-legend span { display: inline-flex; align-items: center; gap: 5px; }
@@ -406,7 +389,7 @@ const alternatePeriodTotal = computed(() => alternatesSeries.value.reduce((total
 .legend-voucher { --legend-color: #f59e0b; }
 .legend-household { --legend-color: #15803d; }
 .legend-alternate { --legend-color: #0ea5e9; }
-.operations-grid { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(320px, .8fr); gap: 12px; margin-top: 12px; }
+.operations-grid { display: grid; align-items: stretch; grid-template-columns: minmax(0, 1.2fr) minmax(320px, .8fr); gap: 12px; margin-top: 12px; }
 .ranking-panel, .activity-panel { padding: 16px; }
 .ranking-list, .activity-list { border-top: 1px solid #eef2f6; }
 .ranking-row { display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: 10px; padding: 10px 0; border-bottom: 1px solid #f1f5f9; }
@@ -417,7 +400,7 @@ const alternatePeriodTotal = computed(() => alternatesSeries.value.reduce((total
 .ranking-copy strong { overflow: hidden; color: #334155; font-size: .76rem; font-weight: 650; white-space: nowrap; text-overflow: ellipsis; }
 .ranking-copy span { color: #0f172a; font-size: .73rem; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .ranking-track { height: 6px; margin: 6px 0 5px; overflow: hidden; border-radius: 4px; background: #e8eef2; }
-.ranking-track span { display: block; height: 100%; min-width: 2px; border-radius: inherit; background: #0d9488; }
+.ranking-track span { display: block; height: 100%; border-radius: inherit; background: #0d9488; }
 .ranking-breakdown { justify-content: flex-start; color: #64748b; font-size: .62rem; }
 .ranking-breakdown span + span::before { content: '·'; margin-right: 8px; color: #cbd5e1; }
 .activity-row { display: grid; grid-template-columns: 8px minmax(0, 1fr) auto; align-items: center; gap: 10px; min-height: 54px; border-bottom: 1px solid #f1f5f9; }
@@ -428,13 +411,13 @@ const alternatePeriodTotal = computed(() => alternatesSeries.value.reduce((total
 .activity-copy span, .activity-value span { overflow: hidden; color: #64748b; font-size: .64rem; white-space: nowrap; text-overflow: ellipsis; }
 .activity-value { justify-items: end; }
 .activity-value strong { color: #0f172a; font-size: .72rem; font-weight: 700; font-variant-numeric: tabular-nums; }
-.compact-empty { min-height: 220px; display: flex; align-items: center; justify-content: center; gap: 12px; color: #64748b; text-align: left; }
+.compact-empty { min-height: 120px; display: flex; align-items: center; justify-content: center; gap: 12px; color: #64748b; text-align: left; }
 .compact-empty div { display: grid; gap: 2px; }
 .compact-empty strong { color: #334155; font-size: .8rem; }
 .compact-empty span { font-size: .72rem; }
 .totals-panel { margin-top: 12px; overflow: hidden; }
 .totals-heading { padding: 14px 16px 10px; }
-.table-scroll { max-width: 100%; overflow-x: auto; outline-offset: -2px; }
+.table-scroll { max-width: 100%; overflow-x: auto; scrollbar-width: thin; scrollbar-color: #94a3b8 transparent; outline-offset: -2px; }
 .table-scroll:focus-visible { outline: 2px solid #0d9488; }
 .table-scroll :deep(table) { font-size: .76rem; }
 .table-scroll :deep(th) { color: #64748b; font-size: .65rem !important; }

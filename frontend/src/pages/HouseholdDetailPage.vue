@@ -5,6 +5,8 @@ import { apiClient, dispatch } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
 import { downloadCsv, toCsv } from '@/utils/csv'
+import { householdReviewStatus } from '@/utils/householdReview'
+import HouseholdReviewActions from '@/components/HouseholdReviewActions.vue'
 import {
   LEGAL_STATUS_OPTIONS,
   VULNERABILITY_OPTIONS,
@@ -87,13 +89,15 @@ const locationsForCounty = (countyCode: string) => countyCode ? locations.value.
 const villagesForLocation = (locationCode: string) => locationCode ? villages.value.filter((v) => v.locationCode === locationCode) : villages.value
 
 const householdNumber = computed(() => String(route.params.householdNumber ?? ''))
+const reviewStatus = computed(() => householdReviewStatus(detail.value?.reviewStatus))
+const reviewStatusColor: Record<string, string> = { PENDING: 'default', APPROVED: 'success', REJECTED: 'error' }
 
 const genderLabel = (g?: string) => (g === 'M' ? 'Male' : g === 'F' ? 'Female' : (g || '—'))
 
 const infoFields = computed(() => {
   const d = detail.value
   if (!d) return []
-  return [
+  const fields = [
     { label: 'Household number', value: d.householdNumber },
     { label: 'Head of household', value: d.householdName },
     { label: 'Organization', value: orgName(d.organisationCode) },
@@ -108,7 +112,7 @@ const infoFields = computed(() => {
     { label: 'Male dependants', value: d.maleDependants ?? '—' },
     { label: 'Vulnerability categories', value: (d.vulnerabilityStatuses ?? []).map(vulnerabilityLabel).join(', ') || 'Not recorded' },
     { label: 'Legal status', value: legalStatusLabel(d.legalStatus) },
-    { label: 'Review status', value: d.reviewStatus || 'PENDING' },
+    { label: 'Review status', value: householdReviewStatus(d.reviewStatus) },
     { label: 'State', value: stateNameByCode.value.get(d.stateCode) || d.stateCode || '—' },
     { label: 'County', value: countyNameByCode.value.get(d.countyCode) || d.countyCode || '—' },
     { label: 'Location', value: locationNameByCode.value.get(d.payamCode) || d.payamCode || '—' },
@@ -117,6 +121,10 @@ const infoFields = computed(() => {
     { label: 'Registered', value: d.createdAt || '—' },
     { label: 'Last updated', value: d.updatedAt || '—' },
   ]
+  if (householdReviewStatus(d.reviewStatus) === 'REJECTED' && d.rejectionReason) {
+    fields.splice(15, 0, { label: 'Rejection reason', value: d.rejectionReason })
+  }
+  return fields
 })
 
 function revokePhotos() {
@@ -459,42 +467,49 @@ onMounted(() => { load(); loadNameLookups() })
 
 <template>
   <div>
-    <div class="d-flex align-center mb-4 ga-3">
-      <v-btn icon="mdi-arrow-left" variant="text" aria-label="Back to households" @click="goBack" />
-      <div>
-        <h1 class="text-h5 font-weight-bold mb-0">
-          {{ detail?.householdName ?? 'Household' }}
-        </h1>
-        <div class="text-body-2 text-medium-emphasis">{{ householdNumber }}</div>
+    <div class="household-detail-header mb-4">
+      <div class="household-detail-heading">
+        <v-btn icon="mdi-arrow-left" variant="text" aria-label="Back to households" @click="goBack" />
+        <div>
+          <h1 class="text-h5 font-weight-bold mb-0">
+            {{ detail?.householdName ?? 'Household' }}
+          </h1>
+          <div class="text-body-2 text-medium-emphasis">{{ householdNumber }}</div>
+        </div>
       </div>
-      <v-spacer />
-      <v-btn
-        v-if="detail && auth.can('ACCESS_HOUSEHOLDS')"
-        variant="tonal"
-        prepend-icon="mdi-pencil-outline"
-        class="mr-3"
-        @click="openEdit"
-      >
-        Edit
-      </v-btn>
-      <v-btn
-        v-if="detail && auth.can('ACCESS_VOUCHERS')"
-        color="primary"
-        variant="tonal"
-        prepend-icon="mdi-printer"
-        :loading="printing"
-        class="mr-3"
-        @click="printVoucher"
-      >
-        Print Voucher
-      </v-btn>
-      <v-chip
-        v-if="detail"
-        :color="detail.status === 1 ? 'success' : 'error'"
-        variant="tonal"
-      >
-        {{ detail.status === 1 ? 'Active' : 'Inactive' }}
-      </v-chip>
+      <div v-if="detail" class="household-detail-actions">
+        <v-chip :color="reviewStatusColor[reviewStatus]" variant="tonal">
+          {{ reviewStatus }}
+        </v-chip>
+        <HouseholdReviewActions
+          v-if="auth.can('ACCESS_HOUSEHOLDS')"
+          :household-number="householdNumber"
+          :household-name="detail.householdName ?? 'Household'"
+          :review-status="detail.reviewStatus"
+          @updated="load"
+        />
+        <v-btn
+          v-if="auth.can('ACCESS_HOUSEHOLDS')"
+          variant="tonal"
+          prepend-icon="mdi-pencil-outline"
+          @click="openEdit"
+        >
+          Edit
+        </v-btn>
+        <v-btn
+          v-if="auth.can('ACCESS_VOUCHERS')"
+          color="primary"
+          variant="tonal"
+          prepend-icon="mdi-printer"
+          :loading="printing"
+          @click="printVoucher"
+        >
+          Print Voucher
+        </v-btn>
+        <v-chip :color="detail.status === 1 ? 'success' : 'error'" variant="tonal">
+          {{ detail.status === 1 ? 'Active' : 'Inactive' }}
+        </v-chip>
+      </div>
     </div>
 
     <v-progress-linear v-if="loading" indeterminate color="primary" class="mb-4" />
@@ -775,3 +790,37 @@ onMounted(() => { load(); loadNameLookups() })
     </v-dialog>
   </div>
 </template>
+
+<style scoped>
+.household-detail-header,
+.household-detail-heading,
+.household-detail-actions {
+  display: flex;
+  align-items: center;
+}
+
+.household-detail-header {
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.household-detail-heading {
+  gap: 12px;
+  flex: 1 1 260px;
+  min-width: 0;
+}
+
+.household-detail-actions {
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-left: auto;
+}
+
+@media (max-width: 700px) {
+  .household-detail-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+}
+</style>
