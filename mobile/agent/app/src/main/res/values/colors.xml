@@ -30,6 +30,18 @@
     <color name="bp_amber_container">#FFF1D6</color>
     <color name="bp_on_primary_translucent">#33FFFFFF</color>
 
+    <!-- Distinct per-card tints for the home dashboard's payment/voucher cards: payments in
+         yellow, vouchers in sky blue, kept at the same pale tonal weight as the app's other
+         container colors (bp_primary_container, bp_secondary_container, bp_amber_container)
+         so a full card reads as a quiet tint rather than a block of color. -->
+    <color name="bp_payment_card_tint">@color/bp_amber_container</color>
+    <color name="bp_voucher_card_tint">#D6EEFB</color>
+
+    <!-- Saturated counterparts of the two tints above, bright enough to read as ring slices on
+         the hero's solid bp_primary background (the pastel card tints would wash out there). -->
+    <color name="bp_donut_payment_slice">#FFCA28</color>
+    <color name="bp_donut_voucher_slice">#4FC3F7</color>
+
     <!-- Quiet identity cues shared by payment, voucher, and attendance verification. -->
     <color name="bp_person_head_container">#F1ECFA</color>
     <color name="bp_person_head_outline">#D5C8EB</color>

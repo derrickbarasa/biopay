@@ -60,7 +60,8 @@
     <string name="home_view_all">View all</string>
     <string name="home_quick_verify_identity">Verify identity</string>
     <string name="home_quick_my_location">My location</string>
-    <string name="home_notifications_description">Notifications</string>
+    <string name="home_summary_donut_title">Your summary</string>
+    <string name="home_summary_donut_description">Field summary: households, pending payments and vouchers. Tap for the full report.</string>
     <string name="home_location_unavailable">Location unavailable. Grant location permission and try again outdoors.</string>
     <string name="my_location_description">The pin marks your last known GPS fix; the shaded ring shows roughly how accurate it is. Works fully offline -- no map tiles or connectivity needed.</string>
     <string name="my_location_coordinates">%1$.5f, %2$.5f</string>
@@ -525,7 +526,9 @@
     <string name="face_test_capture_failed">Capture problem: %1$s</string>
 
     <string name="face_capture_title">Face capture</string>
-    <string name="face_capture_guidance">Center your face in the frame, in good light. This only tests detection — nothing is saved or matched.</string>
+    <string name="face_capture_guidance">Center the face in the frame, in good light. This only tests detection — nothing is saved or matched.</string>
+    <string name="face_capture_guidance_enroll">Center the person\'s face in the frame, in good light. This photo is saved and used to verify their identity for future payments.</string>
+    <string name="face_capture_guidance_verify">Center the person\'s face in the frame, in good light. This photo is matched against their enrolled face to verify their identity.</string>
     <string name="face_capture_action">Capture</string>
     <string name="face_capture_status_searching">Looking for a face…</string>
     <string name="face_capture_status_ready">Face ready</string>

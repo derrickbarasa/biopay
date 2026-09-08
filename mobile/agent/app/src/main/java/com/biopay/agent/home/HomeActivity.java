@@ -22,7 +22,6 @@ import com.biopay.agent.payments.PaymentsActivity;
 import com.biopay.agent.payments.PaymentVerificationActivity;
 import com.biopay.agent.reports.ReportsActivity;
 import com.biopay.agent.session.SessionManager;
-import com.biopay.agent.settings.SettingsActivity;
 import com.biopay.agent.sync.SyncScheduler;
 import com.biopay.agent.sync.SyncFeedback;
 import com.biopay.agent.ui.BaseActivity;
@@ -31,7 +30,10 @@ import com.google.android.material.snackbar.Snackbar;
 
 import org.json.JSONObject;
 
+import androidx.core.content.ContextCompat;
+
 import java.text.NumberFormat;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -45,6 +47,7 @@ public class HomeActivity extends BaseActivity {
     private PaymentDao paymentDao;
     private VoucherDao voucherDao;
     private PaymentDao.LocalPayment nextPayment;
+    private SimpleDonutChartView heroSummaryChart;
 
     // Requested once here, right after login, rather than inside Attendance/HouseholdForm --
     // this way the permission dialog never interrupts the fingerprint live-verify flow later.
@@ -78,8 +81,12 @@ public class HomeActivity extends BaseActivity {
         findViewById(R.id.btnQuickRegister).setOnClickListener(v ->
                 startActivity(new Intent(this, HouseholdFormActivity.class)));
         findViewById(R.id.btnQuickSync).setOnClickListener(this::triggerManualSync);
-        findViewById(R.id.btnNotifications).setOnClickListener(v ->
-                startActivity(new Intent(this, SettingsActivity.class)));
+        heroSummaryChart = findViewById(R.id.heroSummaryChart);
+        heroSummaryChart.setCompact(true);
+        heroSummaryChart.setTrackColor(ContextCompat.getColor(this, R.color.bp_on_primary_translucent));
+        heroSummaryChart.setCenterValueColor(ContextCompat.getColor(this, R.color.bp_on_primary));
+        heroSummaryChart.setOnClickListener(v ->
+                startActivity(new Intent(this, ReportsActivity.class)));
         findViewById(R.id.btnSummaryViewAll).setOnClickListener(v ->
                 startActivity(new Intent(this, ReportsActivity.class)));
         findViewById(R.id.btnPaymentsViewAll).setOnClickListener(v ->
@@ -185,6 +192,16 @@ public class HomeActivity extends BaseActivity {
         }
 
         List<VoucherDao.Voucher> availableVouchers = voucherDao.listIssued();
+
+        heroSummaryChart.setSlices(Arrays.asList(
+                new SimpleDonutChartView.Slice(getString(R.string.home_kpi_households), householdCount,
+                        ContextCompat.getColor(this, R.color.bp_on_primary)),
+                new SimpleDonutChartView.Slice(getString(R.string.home_kpi_pending_payment), pendingPaymentCount,
+                        ContextCompat.getColor(this, R.color.bp_donut_payment_slice)),
+                new SimpleDonutChartView.Slice(getString(R.string.home_vouchers_title), availableVouchers.size(),
+                        ContextCompat.getColor(this, R.color.bp_donut_voucher_slice))),
+                null);
+
         ((TextView) findViewById(R.id.tvHomeVoucherCount)).setText(getResources().getQuantityString(
                 R.plurals.home_voucher_available_count, availableVouchers.size(), availableVouchers.size()));
         TextView nextVoucher = findViewById(R.id.tvHomeNextVoucher);

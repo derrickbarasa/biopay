@@ -39,7 +39,8 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * Dumb capture-and-validate screen: shows a live front-camera preview, runs a fast ML Kit
+ * Dumb capture-and-validate screen: shows a live back-camera preview (the officer is always
+ * photographing someone else, never themselves), runs a fast ML Kit
  * detector on each frame purely for on-screen guidance (enable/disable the capture button, show
  * a status chip), and on capture writes a still JPEG to a cache file and returns its path.
  * Deliberately owns no embedding/storage/enrollment logic itself -- see {@link
@@ -49,6 +50,11 @@ import java.util.concurrent.Executors;
 public class FaceCaptureActivity extends BaseActivity {
 
     public static final String EXTRA_RESULT_IMAGE_PATH = "face_capture_image_path";
+    /** Optional string-resource id overriding the on-screen guidance copy -- callers that actually
+     *  save or match the captured photo (enrollment, payment verification) must pass one of
+     *  {@link R.string#face_capture_guidance_enroll} / {@link R.string#face_capture_guidance_verify}
+     *  so the officer isn't told "nothing is saved" while capturing a real beneficiary photo. */
+    public static final String EXTRA_GUIDANCE_TEXT_RES = "face_capture_guidance_text_res";
 
     private PreviewView previewView;
     private TextView tvFaceStatus;
@@ -78,6 +84,9 @@ public class FaceCaptureActivity extends BaseActivity {
         tvFaceStatus = findViewById(R.id.tvFaceStatus);
         btnCapture = findViewById(R.id.btnCapture);
         btnCapture.setOnClickListener(v -> capture());
+
+        int guidanceRes = getIntent().getIntExtra(EXTRA_GUIDANCE_TEXT_RES, R.string.face_capture_guidance);
+        ((TextView) findViewById(R.id.tvFaceGuidance)).setText(guidanceRes);
 
         cameraExecutor = Executors.newSingleThreadExecutor();
         FaceDetectorOptions liveOptions = new FaceDetectorOptions.Builder()
@@ -119,7 +128,7 @@ public class FaceCaptureActivity extends BaseActivity {
                 .build();
 
         CameraSelector selector = new CameraSelector.Builder()
-                .requireLensFacing(CameraSelector.LENS_FACING_FRONT)
+                .requireLensFacing(CameraSelector.LENS_FACING_BACK)
                 .build();
 
         provider.unbindAll();

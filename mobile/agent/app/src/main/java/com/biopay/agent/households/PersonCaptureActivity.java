@@ -199,7 +199,8 @@ public class PersonCaptureActivity extends BaseActivity {
         });
 
         findViewById(R.id.btnCaptureFace).setOnClickListener(v ->
-                faceCaptureLauncher.launch(new Intent(this, FaceCaptureActivity.class)));
+                faceCaptureLauncher.launch(new Intent(this, FaceCaptureActivity.class)
+                        .putExtra(FaceCaptureActivity.EXTRA_GUIDANCE_TEXT_RES, R.string.face_capture_guidance_enroll)));
         findViewById(R.id.btnAddPerson).setOnClickListener(v -> showAddAlternateDialog());
         findViewById(R.id.btnFinish).setOnClickListener(v -> {
             setResult(RESULT_OK);

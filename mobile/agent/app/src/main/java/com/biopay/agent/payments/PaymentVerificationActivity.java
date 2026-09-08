@@ -189,7 +189,8 @@ public class PaymentVerificationActivity extends BaseActivity {
                     selectedBeneficiary.beneficiaryType, selectedBeneficiary.gender));
         } else {
             pendingFaceBeneficiary = selectedBeneficiary;
-            faceCaptureLauncher.launch(new Intent(this, FaceCaptureActivity.class));
+            faceCaptureLauncher.launch(new Intent(this, FaceCaptureActivity.class)
+                    .putExtra(FaceCaptureActivity.EXTRA_GUIDANCE_TEXT_RES, R.string.face_capture_guidance_verify));
         }
     }
 

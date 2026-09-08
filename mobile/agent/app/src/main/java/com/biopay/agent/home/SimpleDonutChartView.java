@@ -39,6 +39,9 @@ public class SimpleDonutChartView extends View {
     private final Paint trackPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final RectF ringBounds = new RectF();
     private String centerLabel = "";
+    /** Compact mode: for small placements (e.g. the home hero) -- scales the total text to the
+     *  view's own size instead of a fixed sp, and never draws the caption line beneath it. */
+    private boolean compact = false;
 
     public SimpleDonutChartView(Context context, AttributeSet attrs) {
         super(context, attrs);
@@ -63,15 +66,37 @@ public class SimpleDonutChartView extends View {
         invalidate();
     }
 
+    /** Enables compact styling for small placements -- see {@link #compact}. */
+    public void setCompact(boolean compact) {
+        this.compact = compact;
+        invalidate();
+    }
+
+    /** Overrides the empty-track ring color, e.g. a translucent white when drawn on a solid
+     *  brand-color background where the default outline color would be invisible. */
+    public void setTrackColor(int color) {
+        trackPaint.setColor(color);
+        invalidate();
+    }
+
+    /** Overrides the centered total's text color, e.g. white when drawn on a dark background. */
+    public void setCenterValueColor(int color) {
+        centerValuePaint.setColor(color);
+        invalidate();
+    }
+
     @Override
     protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
         float size = Math.min(getWidth(), getHeight());
         if (size <= 0) return;
 
-        float strokeWidth = size * 0.16f;
+        float strokeWidth = size * (compact ? 0.22f : 0.16f);
         ringPaint.setStrokeWidth(strokeWidth);
         trackPaint.setStrokeWidth(strokeWidth);
+        if (compact) {
+            centerValuePaint.setTextSize(size * 0.34f);
+        }
         float inset = strokeWidth / 2f + 4f;
         float left = (getWidth() - size) / 2f + inset;
         float top = (getHeight() - size) / 2f + inset;
@@ -94,12 +119,14 @@ public class SimpleDonutChartView extends View {
                 canvas.drawArc(ringBounds, startAngle, sweep, false, ringPaint);
                 startAngle += sweep;
             }
-            canvas.drawText(String.valueOf((int) total), centerX, centerY, centerValuePaint);
-            if (centerLabel != null && !centerLabel.isEmpty()) {
+            float valueY = compact ? centerY + centerValuePaint.getTextSize() * 0.35f : centerY;
+            canvas.drawText(String.valueOf((int) total), centerX, valueY, centerValuePaint);
+            if (!compact && centerLabel != null && !centerLabel.isEmpty()) {
                 canvas.drawText(centerLabel, centerX, centerY + centerLabelPaint.getTextSize() + 4f, centerLabelPaint);
             }
         } else {
-            canvas.drawText("0", centerX, centerY, centerValuePaint);
+            float zeroY = compact ? centerY + centerValuePaint.getTextSize() * 0.35f : centerY;
+            canvas.drawText("0", centerX, zeroY, centerValuePaint);
         }
     }
 }
