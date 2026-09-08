@@ -75,14 +75,6 @@
     <string name="nav_vouchers">Vouchers</string>
     <string name="nav_more">More</string>
 
-    <string name="scan_action_title">Scan</string>
-    <string name="scan_sheet_fingerprint">Fingerprint Verification</string>
-    <string name="scan_sheet_fingerprint_body">Verify a household member using a registered fingerprint</string>
-    <string name="scan_sheet_face">Face Verification</string>
-    <string name="scan_sheet_face_body">Verify a household member using camera and liveness check</string>
-    <string name="scan_sheet_voucher">Scan Voucher / QR</string>
-    <string name="scan_sheet_voucher_body">Choose an issued voucher to redeem</string>
-
     <string name="activity_feed_title">Activity</string>
     <string name="activity_feed_description">A chronological record of registrations, verifications, disbursements, and sync status on this device.</string>
     <string name="activity_feed_search_hint">Search activity, person, or date</string>
