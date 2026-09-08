@@ -343,13 +343,23 @@
     <string name="feedback_dismiss">Dismiss</string>
 
     <string name="alternate_title">Alternates</string>
-    <string name="alternate_description">Alternate beneficiaries linked to households on this device.</string>
-    <string name="alternate_search_hint">Search name, household, relationship, or gender</string>
-    <string name="alternate_summary">%1$d alternate(s) on this device</string>
-    <string name="alternate_empty_title">No alternates available</string>
-    <string name="alternate_empty_body">Alternates appear here after household records are synced or updated.</string>
+    <string name="alternate_description">Choose a household to view, add, or edit its alternates.</string>
+    <string name="alternate_search_hint">Search households by name, number, or ID</string>
+    <string name="alternate_summary">%1$d household(s) on this device</string>
+    <string name="alternate_empty_title">No households found</string>
+    <string name="alternate_empty_body">Try a different search, or register a household first.</string>
     <string name="alternate_household">Household %1$s</string>
     <string name="alternate_detail_with_gender">%1$s - %2$s - %3$s</string>
+
+    <string name="household_alternates_summary">%1$d alternate(s) in this household</string>
+    <string name="household_alternates_empty_title">No alternates yet</string>
+    <string name="household_alternates_empty_body">Add an alternate for this household so someone else can collect payments on their behalf.</string>
+    <string name="household_alternates_add">Add alternate</string>
+    <string name="alternate_edit_action">Edit alternate</string>
+    <string name="alternate_edit_title">Edit alternate</string>
+    <string name="alternate_edit_save">Save</string>
+    <string name="alternate_edit_cancel">Cancel</string>
+    <string name="alternate_updated">Alternate updated</string>
 
     <string name="payment_title">Payments</string>
     <string name="payment_description">Review paid and pending household payments available offline.</string>

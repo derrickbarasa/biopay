@@ -4,6 +4,9 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:layout_margin="5dp"
+    android:clickable="true"
+    android:focusable="true"
+    android:foreground="?attr/selectableItemBackground"
     app:cardBackgroundColor="@color/bp_surface"
     app:cardCornerRadius="@dimen/bp_radius_surface"
     app:cardElevation="1dp"
@@ -16,5 +19,6 @@
             <TextView android:id="@+id/tvHousehold" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:textColor="@color/bp_primary" android:textSize="13sp" android:textStyle="bold" />
             <TextView android:id="@+id/tvDetail" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="3dp" android:textColor="@color/bp_text_secondary" android:textSize="13sp" />
         </LinearLayout>
+        <ImageView android:id="@+id/btnEditAlternate" android:layout_width="40dp" android:layout_height="40dp" android:layout_marginStart="4dp" android:background="?attr/selectableItemBackgroundBorderless" android:contentDescription="@string/alternate_edit_action" android:padding="9dp" android:src="@drawable/ic_edit" app:tint="@color/bp_primary" />
     </LinearLayout>
 </com.google.android.material.card.MaterialCardView>

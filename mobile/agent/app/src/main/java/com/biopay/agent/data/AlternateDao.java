@@ -35,6 +35,15 @@ public class AlternateDao {
         dbHelper.getWritableDatabase().update("alternates", values, "alternate_number=?", new String[]{alternateNumber});
     }
 
+    /** Edits an alternate's own details (name/relationship/gender/age/phone). Marks the row
+     *  pending again so the next sync re-uploads it via the same UPLOAD_ALTERNATE_BIO path used
+     *  for a fresh alternate (see SyncManager#syncAlternates). */
+    public int update(String alternateNumber, ContentValues values) {
+        values.put("sync_status", DatabaseHelper.SYNC_PENDING);
+        return dbHelper.getWritableDatabase()
+                .update("alternates", values, "alternate_number=? AND partner_code=?", new String[]{alternateNumber, partnerCode});
+    }
+
     public List<Alternate> findByHousehold(String householdNumber) {
         return query("household_number=? AND partner_code=?", new String[]{householdNumber, partnerCode});
     }

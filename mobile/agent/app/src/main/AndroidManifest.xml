@@ -40,6 +40,7 @@
         <activity android:name=".settings.SettingsActivity" android:exported="false" android:windowSoftInputMode="stateAlwaysHidden|adjustResize" />
         <activity android:name=".security.SecurityActivity" android:exported="false" android:windowSoftInputMode="stateAlwaysHidden|adjustResize" />
         <activity android:name=".alternates.AlternatesActivity" android:exported="false" />
+        <activity android:name=".alternates.HouseholdAlternatesActivity" android:exported="false" android:windowSoftInputMode="stateAlwaysHidden|adjustResize" />
         <activity android:name=".payments.PaymentsActivity" android:exported="false" />
         <activity android:name=".payments.GeneratePaymentActivity" android:exported="false" android:windowSoftInputMode="stateAlwaysHidden|adjustResize" />
         <activity android:name=".payments.PaymentVerificationActivity" android:exported="false" />
