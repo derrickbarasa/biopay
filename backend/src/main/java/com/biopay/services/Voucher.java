@@ -370,8 +370,7 @@ public class Voucher extends AbstractVerticle {
             replyError(message, "Only a field officer can sync vouchers");
             return;
         }
-        pool.preparedQuery("SELECT * FROM vouchers WHERE organization_code=@p1 AND status='ISSUED' "
-                        + "AND (expires_at IS NULL OR expires_at>=GETDATE()) ORDER BY created_at DESC")
+        pool.preparedQuery("SELECT * FROM vouchers WHERE organization_code=@p1 ORDER BY created_at DESC")
                 .execute(Tuple.of(payload.getString("partnerCode", "")))
                 .onFailure(err -> onDbError(message, err))
                 .onSuccess(rows -> {

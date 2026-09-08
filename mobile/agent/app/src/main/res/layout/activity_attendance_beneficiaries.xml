@@ -24,6 +24,14 @@
             android:id="@+id/tvHouseholdName"
             style="@style/BioPay.ScreenTitle" />
         <TextView style="@style/BioPay.SupportingText" android:layout_marginTop="4dp" android:text="@string/attendance_people_body" />
+        <androidx.appcompat.widget.SearchView
+            android:id="@+id/searchView"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:layout_marginTop="12dp"
+            android:background="@drawable/bg_icon_container"
+            android:iconifiedByDefault="false"
+            android:queryHint="@string/beneficiary_search_hint" />
     </LinearLayout>
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/recyclerBeneficiaries"
@@ -35,4 +43,13 @@
         android:paddingTop="6dp"
         android:paddingEnd="12dp"
         android:paddingBottom="20dp" />
+    <TextView
+        android:id="@+id/beneficiarySearchEmptyState"
+        style="@style/BioPay.SupportingText"
+        android:layout_marginStart="24dp"
+        android:layout_marginEnd="24dp"
+        android:layout_marginBottom="16dp"
+        android:gravity="center"
+        android:text="@string/beneficiary_search_empty"
+        android:visibility="gone" />
 </LinearLayout>

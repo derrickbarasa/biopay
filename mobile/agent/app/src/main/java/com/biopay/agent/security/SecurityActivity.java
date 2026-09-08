@@ -13,6 +13,8 @@ import com.biopay.agent.home.HomeActivity;
 import com.biopay.agent.network.ApiCallback;
 import com.biopay.agent.network.ApiClient;
 import com.biopay.agent.session.SubscriptionGate;
+import com.biopay.agent.session.OfflineAccessManager;
+import com.biopay.agent.session.SessionManager;
 import com.biopay.agent.session.SubscriptionLockedActivity;
 import com.biopay.agent.ui.BaseActivity;
 import com.google.android.material.button.MaterialButton;
@@ -95,6 +97,13 @@ public class SecurityActivity extends BaseActivity {
                 currentPassword.setText("");
                 newPassword.setText("");
                 confirmPassword.setText("");
+                SessionManager currentSession = new SessionManager(SecurityActivity.this);
+                OfflineAccessManager offlineAccess = new OfflineAccessManager(SecurityActivity.this);
+                offlineAccess.cacheAuthenticatedIdentity(
+                        next, currentSession.getUserId(), currentSession.getEmail(),
+                        currentSession.getFirstName(), currentSession.getLastName(),
+                        currentSession.getAnchorId(), currentSession.getPartnerCode(),
+                        currentSession.getVerificationMethod(), offlineAccess.getOnlineRevalidationDays());
                 if (forced) {
                     Integer anchorId = getIntent().hasExtra(EXTRA_ANCHOR_ID)
                             ? getIntent().getIntExtra(EXTRA_ANCHOR_ID, -1) : null;
@@ -106,6 +115,13 @@ public class SecurityActivity extends BaseActivity {
 
                         @Override public void onLocked() {
                             startActivity(new Intent(SecurityActivity.this, SubscriptionLockedActivity.class));
+                            finish();
+                        }
+
+                        @Override public void onOnlineRequired() {
+                            new SessionManager(SecurityActivity.this).clear();
+                            startActivity(new Intent(SecurityActivity.this,
+                                    com.biopay.agent.login.LoginActivity.class));
                             finish();
                         }
                     });

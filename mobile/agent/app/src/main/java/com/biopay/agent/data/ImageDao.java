@@ -28,6 +28,16 @@ public class ImageDao {
                 android.database.sqlite.SQLiteDatabase.CONFLICT_REPLACE);
     }
 
+    /** Most recently captured photo for this person, or null if none yet. Photos are modeled
+     *  server-side as a per-beneficiary gallery (see {@code Household.java}'s {@code imageUrls}),
+     *  so this is "the" display photo by convention rather than a dedicated single-photo slot. */
+    public String latestLocalPathForBeneficiary(String beneficiaryId) {
+        try (Cursor cursor = dbHelper.getReadableDatabase().query("images", new String[]{"local_path"},
+                "beneficiary_id=?", new String[]{beneficiaryId}, null, null, "created_at DESC", "1")) {
+            return cursor.moveToFirst() ? cursor.getString(0) : null;
+        }
+    }
+
     public List<PendingImage> listPending() {
         List<PendingImage> results = new ArrayList<>();
         try (Cursor cursor = dbHelper.getReadableDatabase().query("images", null,

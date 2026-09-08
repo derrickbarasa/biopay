@@ -39,6 +39,11 @@ public class AlternateDao {
         return query("household_number=? AND partner_code=?", new String[]{householdNumber, partnerCode});
     }
 
+    public Alternate findByNumber(String alternateNumber) {
+        List<Alternate> results = query("alternate_number=? AND partner_code=?", new String[]{alternateNumber, partnerCode});
+        return results.isEmpty() ? null : results.get(0);
+    }
+
     public List<Alternate> listPending() {
         return query("sync_status=?", new String[]{String.valueOf(DatabaseHelper.SYNC_PENDING)});
     }
@@ -70,8 +75,9 @@ public class AlternateDao {
 
     public List<Alternate> search(String searchText) {
         String like = "%" + (searchText == null ? "" : searchText.trim()) + "%";
-        return query("partner_code=? AND (alternate_name LIKE ? OR alternate_number LIKE ? OR household_number LIKE ?)",
-                new String[]{partnerCode, like, like, like});
+        return query("partner_code=? AND (alternate_name LIKE ? OR alternate_number LIKE ? OR household_number LIKE ? "
+                        + "OR relationship LIKE ? OR gender LIKE ? OR phone_number LIKE ?)",
+                new String[]{partnerCode, like, like, like, like, like, like});
     }
 
     public int countAll() {

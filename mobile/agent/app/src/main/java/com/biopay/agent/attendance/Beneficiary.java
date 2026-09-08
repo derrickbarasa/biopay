@@ -14,12 +14,15 @@ public class Beneficiary {
     public final int beneficiaryType;
     public final String name;
     public final String subtitle;
+    public final String gender;
 
-    public Beneficiary(String beneficiaryId, String householdNumber, int beneficiaryType, String name, String subtitle) {
+    public Beneficiary(String beneficiaryId, String householdNumber, int beneficiaryType, String name,
+            String subtitle, String gender) {
         this.beneficiaryId = beneficiaryId;
         this.householdNumber = householdNumber;
         this.beneficiaryType = beneficiaryType;
         this.name = name;
         this.subtitle = subtitle;
+        this.gender = gender;
     }
 }

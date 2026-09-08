@@ -6,6 +6,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
 import { useAnchorScope } from '@/composables/useAnchorScope'
 import { useOrgCascade } from '@/composables/useOrgCascade'
+import { applyVoucherAmount, type VoucherAmountRow } from '@/utils/voucherAmounts'
 
 // Dedicated full page for "Generate Vouchers by Area" (replaces the old
 // in-dialog wizard on VouchersPage). Mirrors the PayrollGeneratePage pattern:
@@ -41,7 +42,7 @@ const householdsLoading = ref(false)
 const flatAmount = ref<number | null>(null)
 const purpose = ref('')
 const expiresAt = ref('')
-const rows = ref<{ householdNumber: string; householdName: string; amount: number }[]>([])
+const rows = ref<VoucherAmountRow[]>([])
 const rowHeaders = [
   { title: 'Household', key: 'householdName' },
   { title: 'Amount', key: 'amount' },
@@ -169,8 +170,15 @@ function onLocationChange() {
 watch(generationLevel, resetScope)
 
 function applyFlatAmountToAll() {
-  const amount = flatAmount.value ?? 0
-  for (const row of rows.value) row.amount = amount
+  const amount = Number(flatAmount.value)
+  if (!Number.isFinite(amount) || amount <= 0) {
+    toast.error('Enter a positive amount to apply to every household')
+    return
+  }
+  // Replace the array instead of mutating Vuetify table-slot row proxies in place.
+  // This guarantees every visible page and every row sent to the API receives the value.
+  rows.value = applyVoucherAmount(rows.value, amount)
+  toast.success(`${amount.toLocaleString()} applied to ${rows.value.length} household${rows.value.length === 1 ? '' : 's'}`)
 }
 
 async function submit() {
@@ -266,9 +274,9 @@ onMounted(async () => {
           <div class="d-flex align-center ga-3 flex-wrap mb-3">
             <v-text-field
               v-model.number="flatAmount" label="Amount per voucher" type="number" density="compact"
-              hide-details style="max-width: 200px"
+              min="0" hide-details style="max-width: 200px" @keydown.enter.prevent="applyFlatAmountToAll"
             />
-            <v-btn size="small" color="primary" variant="flat" @click="applyFlatAmountToAll">Apply to all rows</v-btn>
+            <v-btn size="small" color="secondary" variant="flat" :disabled="!rows.length" @click="applyFlatAmountToAll">Apply to all households</v-btn>
             <v-spacer />
             <span class="text-caption text-medium-emphasis">{{ rows.length }} household(s) in {{ selectedScopeName }}</span>
           </div>

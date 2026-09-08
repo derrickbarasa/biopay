@@ -81,9 +81,11 @@ public class Payment extends AbstractVerticle {
         // NULL for a system admin with no target anchor chosen (browse everything), the
         // requested target anchor once chosen, or the caller's own anchor for an anchor admin.
         String sql = "SELECT pay.* FROM payments pay JOIN organizations p ON p.organization_code = pay.organization_code "
+                + "LEFT JOIN payment_cycles pc ON pc.id=pay.payment_cycle_id "
                 + "WHERE (@p1 IS NULL OR pay.organization_code=@p1) AND (@p2 IS NULL OR pay.status=@p2) "
                 + "AND (@p3 IS NULL OR pay.date_from >= @p3) AND (@p4 IS NULL OR pay.date_from <= @p4) "
-                + "AND (@p8 IS NULL OR p.anchor_id=@p8) "
+                + "AND (@p8 IS NULL OR p.anchor_id=@p8) AND pay.rejected=0 "
+                + "AND (pay.payment_cycle_id IS NULL OR pc.status IN ('APPROVED','DISBURSED')) "
                 + "ORDER BY pay.created_at DESC OFFSET @p5 ROWS FETCH NEXT @p6 ROWS ONLY";
 
         pool.preparedQuery(sql)
@@ -109,9 +111,11 @@ public class Payment extends AbstractVerticle {
     private void getOne(Message<Object> message) {
         JsonObject payload = new JsonObject(message.body().toString());
         Integer id = payload.getInteger("id");
-        String scopeClause = isAnchor(payload) ? " AND (@p2=1 OR anchor_id=@p3)" : " AND organization_code=@p2";
+        String scopeClause = isAnchor(payload) ? " AND (@p2=1 OR pay.anchor_id=@p3)" : " AND pay.organization_code=@p2";
 
-        pool.preparedQuery("SELECT * FROM payments WHERE id=@p1" + scopeClause)
+        pool.preparedQuery("SELECT pay.* FROM payments pay LEFT JOIN payment_cycles pc ON pc.id=pay.payment_cycle_id "
+                        + "WHERE pay.id=@p1 AND pay.rejected=0 "
+                        + "AND (pay.payment_cycle_id IS NULL OR pc.status IN ('APPROVED','DISBURSED'))" + scopeClause)
                 .execute(isAnchor(payload) ? Tuple.of(id, isSystemAdmin(payload), TenantScope.anchorId(payload)) : Tuple.of(id, payload.getString("partnerCode", "")))
                 .onFailure(err -> onDbError(message, err))
                 .onSuccess(rows -> {
@@ -138,7 +142,10 @@ public class Payment extends AbstractVerticle {
         }
         String scopeClause = isAnchor(payload) ? " AND (@p4=1 OR anchor_id=@p5)" : " AND organization_code=@p4";
         Object actorId = payload.getValue("actorId");
-        String sql = "UPDATE payments SET status=@p1, verified_by=@p2, verified_at=GETDATE(), updated_at=GETDATE() WHERE id=@p3" + scopeClause;
+        String sql = "UPDATE payments SET status=@p1, verified_by=@p2, verified_at=GETDATE(), updated_at=GETDATE() "
+                + "WHERE id=@p3 AND rejected=0 AND (payment_cycle_id IS NULL OR EXISTS (SELECT 1 "
+                + "FROM payment_cycles pc WHERE pc.id=payments.payment_cycle_id "
+                + "AND pc.status IN ('APPROVED','DISBURSED')))" + scopeClause;
         Tuple params = isAnchor(payload)
                 ? Tuple.of(status, actorId, id, isSystemAdmin(payload), TenantScope.anchorId(payload))
                 : Tuple.of(status, actorId, id, payload.getString("partnerCode", ""));
@@ -162,7 +169,9 @@ public class Payment extends AbstractVerticle {
         Integer id = payload.getInteger("id");
         String scopeClause = isAnchor(payload) ? " AND (@p2=1 OR anchor_id=@p3)" : " AND organization_code=@p2";
 
-        pool.preparedQuery("DELETE FROM payments WHERE id=@p1 AND status=0" + scopeClause)
+        pool.preparedQuery("DELETE FROM payments WHERE id=@p1 AND status=0 AND rejected=0 "
+                        + "AND (payment_cycle_id IS NULL OR EXISTS (SELECT 1 FROM payment_cycles pc "
+                        + "WHERE pc.id=payments.payment_cycle_id AND pc.status IN ('APPROVED','DISBURSED')))" + scopeClause)
                 .execute(isAnchor(payload) ? Tuple.of(id, isSystemAdmin(payload), TenantScope.anchorId(payload)) : Tuple.of(id, payload.getString("partnerCode", "")))
                 .onFailure(err -> onDbError(message, err))
                 .onSuccess(rows -> {
@@ -190,7 +199,9 @@ public class Payment extends AbstractVerticle {
         // Only a payment currently sitting FAILED (status=2) is eligible -- a pending or
         // already-paid payment has nothing for this recovery channel to do.
         String sql = "UPDATE payments SET status=1, payment_channel='ONLINE', online_reference=@p1, verified_by=@p2, "
-                + "verified_at=GETDATE(), updated_at=GETDATE() WHERE id=@p3 AND status=2" + scopeClause;
+                + "verified_at=GETDATE(), updated_at=GETDATE() WHERE id=@p3 AND status=2 AND rejected=0 "
+                + "AND (payment_cycle_id IS NULL OR EXISTS (SELECT 1 FROM payment_cycles pc "
+                + "WHERE pc.id=payments.payment_cycle_id AND pc.status IN ('APPROVED','DISBURSED')))" + scopeClause;
         Tuple params = isAnchor(payload)
                 ? Tuple.of(reference, actorId, id, isSystemAdmin(payload), TenantScope.anchorId(payload))
                 : Tuple.of(reference, actorId, id, payload.getString("partnerCode", ""));
@@ -225,7 +236,10 @@ public class Payment extends AbstractVerticle {
                 + "SUM(CASE WHEN pay.status=2 THEN 1 ELSE 0 END) AS failedCount, "
                 + "ISNULL(SUM(CASE WHEN pay.status=1 THEN pay.amount ELSE 0 END), 0) AS paidAmount "
                 + "FROM payments pay JOIN organizations p ON p.organization_code = pay.organization_code "
-                + "WHERE (@p1 IS NULL OR pay.organization_code=@p1) AND (@p3 IS NULL OR p.anchor_id=@p3)";
+                + "LEFT JOIN payment_cycles pc ON pc.id=pay.payment_cycle_id "
+                + "WHERE (@p1 IS NULL OR pay.organization_code=@p1) AND (@p3 IS NULL OR p.anchor_id=@p3) "
+                + "AND pay.rejected=0 "
+                + "AND (pay.payment_cycle_id IS NULL OR pc.status IN ('APPROVED','DISBURSED'))";
 
         pool.preparedQuery(sql)
                 .execute(Tuple.of(partnerCode).addBoolean(systemAdmin).addInteger(anchorId))

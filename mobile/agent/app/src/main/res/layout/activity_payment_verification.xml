@@ -30,6 +30,14 @@
             android:textStyle="bold" />
         <TextView style="@style/BioPay.SupportingText" android:layout_marginTop="4dp" android:text="@string/payment_verify_body" />
         <TextView style="@style/BioPay.SectionHeader" android:layout_marginTop="20dp" android:text="@string/payment_verify_choose_method" />
+        <androidx.appcompat.widget.SearchView
+            android:id="@+id/searchView"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:layout_marginTop="12dp"
+            android:background="@drawable/bg_icon_container"
+            android:iconifiedByDefault="false"
+            android:queryHint="@string/beneficiary_search_hint" />
     </LinearLayout>
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/recyclerBeneficiaries"

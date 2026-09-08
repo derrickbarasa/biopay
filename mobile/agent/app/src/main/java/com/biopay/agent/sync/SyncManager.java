@@ -80,7 +80,7 @@ public class SyncManager {
     private boolean syncVoucherCatalogue() {
         try {
             org.json.JSONArray rows=ApiClient.get(context).dispatchSync("SYNC_VOUCHERS",new HashMap<>()).optJSONArray("results");
-            if(rows!=null)for(int i=0;i<rows.length();i++){org.json.JSONObject r=rows.getJSONObject(i);voucherDao.upsert(r.optString("voucherCode"),r.optString("householdNumber"),r.optDouble("amount"),r.optString("purpose",null),r.optString("expiresAt",null));}
+            if(rows!=null)for(int i=0;i<rows.length();i++){org.json.JSONObject r=rows.getJSONObject(i);voucherDao.upsert(r.optString("voucherCode"),r.optString("householdNumber"),r.optDouble("amount"),r.optString("purpose",null),r.optString("expiresAt",null),r.optString("status","ISSUED"));}
             return true;
         } catch(Exception ex){Log.w(TAG,"Voucher catalogue sync failed: "+ex.getMessage());return false;}
     }

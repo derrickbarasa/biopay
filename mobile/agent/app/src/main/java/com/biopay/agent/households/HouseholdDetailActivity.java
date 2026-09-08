@@ -17,8 +17,11 @@ import com.biopay.agent.data.FaceDao;
 import com.biopay.agent.data.FingerprintDao;
 import com.biopay.agent.data.GeoDao;
 import com.biopay.agent.data.HouseholdDao;
+import com.biopay.agent.data.ImageDao;
 import com.biopay.agent.data.PaymentDao;
 import com.biopay.agent.ui.BaseActivity;
+import com.biopay.agent.ui.ThumbnailLoader;
+import com.google.android.material.imageview.ShapeableImageView;
 
 import java.util.List;
 
@@ -47,6 +50,7 @@ public class HouseholdDetailActivity extends BaseActivity {
     private FingerprintDao fingerprintDao;
     private FaceDao faceDao;
     private PaymentDao paymentDao;
+    private ImageDao imageDao;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -61,6 +65,7 @@ public class HouseholdDetailActivity extends BaseActivity {
         fingerprintDao = new FingerprintDao(this);
         faceDao = new FaceDao(this);
         paymentDao = new PaymentDao(this);
+        imageDao = new ImageDao(this);
 
         ((com.google.android.material.appbar.MaterialToolbar) findViewById(R.id.toolbar))
                 .setOnMenuItemClickListener(item -> {
@@ -75,14 +80,6 @@ public class HouseholdDetailActivity extends BaseActivity {
             HouseholdDao.Household household = householdDao.findByNumber(householdNumber);
             String method = household == null ? "FINGERPRINT" : household.registrationMethod;
             startActivity(PersonCaptureActivity.addPersonIntent(this, householdNumber, method));
-        });
-
-        findViewById(R.id.btnCapture).setOnClickListener(v -> {
-            HouseholdDao.Household household = householdDao.findByNumber(householdNumber);
-            if (household != null) {
-                startActivity(PersonCaptureActivity.captureIntent(this, householdNumber, householdNumber,
-                        Beneficiary.TYPE_HOUSEHOLD_HEAD, household.householdName, household.registrationMethod));
-            }
         });
     }
 
@@ -104,6 +101,11 @@ public class HouseholdDetailActivity extends BaseActivity {
 
         ((TextView) findViewById(R.id.tvHeroName)).setText(household.householdName);
         ((TextView) findViewById(R.id.tvHeroCode)).setText(householdNumber);
+        ShapeableImageView heroPhoto = findViewById(R.id.ivHeroPhoto);
+        String headPhotoPath = imageDao.latestLocalPathForBeneficiary(householdNumber);
+        boolean hasHeroPhoto = ThumbnailLoader.loadInto(heroPhoto, headPhotoPath, 48);
+        heroPhoto.setVisibility(hasHeroPhoto ? View.VISIBLE : View.GONE);
+        ThumbnailLoader.makeExpandable(heroPhoto, headPhotoPath, hasHeroPhoto);
         TextView eligible = findViewById(R.id.tvHeroEligible);
         eligible.setText(household.eligible ? R.string.household_detail_eligible : R.string.household_detail_not_eligible);
         eligible.setBackgroundResource(household.eligible ? R.drawable.bg_status_success : R.drawable.bg_status_neutral);
@@ -153,8 +155,6 @@ public class HouseholdDetailActivity extends BaseActivity {
         entitlement.setText(textRes);
         entitlement.setTextColor(ContextCompat.getColor(this, textColorRes));
         entitlementCard.setCardBackgroundColor(ContextCompat.getColor(this, cardColorRes));
-        findViewById(R.id.btnCapture).setVisibility(
-                status == HouseholdStatus.INCOMPLETE ? View.VISIBLE : View.GONE);
     }
 
     private static String displayGeoName(String resolvedName, String storedValue) {
@@ -166,29 +166,46 @@ public class HouseholdDetailActivity extends BaseActivity {
         android.widget.LinearLayout container = findViewById(R.id.containerMembers);
         container.removeAllViews();
         LayoutInflater inflater = LayoutInflater.from(this);
+        String method = household.registrationMethod;
 
-        addMemberRow(container, inflater, household.householdName, getString(R.string.household_detail_head_role),
-                fingerprintDao.countForBeneficiary(householdNumber) > 0,
-                faceDao.existsForBeneficiary(householdNumber));
+        addMemberRow(container, inflater, householdNumber, Beneficiary.TYPE_HOUSEHOLD_HEAD, household.householdName,
+                getString(R.string.household_detail_head_role), method);
 
         for (AlternateDao.Alternate alternate : alternates) {
             String role = alternate.relationship != null ? alternate.relationship
                     : getString(R.string.household_detail_alternate_role);
-            addMemberRow(container, inflater, alternate.alternateName, role,
-                    fingerprintDao.countForBeneficiary(alternate.alternateNumber) > 0,
-                    faceDao.existsForBeneficiary(alternate.alternateNumber));
+            addMemberRow(container, inflater, alternate.alternateNumber, Beneficiary.TYPE_ALTERNATE,
+                    alternate.alternateName, role, method);
         }
     }
 
-    private void addMemberRow(android.widget.LinearLayout container, LayoutInflater inflater, String name,
-            String role, boolean hasFingerprint, boolean hasFace) {
+    /** Each member row is a quick-glance summary that opens {@link PersonDetailActivity} on tap
+     *  -- their own page, with their photo shown large, their registered details, exactly which
+     *  fingers/face/photo are captured, and a **Capture more** action -- replacing the old single
+     *  household-wide "Capture" button (which could only ever reach the household head, leaving
+     *  no way to resume an alternate's capture from this screen at all). */
+    private void addMemberRow(android.widget.LinearLayout container, LayoutInflater inflater, String beneficiaryId,
+            int beneficiaryType, String name, String role, String registrationMethod) {
+        int fingerCount = fingerprintDao.capturedFingerNumbers(beneficiaryId).size();
+        boolean hasFace = faceDao.existsForBeneficiary(beneficiaryId);
+        String photoPath = imageDao.latestLocalPathForBeneficiary(beneficiaryId);
+
         View row = inflater.inflate(R.layout.item_household_member, container, false);
         ((TextView) row.findViewById(R.id.tvMemberName)).setText(name);
         ((TextView) row.findViewById(R.id.tvMemberRole)).setText(role);
         ImageView fingerprintIcon = row.findViewById(R.id.ivMemberFingerprint);
-        fingerprintIcon.setColorFilter(ContextCompat.getColor(this, hasFingerprint ? R.color.bp_success : R.color.bp_disabled));
+        fingerprintIcon.setColorFilter(ContextCompat.getColor(this, fingerCount > 0 ? R.color.bp_success : R.color.bp_disabled));
         ImageView faceIcon = row.findViewById(R.id.ivMemberFace);
         faceIcon.setColorFilter(ContextCompat.getColor(this, hasFace ? R.color.bp_success : R.color.bp_disabled));
+        View memberIcon = row.findViewById(R.id.frameMemberIcon);
+        ShapeableImageView memberPhoto = row.findViewById(R.id.ivMemberPhoto);
+        boolean hasPhoto = ThumbnailLoader.loadInto(memberPhoto, photoPath, 38);
+        memberIcon.setVisibility(hasPhoto ? View.GONE : View.VISIBLE);
+        memberPhoto.setVisibility(hasPhoto ? View.VISIBLE : View.GONE);
+
+        row.setOnClickListener(v -> startActivity(PersonDetailActivity.intent(
+                this, householdNumber, beneficiaryId, beneficiaryType, name, role, registrationMethod)));
+
         if (container.getChildCount() > 0) {
             View divider = new View(this);
             divider.setLayoutParams(new android.widget.LinearLayout.LayoutParams(

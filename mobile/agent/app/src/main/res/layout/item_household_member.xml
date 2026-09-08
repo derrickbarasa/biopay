@@ -1,8 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- One row in the Household Profile's Members card. The whole row opens PersonDetailActivity
+     (their own page: big photo, registered details, captured-finger status, and the entry point
+     into capturing more); this row itself is just a quick-glance summary. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/rowMemberHeader"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
+    android:background="?attr/selectableItemBackground"
+    android:clickable="true"
+    android:focusable="true"
     android:gravity="center_vertical"
     android:minHeight="60dp"
     android:orientation="horizontal"
@@ -11,15 +18,29 @@
 
     <FrameLayout
         android:layout_width="38dp"
-        android:layout_height="38dp"
-        android:background="@drawable/bg_icon_container">
-        <ImageView
-            android:layout_width="18dp"
-            android:layout_height="18dp"
-            android:layout_gravity="center"
-            android:contentDescription="@null"
-            android:src="@drawable/ic_profile"
-            app:tint="@color/bp_primary" />
+        android:layout_height="38dp">
+        <FrameLayout
+            android:id="@+id/frameMemberIcon"
+            android:layout_width="38dp"
+            android:layout_height="38dp"
+            android:background="@drawable/bg_icon_container">
+            <ImageView
+                android:layout_width="18dp"
+                android:layout_height="18dp"
+                android:layout_gravity="center"
+                android:contentDescription="@null"
+                android:src="@drawable/ic_profile"
+                app:tint="@color/bp_primary" />
+        </FrameLayout>
+        <com.google.android.material.imageview.ShapeableImageView
+            android:id="@+id/ivMemberPhoto"
+            android:layout_width="38dp"
+            android:layout_height="38dp"
+            android:scaleType="centerCrop"
+            android:visibility="gone"
+            app:shapeAppearanceOverlay="@style/BioPay.CircleImage"
+            app:strokeColor="@color/bp_outline_variant"
+            app:strokeWidth="1dp" />
     </FrameLayout>
 
     <LinearLayout
@@ -56,8 +77,14 @@
         android:id="@+id/ivMemberFace"
         android:layout_width="18dp"
         android:layout_height="18dp"
-        android:layout_marginEnd="6dp"
+        android:layout_marginEnd="2dp"
         android:contentDescription="@string/settings_face_title"
         android:src="@drawable/ic_face" />
 
+    <ImageView
+        android:layout_width="20dp"
+        android:layout_height="20dp"
+        android:contentDescription="@null"
+        android:src="@drawable/ic_chevron_right"
+        app:tint="@color/bp_text_secondary" />
 </LinearLayout>

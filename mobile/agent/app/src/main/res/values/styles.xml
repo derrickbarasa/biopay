@@ -19,6 +19,34 @@
         <item name="android:textStyle">bold</item>
     </style>
 
+    <!-- Fingerprint-pattern glyph inside one finger circle on the household/alternate hand
+         picker/display (see bg_finger_circle): tinted dark on the outlined (not yet captured)
+         state and white on the green filled (captured) state via the same color the plain-text
+         version used, so the swap didn't need a second color resource. -->
+    <style name="BioPay.FingerGlyph" parent="">
+        <item name="android:layout_width">22dp</item>
+        <item name="android:layout_height">22dp</item>
+        <item name="android:layout_gravity">center</item>
+        <item name="android:contentDescription">@null</item>
+        <item name="android:duplicateParentState">true</item>
+        <item name="android:src">@drawable/ic_fingerprint</item>
+        <item name="android:tint">@color/finger_label_color</item>
+    </style>
+
+    <!-- Circular avatar crop for a captured person/household photo (not used for verification). -->
+    <style name="BioPay.CircleImage" parent="">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">50%</item>
+    </style>
+
+    <!-- Large, plainly-square crop for the Person Profile screen's headline photo: deliberately
+         not circular like every smaller avatar elsewhere, so it reads as the page's own big photo
+         rather than another small identity chip. -->
+    <style name="BioPay.SquareImage" parent="">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">16dp</item>
+    </style>
+
     <style name="BioPay.SupportingText" parent="">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>

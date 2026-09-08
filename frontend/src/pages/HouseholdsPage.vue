@@ -133,7 +133,7 @@ const ageBreakdown = computed(() => {
     else if (a < 65) buckets[3].value++
     else buckets[4].value++
   }
-  return buckets
+  return buckets.filter((bucket) => bucket.label !== 'Not recorded' || bucket.value > 0)
 })
 
 // "By status" reflects the review workflow. Legacy CHECKED records stay in the
@@ -174,46 +174,6 @@ const vulnerabilityBreakdown = computed(() => {
   return Array.from(counts, ([label, value]) => ({ label, value }))
 })
 const legalBreakdown = computed(() => groupByAttribute((h) => h.legalStatus, legalStatusLabel))
-
-function percentage(value: number, total = households.value.length) {
-  return total ? Math.round((value / total) * 100) : 0
-}
-
-const genderInsight = computed(() => {
-  const total = genderBreakdown.value.reduce((sum, item) => sum + item.value, 0)
-  if (!total) return 'No household-head gender data is recorded yet.'
-  const sorted = [...genderBreakdown.value].sort((a, b) => b.value - a.value)
-  if (sorted[0].value === sorted[1].value) return 'Male and female household heads are evenly represented.'
-  return `${sorted[0].label}-headed households are the largest group.`
-})
-
-const ageInsight = computed(() => {
-  const largest = [...ageBreakdown.value].sort((a, b) => b.value - a.value)[0]
-  if (!largest?.value) return 'No household-head ages are recorded yet.'
-  return `Largest group: ${largest.label} years with ${largest.value.toLocaleString()} household${largest.value === 1 ? '' : 's'}.`
-})
-
-const vulnerabilityInsight = computed(() => {
-  const flagged = households.value.filter((household) =>
-    (household.vulnerabilityStatuses?.length ?? 0) > 0 || !!household.vulnerabilityStatus,
-  ).length
-  return flagged
-    ? `${percentage(flagged)}% of households have at least one vulnerability flag.`
-    : 'No vulnerability flags are recorded for these households.'
-})
-
-const statusInsight = computed(() => {
-  const approved = statusBreakdown.value.find((item) => item.label === 'Approved')?.value ?? 0
-  return households.value.length
-    ? `Approval rate: ${percentage(approved)}%`
-    : 'No review decisions are available yet.'
-})
-
-const legalInsight = computed(() => {
-  const largest = [...legalBreakdown.value].sort((a, b) => b.value - a.value)[0]
-  if (!largest?.value) return 'No legal classifications are recorded yet.'
-  return `Most households are ${largest.label.toLowerCase()}.`
-})
 
 const countiesForState = (stateCode: string) => stateCode ? counties.value.filter((c) => c.stateCode === stateCode) : counties.value
 const locationsForCounty = (countyCode: string) => countyCode ? locations.value.filter((l) => l.countyCode === countyCode) : locations.value
@@ -441,9 +401,9 @@ async function submitBulk() {
 
 <template>
   <div>
-    <div class="d-flex align-center justify-space-between mb-4">
+    <div class="households-page-header mb-4">
       <h1 class="page-title">Households</h1>
-      <div v-if="scopeReady" class="d-flex ga-2">
+      <div v-if="scopeReady" class="households-page-actions">
         <v-btn v-if="auth.can('DOWNLOAD_REPORTS')" variant="outlined" prepend-icon="mdi-download" @click="exportCsv">Export CSV</v-btn>
         <v-btn v-if="auth.can('ACCESS_HOUSEHOLDS')" variant="outlined" prepend-icon="mdi-file-upload" @click="openBulk">Import CSV</v-btn>
         <v-btn v-if="auth.can('ACCESS_HOUSEHOLDS')" color="secondary" prepend-icon="mdi-home-plus" @click="router.push({ name: 'household-create' })">Add Household</v-btn>
@@ -453,6 +413,7 @@ async function submitBulk() {
     <template v-if="scopeReady">
     <h2 class="section-heading mb-2">Household breakdown</h2>
     <div class="breakdown-grid mb-4">
+      <div class="breakdown-stack">
       <v-card class="breakdown-card breakdown-card--gender" variant="flat" border>
         <v-card-title class="breakdown-title">
           <span class="breakdown-icon breakdown-icon--teal"><v-icon icon="mdi-account-group-outline" size="18" /></span>
@@ -461,9 +422,33 @@ async function submitBulk() {
         <v-card-text class="breakdown-body">
           <PieChart :data="genderBreakdown" variant="pie" show-labels :show-legend-percent="false" />
         </v-card-text>
-        <div class="breakdown-insight"><v-icon icon="mdi-account-group" size="15" /><span>{{ genderInsight }}</span></div>
       </v-card>
 
+      <v-card class="breakdown-card breakdown-card--status" variant="flat" border>
+        <v-card-title class="breakdown-title">
+          <span class="breakdown-icon breakdown-icon--teal"><v-icon icon="mdi-check-circle-outline" size="18" /></span>
+          <span><strong>By status</strong><small>Household approval status</small></span>
+        </v-card-title>
+        <v-card-text class="breakdown-body breakdown-body--compact-pie">
+          <PieChart :data="statusBreakdown" :colors="['#F59E0B', '#16A34A', '#DC2626']" />
+        </v-card-text>
+      </v-card>
+      </div>
+
+      <div class="breakdown-stack">
+      <v-card class="breakdown-card breakdown-card--vulnerability" variant="flat" border>
+        <v-card-title class="breakdown-title">
+          <span class="breakdown-icon breakdown-icon--green"><v-icon icon="mdi-shield-account-outline" size="18" /></span>
+          <span><strong>By vulnerability status</strong><small>Households may appear in more than one category</small></span>
+          <v-icon class="breakdown-info" icon="mdi-information-outline" size="16" title="Percentages use the filtered household total." />
+        </v-card-title>
+        <v-card-text class="breakdown-body">
+          <DistributionList :data="vulnerabilityBreakdown" :total-value="households.length" :show-percent="false" color="#0D9F78" aria-label="Households by vulnerability status" />
+        </v-card-text>
+      </v-card>
+      </div>
+
+      <div class="breakdown-stack breakdown-stack--wide">
       <v-card class="breakdown-card breakdown-card--age" variant="flat" border>
         <v-card-title class="breakdown-title">
           <span class="breakdown-icon breakdown-icon--blue"><v-icon icon="mdi-chart-bar" size="18" /></span>
@@ -475,30 +460,6 @@ async function submitBulk() {
             aria-label="Household heads by age group, showing household counts"
           />
         </v-card-text>
-        <div class="breakdown-insight"><v-icon icon="mdi-chart-box-outline" size="15" /><span>{{ ageInsight }}</span></div>
-      </v-card>
-
-      <v-card class="breakdown-card breakdown-card--vulnerability" variant="flat" border>
-        <v-card-title class="breakdown-title">
-          <span class="breakdown-icon breakdown-icon--green"><v-icon icon="mdi-shield-account-outline" size="18" /></span>
-          <span><strong>By vulnerability status</strong><small>Households may appear in more than one category</small></span>
-          <v-icon class="breakdown-info" icon="mdi-information-outline" size="16" title="Percentages use the filtered household total." />
-        </v-card-title>
-        <v-card-text class="breakdown-body">
-          <DistributionList :data="vulnerabilityBreakdown" :total-value="households.length" :show-percent="false" color="#0D9F78" aria-label="Households by vulnerability status" />
-        </v-card-text>
-        <div class="breakdown-insight"><v-icon icon="mdi-account-heart-outline" size="15" /><span>{{ vulnerabilityInsight }}</span></div>
-      </v-card>
-
-      <v-card class="breakdown-card breakdown-card--status" variant="flat" border>
-        <v-card-title class="breakdown-title">
-          <span class="breakdown-icon breakdown-icon--teal"><v-icon icon="mdi-check-circle-outline" size="18" /></span>
-          <span><strong>By status</strong><small>Household approval status</small></span>
-        </v-card-title>
-        <v-card-text class="breakdown-body breakdown-body--compact-pie">
-          <PieChart :data="statusBreakdown" :colors="['#F59E0B', '#16A34A', '#DC2626']" />
-        </v-card-text>
-        <div class="breakdown-insight"><v-icon icon="mdi-check-circle" size="15" /><span>{{ statusInsight }}</span></div>
       </v-card>
 
       <v-card class="breakdown-card breakdown-card--legal" variant="flat" border>
@@ -509,8 +470,8 @@ async function submitBulk() {
         <v-card-text class="breakdown-body">
           <StackedDistribution :data="legalBreakdown" aria-label="Households by legal status" />
         </v-card-text>
-        <div class="breakdown-insight"><v-icon icon="mdi-account-group" size="15" /><span>{{ legalInsight }}</span></div>
       </v-card>
+      </div>
     </div>
 
     <v-card variant="flat" border>
@@ -683,41 +644,55 @@ async function submitBulk() {
 
 <style scoped>
 .section-heading { font-size: .95rem; font-weight: 700; color: #0f172a; }
+.households-page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.households-page-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
 .breakdown-grid {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: minmax(240px, .85fr) minmax(280px, 1fr) minmax(360px, 1.35fr);
   gap: 12px;
+  align-items: start;
+}
+.breakdown-stack {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  align-content: start;
 }
 .breakdown-card {
   overflow: hidden;
   border-color: #dbe5ec !important;
   background: #fff;
-  display: flex;
-  flex-direction: column;
   min-width: 0;
-  box-shadow: 0 5px 18px rgb(15 118 110 / 4%) !important;
+  box-shadow: none !important;
 }
-.breakdown-card--gender,
-.breakdown-card--age,
-.breakdown-card--vulnerability { grid-column: span 2; min-height: 252px; }
-.breakdown-card--status,
-.breakdown-card--legal { grid-column: span 3; min-height: 202px; }
 .breakdown-title {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 11px 13px 7px !important;
+  gap: 8px;
+  padding: 9px 11px 5px !important;
   min-height: auto !important;
+  white-space: normal;
 }
 .breakdown-title > span:nth-child(2) { display: grid; gap: 1px; min-width: 0; }
 .breakdown-title strong { color: #0f172a; font-size: .86rem; font-weight: 750; line-height: 1.2; }
-.breakdown-title small { color: #64748b; font-size: .7rem; font-weight: 500; line-height: 1.3; }
+.breakdown-title small { color: #64748b; font-size: .7rem; font-weight: 500; line-height: 1.3; overflow-wrap: anywhere; }
 .breakdown-icon {
   display: grid;
   place-items: center;
-  width: 30px;
-  height: 30px;
-  flex: 0 0 30px;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
   border-radius: 8px;
 }
 .breakdown-icon--teal { color: #0f766e; background: #e8f6f4; }
@@ -726,59 +701,56 @@ async function submitBulk() {
 .breakdown-icon--green { color: #15803d; background: #eaf8ef; }
 .breakdown-info { margin-left: auto; color: #78909c; flex: 0 0 auto; }
 .breakdown-body {
-  flex: 1;
   display: flex;
   align-items: center;
-  padding: 3px 13px 9px !important;
+  padding: 4px 11px 7px !important;
   min-height: 0;
 }
 .breakdown-body > :deep(.pie-wrap) {
   width: 100%;
+  grid-template-columns: 104px minmax(0, 1fr);
+  gap: 12px;
+}
+.breakdown-body > :deep(.pie-wrap .pie-svg-wrap) {
+  width: 104px;
+  height: 104px;
 }
 .age-breakdown-body { justify-content: center; }
+.age-breakdown-body > :deep(.vertical-chart__column) { grid-template-rows: 116px auto; }
 .breakdown-body--compact-pie > :deep(.pie-wrap) {
-  grid-template-columns: 122px minmax(0, 1fr);
+  grid-template-columns: 108px minmax(0, 1fr);
   max-width: 460px;
   margin-inline: auto;
 }
-.breakdown-insight {
-  min-height: 32px;
-  margin: 0 10px 9px;
-  padding: 7px 10px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  border-radius: 7px;
-  background: linear-gradient(90deg, #eff9f6 0%, #f6f9fc 100%);
-  color: #49617a;
-  font-size: .7rem;
-  line-height: 1.3;
+.breakdown-body--compact-pie > :deep(.pie-wrap .pie-svg-wrap) {
+  width: 108px;
+  height: 108px;
 }
-.breakdown-insight .v-icon { flex: 0 0 auto; color: #0d9f78; }
-.breakdown-insight span { min-width: 0; overflow-wrap: anywhere; }
-
-@media (max-width: 1280px) {
-  .breakdown-card--gender,
-  .breakdown-card--age { grid-column: span 3; }
-  .breakdown-card--vulnerability { grid-column: 1 / -1; min-height: 220px; }
+@media (max-width: 1180px) {
+  .breakdown-grid {
+    grid-template-columns: minmax(240px, .9fr) minmax(360px, 1.35fr);
+  }
+  .breakdown-stack--wide { grid-column: 1 / -1; grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .breakdown-card--vulnerability .breakdown-body > :deep(.distribution) {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     column-gap: 24px;
   }
 }
 @media (max-width: 900px) {
-  .breakdown-card--gender,
-  .breakdown-card--age,
-  .breakdown-card--vulnerability,
-  .breakdown-card--status,
-  .breakdown-card--legal { grid-column: 1 / -1; min-height: auto; }
-  .breakdown-card--gender,
-  .breakdown-card--age { min-height: 246px; }
+  .breakdown-grid {
+    grid-template-columns: 1fr;
+  }
+  .breakdown-stack--wide { grid-column: auto; grid-template-columns: 1fr; }
 }
 @media (max-width: 600px) {
+  .households-page-header { align-items: flex-start; }
+  .households-page-header .page-title { width: 100%; }
+  .households-page-actions { width: 100%; }
+  .households-page-actions > :deep(.v-btn) { flex: 1 1 160px; }
   .breakdown-grid { grid-template-columns: 1fr; }
   .breakdown-card--vulnerability .breakdown-body > :deep(.distribution) { grid-template-columns: 1fr; }
   .breakdown-body { padding-inline: 11px !important; }
   .breakdown-body--compact-pie > :deep(.pie-wrap) { grid-template-columns: 108px minmax(0, 1fr); }
+  .breakdown-body--compact-pie > :deep(.pie-wrap .pie-svg-wrap) { width: 108px; height: 108px; }
 }
 </style>

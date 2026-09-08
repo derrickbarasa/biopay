@@ -1,0 +1,193 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The ten-finger hand picker/display, shared by the interactive capture screen
+     (activity_person_capture.xml: taps trigger a live scan) and the read-only person
+     profile screen (activity_person_detail.xml: just shows green/outlined status).
+     Each circle shows a fingerprint-pattern glyph rather than a plain dot, tinted by
+     finger_label_color so it reads dark on the outlined (not-yet-captured) state and
+     white on the green filled (captured) state; view IDs (finger1..finger10) are
+     resolved the same way regardless of which screen includes this layout. -->
+<merge xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="14dp"
+        android:textColor="@color/bp_text_secondary"
+        android:textSize="13sp"
+        android:textStyle="bold"
+        android:text="@string/person_capture_right_hand" />
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="80dp"
+        android:layout_marginTop="4dp"
+        android:orientation="horizontal">
+
+        <FrameLayout android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1">
+            <FrameLayout
+                android:id="@+id/finger1"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:layout_gravity="top|center_horizontal"
+                android:layout_marginTop="28dp"
+                android:background="@drawable/bg_finger_circle"
+                android:clickable="true"
+                android:contentDescription="@string/finger_right_thumb"
+                android:focusable="true"
+                android:foreground="?attr/selectableItemBackgroundBorderless">
+                <ImageView style="@style/BioPay.FingerGlyph" />
+            </FrameLayout>
+        </FrameLayout>
+        <FrameLayout android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1">
+            <FrameLayout
+                android:id="@+id/finger2"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:layout_gravity="top|center_horizontal"
+                android:layout_marginTop="10dp"
+                android:background="@drawable/bg_finger_circle"
+                android:clickable="true"
+                android:contentDescription="@string/finger_right_index"
+                android:focusable="true"
+                android:foreground="?attr/selectableItemBackgroundBorderless">
+                <ImageView style="@style/BioPay.FingerGlyph" />
+            </FrameLayout>
+        </FrameLayout>
+        <FrameLayout android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1">
+            <FrameLayout
+                android:id="@+id/finger3"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:layout_gravity="top|center_horizontal"
+                android:layout_marginTop="0dp"
+                android:background="@drawable/bg_finger_circle"
+                android:clickable="true"
+                android:contentDescription="@string/finger_right_middle"
+                android:focusable="true"
+                android:foreground="?attr/selectableItemBackgroundBorderless">
+                <ImageView style="@style/BioPay.FingerGlyph" />
+            </FrameLayout>
+        </FrameLayout>
+        <FrameLayout android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1">
+            <FrameLayout
+                android:id="@+id/finger4"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:layout_gravity="top|center_horizontal"
+                android:layout_marginTop="10dp"
+                android:background="@drawable/bg_finger_circle"
+                android:clickable="true"
+                android:contentDescription="@string/finger_right_ring"
+                android:focusable="true"
+                android:foreground="?attr/selectableItemBackgroundBorderless">
+                <ImageView style="@style/BioPay.FingerGlyph" />
+            </FrameLayout>
+        </FrameLayout>
+        <FrameLayout android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1">
+            <FrameLayout
+                android:id="@+id/finger5"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:layout_gravity="top|center_horizontal"
+                android:layout_marginTop="28dp"
+                android:background="@drawable/bg_finger_circle"
+                android:clickable="true"
+                android:contentDescription="@string/finger_right_little"
+                android:focusable="true"
+                android:foreground="?attr/selectableItemBackgroundBorderless">
+                <ImageView style="@style/BioPay.FingerGlyph" />
+            </FrameLayout>
+        </FrameLayout>
+    </LinearLayout>
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:textColor="@color/bp_text_secondary"
+        android:textSize="13sp"
+        android:textStyle="bold"
+        android:text="@string/person_capture_left_hand" />
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="80dp"
+        android:layout_marginTop="4dp"
+        android:orientation="horizontal">
+
+        <FrameLayout android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1">
+            <FrameLayout
+                android:id="@+id/finger6"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:layout_gravity="top|center_horizontal"
+                android:layout_marginTop="28dp"
+                android:background="@drawable/bg_finger_circle"
+                android:clickable="true"
+                android:contentDescription="@string/finger_left_thumb"
+                android:focusable="true"
+                android:foreground="?attr/selectableItemBackgroundBorderless">
+                <ImageView style="@style/BioPay.FingerGlyph" />
+            </FrameLayout>
+        </FrameLayout>
+        <FrameLayout android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1">
+            <FrameLayout
+                android:id="@+id/finger7"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:layout_gravity="top|center_horizontal"
+                android:layout_marginTop="10dp"
+                android:background="@drawable/bg_finger_circle"
+                android:clickable="true"
+                android:contentDescription="@string/finger_left_index"
+                android:focusable="true"
+                android:foreground="?attr/selectableItemBackgroundBorderless">
+                <ImageView style="@style/BioPay.FingerGlyph" />
+            </FrameLayout>
+        </FrameLayout>
+        <FrameLayout android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1">
+            <FrameLayout
+                android:id="@+id/finger8"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:layout_gravity="top|center_horizontal"
+                android:layout_marginTop="0dp"
+                android:background="@drawable/bg_finger_circle"
+                android:clickable="true"
+                android:contentDescription="@string/finger_left_middle"
+                android:focusable="true"
+                android:foreground="?attr/selectableItemBackgroundBorderless">
+                <ImageView style="@style/BioPay.FingerGlyph" />
+            </FrameLayout>
+        </FrameLayout>
+        <FrameLayout android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1">
+            <FrameLayout
+                android:id="@+id/finger9"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:layout_gravity="top|center_horizontal"
+                android:layout_marginTop="10dp"
+                android:background="@drawable/bg_finger_circle"
+                android:clickable="true"
+                android:contentDescription="@string/finger_left_ring"
+                android:focusable="true"
+                android:foreground="?attr/selectableItemBackgroundBorderless">
+                <ImageView style="@style/BioPay.FingerGlyph" />
+            </FrameLayout>
+        </FrameLayout>
+        <FrameLayout android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1">
+            <FrameLayout
+                android:id="@+id/finger10"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:layout_gravity="top|center_horizontal"
+                android:layout_marginTop="28dp"
+                android:background="@drawable/bg_finger_circle"
+                android:clickable="true"
+                android:contentDescription="@string/finger_left_little"
+                android:focusable="true"
+                android:foreground="?attr/selectableItemBackgroundBorderless">
+                <ImageView style="@style/BioPay.FingerGlyph" />
+            </FrameLayout>
+        </FrameLayout>
+    </LinearLayout>
+</merge>

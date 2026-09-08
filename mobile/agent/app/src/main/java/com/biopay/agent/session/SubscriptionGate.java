@@ -17,19 +17,16 @@ import java.util.Map;
  * up front rather than discovering it mid-field-visit when every write starts
  * failing with a 402.
  *
- * <p>Checked once, right after login -- {@link com.biopay.agent.login.SplashActivity}'s
- * own javadoc notes the app clears its session as soon as it leaves the
- * foreground, so login is the only place a stale in-memory status could ever
- * matter. Deliberately fails open on any transport error (offline, timeout):
- * a field officer working without signal must not be locked out by a check
- * that itself couldn't reach the server -- the backend's own per-request 402
- * gate is what actually enforces this once a connection exists again.
+ * <p>Checked after every online login. A transport failure may use the last successful check,
+ * but only while its bounded 60-day offline authorization is still valid. A known archived
+ * result never fails open and can only be replaced by a successful online renewal check.
  */
 public final class SubscriptionGate {
 
     public interface Callback {
         void onAllowed();
         void onLocked();
+        void onOnlineRequired();
     }
 
     private SubscriptionGate() {
@@ -49,6 +46,8 @@ public final class SubscriptionGate {
             public void onSuccess(JSONObject response) {
                 JSONObject results = response.optJSONObject("results");
                 String status = results != null ? results.optString("status", "NONE") : "NONE";
+                OfflineAccessManager offlineAccess = new OfflineAccessManager(context);
+                offlineAccess.recordSubscriptionCheck(status);
                 if ("ARCHIVED".equals(status)) {
                     callback.onLocked();
                 } else {
@@ -58,8 +57,15 @@ public final class SubscriptionGate {
 
             @Override
             public void onError(String message, String responseCode) {
-                // Offline or the check itself failed -- fail open (see class javadoc).
-                callback.onAllowed();
+                OfflineAccessManager.Decision decision =
+                        new OfflineAccessManager(context).evaluateCachedAuthorization();
+                if (decision == OfflineAccessManager.Decision.LOCKED) {
+                    callback.onLocked();
+                } else if (decision == OfflineAccessManager.Decision.ALLOWED) {
+                    callback.onAllowed();
+                } else {
+                    callback.onOnlineRequired();
+                }
             }
         });
     }

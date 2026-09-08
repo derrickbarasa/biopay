@@ -29,6 +29,11 @@ val configuredApiBaseUrl = providers.gradleProperty("biopayApiBaseUrl")
     // Keep the repository's explicit mobile endpoint ahead of a stale machine-wide value.
     .orElse(fallbackApiBaseUrl)
     .get()
+val configuredOfflineAccessDays = (
+    providers.gradleProperty("biopayOfflineAccessDays").orNull
+        ?: readDotEnvValue(backendDotEnv, "BIOPAY_OFFLINE_ACCESS_DAYS")
+        ?: providers.environmentVariable("BIOPAY_OFFLINE_ACCESS_DAYS").orNull
+    )?.toIntOrNull()?.takeIf { it > 0 } ?: 60
 
 android {
     namespace = "com.biopay.agent"
@@ -42,6 +47,7 @@ android {
         versionName = "1.1"
 
         buildConfigField("String", "BIOPAY_API_BASE_URL", "\"${configuredApiBaseUrl.replace("\\", "\\\\").replace("\"", "\\\"")}\"")
+        buildConfigField("int", "BIOPAY_OFFLINE_ACCESS_DAYS", configuredOfflineAccessDays.toString())
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

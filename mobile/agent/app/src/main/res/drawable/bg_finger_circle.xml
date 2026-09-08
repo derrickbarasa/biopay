@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- One tappable finger on the household/alternate fingerprint hand-picker (see
+     PersonCaptureActivity). Selected == that finger position already has a stored template. -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_selected="true">
+        <shape android:shape="oval">
+            <solid android:color="@color/bp_success" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="oval">
+            <solid android:color="@color/bp_surface" />
+            <stroke android:width="2dp" android:color="@color/bp_outline_variant" />
+        </shape>
+    </item>
+</selector>

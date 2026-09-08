@@ -12,6 +12,7 @@ import com.biopay.agent.R;
 import com.biopay.agent.data.HouseholdDao;
 import com.biopay.agent.households.HouseholdListAdapter;
 import com.biopay.agent.ui.BaseActivity;
+import com.biopay.agent.ui.SearchViewHelper;
 
 import java.util.List;
 
@@ -38,6 +39,7 @@ public class AttendanceActivity extends BaseActivity {
         recyclerView.setAdapter(adapter);
 
         SearchView searchView = findViewById(R.id.searchView);
+        SearchViewHelper.makeFullyClickable(searchView);
         searchView.setOnQueryTextListener(new SearchView.OnQueryTextListener() {
             @Override
             public boolean onQueryTextSubmit(String query) {

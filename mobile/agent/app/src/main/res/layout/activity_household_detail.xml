@@ -31,6 +31,17 @@
 
             <!-- Hero header -->
             <LinearLayout style="@style/BioPay.HeroHeader">
+                <com.google.android.material.imageview.ShapeableImageView
+                    android:id="@+id/ivHeroPhoto"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:layout_marginBottom="10dp"
+                    android:foreground="?attr/selectableItemBackground"
+                    android:scaleType="centerCrop"
+                    android:visibility="gone"
+                    app:shapeAppearanceOverlay="@style/BioPay.CircleImage"
+                    app:strokeColor="@color/bp_on_primary_translucent"
+                    app:strokeWidth="1dp" />
                 <TextView
                     android:id="@+id/tvHeroName"
                     android:layout_width="match_parent"
@@ -176,33 +187,19 @@
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
+            <TextView
+                style="@style/BioPay.SupportingText"
                 android:layout_marginTop="20dp"
-                android:orientation="horizontal">
+                android:text="@string/household_detail_members_hint" />
 
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btnCapture"
-                    style="@style/BioPay.PrimaryButton"
-                    android:layout_width="0dp"
-                    android:layout_height="56dp"
-                    android:layout_marginEnd="6dp"
-                    android:layout_weight="1"
-                    android:text="@string/household_detail_capture"
-                    app:backgroundTint="@color/bp_primary"
-                    app:icon="@drawable/ic_fingerprint" />
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btnAddAlternate"
-                    style="@style/BioPay.SecondaryButton"
-                    android:layout_width="0dp"
-                    android:layout_height="56dp"
-                    android:layout_marginStart="6dp"
-                    android:layout_weight="1"
-                    android:text="@string/household_detail_add_alternate"
-                    app:icon="@drawable/ic_add" />
-            </LinearLayout>
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnAddAlternate"
+                style="@style/BioPay.SecondaryButton"
+                android:layout_width="match_parent"
+                android:layout_height="56dp"
+                android:layout_marginTop="8dp"
+                android:text="@string/household_detail_add_alternate"
+                app:icon="@drawable/ic_add" />
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>
 </LinearLayout>

@@ -45,6 +45,7 @@ public class Auth extends AbstractVerticle {
     private static final int REFRESH_TOKEN_DAYS = 7;
     private static final int OTP_PENDING_MINUTES = 5;
     private static final int RESET_TOKEN_MINUTES = 60;
+    private static final int DEFAULT_OFFLINE_ACCESS_DAYS = 60;
 
     EventBus eventBus;
     MSSQLPool pool;
@@ -86,6 +87,17 @@ public class Auth extends AbstractVerticle {
 
     private static void replyError(Message<Object> message, String responseMessage) {
         reply(message, new JsonObject().put("responseCode", "999").put("responseMessage", responseMessage));
+    }
+
+    private static int offlineAccessDays() {
+        try {
+            int configured = Integer.parseInt(
+                    Env.get().get("BIOPAY_OFFLINE_ACCESS_DAYS",
+                            String.valueOf(DEFAULT_OFFLINE_ACCESS_DAYS)).trim());
+            return configured > 0 ? configured : DEFAULT_OFFLINE_ACCESS_DAYS;
+        } catch (RuntimeException ignored) {
+            return DEFAULT_OFFLINE_ACCESS_DAYS;
+        }
     }
 
     private void onDbError(Message<Object> message, Throwable err) {
@@ -670,6 +682,7 @@ public class Auth extends AbstractVerticle {
                                         .put("accessToken", tokens.getString("accessToken"))
                                         .put("refreshToken", tokens.getString("refreshToken"))
                                         .put("expiresIn", tokens.getInteger("expiresIn"))
+                                        .put("offlineAccessDays", offlineAccessDays())
                                         .put("user", new JsonObject()
                                                 .put("id", id)
                                                 .put("email", email)

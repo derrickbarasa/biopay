@@ -7,7 +7,9 @@ import android.database.sqlite.SQLiteDatabase;
 import android.util.Base64;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /** Local read/write access to the offline `fingerprints` table (Base64-encoded raw templates). */
 public class FingerprintDao {
@@ -47,6 +49,28 @@ public class FingerprintDao {
         values.put("fingerprint_template", Base64.encodeToString(templateBytes, Base64.NO_WRAP));
         values.put("sync_status", DatabaseHelper.SYNC_SYNCED);
         dbHelper.getWritableDatabase().insert("fingerprints", null, values);
+    }
+
+    /** Which of the ten standard finger positions (see {@link com.biopay.agent.households.FingerPosition})
+     *  already have a stored template for this person -- drives the hand-picker's green/outlined
+     *  state and lets a resumed registration pick up exactly where it left off. */
+    public Set<Integer> capturedFingerNumbers(String beneficiaryId) {
+        Set<Integer> positions = new HashSet<>();
+        try (Cursor cursor = dbHelper.getReadableDatabase().query("fingerprints", new String[]{"fingerprint_number"},
+                "beneficiary_id=?", new String[]{beneficiaryId}, null, null, null)) {
+            while (cursor.moveToNext()) {
+                positions.add(cursor.getInt(0));
+            }
+        }
+        return positions;
+    }
+
+    /** Removes this person's previously captured template for one specific finger position, so a
+     *  recapture can cleanly replace it instead of accumulating a second template for the same
+     *  finger. No-op if that finger was never captured. */
+    public void deleteForBeneficiaryAndFinger(String beneficiaryId, int fingerNumber) {
+        dbHelper.getWritableDatabase().delete("fingerprints", "beneficiary_id=? AND fingerprint_number=?",
+                new String[]{beneficiaryId, String.valueOf(fingerNumber)});
     }
 
     public int countForBeneficiary(String beneficiaryId) {

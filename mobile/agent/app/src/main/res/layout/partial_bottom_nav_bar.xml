@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Shared bottom navigation chrome: the 5 top-level destinations (Home/Households/Payment/
-     Activity/More). Included at the bottom of every top-level tab screen. Payment previously
+     Vouchers/More). Included at the bottom of every top-level tab screen. Payment previously
      had an elevated, overlapping FAB shortcut straight into the pay flow, but its tap target
      covered the plain Payment item underneath, so a normal tap on "Payment" landed on the pay
      flow instead of the payments list it's supposed to open first; removed in favor of the

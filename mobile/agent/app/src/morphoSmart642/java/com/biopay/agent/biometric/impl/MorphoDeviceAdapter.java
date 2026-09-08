@@ -72,7 +72,7 @@ public class MorphoDeviceAdapter implements BiometricDevice, Observer {
     private static final String TAG = "MorphoDeviceAdapter";
     private static final int TIMEOUT_SECONDS = 30;
     private static final long PERIPHERALS_BIND_TIMEOUT_MS = 2000;
-    private static final int ENUMERATION_ATTEMPTS = 12;
+    private static final int ENUMERATION_ATTEMPTS = 40;
     private static final long ENUMERATION_RETRY_MS = 250;
     private static final int IDEMIA_USB_VENDOR_ID = 8797;
     private static final int IDEMIA_CBM_E3_PRODUCT_ID = 8;
@@ -100,8 +100,11 @@ public class MorphoDeviceAdapter implements BiometricDevice, Observer {
     public boolean isAvailable(Activity activity) {
         try {
             powerOnFingerprintPeripherals(activity);
+            waitForEmbeddedScannerOnUsb(activity);
+            // initialize() clears and repopulates the SDK's device list. Calling it on every poll
+            // races the asynchronous Android USB-permission callback and can keep that list empty.
+            USBManager.getInstance().initialize(activity, "com.biopay.agent.USB_ACTION", true);
             for (int attempt = 1; attempt <= ENUMERATION_ATTEMPTS; attempt++) {
-                USBManager.getInstance().initialize(activity, "com.biopay.agent.USB_ACTION", true);
                 MorphoDevice probe = new MorphoDevice();
                 CustomInteger nbUsbDevice = new CustomInteger();
                 int ret = probe.initUsbDevicesNameEnum(nbUsbDevice);
@@ -128,12 +131,12 @@ public class MorphoDeviceAdapter implements BiometricDevice, Observer {
     public void open(Activity activity, ImageView previewView) throws BiometricDeviceException {
         this.previewView = previewView;
         powerOnFingerprintPeripherals(activity);
+        waitForEmbeddedScannerOnUsb(activity);
         USBManager.getInstance().initialize(activity, "com.biopay.agent.USB_ACTION", true);
         MorphoDevice device = new MorphoDevice();
         CustomInteger nbUsbDevice = new CustomInteger();
         int ret = ErrorCodes.MORPHOERR_UNAVAILABLE;
         for (int attempt = 1; attempt <= ENUMERATION_ATTEMPTS; attempt++) {
-            USBManager.getInstance().initialize(activity, "com.biopay.agent.USB_ACTION", true);
             ret = device.initUsbDevicesNameEnum(nbUsbDevice);
             if (ret == ErrorCodes.MORPHO_OK && nbUsbDevice.getValueOf() >= 1) {
                 break;
@@ -257,6 +260,18 @@ public class MorphoDeviceAdapter implements BiometricDevice, Observer {
                 return true;
             }
         }
+        return false;
+    }
+
+    private boolean waitForEmbeddedScannerOnUsb(Activity activity) {
+        for (int attempt = 1; attempt <= ENUMERATION_ATTEMPTS; attempt++) {
+            if (hasEmbeddedScannerOnUsb(activity)) {
+                Log.i(TAG, "Android USB detected the embedded scanner on attempt " + attempt);
+                return true;
+            }
+            SystemClock.sleep(ENUMERATION_RETRY_MS);
+        }
+        Log.w(TAG, "Android USB did not expose the embedded scanner before SDK initialization");
         return false;
     }
 

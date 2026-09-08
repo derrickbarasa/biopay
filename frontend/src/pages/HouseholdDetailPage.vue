@@ -71,6 +71,9 @@ const vouchers = ref<VoucherEvent[]>([])
 const photoUrls = ref<string[]>([])
 // Same blob-fetch pattern, keyed by alternateNumber, for each alternate's own gallery.
 const alternatePhotoUrls = ref<Record<string, string[]>>({})
+// Currently expanded photo, shown large in the lightbox dialog below -- every small photo
+// thumbnail on this page (header avatar, household gallery, alternate avatar/gallery) opens it.
+const lightboxSrc = ref<string | null>(null)
 
 // Name-not-code lookups, matching the pattern used on the Households list page.
 const organizations = ref<{ organisationCode: string; name: string }[]>([])
@@ -130,6 +133,7 @@ const infoFields = computed(() => {
 function revokePhotos() {
   for (const u of photoUrls.value) URL.revokeObjectURL(u)
   photoUrls.value = []
+  lightboxSrc.value = null
 }
 
 function revokeAlternatePhotos() {
@@ -137,6 +141,7 @@ function revokeAlternatePhotos() {
     for (const u of urls) URL.revokeObjectURL(u)
   }
   alternatePhotoUrls.value = {}
+  lightboxSrc.value = null
 }
 
 // Fetches each JWT-protected photo through apiClient (which attaches the bearer
@@ -470,6 +475,21 @@ onMounted(() => { load(); loadNameLookups() })
     <div class="household-detail-header mb-4">
       <div class="household-detail-heading">
         <v-btn icon="mdi-arrow-left" variant="text" aria-label="Back to households" @click="goBack" />
+        <v-avatar
+          v-if="photoUrls.length"
+          size="56"
+          class="household-detail-avatar"
+          role="button"
+          tabindex="0"
+          :aria-label="`View ${detail?.householdName ?? 'household head'}'s photo full size`"
+          @click="lightboxSrc = photoUrls[0]"
+          @keyup.enter="lightboxSrc = photoUrls[0]"
+        >
+          <v-img :src="photoUrls[0]" cover />
+        </v-avatar>
+        <v-avatar v-else size="56" color="surface-variant">
+          <v-icon icon="mdi-account-outline" size="28" />
+        </v-avatar>
         <div>
           <h1 class="text-h5 font-weight-bold mb-0">
             {{ detail?.householdName ?? 'Household' }}
@@ -567,7 +587,15 @@ onMounted(() => { load(); loadNameLookups() })
                 :subtitle="[a.relationship, a.phoneNumber].filter(Boolean).join(' · ') || undefined"
               >
                 <template #prepend>
-                  <v-avatar v-if="alternatePhotoUrls[a.alternateNumber ?? '']?.length" size="40">
+                  <v-avatar
+                    v-if="alternatePhotoUrls[a.alternateNumber ?? '']?.length"
+                    size="40"
+                    role="button"
+                    tabindex="0"
+                    :aria-label="`View ${a.alternateName ?? 'alternate'}'s photo full size`"
+                    @click="lightboxSrc = alternatePhotoUrls[a.alternateNumber ?? '']![0]"
+                    @keyup.enter="lightboxSrc = alternatePhotoUrls[a.alternateNumber ?? '']![0]"
+                  >
                     <v-img :src="alternatePhotoUrls[a.alternateNumber ?? '']![0]" cover />
                   </v-avatar>
                   <v-icon v-else icon="mdi-account-child-outline" />
@@ -584,7 +612,12 @@ onMounted(() => { load(); loadNameLookups() })
                   width="56"
                   height="56"
                   cover
-                  class="rounded-lg"
+                  class="rounded-lg clickable-photo"
+                  role="button"
+                  tabindex="0"
+                  aria-label="View photo full size"
+                  @click="lightboxSrc = src"
+                  @keyup.enter="lightboxSrc = src"
                 />
               </div>
             </template>
@@ -663,7 +696,17 @@ onMounted(() => { load(); loadNameLookups() })
           <v-card-text>
             <v-row v-if="photoUrls.length" dense>
               <v-col v-for="(src, i) in photoUrls" :key="i" cols="6">
-                <v-img :src="src" aspect-ratio="1" cover class="rounded-lg" />
+                <v-img
+                  :src="src"
+                  aspect-ratio="1"
+                  cover
+                  class="rounded-lg clickable-photo"
+                  role="button"
+                  tabindex="0"
+                  aria-label="View photo full size"
+                  @click="lightboxSrc = src"
+                  @keyup.enter="lightboxSrc = src"
+                />
               </v-col>
             </v-row>
             <div v-else class="text-medium-emphasis">No photos uploaded for this household.</div>
@@ -693,6 +736,13 @@ onMounted(() => { load(); loadNameLookups() })
         </v-card>
       </v-col>
     </v-row>
+
+    <v-dialog :model-value="!!lightboxSrc" max-width="720" @update:model-value="lightboxSrc = null">
+      <v-card v-if="lightboxSrc">
+        <dialog-close-button @close="lightboxSrc = null" />
+        <v-img :src="lightboxSrc" max-height="80vh" contain />
+      </v-card>
+    </v-dialog>
 
     <v-dialog v-model="editDialog" max-width="560">
       <v-card>
@@ -822,5 +872,10 @@ onMounted(() => { load(); loadNameLookups() })
     width: 100%;
     justify-content: flex-start;
   }
+}
+
+.household-detail-avatar,
+.clickable-photo {
+  cursor: pointer;
 }
 </style>

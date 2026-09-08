@@ -9,8 +9,10 @@ import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AlertDialog;
+import androidx.core.content.ContextCompat;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
+import androidx.appcompat.widget.SearchView;
 
 import com.biopay.agent.R;
 import com.biopay.agent.biometric.BiometricDevice;
@@ -24,7 +26,9 @@ import com.biopay.agent.data.HouseholdDao;
 import com.biopay.agent.location.LocationHelper;
 import com.biopay.agent.session.SessionManager;
 import com.biopay.agent.ui.BaseActivity;
+import com.biopay.agent.ui.BeneficiaryTone;
 import com.biopay.agent.ui.OutcomeFeedback;
+import com.biopay.agent.ui.SearchViewHelper;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 import java.util.ArrayList;
@@ -78,6 +82,19 @@ public class AttendanceBeneficiariesActivity extends BaseActivity {
         recyclerView.setLayoutManager(new LinearLayoutManager(this));
         recyclerView.setAdapter(adapter);
         adapter.submitList(buildBeneficiaries(household));
+        SearchView searchView = findViewById(R.id.searchView);
+        SearchViewHelper.makeFullyClickable(searchView);
+        searchView.setOnQueryTextListener(new SearchView.OnQueryTextListener() {
+            @Override public boolean onQueryTextSubmit(String query) { return filterBeneficiaries(adapter, query); }
+            @Override public boolean onQueryTextChange(String newText) { return filterBeneficiaries(adapter, newText); }
+        });
+    }
+
+    private boolean filterBeneficiaries(AttendanceBeneficiaryAdapter adapter, String query) {
+        adapter.filter(query);
+        findViewById(R.id.beneficiarySearchEmptyState).setVisibility(
+                adapter.getItemCount() == 0 ? android.view.View.VISIBLE : android.view.View.GONE);
+        return true;
     }
 
     private List<Beneficiary> buildBeneficiaries(HouseholdDao.Household household) {
@@ -85,15 +102,26 @@ public class AttendanceBeneficiariesActivity extends BaseActivity {
         if (household != null) {
             beneficiaries.add(new Beneficiary(household.householdNumber, household.householdNumber,
                     Beneficiary.TYPE_HOUSEHOLD_HEAD, household.householdName,
-                    getString(R.string.attendance_beneficiary_head)));
+                    getString(R.string.beneficiary_head_detail, genderLabel(household.gender)), household.gender));
         }
         for (AlternateDao.Alternate alternate : alternateDao.findByHousehold(householdNumber)) {
             beneficiaries.add(new Beneficiary(alternate.alternateNumber, householdNumber,
                     Beneficiary.TYPE_ALTERNATE, alternate.alternateName,
-                    getString(R.string.alternate_detail,
-                            getString(R.string.attendance_beneficiary_alternate), alternate.relationship)));
+                    getString(R.string.beneficiary_alternate_detail,
+                            relationshipLabel(alternate.relationship), genderLabel(alternate.gender)),
+                    alternate.gender));
         }
         return beneficiaries;
+    }
+
+    private String genderLabel(String gender) {
+        return gender == null || gender.trim().isEmpty()
+                ? getString(R.string.gender_not_recorded) : gender.trim();
+    }
+
+    private String relationshipLabel(String relationship) {
+        return relationship == null || relationship.trim().isEmpty()
+                ? getString(R.string.attendance_beneficiary_alternate) : relationship.trim();
     }
 
     private void startVerify(Beneficiary beneficiary, String clock) {
@@ -120,9 +148,10 @@ public class AttendanceBeneficiariesActivity extends BaseActivity {
         }
 
         android.view.View dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_verify_progress, null);
+        dialogView.setBackgroundColor(ContextCompat.getColor(this, BeneficiaryTone.background(beneficiary)));
         TextView tvProgress = dialogView.findViewById(R.id.tvVerifyProgress);
         AlertDialog dialog = new MaterialAlertDialogBuilder(this)
-                .setTitle(R.string.attendance_people_title)
+                .setTitle(getString(R.string.verify_method_title, beneficiary.name))
                 .setView(dialogView)
                 .setCancelable(false)
                 .setNegativeButton(R.string.attendance_cancel, (d, which) -> {

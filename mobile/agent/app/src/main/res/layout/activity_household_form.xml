@@ -43,26 +43,31 @@
                 <com.google.android.material.textfield.TextInputEditText android:id="@+id/etHouseholdName" android:layout_width="match_parent" android:layout_height="wrap_content" android:inputType="textCapWords" android:imeOptions="actionNext" android:singleLine="true" />
             </com.google.android.material.textfield.TextInputLayout>
 
-            <com.google.android.material.textfield.TextInputLayout style="@style/BioPay.FormField" android:hint="@string/field_id_number">
-                <com.google.android.material.textfield.TextInputEditText android:id="@+id/etIdNumber" android:layout_width="match_parent" android:layout_height="wrap_content" android:inputType="text" android:imeOptions="actionNext" android:singleLine="true" />
-            </com.google.android.material.textfield.TextInputLayout>
-
-            <com.google.android.material.textfield.TextInputLayout style="@style/BioPay.FormField" android:hint="@string/field_phone_number">
-                <com.google.android.material.textfield.TextInputEditText android:id="@+id/etPhoneNumber" android:layout_width="match_parent" android:layout_height="wrap_content" android:inputType="phone" android:imeOptions="actionNext" android:singleLine="true" />
-            </com.google.android.material.textfield.TextInputLayout>
-
-            <com.google.android.material.textfield.TextInputLayout style="@style/BioPay.FormField" android:hint="@string/field_age">
-                <com.google.android.material.textfield.TextInputEditText android:id="@+id/etAge" android:layout_width="match_parent" android:layout_height="wrap_content" android:inputType="number" android:imeOptions="actionNext" android:singleLine="true" />
-            </com.google.android.material.textfield.TextInputLayout>
-
-            <com.google.android.material.textfield.TextInputLayout
-                style="@style/BioPay.DropdownField"
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="12dp"
-                android:hint="@string/field_gender">
-                <com.google.android.material.textfield.MaterialAutoCompleteTextView android:id="@+id/spinnerGender" android:layout_width="match_parent" android:layout_height="wrap_content" android:inputType="none" />
-            </com.google.android.material.textfield.TextInputLayout>
+                android:baselineAligned="false"
+                android:orientation="horizontal">
+                <com.google.android.material.textfield.TextInputLayout style="@style/BioPay.FormField" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginEnd="4dp" android:layout_weight="1" android:hint="@string/field_id_number">
+                    <com.google.android.material.textfield.TextInputEditText android:id="@+id/etIdNumber" android:layout_width="match_parent" android:layout_height="wrap_content" android:inputType="text" android:imeOptions="actionNext" android:singleLine="true" />
+                </com.google.android.material.textfield.TextInputLayout>
+                <com.google.android.material.textfield.TextInputLayout style="@style/BioPay.FormField" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="4dp" android:layout_weight="1" android:hint="@string/field_phone_number">
+                    <com.google.android.material.textfield.TextInputEditText android:id="@+id/etPhoneNumber" android:layout_width="match_parent" android:layout_height="wrap_content" android:inputType="phone" android:imeOptions="actionNext" android:singleLine="true" />
+                </com.google.android.material.textfield.TextInputLayout>
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:baselineAligned="false"
+                android:orientation="horizontal">
+                <com.google.android.material.textfield.TextInputLayout style="@style/BioPay.FormField" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginEnd="4dp" android:layout_weight="1" android:hint="@string/field_age">
+                    <com.google.android.material.textfield.TextInputEditText android:id="@+id/etAge" android:layout_width="match_parent" android:layout_height="wrap_content" android:inputType="number" android:imeOptions="actionNext" android:singleLine="true" />
+                </com.google.android.material.textfield.TextInputLayout>
+                <com.google.android.material.textfield.TextInputLayout style="@style/BioPay.DropdownField" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="4dp" android:layout_marginBottom="12dp" android:layout_weight="1" android:hint="@string/field_gender">
+                    <com.google.android.material.textfield.MaterialAutoCompleteTextView android:id="@+id/spinnerGender" android:layout_width="match_parent" android:layout_height="wrap_content" android:inputType="none" />
+                </com.google.android.material.textfield.TextInputLayout>
+            </LinearLayout>
 
             <TextView style="@style/BioPay.SectionHeader" android:text="@string/section_location" />
             <TextView style="@style/BioPay.SupportingText" android:text="@string/location_picker_note" />
@@ -73,41 +78,23 @@
                 android:layout_height="wrap_content"
                 android:orientation="vertical">
 
-                <com.google.android.material.textfield.TextInputLayout
-                    style="@style/BioPay.DropdownField"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginBottom="12dp"
-                    android:hint="@string/field_state">
-                    <com.google.android.material.textfield.MaterialAutoCompleteTextView android:id="@+id/spinnerState" android:layout_width="match_parent" android:layout_height="wrap_content" android:inputType="none" />
-                </com.google.android.material.textfield.TextInputLayout>
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:baselineAligned="false" android:orientation="horizontal">
+                    <com.google.android.material.textfield.TextInputLayout style="@style/BioPay.DropdownField" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginEnd="4dp" android:layout_marginBottom="12dp" android:layout_weight="1" android:hint="@string/field_state">
+                        <com.google.android.material.textfield.MaterialAutoCompleteTextView android:id="@+id/spinnerState" android:layout_width="match_parent" android:layout_height="wrap_content" android:inputType="none" />
+                    </com.google.android.material.textfield.TextInputLayout>
+                    <com.google.android.material.textfield.TextInputLayout style="@style/BioPay.DropdownField" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="4dp" android:layout_marginBottom="12dp" android:layout_weight="1" android:hint="@string/field_county">
+                        <com.google.android.material.textfield.MaterialAutoCompleteTextView android:id="@+id/spinnerCounty" android:layout_width="match_parent" android:layout_height="wrap_content" android:inputType="none" />
+                    </com.google.android.material.textfield.TextInputLayout>
+                </LinearLayout>
 
-                <com.google.android.material.textfield.TextInputLayout
-                    style="@style/BioPay.DropdownField"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginBottom="12dp"
-                    android:hint="@string/field_county">
-                    <com.google.android.material.textfield.MaterialAutoCompleteTextView android:id="@+id/spinnerCounty" android:layout_width="match_parent" android:layout_height="wrap_content" android:inputType="none" />
-                </com.google.android.material.textfield.TextInputLayout>
-
-                <com.google.android.material.textfield.TextInputLayout
-                    style="@style/BioPay.DropdownField"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginBottom="12dp"
-                    android:hint="@string/field_location">
-                    <com.google.android.material.textfield.MaterialAutoCompleteTextView android:id="@+id/spinnerLocation" android:layout_width="match_parent" android:layout_height="wrap_content" android:inputType="none" />
-                </com.google.android.material.textfield.TextInputLayout>
-
-                <com.google.android.material.textfield.TextInputLayout
-                    style="@style/BioPay.DropdownField"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginBottom="4dp"
-                    android:hint="@string/field_village">
-                    <com.google.android.material.textfield.MaterialAutoCompleteTextView android:id="@+id/spinnerVillage" android:layout_width="match_parent" android:layout_height="wrap_content" android:inputType="none" />
-                </com.google.android.material.textfield.TextInputLayout>
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:baselineAligned="false" android:orientation="horizontal">
+                    <com.google.android.material.textfield.TextInputLayout style="@style/BioPay.DropdownField" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginEnd="4dp" android:layout_marginBottom="4dp" android:layout_weight="1" android:hint="@string/field_location">
+                        <com.google.android.material.textfield.MaterialAutoCompleteTextView android:id="@+id/spinnerLocation" android:layout_width="match_parent" android:layout_height="wrap_content" android:inputType="none" />
+                    </com.google.android.material.textfield.TextInputLayout>
+                    <com.google.android.material.textfield.TextInputLayout style="@style/BioPay.DropdownField" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="4dp" android:layout_marginBottom="4dp" android:layout_weight="1" android:hint="@string/field_village">
+                        <com.google.android.material.textfield.MaterialAutoCompleteTextView android:id="@+id/spinnerVillage" android:layout_width="match_parent" android:layout_height="wrap_content" android:inputType="none" />
+                    </com.google.android.material.textfield.TextInputLayout>
+                </LinearLayout>
             </LinearLayout>
 
             <LinearLayout
@@ -117,18 +104,22 @@
                 android:orientation="vertical"
                 android:visibility="gone">
 
-                <com.google.android.material.textfield.TextInputLayout style="@style/BioPay.FormField" android:hint="@string/field_state_name">
-                    <com.google.android.material.textfield.TextInputEditText android:id="@+id/etStateName" android:layout_width="match_parent" android:layout_height="wrap_content" android:inputType="textCapWords" android:imeOptions="actionNext" android:singleLine="true" />
-                </com.google.android.material.textfield.TextInputLayout>
-                <com.google.android.material.textfield.TextInputLayout style="@style/BioPay.FormField" android:hint="@string/field_county_name">
-                    <com.google.android.material.textfield.TextInputEditText android:id="@+id/etCountyName" android:layout_width="match_parent" android:layout_height="wrap_content" android:inputType="textCapWords" android:imeOptions="actionNext" android:singleLine="true" />
-                </com.google.android.material.textfield.TextInputLayout>
-                <com.google.android.material.textfield.TextInputLayout style="@style/BioPay.FormField" android:hint="@string/field_location_name">
-                    <com.google.android.material.textfield.TextInputEditText android:id="@+id/etPayamName" android:layout_width="match_parent" android:layout_height="wrap_content" android:inputType="textCapWords" android:imeOptions="actionNext" android:singleLine="true" />
-                </com.google.android.material.textfield.TextInputLayout>
-                <com.google.android.material.textfield.TextInputLayout style="@style/BioPay.FormField" android:hint="@string/field_village_name">
-                    <com.google.android.material.textfield.TextInputEditText android:id="@+id/etBomaName" android:layout_width="match_parent" android:layout_height="wrap_content" android:inputType="textCapWords" android:imeOptions="actionNext" android:singleLine="true" />
-                </com.google.android.material.textfield.TextInputLayout>
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:baselineAligned="false" android:orientation="horizontal">
+                    <com.google.android.material.textfield.TextInputLayout style="@style/BioPay.FormField" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginEnd="4dp" android:layout_weight="1" android:hint="@string/field_state_name">
+                        <com.google.android.material.textfield.TextInputEditText android:id="@+id/etStateName" android:layout_width="match_parent" android:layout_height="wrap_content" android:inputType="textCapWords" android:imeOptions="actionNext" android:singleLine="true" />
+                    </com.google.android.material.textfield.TextInputLayout>
+                    <com.google.android.material.textfield.TextInputLayout style="@style/BioPay.FormField" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="4dp" android:layout_weight="1" android:hint="@string/field_county_name">
+                        <com.google.android.material.textfield.TextInputEditText android:id="@+id/etCountyName" android:layout_width="match_parent" android:layout_height="wrap_content" android:inputType="textCapWords" android:imeOptions="actionNext" android:singleLine="true" />
+                    </com.google.android.material.textfield.TextInputLayout>
+                </LinearLayout>
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:baselineAligned="false" android:orientation="horizontal">
+                    <com.google.android.material.textfield.TextInputLayout style="@style/BioPay.FormField" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginEnd="4dp" android:layout_weight="1" android:hint="@string/field_location_name">
+                        <com.google.android.material.textfield.TextInputEditText android:id="@+id/etPayamName" android:layout_width="match_parent" android:layout_height="wrap_content" android:inputType="textCapWords" android:imeOptions="actionNext" android:singleLine="true" />
+                    </com.google.android.material.textfield.TextInputLayout>
+                    <com.google.android.material.textfield.TextInputLayout style="@style/BioPay.FormField" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="4dp" android:layout_weight="1" android:hint="@string/field_village_name">
+                        <com.google.android.material.textfield.TextInputEditText android:id="@+id/etBomaName" android:layout_width="match_parent" android:layout_height="wrap_content" android:inputType="textCapWords" android:imeOptions="actionNext" android:singleLine="true" />
+                    </com.google.android.material.textfield.TextInputLayout>
+                </LinearLayout>
             </LinearLayout>
 
             <TextView
@@ -147,15 +138,21 @@
                 android:textStyle="bold" />
 
             <TextView style="@style/BioPay.SectionHeader" android:text="@string/section_household_breakdown" />
-            <com.google.android.material.textfield.TextInputLayout style="@style/BioPay.FormField" android:hint="@string/field_household_size">
-                <com.google.android.material.textfield.TextInputEditText android:id="@+id/etHouseholdSize" android:layout_width="match_parent" android:layout_height="wrap_content" android:inputType="number" android:imeOptions="actionNext" android:singleLine="true" />
-            </com.google.android.material.textfield.TextInputLayout>
-            <com.google.android.material.textfield.TextInputLayout style="@style/BioPay.FormField" android:hint="@string/field_male_dependants">
-                <com.google.android.material.textfield.TextInputEditText android:id="@+id/etMaleDependants" android:layout_width="match_parent" android:layout_height="wrap_content" android:inputType="number" android:imeOptions="actionNext" android:singleLine="true" />
-            </com.google.android.material.textfield.TextInputLayout>
-            <com.google.android.material.textfield.TextInputLayout style="@style/BioPay.FormField" android:hint="@string/field_female_dependants">
-                <com.google.android.material.textfield.TextInputEditText android:id="@+id/etFemaleDependants" android:layout_width="match_parent" android:layout_height="wrap_content" android:inputType="number" android:imeOptions="actionDone" android:singleLine="true" />
-            </com.google.android.material.textfield.TextInputLayout>
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:baselineAligned="false"
+                android:orientation="horizontal">
+                <com.google.android.material.textfield.TextInputLayout style="@style/BioPay.FormField" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginEnd="3dp" android:layout_weight="1" android:hint="@string/field_size_short">
+                    <com.google.android.material.textfield.TextInputEditText android:id="@+id/etHouseholdSize" android:layout_width="match_parent" android:layout_height="wrap_content" android:inputType="number" android:imeOptions="actionNext" android:singleLine="true" />
+                </com.google.android.material.textfield.TextInputLayout>
+                <com.google.android.material.textfield.TextInputLayout style="@style/BioPay.FormField" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="3dp" android:layout_marginEnd="3dp" android:layout_weight="1" android:hint="@string/field_male_short">
+                    <com.google.android.material.textfield.TextInputEditText android:id="@+id/etMaleDependants" android:layout_width="match_parent" android:layout_height="wrap_content" android:inputType="number" android:imeOptions="actionNext" android:singleLine="true" />
+                </com.google.android.material.textfield.TextInputLayout>
+                <com.google.android.material.textfield.TextInputLayout style="@style/BioPay.FormField" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="3dp" android:layout_weight="1" android:hint="@string/field_female_short">
+                    <com.google.android.material.textfield.TextInputEditText android:id="@+id/etFemaleDependants" android:layout_width="match_parent" android:layout_height="wrap_content" android:inputType="number" android:imeOptions="actionDone" android:singleLine="true" />
+                </com.google.android.material.textfield.TextInputLayout>
+            </LinearLayout>
 
             <TextView style="@style/BioPay.SectionHeader" android:text="@string/section_vulnerability_literacy" />
             <com.google.android.material.card.MaterialCardView

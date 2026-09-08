@@ -60,11 +60,20 @@
             android:name=".households.PersonCaptureActivity"
             android:exported="false"
             android:windowSoftInputMode="stateAlwaysHidden|adjustResize" />
+        <activity android:name=".households.PersonDetailActivity" android:exported="false" />
         <activity android:name=".attendance.AttendanceActivity" android:exported="false" />
         <activity android:name=".attendance.AttendanceBeneficiariesActivity" android:exported="false" />
         <activity android:name=".vouchers.VoucherRedemptionActivity" android:exported="false" />
         <activity
             android:name=".face.FaceCaptureActivity"
+            android:exported="false"
+            android:screenOrientation="portrait" />
+        <activity
+            android:name=".households.PhotoCaptureActivity"
+            android:exported="false"
+            android:screenOrientation="portrait" />
+        <activity
+            android:name=".ui.PhotoViewerActivity"
             android:exported="false"
             android:screenOrientation="portrait" />
 

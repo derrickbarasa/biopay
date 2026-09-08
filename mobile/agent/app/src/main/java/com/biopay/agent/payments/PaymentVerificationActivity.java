@@ -10,6 +10,7 @@ import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
+import androidx.appcompat.widget.SearchView;
 
 import com.biopay.agent.R;
 import com.biopay.agent.attendance.Beneficiary;
@@ -28,6 +29,7 @@ import com.biopay.agent.location.LocationHelper;
 import com.biopay.agent.session.SessionManager;
 import com.biopay.agent.sync.SyncScheduler;
 import com.biopay.agent.ui.BaseActivity;
+import com.biopay.agent.ui.SearchViewHelper;
 import com.google.android.material.button.MaterialButton;
 
 import org.json.JSONArray;
@@ -127,9 +129,22 @@ public class PaymentVerificationActivity extends BaseActivity {
         recycler.setAdapter(adapter);
         List<PaymentBeneficiaryAdapter.Row> beneficiaries = buildBeneficiaries(household);
         adapter.submitList(beneficiaries);
+        SearchView searchView = findViewById(R.id.searchView);
+        SearchViewHelper.makeFullyClickable(searchView);
+        searchView.setOnQueryTextListener(new SearchView.OnQueryTextListener() {
+            @Override public boolean onQueryTextSubmit(String query) { return filterBeneficiaries(adapter, query); }
+            @Override public boolean onQueryTextChange(String newText) { return filterBeneficiaries(adapter, newText); }
+        });
         findViewById(R.id.verificationEmptyState).setVisibility(
                 beneficiaries.isEmpty() ? android.view.View.VISIBLE : android.view.View.GONE);
         scanButton.setOnClickListener(v -> startSelectedVerification());
+    }
+
+    private boolean filterBeneficiaries(PaymentBeneficiaryAdapter adapter, String query) {
+        adapter.filter(query);
+        findViewById(R.id.verificationEmptyState).setVisibility(
+                adapter.getItemCount() == 0 ? android.view.View.VISIBLE : android.view.View.GONE);
+        return true;
     }
 
     private List<PaymentBeneficiaryAdapter.Row> buildBeneficiaries(HouseholdDao.Household household) {
@@ -137,15 +152,26 @@ public class PaymentVerificationActivity extends BaseActivity {
         if (household != null) {
             rows.add(toRow(new Beneficiary(household.householdNumber, household.householdNumber,
                     Beneficiary.TYPE_HOUSEHOLD_HEAD, household.householdName,
-                    getString(R.string.attendance_beneficiary_head))));
+                    getString(R.string.beneficiary_head_detail, genderLabel(household.gender)), household.gender)));
         }
         for (AlternateDao.Alternate alternate : alternateDao.findByHousehold(householdNumber)) {
             rows.add(toRow(new Beneficiary(alternate.alternateNumber, householdNumber,
                     Beneficiary.TYPE_ALTERNATE, alternate.alternateName,
-                    getString(R.string.alternate_detail,
-                            getString(R.string.attendance_beneficiary_alternate), alternate.relationship))));
+                    getString(R.string.beneficiary_alternate_detail,
+                            relationshipLabel(alternate.relationship), genderLabel(alternate.gender)),
+                    alternate.gender)));
         }
         return rows;
+    }
+
+    private String genderLabel(String gender) {
+        return gender == null || gender.trim().isEmpty()
+                ? getString(R.string.gender_not_recorded) : gender.trim();
+    }
+
+    private String relationshipLabel(String relationship) {
+        return relationship == null || relationship.trim().isEmpty()
+                ? getString(R.string.attendance_beneficiary_alternate) : relationship.trim();
     }
 
     private PaymentBeneficiaryAdapter.Row toRow(Beneficiary beneficiary) {
@@ -159,7 +185,8 @@ public class PaymentVerificationActivity extends BaseActivity {
         if (selectedFingerprint) {
             pendingFingerprintBeneficiary = selectedBeneficiary;
             fingerprintVerifyLauncher.launch(FingerprintVerifyActivity.intentFor(this, householdNumber,
-                    selectedBeneficiary.beneficiaryId, selectedBeneficiary.name, selectedBeneficiary.subtitle));
+                    selectedBeneficiary.beneficiaryId, selectedBeneficiary.name, selectedBeneficiary.subtitle,
+                    selectedBeneficiary.beneficiaryType, selectedBeneficiary.gender));
         } else {
             pendingFaceBeneficiary = selectedBeneficiary;
             faceCaptureLauncher.launch(new Intent(this, FaceCaptureActivity.class));

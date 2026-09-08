@@ -390,18 +390,35 @@ public class Payroll extends AbstractVerticle {
         String cycleCode = payload.getString("cycleCode", "").trim();
         String reason = payload.getString("reason", "").trim();
 
-        pool.preparedQuery("UPDATE payment_cycles SET status='REJECTED', checker_id=@p1, checker_at=GETDATE(), "
-                        + "rejection_reason=@p2, updated_at=GETDATE() WHERE cycle_code=@p3 AND status='PENDING_APPROVAL' "
-                        + "AND (@p4=1 OR anchor_id=@p5)")
-                .execute(Tuple.of(actorId(payload), reason, cycleCode, isSystemAdmin(payload), TenantScope.anchorId(payload)))
-                .onFailure(err -> onDbError(message, err))
-                .onSuccess(rows -> {
-                    if (rows.rowCount() > 0) {
-                        reply(message, new JsonObject().put("responseCode", "000").put("responseMessage", "Payroll cycle rejected"));
-                    } else {
-                        replyError(message, "Cycle not found or not pending approval");
+        Tuple params = Tuple.of(actorId(payload), reason, cycleCode, isSystemAdmin(payload), TenantScope.anchorId(payload));
+        pool.withTransaction(connection -> connection.preparedQuery(
+                        "UPDATE payment_cycles SET status='REJECTED', checker_id=@p1, checker_at=GETDATE(), "
+                                + "rejection_reason=@p2, updated_at=GETDATE() WHERE cycle_code=@p3 "
+                                + "AND status='PENDING_APPROVAL' AND (@p4=1 OR anchor_id=@p5)")
+                .execute(params)
+                .compose(rows -> {
+                    if (rows.rowCount() == 0) {
+                        return Future.failedFuture("Cycle not found or not pending approval");
                     }
-                });
+                    // A rejected cycle never became a real payable instruction. Keep its line
+                    // items for the cycle's audit view, but mark them rejected in the same
+                    // transaction so payment lists, summaries and devices cannot offer them.
+                    return connection.preparedQuery("UPDATE payments SET rejected=1, rejected_by=@p1, "
+                                    + "rejected_at=GETDATE(), rejection_reason=@p2, updated_at=GETDATE() "
+                                    + "WHERE payment_cycle_id=(SELECT id FROM payment_cycles WHERE cycle_code=@p3) "
+                                    + "AND rejected=0")
+                            .execute(Tuple.of(actorId(payload), reason, cycleCode));
+                }))
+                .onFailure(err -> {
+                    if ("Cycle not found or not pending approval".equals(err.getMessage())) {
+                        replyError(message, err.getMessage());
+                    } else {
+                        onDbError(message, err);
+                    }
+                })
+                .onSuccess(rows -> reply(message, new JsonObject()
+                        .put("responseCode", "000")
+                        .put("responseMessage", "Payroll cycle rejected")));
     }
 
     // ---- REJECT_PAYROLL_ITEMS (the cycle's own maker, or any anchor-admin checker;

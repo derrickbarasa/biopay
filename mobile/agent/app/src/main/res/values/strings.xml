@@ -16,12 +16,15 @@
     <string name="login_button">Sign in</string>
     <string name="login_signing_in">Signing in</string>
     <string name="login_error_required">Enter your email address and password.</string>
+    <string name="login_offline_credentials_unavailable">Offline sign-in is unavailable for these credentials. Connect to the internet and sign in once to enable it on this device.</string>
+    <string name="login_online_required">This device must connect to BioPay now. Offline access lasts %1$d days after the last successful online sign-in and subscription check.</string>
     <string name="login_security_note">Secure access for authorised field officers</string>
 
     <string name="subscription_locked_title">Subscription expired</string>
     <string name="subscription_locked_message">Your organisation\'s BioPay subscription has lapsed past its grace period. Ask your anchor administrator to renew it from the web dashboard, then try again.</string>
     <string name="subscription_locked_retry">Try again</string>
     <string name="subscription_locked_logout">Log out</string>
+    <string name="subscription_locked_online_required">Connect to the internet to check whether the anchor subscription has been renewed.</string>
 
     <string name="home_welcome">Hello, %1$s</string>
     <string name="home_subtitle">Your field workspace</string>
@@ -33,6 +36,7 @@
     <string name="home_subscription_grace">Subscription expired - %1$d day(s) left before your organisation is locked out. Ask your anchor administrator to renew.</string>
     <string name="home_sync_pending">%1$d record(s) waiting to sync</string>
     <string name="home_overview">Operational summary</string>
+    <string name="home_field_actions">Field actions</string>
     <string name="home_records">Records and reporting</string>
     <string name="home_chart_title">Payments</string>
     <string name="home_kpi_households">Households</string>
@@ -68,7 +72,7 @@
     <string name="nav_settings">Settings</string>
     <string name="nav_households">Households</string>
     <string name="nav_payment">Payment</string>
-    <string name="nav_activity">Activity</string>
+    <string name="nav_vouchers">Vouchers</string>
     <string name="nav_more">More</string>
 
     <string name="scan_action_title">Scan</string>
@@ -81,6 +85,7 @@
 
     <string name="activity_feed_title">Activity</string>
     <string name="activity_feed_description">A chronological record of registrations, verifications, disbursements, and sync status on this device.</string>
+    <string name="activity_feed_search_hint">Search activity, person, or date</string>
     <string name="activity_feed_filter_all">All</string>
     <string name="activity_feed_filter_registrations">Registrations</string>
     <string name="activity_feed_filter_verification">Verification</string>
@@ -98,8 +103,8 @@
     <string name="more_security_body">Change your password</string>
     <string name="more_attendance">Attendance</string>
     <string name="more_attendance_body">Record and review attendance</string>
-    <string name="more_vouchers">Vouchers</string>
-    <string name="more_vouchers_body">Redeem issued vouchers</string>
+    <string name="more_activities">Activities</string>
+    <string name="more_activities_body">Search registrations and field events</string>
     <string name="more_alternates">Alternates</string>
     <string name="more_alternates_body">Manage household alternates</string>
     <string name="more_my_location">My location</string>
@@ -149,8 +154,8 @@
     <string name="household_detail_village">Village</string>
     <string name="household_detail_registration_method">Registration method</string>
     <string name="household_detail_members_header">Members (%1$d)</string>
+    <string name="household_detail_members_hint">Tap a member to view their profile, captured fingerprints, and to scan more.</string>
     <string name="household_detail_add_alternate">Add alternate</string>
-    <string name="household_detail_capture">Capture</string>
     <string name="household_detail_entitlement">Current status</string>
 
     <string name="intervention_cash">Cash</string>
@@ -185,9 +190,38 @@
     <string name="field_phone_number">Phone number</string>
     <string name="field_age">Age</string>
     <string name="field_gender">Gender</string>
+    <string name="gender_male">Male</string>
+    <string name="gender_female">Female</string>
     <string name="field_registration_method">Biometric method</string>
     <string name="field_alternate_name">Full name</string>
     <string name="field_alternate_relationship">Relationship to household head</string>
+    <string name="field_size_short">Size</string>
+    <string name="field_male_short">Male</string>
+    <string name="field_female_short">Female</string>
+    <string-array name="alternate_relationship_options">
+        <item>Wife</item>
+        <item>Husband</item>
+        <item>Son</item>
+        <item>Daughter</item>
+        <item>Brother</item>
+        <item>Sister</item>
+        <item>Mother</item>
+        <item>Father</item>
+        <item>Grandmother</item>
+        <item>Grandfather</item>
+        <item>Grandson</item>
+        <item>Granddaughter</item>
+        <item>Aunt</item>
+        <item>Uncle</item>
+        <item>Niece</item>
+        <item>Nephew</item>
+        <item>Cousin</item>
+        <item>In-law</item>
+        <item>Ward</item>
+        <item>Other</item>
+    </string-array>
+    <string name="alternate_relationship_required">Choose the alternate’s relationship to the household head.</string>
+    <string name="alternate_gender_required">Choose the alternate’s gender.</string>
     <string name="field_state">State</string>
     <string name="field_county">County</string>
     <string name="field_location">Location</string>
@@ -243,6 +277,43 @@
     <string name="person_capture_fingerprint_duplicate">Fingerprint capture failed: this fingerprint is already registered to another person</string>
     <string name="person_capture_fingerprint_check_failed">Fingerprint capture failed: could not verify against existing records. Please try again</string>
 
+    <string name="person_capture_fingerprint_hint">Tap a finger below to scan it. Only one finger is required to continue — capture the rest now or come back later.</string>
+    <string name="person_capture_right_hand">Right hand</string>
+    <string name="person_capture_left_hand">Left hand</string>
+    <string name="person_capture_fingerprint_count">%1$d of 10 fingers captured</string>
+    <string name="finger_right_thumb">Right thumb</string>
+    <string name="finger_right_index">Right index finger</string>
+    <string name="finger_right_middle">Right middle finger</string>
+    <string name="finger_right_ring">Right ring finger</string>
+    <string name="finger_right_little">Right little finger</string>
+    <string name="finger_left_thumb">Left thumb</string>
+    <string name="finger_left_index">Left index finger</string>
+    <string name="finger_left_middle">Left middle finger</string>
+    <string name="finger_left_ring">Left ring finger</string>
+    <string name="finger_left_little">Left little finger</string>
+    <string name="person_capture_recapture_title">Recapture this finger?</string>
+    <string name="person_capture_recapture_message">%1$s already has a stored scan. Scanning again will replace it.</string>
+    <string name="person_capture_recapture_confirm">Recapture</string>
+    <string name="person_capture_recapture_cancel">Cancel</string>
+
+    <string name="person_capture_photo_label">Photo</string>
+    <string name="person_capture_photo_hint">Optional — a plain photo so this person is easy to recognize later. Not used for verification.</string>
+    <string name="person_capture_photo_action">Capture photo</string>
+    <string name="person_capture_photo_retake_action">Retake photo</string>
+    <string name="person_capture_photo_success">Photo captured</string>
+    <string name="person_capture_photo_failed">Could not save the photo. Please try again.</string>
+
+    <string name="photo_capture_title">Photo</string>
+    <string name="photo_capture_guidance">Frame the person clearly, in good light. This photo is only for identification — it is never used to verify anyone.</string>
+    <string name="photo_capture_action">Capture</string>
+    <string name="photo_capture_permission_denied">Camera permission is required to capture a photo</string>
+    <string name="photo_viewer_unavailable">This photo is no longer available on this device</string>
+
+    <string name="person_detail_details_header">Details</string>
+    <string name="person_detail_capture_action">Capture more</string>
+    <string name="person_detail_role_head">Head of household</string>
+    <string name="person_detail_not_recorded">Not recorded</string>
+
     <string name="attendance_title">Attendance</string>
     <string name="attendance_description">Choose a household, then verify the person clocking in or out.</string>
     <string name="attendance_search_hint">Search households for attendance</string>
@@ -250,7 +321,11 @@
     <string name="attendance_empty_body">Sync or register households before recording attendance.</string>
     <string name="attendance_people_title">Choose a beneficiary</string>
     <string name="attendance_people_body">Fingerprint verification is required before attendance is recorded.</string>
-    <string name="attendance_beneficiary_head">Household head</string>
+    <string name="beneficiary_search_hint">Search name, relationship, or gender</string>
+    <string name="beneficiary_search_empty">No household members match your search.</string>
+    <string name="beneficiary_head_detail">Household head - %1$s</string>
+    <string name="beneficiary_alternate_detail">Alternate - %1$s - %2$s</string>
+    <string name="gender_not_recorded">Gender not recorded</string>
     <string name="attendance_beneficiary_alternate">Alternate</string>
     <string name="attendance_clock_in">Clock in</string>
     <string name="attendance_clock_out">Clock out</string>
@@ -269,12 +344,12 @@
 
     <string name="alternate_title">Alternates</string>
     <string name="alternate_description">Alternate beneficiaries linked to households on this device.</string>
-    <string name="alternate_search_hint">Search alternate or household number</string>
+    <string name="alternate_search_hint">Search name, household, relationship, or gender</string>
     <string name="alternate_summary">%1$d alternate(s) on this device</string>
     <string name="alternate_empty_title">No alternates available</string>
     <string name="alternate_empty_body">Alternates appear here after household records are synced or updated.</string>
     <string name="alternate_household">Household %1$s</string>
-    <string name="alternate_detail">%1$s - %2$s</string>
+    <string name="alternate_detail_with_gender">%1$s - %2$s - %3$s</string>
 
     <string name="payment_title">Payments</string>
     <string name="payment_description">Review paid and pending household payments available offline.</string>
@@ -341,14 +416,50 @@
     <string name="payment_result_home">Home</string>
 
     <string name="voucher_title">Voucher redemption</string>
-    <string name="voucher_subtitle">Choose an issued voucher and verify the household fingerprint before redemption.</string>
-    <string name="voucher_empty_title">No issued vouchers</string>
-    <string name="voucher_empty">Connect and sync to download vouchers assigned to this device.</string>
-    <string name="voucher_verify_action">Verify and redeem</string>
+    <string name="home_vouchers_title">Vouchers</string>
+    <string name="home_vouchers_open">View vouchers</string>
+    <plurals name="home_voucher_available_count">
+        <item quantity="one">%1$d voucher ready to redeem</item>
+        <item quantity="other">%1$d vouchers ready to redeem</item>
+    </plurals>
+    <string name="home_voucher_next">Next: %1$s · Amount %2$s</string>
+    <string name="home_voucher_empty">No vouchers are ready. Sync to check for new vouchers.</string>
+    <string name="voucher_subtitle">Review voucher status and redeem available vouchers after biometric verification.</string>
+    <string name="voucher_filter_all">All</string>
+    <string name="voucher_filter_not_redeemed">Not redeemed</string>
+    <string name="voucher_filter_redeemed">Redeemed</string>
+    <string name="voucher_filter_voided">Voided</string>
+    <string name="voucher_status_not_redeemed">Not redeemed</string>
+    <string name="voucher_status_redeemed">Redeemed</string>
+    <string name="voucher_status_voided">Voided</string>
+    <plurals name="voucher_list_summary">
+        <item quantity="one">%1$d voucher</item>
+        <item quantity="other">%1$d vouchers</item>
+    </plurals>
+    <string name="voucher_filter_empty">No vouchers have this status.</string>
+    <string name="voucher_search_hint">Search household name or number</string>
+    <string name="voucher_search_empty">No vouchers match this household.</string>
     <string name="voucher_amount">Amount %1$s</string>
-    <string name="voucher_household">Household %1$s</string>
+    <string name="voucher_household_named">%1$s · %2$s</string>
     <string name="voucher_expires">Expires %1$s</string>
-    <string name="voucher_verify_title">Verify voucher holder</string>
+    <string name="voucher_select_label">Choose voucher</string>
+    <string name="voucher_empty_title">No vouchers to show</string>
+    <string name="voucher_empty">Connect and sync to download vouchers assigned to this device.</string>
+    <string name="voucher_picker_title">Choose voucher</string>
+    <string name="voucher_picker_search_hint">Search by household, code, or purpose</string>
+    <string name="voucher_picker_empty_none_issued">No issued vouchers are available yet. Sync and try again.</string>
+    <string name="voucher_picker_empty_no_match">No voucher matches your search.</string>
+    <string name="voucher_details_title">Voucher details</string>
+    <string name="voucher_field_household">Household</string>
+    <string name="voucher_field_code">Voucher code</string>
+    <string name="voucher_field_amount">Amount</string>
+    <string name="voucher_field_purpose">Purpose</string>
+    <string name="voucher_field_expiry">Expires</string>
+    <string name="voucher_placeholder">—</string>
+    <string name="voucher_proceed">Proceed to verify and redeem</string>
+    <string name="voucher_choose_person_title">Who is redeeming this voucher?</string>
+    <string name="voucher_choose_person_body">Choose a person with an enrolled fingerprint. The background identifies the household head or alternate.</string>
+    <string name="voucher_verify_person">Verify</string>
     <string name="voucher_no_fingerprint">This household has no enrolled fingerprint for voucher verification.</string>
     <string name="voucher_redeemed_queued">Voucher redeemed and queued for secure sync.</string>
 

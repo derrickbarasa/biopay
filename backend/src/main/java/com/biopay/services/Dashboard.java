@@ -131,7 +131,9 @@ public class Dashboard extends AbstractVerticle {
                                 + "LEFT JOIN payment_cycles pc ON pc.id=pay.payment_cycle_id "
                                 + "LEFT JOIN households h ON h.household_number=pay.household_number AND h.organization_code=pay.organization_code "
                                 + "LEFT JOIN organizations p ON p.organization_code=pay.organization_code "
-                                + "WHERE (@p1 IS NULL OR pay.anchor_id=@p1) ORDER BY activity_at DESC, pay.id DESC")
+                                + "WHERE (@p1 IS NULL OR pay.anchor_id=@p1) AND pay.rejected=0 "
+                                + "AND (pay.payment_cycle_id IS NULL OR pc.status IN ('APPROVED','DISBURSED')) "
+                                + "ORDER BY activity_at DESC, pay.id DESC")
                 .execute(Tuple.of(anchorId))
                 .map(rows -> {
                     JsonArray arr = new JsonArray();

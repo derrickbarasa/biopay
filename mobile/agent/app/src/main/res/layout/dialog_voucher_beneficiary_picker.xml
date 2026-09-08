@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:paddingStart="20dp"
+    android:paddingTop="4dp"
+    android:paddingEnd="20dp"
+    android:paddingBottom="8dp">
+
+    <TextView
+        style="@style/BioPay.SupportingText"
+        android:text="@string/voucher_choose_person_body" />
+    <androidx.appcompat.widget.SearchView
+        android:id="@+id/searchView"
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:layout_marginTop="12dp"
+        android:background="@drawable/bg_icon_container"
+        android:iconifiedByDefault="false"
+        android:queryHint="@string/beneficiary_search_hint" />
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/recyclerBeneficiaries"
+        android:layout_width="match_parent"
+        android:layout_height="360dp"
+        android:layout_marginTop="8dp"
+        android:nestedScrollingEnabled="true" />
+    <TextView
+        android:id="@+id/emptyState"
+        style="@style/BioPay.SupportingText"
+        android:layout_marginTop="16dp"
+        android:gravity="center"
+        android:text="@string/voucher_no_fingerprint"
+        android:visibility="gone" />
+</LinearLayout>

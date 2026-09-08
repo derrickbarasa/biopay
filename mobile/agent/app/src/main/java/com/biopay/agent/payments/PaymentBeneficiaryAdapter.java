@@ -6,10 +6,13 @@ import android.view.ViewGroup;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
+import androidx.core.content.ContextCompat;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.biopay.agent.R;
 import com.biopay.agent.attendance.Beneficiary;
+import com.biopay.agent.ui.BeneficiaryTone;
+import com.google.android.material.card.MaterialCardView;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -36,6 +39,7 @@ public class PaymentBeneficiaryAdapter extends RecyclerView.Adapter<PaymentBenef
     }
 
     private final List<Row> rows = new ArrayList<>();
+    private final List<Row> allRows = new ArrayList<>();
     private final OnVerifyListener listener;
     private String selectedBeneficiaryId;
     private Boolean fingerprintSelected;
@@ -46,8 +50,29 @@ public class PaymentBeneficiaryAdapter extends RecyclerView.Adapter<PaymentBenef
 
     public void submitList(List<Row> newRows) {
         rows.clear();
+        allRows.clear();
+        allRows.addAll(newRows);
         rows.addAll(newRows);
         notifyDataSetChanged();
+    }
+
+    public void filter(String query) {
+        String needle = query == null ? "" : query.trim().toLowerCase(java.util.Locale.ROOT);
+        rows.clear();
+        for (Row row : allRows) {
+            Beneficiary person = row.beneficiary;
+            if (needle.isEmpty()
+                    || contains(person.name, needle)
+                    || contains(person.subtitle, needle)
+                    || contains(person.gender, needle)) {
+                rows.add(row);
+            }
+        }
+        notifyDataSetChanged();
+    }
+
+    private static boolean contains(String value, String needle) {
+        return value != null && value.toLowerCase(java.util.Locale.ROOT).contains(needle);
     }
 
     @NonNull
@@ -62,6 +87,10 @@ public class PaymentBeneficiaryAdapter extends RecyclerView.Adapter<PaymentBenef
         Row row = rows.get(position);
         holder.tvName.setText(row.beneficiary.name);
         holder.tvSubtitle.setText(row.beneficiary.subtitle);
+        holder.card.setCardBackgroundColor(ContextCompat.getColor(holder.itemView.getContext(),
+                BeneficiaryTone.background(row.beneficiary)));
+        holder.card.setStrokeColor(ContextCompat.getColor(holder.itemView.getContext(),
+                BeneficiaryTone.outline(row.beneficiary)));
 
         boolean anyEnrolled = row.hasFingerprint || row.hasFace;
         holder.tvNotEnrolled.setVisibility(anyEnrolled ? View.GONE : View.VISIBLE);
@@ -101,10 +130,12 @@ public class PaymentBeneficiaryAdapter extends RecyclerView.Adapter<PaymentBenef
         final com.google.android.material.button.MaterialButton btnVerifyFingerprint;
         final com.google.android.material.button.MaterialButton btnVerifyFace;
         final TextView tvFaceAccuracyNotice;
+        final MaterialCardView card;
 
         ViewHolder(@NonNull View itemView) {
             super(itemView);
             tvName = itemView.findViewById(R.id.tvName);
+            card = (MaterialCardView) itemView;
             tvSubtitle = itemView.findViewById(R.id.tvSubtitle);
             tvNotEnrolled = itemView.findViewById(R.id.tvNotEnrolled);
             verifyButtonRow = itemView.findViewById(R.id.verifyButtonRow);

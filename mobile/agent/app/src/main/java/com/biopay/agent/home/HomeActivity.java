@@ -8,9 +8,12 @@ import android.widget.TextView;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import com.biopay.agent.R;
+import com.biopay.agent.alternates.AlternatesActivity;
+import com.biopay.agent.attendance.AttendanceActivity;
 import com.biopay.agent.data.DatabaseHelper;
 import com.biopay.agent.data.HouseholdDao;
 import com.biopay.agent.data.PaymentDao;
+import com.biopay.agent.data.VoucherDao;
 import com.biopay.agent.households.HouseholdFormActivity;
 import com.biopay.agent.location.LocationHelper;
 import com.biopay.agent.network.ApiCallback;
@@ -23,6 +26,7 @@ import com.biopay.agent.settings.SettingsActivity;
 import com.biopay.agent.sync.SyncScheduler;
 import com.biopay.agent.sync.SyncFeedback;
 import com.biopay.agent.ui.BaseActivity;
+import com.biopay.agent.vouchers.VoucherRedemptionActivity;
 import com.google.android.material.snackbar.Snackbar;
 
 import org.json.JSONObject;
@@ -39,6 +43,7 @@ public class HomeActivity extends BaseActivity {
     private DatabaseHelper databaseHelper;
     private HouseholdDao householdDao;
     private PaymentDao paymentDao;
+    private VoucherDao voucherDao;
     private PaymentDao.LocalPayment nextPayment;
 
     // Requested once here, right after login, rather than inside Attendance/HouseholdForm --
@@ -57,6 +62,7 @@ public class HomeActivity extends BaseActivity {
         databaseHelper = DatabaseHelper.get(this);
         householdDao = new HouseholdDao(this);
         paymentDao = new PaymentDao(this);
+        voucherDao = new VoucherDao(this);
 
         if (!LocationHelper.hasPermission(this)) {
             locationPermissionLauncher.launch(new String[]{
@@ -78,12 +84,18 @@ public class HomeActivity extends BaseActivity {
                 startActivity(new Intent(this, ReportsActivity.class)));
         findViewById(R.id.btnPaymentsViewAll).setOnClickListener(v ->
                 startActivity(new Intent(this, PaymentsActivity.class)));
+        findViewById(R.id.btnHomeAttendance).setOnClickListener(v ->
+                startActivity(new Intent(this, AttendanceActivity.class)));
+        findViewById(R.id.btnHomeAlternates).setOnClickListener(v ->
+                startActivity(new Intent(this, AlternatesActivity.class)));
         findViewById(R.id.btnCheckPayments).setOnClickListener(this::triggerManualSync);
         findViewById(R.id.btnStartNextPayment).setOnClickListener(v -> {
             if (nextPayment == null || nextPayment.remoteId == null) return;
             startActivity(PaymentVerificationActivity.intentFor(this, nextPayment.remoteId,
                     nextPayment.householdNumber, nextPayment.amount));
         });
+        findViewById(R.id.btnHomeVouchers).setOnClickListener(v ->
+                startActivity(new Intent(this, VoucherRedemptionActivity.class)));
     }
 
     private void triggerManualSync(View anchor) {
@@ -158,18 +170,32 @@ public class HomeActivity extends BaseActivity {
         findViewById(R.id.paymentEmptyState).setVisibility(hasReadyPayment ? View.GONE : View.VISIBLE);
 
         nextPayment = hasReadyPayment ? readyPayments.get(0) : null;
-        if (nextPayment == null) return;
+        if (nextPayment != null) {
+            ((TextView) findViewById(R.id.tvPaymentReadyCount)).setText(getResources().getQuantityString(
+                    R.plurals.home_payment_ready_count, readyPayments.size(), readyPayments.size()));
+            String householdName = nextPayment.householdName == null || nextPayment.householdName.trim().isEmpty()
+                    ? nextPayment.householdNumber : nextPayment.householdName.trim();
+            ((TextView) findViewById(R.id.tvNextPaymentName)).setText(householdName);
+            String village = nextPayment.village == null ? "" : nextPayment.village.trim();
+            ((TextView) findViewById(R.id.tvNextPaymentMeta)).setText(village.isEmpty()
+                    ? nextPayment.householdNumber
+                    : getString(R.string.home_payment_next_meta, nextPayment.householdNumber, village));
+            ((TextView) findViewById(R.id.tvNextPaymentAmount)).setText(getString(
+                    R.string.payment_amount, NumberFormat.getNumberInstance().format(nextPayment.amount)));
+        }
 
-        ((TextView) findViewById(R.id.tvPaymentReadyCount)).setText(getResources().getQuantityString(
-                R.plurals.home_payment_ready_count, readyPayments.size(), readyPayments.size()));
-        String householdName = nextPayment.householdName == null || nextPayment.householdName.trim().isEmpty()
-                ? nextPayment.householdNumber : nextPayment.householdName.trim();
-        ((TextView) findViewById(R.id.tvNextPaymentName)).setText(householdName);
-        String village = nextPayment.village == null ? "" : nextPayment.village.trim();
-        ((TextView) findViewById(R.id.tvNextPaymentMeta)).setText(village.isEmpty()
-                ? nextPayment.householdNumber
-                : getString(R.string.home_payment_next_meta, nextPayment.householdNumber, village));
-        ((TextView) findViewById(R.id.tvNextPaymentAmount)).setText(getString(
-                R.string.payment_amount, NumberFormat.getNumberInstance().format(nextPayment.amount)));
+        List<VoucherDao.Voucher> availableVouchers = voucherDao.listIssued();
+        ((TextView) findViewById(R.id.tvHomeVoucherCount)).setText(getResources().getQuantityString(
+                R.plurals.home_voucher_available_count, availableVouchers.size(), availableVouchers.size()));
+        TextView nextVoucher = findViewById(R.id.tvHomeNextVoucher);
+        if (availableVouchers.isEmpty()) {
+            nextVoucher.setText(R.string.home_voucher_empty);
+        } else {
+            VoucherDao.Voucher voucher = availableVouchers.get(0);
+            String household = voucher.householdName == null || voucher.householdName.trim().isEmpty()
+                    ? voucher.householdNumber : voucher.householdName.trim();
+            nextVoucher.setText(getString(R.string.home_voucher_next, household,
+                    NumberFormat.getNumberInstance().format(voucher.amount)));
+        }
     }
 }

@@ -29,4 +29,13 @@
     <!-- Pastel icon-badge tokens for the Field Workspace home dashboard (2026-08-20 mobile.png revamp). -->
     <color name="bp_amber_container">#FFF1D6</color>
     <color name="bp_on_primary_translucent">#33FFFFFF</color>
+
+    <!-- Quiet identity cues shared by payment, voucher, and attendance verification. -->
+    <color name="bp_person_head_container">#F1ECFA</color>
+    <color name="bp_person_head_outline">#D5C8EB</color>
+    <color name="bp_person_male_container">#EAF3FC</color>
+    <color name="bp_person_male_outline">#C5DAEF</color>
+    <color name="bp_person_female_container">#FCEEF4</color>
+    <color name="bp_person_female_outline">#EDCAD9</color>
+    <color name="bp_person_neutral_container">#F1F5F3</color>
 </resources>

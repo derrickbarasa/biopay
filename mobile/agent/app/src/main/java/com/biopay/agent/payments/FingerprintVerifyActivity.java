@@ -5,6 +5,7 @@ import android.content.Intent;
 import android.os.Bundle;
 import android.util.Log;
 import android.widget.TextView;
+import androidx.core.content.ContextCompat;
 
 import com.biopay.agent.R;
 import com.biopay.agent.attendance.Beneficiary;
@@ -16,6 +17,7 @@ import com.biopay.agent.data.FingerprintDao;
 import com.biopay.agent.data.VerificationEventDao;
 import com.biopay.agent.session.SessionManager;
 import com.biopay.agent.ui.BaseActivity;
+import com.biopay.agent.ui.BeneficiaryTone;
 
 import java.util.List;
 import java.util.concurrent.ExecutorService;
@@ -33,13 +35,18 @@ public class FingerprintVerifyActivity extends BaseActivity {
     private static final String EXTRA_BENEFICIARY_ID = "beneficiary_id";
     private static final String EXTRA_PERSON_NAME = "person_name";
     private static final String EXTRA_SUBTITLE = "subtitle";
+    private static final String EXTRA_BENEFICIARY_TYPE = "beneficiary_type";
+    private static final String EXTRA_GENDER = "gender";
 
-    public static Intent intentFor(Context context, String householdNumber, String beneficiaryId, String personName, String subtitle) {
+    public static Intent intentFor(Context context, String householdNumber, String beneficiaryId, String personName,
+            String subtitle, int beneficiaryType, String gender) {
         Intent intent = new Intent(context, FingerprintVerifyActivity.class);
         intent.putExtra(EXTRA_HOUSEHOLD_NUMBER, householdNumber);
         intent.putExtra(EXTRA_BENEFICIARY_ID, beneficiaryId);
         intent.putExtra(EXTRA_PERSON_NAME, personName);
         intent.putExtra(EXTRA_SUBTITLE, subtitle);
+        intent.putExtra(EXTRA_BENEFICIARY_TYPE, beneficiaryType);
+        intent.putExtra(EXTRA_GENDER, gender);
         return intent;
     }
 
@@ -67,6 +74,9 @@ public class FingerprintVerifyActivity extends BaseActivity {
         personName = getIntent().getStringExtra(EXTRA_PERSON_NAME);
         ((TextView) findViewById(R.id.tvPersonName)).setText(personName);
         ((TextView) findViewById(R.id.tvPersonSubtitle)).setText(getIntent().getStringExtra(EXTRA_SUBTITLE));
+        findViewById(R.id.verificationRoot).setBackgroundColor(ContextCompat.getColor(this,
+                BeneficiaryTone.background(getIntent().getIntExtra(EXTRA_BENEFICIARY_TYPE,
+                        Beneficiary.TYPE_HOUSEHOLD_HEAD), getIntent().getStringExtra(EXTRA_GENDER))));
 
         findViewById(R.id.btnCancel).setOnClickListener(v -> {
             sessionEnding = true;

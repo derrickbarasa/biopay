@@ -607,9 +607,12 @@ public class Biometric extends AbstractVerticle {
 
         pool.preparedQuery("SELECT pay.*, COALESCE(pay.household_name,h.household_name) AS resolved_household_name, "
                         + "COALESCE(pay.boma_code,h.boma_code) AS village_code FROM payments pay "
+                        + "LEFT JOIN payment_cycles pc ON pc.id=pay.payment_cycle_id "
                         + "LEFT JOIN households h ON h.household_number=pay.household_number "
                         + "AND h.organization_code=pay.organization_code "
-                        + "WHERE pay.organization_code=@p1 ORDER BY pay.created_at DESC")
+                        + "WHERE pay.organization_code=@p1 AND pay.rejected=0 "
+                        + "AND (pay.payment_cycle_id IS NULL OR pc.status IN ('APPROVED','DISBURSED')) "
+                        + "ORDER BY pay.created_at DESC")
                 .execute(Tuple.of(partnerCode))
                 .onFailure(err -> onDbError(message, err))
                 .onSuccess(rows -> {
@@ -653,7 +656,10 @@ public class Biometric extends AbstractVerticle {
             // payment moves to FAILED (status=2) rather than staying pending forever, so the
             // System Owner can see it and recover it with PAY_PAYMENT_ONLINE from the dashboard.
             String failSql = "UPDATE payments SET status=2, updated_at=GETDATE() "
-                    + "WHERE id=@p1 AND organization_code=@p2 AND household_number=@p3 AND status=0";
+                    + "WHERE id=@p1 AND organization_code=@p2 AND household_number=@p3 AND status=0 "
+                    + "AND rejected=0 AND (payment_cycle_id IS NULL OR EXISTS (SELECT 1 "
+                    + "FROM payment_cycles pc WHERE pc.id=payments.payment_cycle_id "
+                    + "AND pc.status IN ('APPROVED','DISBURSED')))";
             pool.preparedQuery(failSql)
                     .execute(Tuple.of(paymentId, partnerCode, householdNumber))
                     .onFailure(err -> onDbError(message, err))
@@ -673,7 +679,10 @@ public class Biometric extends AbstractVerticle {
             String update = "UPDATE payments SET officer_code=@p1, matched_fp=@p2, matched_face_uuid=@p3, "
                     + "latitude=@p4, longitude=@p5, status=1, approved=1, verified_by=@p6, "
                     + "verified_at=GETDATE(), updated_at=GETDATE() "
-                    + "WHERE id=@p7 AND organization_code=@p8 AND household_number=@p9 AND status=0";
+                    + "WHERE id=@p7 AND organization_code=@p8 AND household_number=@p9 AND status=0 "
+                    + "AND rejected=0 AND (payment_cycle_id IS NULL OR EXISTS (SELECT 1 "
+                    + "FROM payment_cycles pc WHERE pc.id=payments.payment_cycle_id "
+                    + "AND pc.status IN ('APPROVED','DISBURSED')))";
             pool.preparedQuery(update)
                     .execute(Tuple.of(String.valueOf(payload.getValue("actorId")),
                             payload.getString("fingerprintUuid"), payload.getString("faceUuid"),

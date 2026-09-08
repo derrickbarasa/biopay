@@ -51,9 +51,7 @@
                     <View style="@style/BioPay.RowDivider" />
                     <include layout="@layout/row_more_item" android:id="@+id/rowAttendance" />
                     <View style="@style/BioPay.RowDivider" />
-                    <include layout="@layout/row_more_item" android:id="@+id/rowVouchers" />
-                    <View style="@style/BioPay.RowDivider" />
-                    <include layout="@layout/row_more_item" android:id="@+id/rowAlternates" />
+                    <include layout="@layout/row_more_item" android:id="@+id/rowActivities" />
                     <View style="@style/BioPay.RowDivider" />
                     <include layout="@layout/row_more_item" android:id="@+id/rowMyLocation" />
                     <View style="@style/BioPay.RowDivider" />

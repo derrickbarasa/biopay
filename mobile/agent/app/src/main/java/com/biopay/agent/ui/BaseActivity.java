@@ -14,11 +14,11 @@ import androidx.core.view.WindowInsetsCompat;
 import com.google.android.material.appbar.MaterialToolbar;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
 import com.biopay.agent.R;
-import com.biopay.agent.feed.ActivityFeedActivity;
 import com.biopay.agent.home.HomeActivity;
 import com.biopay.agent.households.HouseholdListActivity;
 import com.biopay.agent.more.MoreActivity;
 import com.biopay.agent.payments.PaymentsActivity;
+import com.biopay.agent.vouchers.VoucherRedemptionActivity;
 
 import android.content.Intent;
 
@@ -82,8 +82,8 @@ public abstract class BaseActivity extends AppCompatActivity {
                 destination = PaymentsActivity.class;
             } else if (targetId == R.id.navHouseholds) {
                 destination = HouseholdListActivity.class;
-            } else if (targetId == R.id.navActivityFeed) {
-                destination = ActivityFeedActivity.class;
+            } else if (targetId == R.id.navVouchers) {
+                destination = VoucherRedemptionActivity.class;
             } else if (targetId == R.id.navMore) {
                 destination = MoreActivity.class;
             } else {

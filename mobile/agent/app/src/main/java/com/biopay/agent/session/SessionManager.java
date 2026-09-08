@@ -23,6 +23,7 @@ public class SessionManager {
     private static final String KEY_PARTNER_CODE = "partner_code";
     private static final String KEY_VERIFICATION_METHOD = "verification_method";
     private static final String KEY_APP_BACKGROUNDED_AT = "app_backgrounded_at";
+    private static final String KEY_OFFLINE_SESSION = "offline_session";
 
     private final SharedPreferences prefs;
 
@@ -42,7 +43,24 @@ public class SessionManager {
         editor.putInt(KEY_ANCHOR_ID, anchorId == null ? -1 : anchorId);
         editor.putString(KEY_PARTNER_CODE, partnerCode);
         editor.putString(KEY_VERIFICATION_METHOD, verificationMethod);
+        editor.putBoolean(KEY_OFFLINE_SESSION, false);
         editor.apply();
+    }
+
+    /** Creates a transient app session from a previously server-validated local profile. */
+    public void saveOfflineSession(OfflineAccessManager.CachedProfile profile) {
+        prefs.edit()
+                .remove(KEY_ACCESS_TOKEN)
+                .remove(KEY_REFRESH_TOKEN)
+                .putBoolean(KEY_OFFLINE_SESSION, true)
+                .putInt(KEY_USER_ID, profile.userId)
+                .putString(KEY_EMAIL, profile.email)
+                .putString(KEY_FIRST_NAME, profile.firstName)
+                .putString(KEY_LAST_NAME, profile.lastName)
+                .putInt(KEY_ANCHOR_ID, profile.anchorId == null ? -1 : profile.anchorId)
+                .putString(KEY_PARTNER_CODE, profile.partnerCode)
+                .putString(KEY_VERIFICATION_METHOD, profile.verificationMethod)
+                .apply();
     }
 
     /** Called after a successful token refresh -- only the token pair changes. */
@@ -58,6 +76,10 @@ public class SessionManager {
     }
 
     public boolean isLoggedIn() {
+        return getAccessToken() != null || prefs.getBoolean(KEY_OFFLINE_SESSION, false);
+    }
+
+    public boolean hasOnlineSession() {
         return getAccessToken() != null;
     }
 

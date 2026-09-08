@@ -38,8 +38,11 @@ public class AlternateListAdapter extends RecyclerView.Adapter<AlternateListAdap
                 : alternate.relationship;
         String phone = alternate.phoneNumber == null || alternate.phoneNumber.isEmpty()
                 ? alternate.alternateNumber : alternate.phoneNumber;
+        String gender = alternate.gender == null || alternate.gender.trim().isEmpty()
+                ? holder.itemView.getContext().getString(R.string.gender_not_recorded)
+                : alternate.gender.trim();
         holder.detail.setText(holder.itemView.getContext().getString(
-                R.string.alternate_detail, relationship, phone));
+                R.string.alternate_detail_with_gender, relationship, gender, phone));
     }
 
     @Override public int getItemCount() { return alternates.size(); }

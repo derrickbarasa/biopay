@@ -16,6 +16,7 @@ import com.biopay.agent.data.FingerprintDao;
 import com.biopay.agent.data.HouseholdDao;
 import com.biopay.agent.data.PaymentDao;
 import com.biopay.agent.ui.BaseActivity;
+import com.biopay.agent.ui.SearchViewHelper;
 import com.google.android.material.chip.ChipGroup;
 
 import java.util.ArrayList;
@@ -50,6 +51,7 @@ public class HouseholdListActivity extends BaseActivity {
         recyclerView.setAdapter(adapter);
 
         SearchView searchView = findViewById(R.id.searchView);
+        SearchViewHelper.makeFullyClickable(searchView);
         searchView.setOnQueryTextListener(new SearchView.OnQueryTextListener() {
             @Override
             public boolean onQueryTextSubmit(String query) {

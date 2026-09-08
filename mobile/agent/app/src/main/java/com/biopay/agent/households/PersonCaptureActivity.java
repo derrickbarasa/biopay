@@ -1,19 +1,25 @@
 package com.biopay.agent.households;
 
+import android.Manifest;
 import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.EditText;
+import android.widget.ImageView;
 import android.widget.TextView;
+import android.widget.ArrayAdapter;
+import android.widget.AutoCompleteTextView;
 
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AlertDialog;
+import androidx.core.content.ContextCompat;
 
 import com.biopay.agent.R;
 import com.biopay.agent.attendance.Beneficiary;
@@ -24,6 +30,7 @@ import com.biopay.agent.biometric.CaptureCallback;
 import com.biopay.agent.data.AlternateDao;
 import com.biopay.agent.data.FaceDao;
 import com.biopay.agent.data.FingerprintDao;
+import com.biopay.agent.data.ImageDao;
 import com.biopay.agent.face.FaceCaptureActivity;
 import com.biopay.agent.face.FaceRecognitionEngine;
 import com.biopay.agent.face.FaceRecognitionException;
@@ -31,15 +38,21 @@ import com.biopay.agent.face.MlKitFaceRecognitionEngine;
 import com.biopay.agent.session.SessionManager;
 import com.biopay.agent.ui.BaseActivity;
 import com.biopay.agent.ui.OutcomeFeedback;
+import com.biopay.agent.ui.ThumbnailLoader;
+import com.google.android.material.button.MaterialButton;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 import org.json.JSONArray;
 
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.OutputStream;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -90,6 +103,7 @@ public class PersonCaptureActivity extends BaseActivity {
     private FingerprintDao fingerprintDao;
     private FaceDao faceDao;
     private AlternateDao alternateDao;
+    private ImageDao imageDao;
 
     private String householdNumber;
     private String method;
@@ -101,6 +115,7 @@ public class PersonCaptureActivity extends BaseActivity {
     private boolean needsFace;
     private boolean fingerprintCaptured;
     private boolean faceCaptured;
+    private final Set<Integer> capturedFingers = new HashSet<>();
 
     private TextView tvPersonName;
     private TextView tvPersonSubtitle;
@@ -111,11 +126,34 @@ public class PersonCaptureActivity extends BaseActivity {
     private View doneSection;
     private TextView tvDoneMessage;
 
+    /** {@code fingerViews[i]} is the tappable circle for {@link FingerPosition#RIGHT_HAND}[0..4]
+     *  then {@link FingerPosition#LEFT_HAND}[0..4], i.e. index i holds finger position i+1. */
+    private View[] fingerViews;
+    private ImageView ivPersonPhoto;
+    private TextView tvPhotoRowStatus;
+    private MaterialButton btnCapturePhoto;
+
     private final ActivityResultLauncher<Intent> faceCaptureLauncher =
             registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {
                 if (result.getResultCode() != RESULT_OK || result.getData() == null) return;
                 String path = result.getData().getStringExtra(FaceCaptureActivity.EXTRA_RESULT_IMAGE_PATH);
                 if (path != null) embedFace(path);
+            });
+
+    private final ActivityResultLauncher<Intent> photoCaptureLauncher =
+            registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {
+                if (result.getResultCode() != RESULT_OK || result.getData() == null) return;
+                String path = result.getData().getStringExtra(PhotoCaptureActivity.EXTRA_RESULT_IMAGE_PATH);
+                if (path != null) savePhoto(path);
+            });
+
+    private final ActivityResultLauncher<String> cameraPermissionLauncher =
+            registerForActivityResult(new ActivityResultContracts.RequestPermission(), granted -> {
+                if (granted) {
+                    photoCaptureLauncher.launch(new Intent(this, PhotoCaptureActivity.class));
+                } else {
+                    OutcomeFeedback.error(this, R.string.photo_capture_permission_denied);
+                }
             });
 
     @Override
@@ -128,6 +166,7 @@ public class PersonCaptureActivity extends BaseActivity {
         fingerprintDao = new FingerprintDao(this);
         faceDao = new FaceDao(this);
         alternateDao = new AlternateDao(this);
+        imageDao = new ImageDao(this);
 
         tvPersonName = findViewById(R.id.tvPersonName);
         tvPersonSubtitle = findViewById(R.id.tvPersonSubtitle);
@@ -138,7 +177,27 @@ public class PersonCaptureActivity extends BaseActivity {
         doneSection = findViewById(R.id.doneSection);
         tvDoneMessage = findViewById(R.id.tvDoneMessage);
 
-        findViewById(R.id.btnCaptureFingerprint).setOnClickListener(v -> captureFingerprint());
+        fingerViews = new View[]{
+                findViewById(R.id.finger1), findViewById(R.id.finger2), findViewById(R.id.finger3),
+                findViewById(R.id.finger4), findViewById(R.id.finger5), findViewById(R.id.finger6),
+                findViewById(R.id.finger7), findViewById(R.id.finger8), findViewById(R.id.finger9),
+                findViewById(R.id.finger10)};
+        for (int i = 0; i < fingerViews.length; i++) {
+            int fingerPosition = i + 1;
+            fingerViews[i].setOnClickListener(v -> onFingerTapped(fingerPosition));
+        }
+
+        ivPersonPhoto = findViewById(R.id.ivPersonPhoto);
+        tvPhotoRowStatus = findViewById(R.id.tvPhotoRowStatus);
+        btnCapturePhoto = findViewById(R.id.btnCapturePhoto);
+        btnCapturePhoto.setOnClickListener(v -> {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+                photoCaptureLauncher.launch(new Intent(this, PhotoCaptureActivity.class));
+            } else {
+                cameraPermissionLauncher.launch(Manifest.permission.CAMERA);
+            }
+        });
+
         findViewById(R.id.btnCaptureFace).setOnClickListener(v ->
                 faceCaptureLauncher.launch(new Intent(this, FaceCaptureActivity.class)));
         findViewById(R.id.btnAddPerson).setOnClickListener(v -> showAddAlternateDialog());
@@ -175,7 +234,9 @@ public class PersonCaptureActivity extends BaseActivity {
 
         needsFingerprint = "FINGERPRINT".equals(method) || "FINGERPRINT_AND_FACE".equals(method);
         needsFace = "FACE".equals(method) || "FINGERPRINT_AND_FACE".equals(method);
-        fingerprintCaptured = needsFingerprint && fingerprintDao.countForBeneficiary(beneficiaryId) > 0;
+        capturedFingers.clear();
+        capturedFingers.addAll(fingerprintDao.capturedFingerNumbers(beneficiaryId));
+        fingerprintCaptured = needsFingerprint && !capturedFingers.isEmpty();
         faceCaptured = needsFace && faceDao.existsForBeneficiary(beneficiaryId);
 
         tvPersonName.setText(personName);
@@ -183,10 +244,29 @@ public class PersonCaptureActivity extends BaseActivity {
                 ? R.string.person_capture_subtitle_head : R.string.person_capture_subtitle_alternate);
         rowFingerprint.setVisibility(needsFingerprint ? View.VISIBLE : View.GONE);
         rowFace.setVisibility(needsFace ? View.VISIBLE : View.GONE);
-        tvFingerprintRowStatus.setText(fingerprintCaptured ? R.string.person_capture_captured : R.string.person_capture_not_captured);
+        for (int i = 0; i < fingerViews.length; i++) {
+            fingerViews[i].setSelected(capturedFingers.contains(i + 1));
+        }
+        updateFingerprintStatusText();
         tvFaceRowStatus.setText(faceCaptured ? R.string.person_capture_captured : R.string.person_capture_not_captured);
+        refreshPhoto();
         doneSection.setVisibility(View.GONE);
         updateDoneState();
+    }
+
+    private void updateFingerprintStatusText() {
+        tvFingerprintRowStatus.setText(capturedFingers.isEmpty()
+                ? getString(R.string.person_capture_not_captured)
+                : getString(R.string.person_capture_fingerprint_count, capturedFingers.size()));
+    }
+
+    private void refreshPhoto() {
+        String path = imageDao.latestLocalPathForBeneficiary(beneficiaryId);
+        boolean hasPhoto = ThumbnailLoader.loadInto(ivPersonPhoto, path, 72);
+        if (!hasPhoto) ivPersonPhoto.setImageResource(R.drawable.ic_profile);
+        ThumbnailLoader.makeExpandable(ivPersonPhoto, path, hasPhoto);
+        tvPhotoRowStatus.setText(hasPhoto ? R.string.person_capture_captured : R.string.person_capture_not_captured);
+        btnCapturePhoto.setText(hasPhoto ? R.string.person_capture_photo_retake_action : R.string.person_capture_photo_action);
     }
 
     private void updateDoneState() {
@@ -200,7 +280,24 @@ public class PersonCaptureActivity extends BaseActivity {
 
     // ---- Fingerprint capture --------------------------------------------------------------
 
-    private void captureFingerprint() {
+    /** Tapping a finger on the hand-picker: fresh capture goes straight to the scanner; an
+     *  already-captured (green) finger asks for confirmation first since scanning replaces its
+     *  stored template. */
+    private void onFingerTapped(int fingerPosition) {
+        if (capturedFingers.contains(fingerPosition)) {
+            new MaterialAlertDialogBuilder(this)
+                    .setTitle(R.string.person_capture_recapture_title)
+                    .setMessage(getString(R.string.person_capture_recapture_message, FingerPosition.fullLabel(fingerPosition)))
+                    .setNegativeButton(R.string.person_capture_recapture_cancel, null)
+                    .setPositiveButton(R.string.person_capture_recapture_confirm,
+                            (dialog, which) -> captureFingerprint(fingerPosition))
+                    .show();
+        } else {
+            captureFingerprint(fingerPosition);
+        }
+    }
+
+    private void captureFingerprint(int fingerPosition) {
         BiometricDevice device = BiometricDeviceFactory.create();
         try {
             device.open(this, null);
@@ -223,7 +320,7 @@ public class PersonCaptureActivity extends BaseActivity {
         View content = LayoutInflater.from(this).inflate(R.layout.dialog_verify_progress, null);
         TextView progress = content.findViewById(R.id.tvVerifyProgress);
         AlertDialog dialog = new MaterialAlertDialogBuilder(this)
-                .setTitle(R.string.person_capture_fingerprint_action)
+                .setTitle(FingerPosition.fullLabel(fingerPosition))
                 .setView(content)
                 .setCancelable(false)
                 .setNegativeButton(R.string.attendance_cancel, (ignored, which) -> {
@@ -233,17 +330,18 @@ public class PersonCaptureActivity extends BaseActivity {
                 .create();
         dialog.show();
 
-        device.startCapture(1, new CaptureCallback() {
+        device.startCapture(fingerPosition, new CaptureCallback() {
             @Override public void onProgress(String message) { progress.setText(message); }
             @Override public void onPreviewFrame(Bitmap frame) { }
 
             @Override public void onCaptured(byte[] template, Bitmap finalImage) {
                 progress.setText(R.string.person_capture_checking_duplicate);
-                checkDuplicateThenSave(device, template, dialog);
+                checkDuplicateThenSave(device, fingerPosition, template, dialog);
             }
 
             @Override public void onError(int errorCode, String message) {
                 device.close();
+                if (!isAliveForUi()) return;
                 dialog.dismiss();
                 OutcomeFeedback.error(PersonCaptureActivity.this,
                         getString(R.string.person_capture_failed, message));
@@ -251,11 +349,22 @@ public class PersonCaptureActivity extends BaseActivity {
         });
     }
 
+    /** A live fingerprint scan or the offline duplicate-check that follows it can take several
+     *  seconds; if the officer backgrounds the app (screen lock, task switch, "don't keep
+     *  activities") during that window, this activity's window can already be torn down by the
+     *  time the async result arrives. Dismissing a dialog or touching views on a torn-down
+     *  activity throws {@code IllegalArgumentException: ... not attached to window manager} and
+     *  crashes the app -- confirmed on-device, see the 2026-09-08 progress.md entry. Every
+     *  callback that reaches the UI after crossing a thread/async boundary checks this first. */
+    private boolean isAliveForUi() {
+        return !isFinishing() && !isDestroyed();
+    }
+
     /** Runs after a fresh capture, before it's persisted: compares the new template against
      *  every other beneficiary's stored fingerprint (offline, no extra live scan) so the same
      *  finger can't be enrolled under two different people. Reused the {@code device} connection
      *  the capture just opened rather than reopening it. */
-    private void checkDuplicateThenSave(BiometricDevice device, byte[] template, AlertDialog dialog) {
+    private void checkDuplicateThenSave(BiometricDevice device, int fingerPosition, byte[] template, AlertDialog dialog) {
         List<FingerprintDao.BeneficiaryTemplate> others = fingerprintDao.templatesExcludingBeneficiary(beneficiaryId);
         new Thread(() -> {
             boolean duplicate = false;
@@ -274,22 +383,71 @@ public class PersonCaptureActivity extends BaseActivity {
             boolean hadError = checkFailed;
             runOnUiThread(() -> {
                 device.close();
+                if (!isAliveForUi()) return;
                 dialog.dismiss();
                 if (isDuplicate) {
                     OutcomeFeedback.error(this, R.string.person_capture_fingerprint_duplicate);
                 } else if (hadError) {
                     OutcomeFeedback.error(this, R.string.person_capture_fingerprint_check_failed);
                 } else {
+                    // Replaces this exact finger's previous template (if any) rather than
+                    // accumulating a second row for the same finger position -- a no-op delete
+                    // on a fresh capture.
+                    fingerprintDao.deleteForBeneficiaryAndFinger(beneficiaryId, fingerPosition);
                     fingerprintDao.save(String.valueOf(sessionManager.getUserId()), sessionManager.getPartnerCode(),
-                            beneficiaryType, beneficiaryId, 1, UUID.randomUUID().toString(), template,
+                            beneficiaryType, beneficiaryId, fingerPosition, UUID.randomUUID().toString(), template,
                             device.getDeviceId());
+                    capturedFingers.add(fingerPosition);
+                    fingerViews[fingerPosition - 1].setSelected(true);
+                    updateFingerprintStatusText();
                     fingerprintCaptured = true;
-                    tvFingerprintRowStatus.setText(R.string.person_capture_captured);
                     updateDoneState();
                     OutcomeFeedback.success(this, R.string.person_capture_fingerprint_success);
                 }
             });
         }).start();
+    }
+
+    // ---- Photo capture (not used for verification -- see PhotoCaptureActivity) -----------
+
+    private void savePhoto(String cachePath) {
+        String targetBeneficiaryId = beneficiaryId;
+        int targetBeneficiaryType = beneficiaryType;
+        new Thread(() -> {
+            try {
+                File dir = new File(getFilesDir(), "photos");
+                if (!dir.exists() && !dir.mkdirs() && !dir.exists()) {
+                    throw new IOException("Could not create photo storage directory");
+                }
+                File dest = new File(dir, targetBeneficiaryId + "_" + System.currentTimeMillis() + ".jpg");
+                copyFile(new File(cachePath), dest);
+                new File(cachePath).delete();
+                imageDao.save(String.valueOf(sessionManager.getUserId()), sessionManager.getPartnerCode(),
+                        targetBeneficiaryType, targetBeneficiaryId, dest.getAbsolutePath());
+                runOnUiThread(() -> {
+                    if (!isAliveForUi()) return;
+                    // The person shown may have changed (e.g. "Add another person") while the
+                    // photo was being copied off the UI thread -- only refresh if it's still theirs.
+                    if (targetBeneficiaryId.equals(beneficiaryId)) refreshPhoto();
+                    OutcomeFeedback.success(this, R.string.person_capture_photo_success);
+                });
+            } catch (IOException ex) {
+                Log.e(TAG, "Failed to save person photo", ex);
+                runOnUiThread(() -> {
+                    if (isAliveForUi()) OutcomeFeedback.error(this, R.string.person_capture_photo_failed);
+                });
+            }
+        }).start();
+    }
+
+    private static void copyFile(File source, File dest) throws IOException {
+        try (FileInputStream in = new FileInputStream(source); OutputStream out = new FileOutputStream(dest)) {
+            byte[] buffer = new byte[8192];
+            int read;
+            while ((read = in.read(buffer)) >= 0) {
+                out.write(buffer, 0, read);
+            }
+        }
     }
 
     // ---- Face capture (real embedding pipeline; still an explicitly unvalidated prototype --
@@ -307,6 +465,7 @@ public class PersonCaptureActivity extends BaseActivity {
                         beneficiaryType, beneficiaryId, UUID.randomUUID().toString(), embeddingJson,
                         engine.modelVersion(), result.qualityScore);
                 runOnUiThread(() -> {
+                    if (!isAliveForUi()) return;
                     faceCaptured = true;
                     tvFaceRowStatus.setText(R.string.person_capture_captured);
                     updateDoneState();
@@ -314,8 +473,12 @@ public class PersonCaptureActivity extends BaseActivity {
                 });
             } catch (FaceRecognitionException | IOException | org.json.JSONException ex) {
                 String detail = ex.getMessage();
-                runOnUiThread(() -> OutcomeFeedback.error(PersonCaptureActivity.this,
-                        getString(R.string.person_capture_failed, detail)));
+                runOnUiThread(() -> {
+                    if (isAliveForUi()) {
+                        OutcomeFeedback.error(PersonCaptureActivity.this,
+                                getString(R.string.person_capture_failed, detail));
+                    }
+                });
             } finally {
                 engine.close();
                 new File(imagePath).delete();
@@ -342,9 +505,16 @@ public class PersonCaptureActivity extends BaseActivity {
     private void showAddAlternateDialog() {
         View content = LayoutInflater.from(this).inflate(R.layout.dialog_add_alternate, null);
         EditText etName = content.findViewById(R.id.etAlternateName);
-        EditText etRelationship = content.findViewById(R.id.etAlternateRelationship);
+        AutoCompleteTextView etRelationship = content.findViewById(R.id.etAlternateRelationship);
         EditText etAge = content.findViewById(R.id.etAlternateAge);
         EditText etPhone = content.findViewById(R.id.etAlternatePhone);
+        AutoCompleteTextView genderField = content.findViewById(R.id.spinnerAlternateGender);
+        String[] genderOptions = {getString(R.string.gender_male), getString(R.string.gender_female)};
+        genderField.setAdapter(new ArrayAdapter<>(this,
+                android.R.layout.simple_dropdown_item_1line, genderOptions));
+        String[] relationshipOptions = getResources().getStringArray(R.array.alternate_relationship_options);
+        etRelationship.setAdapter(new ArrayAdapter<>(this,
+                android.R.layout.simple_dropdown_item_1line, relationshipOptions));
 
         AlertDialog addPersonDialog = new MaterialAlertDialogBuilder(this)
                 .setTitle(R.string.person_capture_add_another)
@@ -355,10 +525,23 @@ public class PersonCaptureActivity extends BaseActivity {
                     // the only thing this screen can do leaves nothing to show.
                     if (beneficiaryId == null) finish();
                 })
-                .setPositiveButton(R.string.person_capture_add_confirm, (dialog, which) -> {
+                .setPositiveButton(R.string.person_capture_add_confirm, null)
+                .create();
+        addPersonDialog.setOnShowListener(ignored -> addPersonDialog.getButton(AlertDialog.BUTTON_POSITIVE)
+                .setOnClickListener(button -> {
                     String name = etName.getText().toString().trim();
                     if (name.isEmpty()) {
                         OutcomeFeedback.error(this, R.string.field_alternate_name);
+                        return;
+                    }
+                    String relationship = etRelationship.getText().toString().trim();
+                    if (relationship.isEmpty()) {
+                        OutcomeFeedback.error(this, R.string.alternate_relationship_required);
+                        return;
+                    }
+                    String gender = genderField.getText().toString().trim();
+                    if (gender.isEmpty()) {
+                        OutcomeFeedback.error(this, R.string.alternate_gender_required);
                         return;
                     }
                     String alternateNumber = "ALT" + Long.toString(System.currentTimeMillis(), 36).toUpperCase(Locale.US);
@@ -368,15 +551,17 @@ public class PersonCaptureActivity extends BaseActivity {
                     values.put("supervisor_id", String.valueOf(sessionManager.getUserId()));
                     values.put("partner_code", sessionManager.getPartnerCode());
                     values.put("alternate_name", name);
-                    values.put("relationship", etRelationship.getText().toString().trim());
+                    values.put("relationship", relationship);
+                    values.put("gender", gender);
                     values.put("age", parseIntOrNull(etAge.getText().toString()));
                     values.put("phone_number", etPhone.getText().toString().trim());
                     values.put("registration_method", method);
                     alternateDao.insert(values);
 
                     applyPerson(alternateNumber, Beneficiary.TYPE_ALTERNATE, name);
-                })
-                .show();
+                    addPersonDialog.dismiss();
+                }));
+        addPersonDialog.show();
     }
 
     private static Integer parseIntOrNull(String text) {

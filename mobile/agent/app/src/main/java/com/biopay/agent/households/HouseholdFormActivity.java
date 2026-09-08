@@ -25,10 +25,13 @@ import com.biopay.agent.data.FaceDao;
 import com.biopay.agent.data.FingerprintDao;
 import com.biopay.agent.data.GeoDao;
 import com.biopay.agent.data.HouseholdDao;
+import com.biopay.agent.data.ImageDao;
 import com.biopay.agent.location.LocationHelper;
 import com.biopay.agent.session.SessionManager;
 import com.biopay.agent.ui.BaseActivity;
+import com.biopay.agent.ui.ThumbnailLoader;
 import com.google.android.material.button.MaterialButton;
+import com.google.android.material.imageview.ShapeableImageView;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -67,6 +70,7 @@ public class HouseholdFormActivity extends BaseActivity {
     private AlternateDao alternateDao;
     private FingerprintDao fingerprintDao;
     private FaceDao faceDao;
+    private ImageDao imageDao;
     private SessionManager sessionManager;
     private String editingHouseholdNumber;
 
@@ -136,6 +140,7 @@ public class HouseholdFormActivity extends BaseActivity {
         alternateDao = new AlternateDao(this);
         fingerprintDao = new FingerprintDao(this);
         faceDao = new FaceDao(this);
+        imageDao = new ImageDao(this);
         sessionManager = new SessionManager(this);
         editingHouseholdNumber = getIntent().getStringExtra(EXTRA_HOUSEHOLD_NUMBER);
         buildRegistrationOptions();
@@ -181,7 +186,7 @@ public class HouseholdFormActivity extends BaseActivity {
 
         spinnerRegistrationMethod.setAdapter(new ArrayAdapter<>(this,
                 android.R.layout.simple_dropdown_item_1line, registrationLabels));
-        spinnerRegistrationMethod.setText(registrationLabels[0], false);
+        spinnerRegistrationMethod.setText(registrationLabels[defaultRegistrationIndex()], false);
         spinnerRegistrationMethod.setEnabled(registrationLabels.length > 1);
         spinnerRegistrationMethod.setOnItemClickListener((parent, view, position, id) ->
                 updateFaceAccuracyNoticeVisibility());
@@ -224,6 +229,14 @@ public class HouseholdFormActivity extends BaseActivity {
             registrationOptions = new String[]{OPTION_FINGERPRINT};
             registrationLabels = new String[]{"Fingerprint"};
         }
+    }
+
+    /** When the org allows both methods, default new registrations to capturing both rather than
+     *  fingerprint-only -- the officer can still narrow it to fingerprint-only or face-only from
+     *  the dropdown. */
+    private int defaultRegistrationIndex() {
+        int bothIndex = java.util.Arrays.asList(registrationOptions).indexOf(OPTION_BOTH);
+        return bothIndex >= 0 ? bothIndex : 0;
     }
 
     private void updateFaceAccuracyNoticeVisibility() {
@@ -494,25 +507,35 @@ public class HouseholdFormActivity extends BaseActivity {
     }
 
     private void addCapturedPersonRow(LinearLayout container, String beneficiaryId, int beneficiaryType, String name) {
-        boolean fingerprintDone = fingerprintDao.countForBeneficiary(beneficiaryId) > 0;
+        int fingerCount = fingerprintDao.capturedFingerNumbers(beneficiaryId).size();
         boolean faceDone = faceDao.existsForBeneficiary(beneficiaryId);
+        String photoPath = imageDao.latestLocalPathForBeneficiary(beneficiaryId);
 
         View row = LayoutInflater.from(this).inflate(R.layout.item_captured_person, container, false);
         ((TextView) row.findViewById(R.id.tvCapturedPersonName)).setText(
                 beneficiaryType == Beneficiary.TYPE_HOUSEHOLD_HEAD
                         ? getString(R.string.household_person_head) + " - " + name
                         : getString(R.string.household_person_alternate) + " - " + name);
-        ((TextView) row.findViewById(R.id.tvCapturedPersonStatus)).setText(capturedStatusText(fingerprintDone, faceDone));
+        ((TextView) row.findViewById(R.id.tvCapturedPersonStatus)).setText(capturedStatusText(fingerCount, faceDone, photoPath != null));
+        ShapeableImageView photo = row.findViewById(R.id.ivCapturedPersonPhoto);
+        boolean hasPhoto = ThumbnailLoader.loadInto(photo, photoPath, 40);
+        if (!hasPhoto) {
+            photo.setImageResource(R.drawable.ic_profile);
+        }
+        ThumbnailLoader.makeExpandable(photo, photoPath, hasPhoto);
         row.findViewById(R.id.btnCapturePersonRow).setOnClickListener(v -> personCaptureLauncher.launch(
                 PersonCaptureActivity.captureIntent(this, editingHouseholdNumber, beneficiaryId, beneficiaryType,
                         name, selectedRegistrationCode())));
         container.addView(row);
     }
 
-    private String capturedStatusText(boolean fingerprintDone, boolean faceDone) {
+    private String capturedStatusText(int fingerCount, boolean faceDone, boolean hasPhoto) {
         List<String> captured = new ArrayList<>();
-        if (fingerprintDone) captured.add(getString(R.string.person_capture_fingerprint_label));
+        if (fingerCount > 0) {
+            captured.add(getString(R.string.person_capture_fingerprint_label) + " (" + fingerCount + ")");
+        }
         if (faceDone) captured.add(getString(R.string.person_capture_face_label));
+        if (hasPhoto) captured.add(getString(R.string.person_capture_photo_label));
         return captured.isEmpty() ? getString(R.string.household_person_not_captured)
                 : android.text.TextUtils.join(", ", captured);
     }

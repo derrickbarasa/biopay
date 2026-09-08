@@ -15,6 +15,7 @@ import com.biopay.agent.home.HomeActivity;
 import com.biopay.agent.network.ApiCallback;
 import com.biopay.agent.network.ApiClient;
 import com.biopay.agent.security.SecurityActivity;
+import com.biopay.agent.session.OfflineAccessManager;
 import com.biopay.agent.session.SessionManager;
 import com.biopay.agent.session.SubscriptionGate;
 import com.biopay.agent.session.SubscriptionLockedActivity;
@@ -34,6 +35,7 @@ public class LoginActivity extends BaseActivity {
     private ProgressBar progressBar;
     private Button btnLogin;
     private SessionManager sessionManager;
+    private OfflineAccessManager offlineAccessManager;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -41,6 +43,7 @@ public class LoginActivity extends BaseActivity {
         setContentView(R.layout.activity_login);
 
         sessionManager = new SessionManager(this);
+        offlineAccessManager = new OfflineAccessManager(this);
         etEmail = findViewById(R.id.etEmail);
         etPassword = findViewById(R.id.etPassword);
         tvErrorMessage = findViewById(R.id.tvErrorMessage);
@@ -77,6 +80,8 @@ public class LoginActivity extends BaseActivity {
             public void onSuccess(JSONObject response) {
                 JSONObject user = response.optJSONObject("user");
                 Integer anchorId = user != null && !user.isNull("anchorId") ? user.optInt("anchorId") : null;
+                int offlineAccessDays = response.optInt("offlineAccessDays",
+                        com.biopay.agent.BuildConfig.BIOPAY_OFFLINE_ACCESS_DAYS);
                 sessionManager.saveSession(
                         response.optString("accessToken"),
                         response.optString("refreshToken"),
@@ -99,6 +104,17 @@ public class LoginActivity extends BaseActivity {
                     return;
                 }
 
+                offlineAccessManager.cacheAuthenticatedIdentity(
+                        password,
+                        user != null ? user.optInt("id") : -1,
+                        user != null ? user.optString("email") : email,
+                        user != null ? user.optString("firstName") : "",
+                        user != null ? user.optString("lastName") : "",
+                        anchorId,
+                        user != null ? user.optString("partnerCode", null) : null,
+                        user != null ? user.optString("verificationMethod", "BIOMETRIC") : "BIOMETRIC",
+                        offlineAccessDays);
+
                 // Mirrors the web dashboard's archived-subscription gate -- see
                 // SubscriptionGate's javadoc for why this only needs checking here.
                 SubscriptionGate.check(LoginActivity.this, anchorId, new SubscriptionGate.Callback() {
@@ -115,15 +131,54 @@ public class LoginActivity extends BaseActivity {
                         startActivity(new Intent(LoginActivity.this, SubscriptionLockedActivity.class));
                         finish();
                     }
+
+                    @Override
+                    public void onOnlineRequired() {
+                        sessionManager.clear();
+                        setLoading(false);
+                        showError(getString(R.string.login_online_required,
+                                offlineAccessManager.getOnlineRevalidationDays()));
+                    }
                 });
             }
 
             @Override
             public void onError(String message, String responseCode) {
                 setLoading(false);
-                showError(message);
+                // Only transport failures may fall back to the local verifier. A server-side
+                // rejection (wrong password, inactive account, etc.) is always authoritative.
+                if (responseCode == null) {
+                    attemptOfflineLogin(email, password);
+                } else {
+                    showError(message);
+                }
             }
         });
+    }
+
+    private void attemptOfflineLogin(String email, String password) {
+        OfflineAccessManager.Decision decision =
+                offlineAccessManager.evaluateOfflineLogin(email, password);
+        if (decision == OfflineAccessManager.Decision.INVALID_CREDENTIALS) {
+            showError(getString(R.string.login_offline_credentials_unavailable));
+            return;
+        }
+        if (decision == OfflineAccessManager.Decision.ONLINE_REQUIRED) {
+            showError(getString(R.string.login_online_required,
+                    offlineAccessManager.getOnlineRevalidationDays()));
+            return;
+        }
+
+        OfflineAccessManager.CachedProfile profile = offlineAccessManager.getCachedProfile();
+        if (profile == null) {
+            showError(getString(R.string.login_offline_credentials_unavailable));
+            return;
+        }
+        sessionManager.saveOfflineSession(profile);
+        Class<?> destination = decision == OfflineAccessManager.Decision.LOCKED
+                ? SubscriptionLockedActivity.class : HomeActivity.class;
+        startActivity(new Intent(this, destination));
+        finish();
     }
 
     private void setLoading(boolean loading) {

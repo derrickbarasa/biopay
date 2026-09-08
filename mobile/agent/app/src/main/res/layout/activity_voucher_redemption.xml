@@ -6,17 +6,138 @@
     android:background="@color/bp_background"
     android:fitsSystemWindows="true"
     android:orientation="vertical">
-    <com.google.android.material.appbar.MaterialToolbar android:id="@+id/toolbar" style="@style/BioPay.Toolbar" android:title="@string/voucher_title" app:navigationIcon="@drawable/ic_arrow_back" app:navigationIconTint="@color/bp_text_primary" />
-    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:paddingStart="16dp" android:paddingTop="8dp" android:paddingEnd="16dp" android:paddingBottom="8dp">
-        <TextView style="@style/BioPay.ScreenTitle" android:text="@string/voucher_title" />
-        <TextView style="@style/BioPay.SupportingText" android:layout_marginTop="4dp" android:text="@string/voucher_subtitle" />
+
+    <com.google.android.material.appbar.MaterialToolbar
+        android:id="@+id/toolbar"
+        style="@style/BioPay.Toolbar"
+        android:title="@string/voucher_title" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:orientation="vertical"
+        android:paddingStart="16dp"
+        android:paddingTop="8dp"
+        android:paddingEnd="16dp">
+
+        <TextView
+            style="@style/BioPay.ScreenTitle"
+            android:text="@string/voucher_title" />
+
+        <TextView
+            style="@style/BioPay.SupportingText"
+            android:layout_marginTop="4dp"
+            android:text="@string/voucher_subtitle" />
+
+        <androidx.appcompat.widget.SearchView
+            android:id="@+id/searchVouchers"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:layout_marginTop="12dp"
+            android:background="@drawable/bg_icon_container"
+            android:iconifiedByDefault="false"
+            android:queryHint="@string/voucher_search_hint" />
+
+        <HorizontalScrollView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:clipToPadding="false"
+            android:fillViewport="false"
+            android:scrollbars="none">
+
+            <com.google.android.material.chip.ChipGroup
+                android:id="@+id/voucherStatusFilters"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                app:checkedChip="@id/chipVoucherAll"
+                app:chipSpacingHorizontal="8dp"
+                app:selectionRequired="true"
+                app:singleSelection="true">
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/chipVoucherAll"
+                    style="@style/Widget.Material3.Chip.Filter"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:checked="true"
+                    android:text="@string/voucher_filter_all" />
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/chipVoucherAvailable"
+                    style="@style/Widget.Material3.Chip.Filter"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/voucher_filter_not_redeemed" />
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/chipVoucherRedeemed"
+                    style="@style/Widget.Material3.Chip.Filter"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/voucher_filter_redeemed" />
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/chipVoucherVoided"
+                    style="@style/Widget.Material3.Chip.Filter"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/voucher_filter_voided" />
+            </com.google.android.material.chip.ChipGroup>
+        </HorizontalScrollView>
+
+        <TextView
+            android:id="@+id/tvVoucherSummary"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:layout_marginBottom="10dp"
+            android:textColor="@color/bp_text_secondary"
+            android:textSize="13sp" />
+
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/voucherEmptyState"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:visibility="gone"
+            app:cardBackgroundColor="@color/bp_primary_container"
+            app:cardCornerRadius="@dimen/bp_radius_surface"
+            app:cardElevation="0dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="14dp">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/voucher_empty_title"
+                    android:textColor="@color/bp_on_primary_container"
+                    android:textSize="15sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/tvVoucherEmptyBody"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="3dp"
+                    android:text="@string/voucher_empty"
+                    android:textColor="@color/bp_on_primary_container"
+                    android:textSize="13sp" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/recyclerVouchers"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:clipToPadding="false"
+            android:paddingBottom="14dp" />
     </LinearLayout>
-    <FrameLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1">
-        <androidx.recyclerview.widget.RecyclerView android:id="@+id/recyclerVouchers" android:layout_width="match_parent" android:layout_height="match_parent" android:clipToPadding="false" android:paddingStart="12dp" android:paddingTop="6dp" android:paddingEnd="12dp" android:paddingBottom="20dp" />
-        <LinearLayout android:id="@+id/emptyState" android:layout_width="match_parent" android:layout_height="match_parent" android:gravity="center" android:orientation="vertical" android:padding="32dp" android:visibility="gone">
-            <ImageView android:layout_width="48dp" android:layout_height="48dp" android:contentDescription="@null" android:src="@drawable/ic_voucher" app:tint="@color/bp_secondary" />
-            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:text="@string/voucher_empty_title" android:textColor="@color/bp_text_primary" android:textSize="18sp" android:textStyle="bold" />
-            <TextView style="@style/BioPay.SupportingText" android:layout_marginTop="6dp" android:gravity="center" android:text="@string/voucher_empty" />
-        </LinearLayout>
-    </FrameLayout>
+
+    <include layout="@layout/partial_bottom_nav_bar" />
 </LinearLayout>

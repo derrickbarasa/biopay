@@ -7,8 +7,8 @@ import android.widget.ImageView;
 import android.widget.TextView;
 
 import com.biopay.agent.R;
-import com.biopay.agent.alternates.AlternatesActivity;
 import com.biopay.agent.attendance.AttendanceActivity;
+import com.biopay.agent.feed.ActivityFeedActivity;
 import com.biopay.agent.location.MyLocationActivity;
 import com.biopay.agent.profile.ProfileActivity;
 import com.biopay.agent.reports.ReportsActivity;
@@ -16,10 +16,9 @@ import com.biopay.agent.security.SecurityActivity;
 import com.biopay.agent.settings.SettingsActivity;
 import com.biopay.agent.sync.SyncCenterActivity;
 import com.biopay.agent.ui.BaseActivity;
-import com.biopay.agent.vouchers.VoucherRedemptionActivity;
 
 /**
- * Everything that isn't Home/Households/Activity: the new home for screens that used to hang
+ * Everything that isn't Home/Households/Payment/Vouchers: the home for secondary field tools
  * off the old Settings-tab-adjacent navigation before the 5-tab redesign.
  */
 public class MoreActivity extends BaseActivity {
@@ -40,10 +39,8 @@ public class MoreActivity extends BaseActivity {
                 new Intent(this, SyncCenterActivity.class));
         bindRow(R.id.rowAttendance, R.drawable.ic_attendance, R.string.more_attendance, R.string.more_attendance_body,
                 new Intent(this, AttendanceActivity.class));
-        bindRow(R.id.rowVouchers, R.drawable.ic_voucher, R.string.more_vouchers, R.string.more_vouchers_body,
-                new Intent(this, VoucherRedemptionActivity.class));
-        bindRow(R.id.rowAlternates, R.drawable.ic_alternates, R.string.more_alternates, R.string.more_alternates_body,
-                new Intent(this, AlternatesActivity.class));
+        bindRow(R.id.rowActivities, R.drawable.ic_activity, R.string.more_activities, R.string.more_activities_body,
+                new Intent(this, ActivityFeedActivity.class));
         bindRow(R.id.rowMyLocation, R.drawable.ic_location_pin, R.string.more_my_location, R.string.more_my_location_body,
                 new Intent(this, MyLocationActivity.class));
         bindRow(R.id.rowReports, R.drawable.ic_reports, R.string.more_reports, R.string.more_reports_body,

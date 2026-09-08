@@ -6,58 +6,198 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.TextView;
 
+import androidx.appcompat.app.AlertDialog;
+import androidx.appcompat.widget.SearchView;
+import androidx.core.content.ContextCompat;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
-import androidx.appcompat.app.AlertDialog;
 
 import com.biopay.agent.R;
+import com.biopay.agent.attendance.Beneficiary;
 import com.biopay.agent.biometric.BiometricDevice;
 import com.biopay.agent.biometric.BiometricDeviceException;
 import com.biopay.agent.biometric.BiometricDeviceFactory;
 import com.biopay.agent.biometric.VerifyCallback;
+import com.biopay.agent.data.AlternateDao;
 import com.biopay.agent.data.FingerprintDao;
+import com.biopay.agent.data.HouseholdDao;
 import com.biopay.agent.data.VoucherDao;
 import com.biopay.agent.location.LocationHelper;
 import com.biopay.agent.sync.SyncScheduler;
 import com.biopay.agent.ui.BaseActivity;
+import com.biopay.agent.ui.BeneficiaryTone;
 import com.biopay.agent.ui.OutcomeFeedback;
+import com.biopay.agent.ui.SearchViewHelper;
+import com.google.android.material.chip.ChipGroup;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
+import java.util.ArrayList;
 import java.util.List;
 
-/** Offline voucher list; redemption is queued only after an IDEMIA 1:1 fingerprint match. */
+/** Offline voucher ledger; issued rows can continue into IDEMIA 1:1 fingerprint redemption. */
 public class VoucherRedemptionActivity extends BaseActivity {
     private VoucherDao voucherDao;
     private FingerprintDao fingerprintDao;
+    private HouseholdDao householdDao;
+    private AlternateDao alternateDao;
     private VoucherListAdapter adapter;
+    private View voucherEmptyState;
+    private TextView voucherEmptyBody;
+    private TextView voucherSummary;
+    private List<VoucherDao.Voucher> allVouchers = new ArrayList<>();
+    private int checkedFilterId = R.id.chipVoucherAll;
+    private String currentQuery = "";
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
         setContentView(R.layout.activity_voucher_redemption);
-        setupBackToolbar(R.id.toolbar);
+        setupMainNavigation(R.id.bottomNavigation, R.id.navVouchers);
         voucherDao = new VoucherDao(this);
         fingerprintDao = new FingerprintDao(this);
-        adapter = new VoucherListAdapter(this::verify);
-        RecyclerView list = findViewById(R.id.recyclerVouchers);
-        list.setLayoutManager(new LinearLayoutManager(this));
-        list.setAdapter(adapter);
+        householdDao = new HouseholdDao(this);
+        alternateDao = new AlternateDao(this);
+
+        voucherEmptyState = findViewById(R.id.voucherEmptyState);
+        voucherEmptyBody = findViewById(R.id.tvVoucherEmptyBody);
+        voucherSummary = findViewById(R.id.tvVoucherSummary);
+        adapter = new VoucherListAdapter(this::chooseBeneficiary);
+        RecyclerView voucherList = findViewById(R.id.recyclerVouchers);
+        voucherList.setLayoutManager(new LinearLayoutManager(this));
+        voucherList.setAdapter(adapter);
+
+        SearchView voucherSearch = findViewById(R.id.searchVouchers);
+        SearchViewHelper.makeFullyClickable(voucherSearch);
+        voucherSearch.setOnQueryTextListener(new SearchView.OnQueryTextListener() {
+            @Override public boolean onQueryTextSubmit(String query) {
+                currentQuery = query == null ? "" : query.trim();
+                renderVoucherList();
+                return true;
+            }
+
+            @Override public boolean onQueryTextChange(String query) {
+                currentQuery = query == null ? "" : query.trim();
+                renderVoucherList();
+                return true;
+            }
+        });
+
+        ChipGroup filters = findViewById(R.id.voucherStatusFilters);
+        filters.setOnCheckedStateChangeListener((group, checkedIds) -> {
+            checkedFilterId = checkedIds.isEmpty() ? R.id.chipVoucherAll : checkedIds.get(0);
+            renderVoucherList();
+        });
     }
 
     @Override protected void onResume() {
         super.onResume();
-        showVouchers();
+        loadVouchers();
     }
 
-    private void showVouchers() {
-        List<VoucherDao.Voucher> rows = voucherDao.listIssued();
-        adapter.submitList(rows);
-        findViewById(R.id.emptyState).setVisibility(rows.isEmpty() ? View.VISIBLE : View.GONE);
-        findViewById(R.id.recyclerVouchers).setVisibility(rows.isEmpty() ? View.GONE : View.VISIBLE);
+    private void loadVouchers() {
+        allVouchers = voucherDao.listAll();
+        renderVoucherList();
     }
 
-    private void verify(VoucherDao.Voucher voucher) {
+    private void renderVoucherList() {
+        List<VoucherDao.Voucher> visible = new ArrayList<>();
+        for (VoucherDao.Voucher voucher : allVouchers) {
+            boolean statusMatches = checkedFilterId == R.id.chipVoucherAll
+                    || (checkedFilterId == R.id.chipVoucherAvailable && "ISSUED".equalsIgnoreCase(voucher.status))
+                    || (checkedFilterId == R.id.chipVoucherRedeemed && "REDEEMED".equalsIgnoreCase(voucher.status))
+                    || (checkedFilterId == R.id.chipVoucherVoided && "VOID".equalsIgnoreCase(voucher.status));
+            String query = currentQuery.toLowerCase(java.util.Locale.getDefault());
+            boolean householdMatches = query.isEmpty()
+                    || contains(voucher.householdName, query)
+                    || contains(voucher.householdNumber, query);
+            if (statusMatches && householdMatches) {
+                visible.add(voucher);
+            }
+        }
+        adapter.submitList(visible);
+        voucherSummary.setText(getResources().getQuantityString(
+                R.plurals.voucher_list_summary, visible.size(), visible.size()));
+        boolean empty = visible.isEmpty();
+        voucherEmptyState.setVisibility(empty ? View.VISIBLE : View.GONE);
+        findViewById(R.id.recyclerVouchers).setVisibility(empty ? View.GONE : View.VISIBLE);
+        voucherEmptyBody.setText(allVouchers.isEmpty()
+                ? R.string.voucher_empty
+                : currentQuery.isEmpty() ? R.string.voucher_filter_empty : R.string.voucher_search_empty);
+    }
+
+    private static boolean contains(String value, String query) {
+        return value != null && value.toLowerCase(java.util.Locale.getDefault()).contains(query);
+    }
+
+    private void chooseBeneficiary(VoucherDao.Voucher voucher) {
+        View content = LayoutInflater.from(this).inflate(R.layout.dialog_voucher_beneficiary_picker, null);
+        AlertDialog picker = new MaterialAlertDialogBuilder(this)
+                .setTitle(R.string.voucher_choose_person_title)
+                .setView(content)
+                .setNegativeButton(android.R.string.cancel, null)
+                .create();
+        VoucherBeneficiaryAdapter peopleAdapter = new VoucherBeneficiaryAdapter(person -> {
+            picker.dismiss();
+            verify(voucher, person);
+        });
+        RecyclerView peopleList = content.findViewById(R.id.recyclerBeneficiaries);
+        peopleList.setLayoutManager(new LinearLayoutManager(this));
+        peopleList.setAdapter(peopleAdapter);
+        List<Beneficiary> people = buildVerifiableBeneficiaries(voucher.householdNumber);
+        peopleAdapter.submitList(people);
+        View emptyState = content.findViewById(R.id.emptyState);
+        emptyState.setVisibility(people.isEmpty() ? View.VISIBLE : View.GONE);
+        SearchView searchView = content.findViewById(R.id.searchView);
+        SearchViewHelper.makeFullyClickable(searchView);
+        searchView.setOnQueryTextListener(new SearchView.OnQueryTextListener() {
+            @Override public boolean onQueryTextSubmit(String query) {
+                return filterPeople(peopleAdapter, emptyState, query);
+            }
+            @Override public boolean onQueryTextChange(String newText) {
+                return filterPeople(peopleAdapter, emptyState, newText);
+            }
+        });
+        picker.show();
+    }
+
+    private boolean filterPeople(VoucherBeneficiaryAdapter peopleAdapter, View emptyState, String query) {
+        peopleAdapter.filter(query);
+        emptyState.setVisibility(peopleAdapter.getItemCount() == 0 ? View.VISIBLE : View.GONE);
+        return true;
+    }
+
+    private List<Beneficiary> buildVerifiableBeneficiaries(String householdNumber) {
+        List<Beneficiary> people = new ArrayList<>();
+        HouseholdDao.Household household = householdDao.findByNumber(householdNumber);
+        if (household != null && fingerprintDao.countForBeneficiary(householdNumber) > 0) {
+            people.add(new Beneficiary(householdNumber, householdNumber,
+                    Beneficiary.TYPE_HOUSEHOLD_HEAD, household.householdName,
+                    getString(R.string.beneficiary_head_detail, genderLabel(household.gender)), household.gender));
+        }
+        for (AlternateDao.Alternate alternate : alternateDao.findByHousehold(householdNumber)) {
+            if (fingerprintDao.countForBeneficiary(alternate.alternateNumber) > 0) {
+                people.add(new Beneficiary(alternate.alternateNumber, householdNumber,
+                        Beneficiary.TYPE_ALTERNATE, alternate.alternateName,
+                        getString(R.string.beneficiary_alternate_detail,
+                                relationshipLabel(alternate.relationship), genderLabel(alternate.gender)),
+                        alternate.gender));
+            }
+        }
+        return people;
+    }
+
+    private String genderLabel(String gender) {
+        return gender == null || gender.trim().isEmpty()
+                ? getString(R.string.gender_not_recorded) : gender.trim();
+    }
+
+    private String relationshipLabel(String relationship) {
+        return relationship == null || relationship.trim().isEmpty()
+                ? getString(R.string.attendance_beneficiary_alternate) : relationship.trim();
+    }
+
+    private void verify(VoucherDao.Voucher voucher, Beneficiary beneficiary) {
         List<FingerprintDao.StoredTemplate> templates =
-                fingerprintDao.templatesWithUuidForBeneficiary(voucher.householdNumber);
+                fingerprintDao.templatesWithUuidForBeneficiary(beneficiary.beneficiaryId);
         if (templates.isEmpty()) {
             OutcomeFeedback.error(this, R.string.voucher_no_fingerprint);
             return;
@@ -69,18 +209,15 @@ public class VoucherRedemptionActivity extends BaseActivity {
             OutcomeFeedback.error(this, R.string.attendance_verify_error);
             return;
         } catch (Throwable error) {
-            // A missing/mismatched vendor native library throws an unchecked UnsatisfiedLinkError,
-            // not the checked exception open() declares -- confirmed on-device (see PersonCaptureActivity's
-            // matching fix). Caught broadly so a hardware/library problem degrades to the same
-            // honest message instead of crashing the app.
             android.util.Log.e("VoucherRedemption", "BiometricDevice.open() failed unexpectedly", error);
             OutcomeFeedback.error(this, R.string.attendance_verify_error);
             return;
         }
         View content = LayoutInflater.from(this).inflate(R.layout.dialog_verify_progress, null);
+        content.setBackgroundColor(ContextCompat.getColor(this, BeneficiaryTone.background(beneficiary)));
         TextView progress = content.findViewById(R.id.tvVerifyProgress);
         AlertDialog dialog = new MaterialAlertDialogBuilder(this)
-                .setTitle(R.string.voucher_verify_title)
+                .setTitle(getString(R.string.verify_method_title, beneficiary.name))
                 .setView(content)
                 .setCancelable(false)
                 .setNegativeButton(R.string.attendance_cancel, (ignored, which) -> {
@@ -124,7 +261,7 @@ public class VoucherRedemptionActivity extends BaseActivity {
                 location == null ? null : String.valueOf(location.getLatitude()),
                 location == null ? null : String.valueOf(location.getLongitude()));
         OutcomeFeedback.success(this, R.string.voucher_redeemed_queued);
-        showVouchers();
+        loadVouchers();
         SyncScheduler.triggerAutomaticNow(this);
     }
 }

@@ -21,7 +21,12 @@ const rows = computed(() => props.data.map((item) => ({
 
 <template>
   <div class="vertical-chart-scroll" tabindex="0" :aria-label="ariaLabel">
-    <div class="vertical-chart" role="img" :aria-label="ariaLabel">
+    <div
+      class="vertical-chart"
+      role="img"
+      :aria-label="ariaLabel"
+      :style="{ '--column-count': Math.max(rows.length, 1) }"
+    >
       <div v-for="row in rows" :key="row.label" class="vertical-chart__column">
         <div class="vertical-chart__plot">
           <strong>{{ row.value.toLocaleString() }}</strong>
@@ -40,16 +45,16 @@ const rows = computed(() => props.data.map((item) => ({
 <style scoped>
 .vertical-chart-scroll {
   width: 100%;
-  overflow-x: auto;
+  overflow-x: hidden;
   scrollbar-width: thin;
   scrollbar-color: #94a3b8 transparent;
 }
 .vertical-chart-scroll:focus-visible { outline: 2px solid #0f766e; outline-offset: 2px; }
 .vertical-chart {
-  min-width: 500px;
+  min-width: 0;
   display: grid;
-  grid-template-columns: repeat(6, minmax(58px, 1fr));
-  gap: 9px;
+  grid-template-columns: repeat(var(--column-count), minmax(0, 1fr));
+  gap: 7px;
 }
 .vertical-chart__column { min-width: 0; display: grid; grid-template-rows: 132px auto; text-align: center; }
 .vertical-chart__plot {
@@ -76,5 +81,14 @@ const rows = computed(() => props.data.map((item) => ({
   background: linear-gradient(180deg, #20b99f 0%, #0d9488 100%);
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 28%);
 }
-.vertical-chart__label { margin-top: 7px; color: #334155; font-size: .68rem; line-height: 1.15; }
+.vertical-chart__label { margin-top: 7px; color: #334155; font-size: .64rem; line-height: 1.15; white-space: nowrap; }
+
+@media (max-width: 600px) {
+  .vertical-chart-scroll { overflow-x: auto; }
+  .vertical-chart {
+    min-width: 500px;
+    grid-template-columns: repeat(var(--column-count), minmax(58px, 1fr));
+    gap: 9px;
+  }
+}
 </style>
