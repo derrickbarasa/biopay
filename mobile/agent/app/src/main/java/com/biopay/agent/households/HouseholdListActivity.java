@@ -1,11 +1,13 @@
 package com.biopay.agent.households;
 
 import android.content.Intent;
+import android.content.res.Configuration;
 import android.os.Bundle;
 import android.view.View;
 import android.widget.TextView;
 
 import androidx.appcompat.widget.SearchView;
+import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
@@ -46,9 +48,21 @@ public class HouseholdListActivity extends BaseActivity {
         adapter = new HouseholdListAdapter(household ->
                 startActivity(HouseholdDetailActivity.intent(this, household.householdNumber)));
 
+        boolean isLandscape = getResources().getConfiguration().orientation == Configuration.ORIENTATION_LANDSCAPE;
+
         RecyclerView recyclerView = findViewById(R.id.recyclerHouseholds);
-        recyclerView.setLayoutManager(new LinearLayoutManager(this));
+        recyclerView.setLayoutManager(isLandscape
+                ? new GridLayoutManager(this, 2)
+                : new LinearLayoutManager(this));
         recyclerView.setAdapter(adapter);
+
+        if (isLandscape) {
+            // The toolbar already carries the title; repeating it here just to burn vertical
+            // space that a short landscape viewport can't spare (see item_household.xml and the
+            // grid layout manager above for the rest of this landscape treatment).
+            findViewById(R.id.tvScreenTitle).setVisibility(View.GONE);
+            findViewById(R.id.tvScreenDescription).setVisibility(View.GONE);
+        }
 
         SearchView searchView = findViewById(R.id.searchView);
         SearchViewHelper.makeFullyClickable(searchView);

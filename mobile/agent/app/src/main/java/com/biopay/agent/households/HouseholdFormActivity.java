@@ -50,10 +50,10 @@ public class HouseholdFormActivity extends BaseActivity {
     private static final String EXTRA_HOUSEHOLD_NUMBER = "household_number";
     private static final String[] GENDER_OPTIONS = {"Male", "Female"};
     private static final String[] LEGAL_STATUS_LABELS = {
-            "Not recorded", "Citizen", "Refugee", "Internally displaced person (IDP)",
+            "Citizen", "Refugee", "Internally displaced person (IDP)",
             "Asylum seeker", "Returnee", "Stateless", "Other"};
     private static final String[] LEGAL_STATUS_CODES = {
-            "", "CITIZEN", "REFUGEE", "IDP", "ASYLUM_SEEKER", "RETURNEE", "STATELESS", "OTHER"};
+            "CITIZEN", "REFUGEE", "IDP", "ASYLUM_SEEKER", "RETURNEE", "STATELESS", "OTHER"};
 
     private static final String OPTION_FINGERPRINT = "FINGERPRINT";
     private static final String OPTION_FACE = "FACE";
@@ -178,7 +178,6 @@ public class HouseholdFormActivity extends BaseActivity {
 
         spinnerGender.setAdapter(new ArrayAdapter<>(this,
                 android.R.layout.simple_dropdown_item_1line, GENDER_OPTIONS));
-        spinnerGender.setText(GENDER_OPTIONS[0], false);
 
         spinnerLegalStatus.setAdapter(new ArrayAdapter<>(this,
                 android.R.layout.simple_dropdown_item_1line, LEGAL_STATUS_LABELS));
@@ -328,11 +327,11 @@ public class HouseholdFormActivity extends BaseActivity {
         cbChronicIllness.setChecked(hasCsvCode(household.vulnerabilityStatuses, "CHRONIC_ILLNESS"));
         cbPregnantLactating.setChecked(hasCsvCode(household.vulnerabilityStatuses, "PREGNANT_OR_LACTATING"));
         cbSingleCaregiver.setChecked(hasCsvCode(household.vulnerabilityStatuses, "SINGLE_CAREGIVER"));
-        cbLiteracy.setChecked(household.literate);
+        cbLiteracy.setChecked(!household.literate);
         cbEligible.setChecked(household.eligible);
-        int legalIndex = household.legalStatus == null ? 0
+        int legalIndex = household.legalStatus == null ? -1
                 : java.util.Arrays.asList(LEGAL_STATUS_CODES).indexOf(household.legalStatus);
-        spinnerLegalStatus.setText(LEGAL_STATUS_LABELS[Math.max(0, legalIndex)], false);
+        spinnerLegalStatus.setText(legalIndex >= 0 ? LEGAL_STATUS_LABELS[legalIndex] : "", false);
     }
 
     /**
@@ -413,6 +412,17 @@ public class HouseholdFormActivity extends BaseActivity {
             etHouseholdName.setError(getString(R.string.field_household_name));
             return;
         }
+        String gender = spinnerGender.getText().toString().trim();
+        if (!java.util.Arrays.asList(GENDER_OPTIONS).contains(gender)) {
+            spinnerGender.setError(getString(R.string.gender_required));
+            return;
+        }
+        int legalIndex = java.util.Arrays.asList(LEGAL_STATUS_LABELS)
+                .indexOf(spinnerLegalStatus.getText().toString());
+        if (legalIndex < 0) {
+            spinnerLegalStatus.setError(getString(R.string.legal_status_required));
+            return;
+        }
 
         ContentValues values = new ContentValues();
         values.put("supervisor_id", String.valueOf(sessionManager.getUserId()));
@@ -421,7 +431,7 @@ public class HouseholdFormActivity extends BaseActivity {
         values.put("id_number", etIdNumber.getText().toString().trim());
         values.put("phone_number", etPhoneNumber.getText().toString().trim());
         values.put("age", parseIntOrNull(etAge.getText().toString()));
-        values.put("gender", spinnerGender.getText().toString());
+        values.put("gender", gender);
         values.put("registration_method", selectedRegistrationCode());
         // Manual entry stores the place name the officer typed directly -- state_code/county_code/
         // payam_code/boma_code are loosely-typed free text columns (no FK to the geo hierarchy, see
@@ -452,10 +462,8 @@ public class HouseholdFormActivity extends BaseActivity {
         if (cbPregnantLactating.isChecked()) vulnerabilityStatuses.add("PREGNANT_OR_LACTATING");
         if (cbSingleCaregiver.isChecked()) vulnerabilityStatuses.add("SINGLE_CAREGIVER");
         values.put("vulnerability_statuses", android.text.TextUtils.join(",", vulnerabilityStatuses));
-        int legalIndex = java.util.Arrays.asList(LEGAL_STATUS_LABELS)
-                .indexOf(spinnerLegalStatus.getText().toString());
-        values.put("legal_status", LEGAL_STATUS_CODES[Math.max(0, legalIndex)]);
-        values.put("literacy", cbLiteracy.isChecked() ? "Y" : "N");
+        values.put("legal_status", LEGAL_STATUS_CODES[legalIndex]);
+        values.put("literacy", cbLiteracy.isChecked() ? "N" : "Y");
         values.put("eligibility", cbEligible.isChecked() ? "Y" : "N");
 
         Location location = LocationHelper.getLastKnownLocation(this);

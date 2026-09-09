@@ -1,5 +1,6 @@
 package com.biopay.agent.profile;
 
+import android.content.Intent;
 import android.os.Bundle;
 import android.view.View;
 import android.widget.EditText;
@@ -8,6 +9,7 @@ import android.widget.TextView;
 import com.biopay.agent.R;
 import com.biopay.agent.network.ApiCallback;
 import com.biopay.agent.network.ApiClient;
+import com.biopay.agent.security.SecurityActivity;
 import com.biopay.agent.session.SessionManager;
 import com.biopay.agent.ui.BaseActivity;
 import com.google.android.material.button.MaterialButton;
@@ -46,6 +48,8 @@ public class ProfileActivity extends BaseActivity {
                 organisation == null || organisation.trim().isEmpty() ? getString(R.string.profile_role) : organisation);
 
         saveButton.setOnClickListener(view -> saveProfile());
+        findViewById(R.id.rowSecurity).setOnClickListener(view ->
+                startActivity(new Intent(this, SecurityActivity.class)));
     }
 
     private void saveProfile() {

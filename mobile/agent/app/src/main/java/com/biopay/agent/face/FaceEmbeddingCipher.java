@@ -1,5 +1,6 @@
 package com.biopay.agent.face;
 
+import android.os.Build;
 import android.security.keystore.KeyGenParameterSpec;
 import android.security.keystore.KeyProperties;
 import android.util.Base64;
@@ -35,16 +36,19 @@ public final class FaceEmbeddingCipher {
 
     private FaceEmbeddingCipher() { }
 
-    /** {@link KeyGenParameterSpec} (Keystore-backed symmetric keys) is available on every device
-     *  this app runs on now that minSdk is 24 -- kept as a method (rather than inlined at call
-     *  sites) so FaceDao's plaintext-fallback branch stays a single well-named check. */
+    /** {@link KeyGenParameterSpec} (Keystore-backed symmetric keys) needs API 23+. Every
+     *  morphoSmart642 device meets that (minSdk 24), but morphoSmart615 goes down to minSdk 21
+     *  for old Android 5.0/5.1 tablets -- those can't use the Keystore path at all, so FaceDao
+     *  falls back to storing the plaintext embedding and marking the row unencrypted. */
     public static boolean isSupported() {
-        return true;
+        return Build.VERSION.SDK_INT >= Build.VERSION_CODES.M;
     }
 
-    /** @return Base64(iv || ciphertext+tag), or null if encryption fails -- callers must handle
-     *  that by storing plaintext and marking the row as such. */
+    /** @return Base64(iv || ciphertext+tag), or null if encryption fails or isn't supported on
+     *  this device (API &lt; 23) -- callers must handle that by storing plaintext and marking the
+     *  row as such. */
     public static String encrypt(String plaintext) {
+        if (!isSupported()) return null;
         try {
             byte[] combined = encryptWithKey(getOrCreateKey(), plaintext.getBytes("UTF-8"));
             return Base64.encodeToString(combined, Base64.NO_WRAP);

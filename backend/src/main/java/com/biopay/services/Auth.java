@@ -868,7 +868,9 @@ public class Auth extends AbstractVerticle {
                         }
                         Row r = rows.iterator().next();
                         String partnerCode = Rows.str(r, "organization_code");
-                        enabledModulesFor("SUPERVISOR", partnerCode).onComplete(modulesAr -> reply(message, new JsonObject()
+                        Future<JsonArray> modulesF = enabledModulesFor("SUPERVISOR", partnerCode);
+                        Future<String> verificationMethodF = verificationMethodFor(partnerCode);
+                        Future.all(modulesF, verificationMethodF).onComplete(cf -> reply(message, new JsonObject()
                                 .put("responseCode", "000")
                                 .put("responseMessage", "OK")
                                 .put("user", new JsonObject()
@@ -879,7 +881,8 @@ public class Auth extends AbstractVerticle {
                                         .put("role", "SUPERVISOR")
                                         .put("anchorId", intOr(r, "anchor_id", null))
                                         .put("partnerCode", partnerCode)
-                                        .put("enabledModules", modulesAr.succeeded() ? modulesAr.result() : new JsonArray()))));
+                                        .put("enabledModules", modulesF.succeeded() ? modulesF.result() : new JsonArray())
+                                        .put("verificationMethod", verificationMethodF.succeeded() ? verificationMethodF.result() : "BIOMETRIC"))));
                     });
             return;
         }

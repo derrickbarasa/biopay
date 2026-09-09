@@ -1,14 +1,12 @@
 <resources>
     <string name="app_name">BioPay</string>
     <string name="biopay_logo_description">BioPay fingerprint logo</string>
-    <string name="back">Back</string>
     <string name="splash_scanner_label">Scanner profile: %1$s</string>
     <string name="notification_channel_sync_name">Sync alerts</string>
     <string name="notification_channel_sync_description">Notifies you when offline records can\'t reach the BioPay server.</string>
     <string name="notification_sync_title">Records waiting to sync</string>
     <string name="notification_sync_body">%1$d record(s) captured on this device haven\'t reached the server yet. Open BioPay on a connection to retry.</string>
 
-    <string name="login_brand_supporting">Trusted field operations</string>
     <string name="login_title">Field officer sign in</string>
     <string name="login_subtitle">Use your BioPay field account to continue to your organisation workspace.</string>
     <string name="login_email_hint">Email address</string>
@@ -27,7 +25,6 @@
     <string name="subscription_locked_online_required">Connect to the internet to check whether the anchor subscription has been renewed.</string>
 
     <string name="home_welcome">Hello, %1$s</string>
-    <string name="home_subtitle">Your field workspace</string>
     <string name="home_field_workspace">BioPay field workspace</string>
     <string name="home_register_quick">Register household</string>
     <string name="home_sync_now">Sync now</string>
@@ -37,7 +34,6 @@
     <string name="home_sync_pending">%1$d record(s) waiting to sync</string>
     <string name="home_overview">Operational summary</string>
     <string name="home_field_actions">Field actions</string>
-    <string name="home_records">Records and reporting</string>
     <string name="home_chart_title">Payments</string>
     <string name="home_kpi_households">Households</string>
     <string name="home_kpi_pending_sync">Pending sync</string>
@@ -53,12 +49,9 @@
         <item quantity="one">%1$d assignment ready</item>
         <item quantity="other">%1$d assignments ready</item>
     </plurals>
-    <string name="home_legend_paid">Paid (%1$d)</string>
-    <string name="home_legend_pending">Pending (%1$d)</string>
     <string name="menu_logout">Log out</string>
 
     <string name="home_view_all">View all</string>
-    <string name="home_quick_verify_identity">Verify identity</string>
     <string name="home_quick_my_location">My location</string>
     <string name="home_summary_donut_title">Your summary</string>
     <string name="home_summary_donut_description">Field summary: households, pending payments and vouchers. Tap for the full report.</string>
@@ -70,7 +63,6 @@
     <string name="my_location_timestamp">Captured %1$s</string>
     <string name="my_location_refresh">Refresh location</string>
     <string name="nav_home">Home</string>
-    <string name="nav_settings">Settings</string>
     <string name="nav_households">Households</string>
     <string name="nav_payment">Payment</string>
     <string name="nav_vouchers">Vouchers</string>
@@ -91,15 +83,11 @@
     <string name="more_profile">Profile</string>
     <string name="more_profile_body">Your officer identity</string>
     <string name="more_settings">Settings</string>
-    <string name="more_settings_body">Connection, sync, and biometrics</string>
-    <string name="more_security">Security</string>
-    <string name="more_security_body">Change your password</string>
+    <string name="more_settings_body">Notifications, biometrics, and app details</string>
     <string name="more_attendance">Attendance</string>
     <string name="more_attendance_body">Record and review attendance</string>
     <string name="more_activities">Activities</string>
     <string name="more_activities_body">Search registrations and field events</string>
-    <string name="more_alternates">Alternates</string>
-    <string name="more_alternates_body">Manage household alternates</string>
     <string name="more_my_location">My location</string>
     <string name="more_my_location_body">Your last known position</string>
     <string name="more_reports">Reports</string>
@@ -151,17 +139,8 @@
     <string name="household_detail_add_alternate">Add alternate</string>
     <string name="household_detail_entitlement">Current status</string>
 
-    <string name="intervention_cash">Cash</string>
-    <string name="intervention_voucher">Voucher</string>
-    <string name="intervention_food">Food</string>
-    <string name="intervention_in_kind">In-kind</string>
 
     <string name="verify_method_title">Verify %1$s</string>
-    <string name="verify_method_choose">Choose a verification method</string>
-    <string name="verify_method_fingerprint_body">Use registered fingerprint</string>
-    <string name="verify_method_face_body">Use camera and liveness check</string>
-    <string name="verify_method_offline_note">Verification works offline -- your data is secure on this device.</string>
-    <string name="verify_method_none_enrolled">This person has no enrolled fingerprint or face on this device.</string>
     <string name="verify_method_fingerprint_label">Fingerprint</string>
 
     <string name="fingerprint_verify_title">Fingerprint Verification</string>
@@ -185,6 +164,7 @@
     <string name="field_gender">Gender</string>
     <string name="gender_male">Male</string>
     <string name="gender_female">Female</string>
+    <string name="gender_required">Choose the household head\'s gender.</string>
     <string name="field_registration_method">Biometric method</string>
     <string name="field_alternate_name">Full name</string>
     <string name="field_alternate_relationship">Relationship to household head</string>
@@ -226,9 +206,6 @@
     <string name="location_enter_manually">Can\'t find your area? Enter names manually</string>
     <string name="location_use_picker">Use the location picker instead</string>
     <string name="location_picker_note">Choose from the state, county, location, and village configured for your organisation.</string>
-    <string name="field_household_size">Household size</string>
-    <string name="field_male_dependants">Male dependants</string>
-    <string name="field_female_dependants">Female dependants</string>
     <string name="field_has_disabled_members">Household has members with disabilities</string>
     <string name="field_elderly_headed">Elderly-headed household</string>
     <string name="field_child_headed">Child-headed household</string>
@@ -236,7 +213,8 @@
     <string name="field_pregnant_lactating">Pregnant or lactating caregiver</string>
     <string name="field_single_caregiver">Single caregiver</string>
     <string name="field_legal_status">Legal status</string>
-    <string name="field_literate">Household head is literate</string>
+    <string name="legal_status_required">Choose a legal status.</string>
+    <string name="field_literate">Household head is illiterate</string>
     <string name="field_eligible">Eligible for the programme</string>
     <string name="household_continue_to_capture">Continue to capture</string>
     <string name="household_save_continue">Save changes</string>
@@ -254,7 +232,6 @@
     <string name="person_capture_face_label">Face</string>
     <string name="person_capture_not_captured">Not captured yet</string>
     <string name="person_capture_captured">Captured ✓</string>
-    <string name="person_capture_fingerprint_action">Capture fingerprint</string>
     <string name="person_capture_face_action">Capture face</string>
     <string name="person_capture_add_another">Add another person</string>
     <string name="person_capture_add_confirm">Add and continue</string>
@@ -269,6 +246,8 @@
     <string name="person_capture_face_success">Face captured successfully</string>
     <string name="person_capture_fingerprint_duplicate">Fingerprint capture failed: this fingerprint is already registered to another person</string>
     <string name="person_capture_fingerprint_check_failed">Fingerprint capture failed: could not verify against existing records. Please try again</string>
+    <string name="person_capture_face_duplicate">Face capture failed: this face is already registered to another person</string>
+    <string name="person_capture_face_check_failed">Face capture failed: could not verify against existing records. Please try again</string>
 
     <string name="person_capture_fingerprint_hint">Tap a finger below to scan it. Only one finger is required to continue — capture the rest now or come back later.</string>
     <string name="person_capture_right_hand">Right hand</string>
@@ -304,7 +283,6 @@
 
     <string name="person_detail_details_header">Details</string>
     <string name="person_detail_capture_action">Capture more</string>
-    <string name="person_detail_role_head">Head of household</string>
     <string name="person_detail_not_recorded">Not recorded</string>
 
     <string name="attendance_title">Attendance</string>
@@ -378,8 +356,6 @@
     <string name="payment_verify_not_enrolled">Not enrolled with any verification method yet.</string>
     <string name="payment_verify_fingerprint">Fingerprint</string>
     <string name="payment_verify_face">Face</string>
-    <string name="payment_verify_recorded">Payment recorded and queued to sync</string>
-    <string name="payment_verify_no_face_match">Face did not match. Check the beneficiary and try again.</string>
 
     <string name="generated_payment_title">Generated payment</string>
     <string name="generated_payment_description">Select an unpaid household from the latest generated payment cycle.</string>
@@ -445,20 +421,10 @@
     <string name="voucher_amount">Amount %1$s</string>
     <string name="voucher_household_named">%1$s · %2$s</string>
     <string name="voucher_expires">Expires %1$s</string>
-    <string name="voucher_select_label">Choose voucher</string>
     <string name="voucher_empty_title">No vouchers to show</string>
     <string name="voucher_empty">Connect and sync to download vouchers assigned to this device.</string>
     <string name="voucher_picker_title">Choose voucher</string>
     <string name="voucher_picker_search_hint">Search by household, code, or purpose</string>
-    <string name="voucher_picker_empty_none_issued">No issued vouchers are available yet. Sync and try again.</string>
-    <string name="voucher_picker_empty_no_match">No voucher matches your search.</string>
-    <string name="voucher_details_title">Voucher details</string>
-    <string name="voucher_field_household">Household</string>
-    <string name="voucher_field_code">Voucher code</string>
-    <string name="voucher_field_amount">Amount</string>
-    <string name="voucher_field_purpose">Purpose</string>
-    <string name="voucher_field_expiry">Expires</string>
-    <string name="voucher_placeholder">—</string>
     <string name="voucher_proceed">Proceed to verify and redeem</string>
     <string name="voucher_choose_person_title">Who is redeeming this voucher?</string>
     <string name="voucher_choose_person_body">Choose a person with an enrolled fingerprint. The background identifies the household head or alternate.</string>
@@ -476,34 +442,70 @@
     <string name="reports_alternates">Alternates</string>
     <string name="reports_waiting_sync">Waiting to sync</string>
     <string name="reports_offline_note">These totals reflect data currently stored on this device.</string>
+    <string name="reports_range_today">Today</string>
+    <string name="reports_range_seven_days">7 days</string>
+    <string name="reports_range_thirty_days">30 days</string>
+    <string name="reports_range_all">All</string>
+    <string name="reports_range_scope_today">All report data below is from today</string>
+    <string name="reports_range_scope_seven">All report data below is from the last 7 days</string>
+    <string name="reports_range_scope_thirty">All report data below is from the last 30 days</string>
+    <string name="reports_range_scope_all">All report data stored on this device</string>
+    <string name="reports_activity_summary">Field activity</string>
+    <string name="reports_registrations">Registrations</string>
+    <string name="reports_verifications">Verifications</string>
+    <string name="reports_payments_completed">Payments</string>
+    <string name="reports_attendance_records">Attendance</string>
+    <string name="reports_payment_progress">Payment progress</string>
+    <string name="reports_paid_count">%1$d paid</string>
+    <string name="reports_pending_count">%1$d pending</string>
+    <string name="reports_failed_count">%1$d failed</string>
+    <string name="reports_amount_summary">%1$s paid · %2$s pending</string>
+    <string name="reports_payment_bar_accessibility">Payment status: %1$d paid, %2$d pending, %3$d failed</string>
+    <string name="reports_view_payments">View payments</string>
+    <string name="reports_seven_day_activity">Activity over the last 7 days</string>
+    <string name="reports_today_activity">Activity today</string>
+    <string name="reports_recent_seven_day_activity">Recent 7-day activity</string>
+    <string name="reports_activity_chart_note">Registrations, verifications, completed payments, and attendance records</string>
+    <plurals name="reports_activity_chart_accessibility">
+        <item quantity="one">One field action over the last seven days</item>
+        <item quantity="other">%d field actions over the last seven days</item>
+    </plurals>
+    <string name="reports_ready_payment">Biometric-ready households</string>
+    <string name="reports_missing_biometrics">Missing biometrics</string>
+    <string name="reports_incomplete_records">Incomplete records</string>
+    <string name="reports_location_title">Registrations by location</string>
+    <string name="reports_location_empty">No registrations in this period.</string>
+    <string name="reports_view_locations">View all locations</string>
+    <string name="reports_locations_title">Registration locations</string>
+    <string name="reports_locations_empty">No registration locations in this period.</string>
+    <string name="reports_recent_activity">Recent activity</string>
+    <string name="reports_recent_empty">No field activity recorded in this period.</string>
+    <string name="reports_view_activity">View all activity</string>
+    <string name="reports_open_sync">Open sync center</string>
 
     <string name="profile_title">Your profile</string>
     <string name="profile_description">Review your officer identity and update your name in BioPay when connected.</string>
     <string name="profile_role">Field officer</string>
     <string name="profile_first_name">First name</string>
     <string name="profile_last_name">Last name</string>
-    <string name="profile_email">Sign-in email</string>
     <string name="profile_email_note">Your sign-in email is managed by an administrator.</string>
     <string name="profile_save">Save profile</string>
     <string name="profile_saving">Saving profile</string>
     <string name="profile_account_details">Account details</string>
+    <string name="profile_security">Security</string>
+    <string name="profile_change_password">Change password</string>
+    <string name="profile_change_password_body">Update the password used to sign in</string>
     <string name="profile_saved">Profile updated</string>
     <string name="profile_first_name_required">Enter your first name.</string>
 
     <string name="settings_title">Settings</string>
-    <string name="settings_description">Account, notifications, connection, biometrics, security, and app information.</string>
-
-    <string name="settings_account">Account</string>
+    <string name="settings_description">Notifications, biometric hardware, device data, and app information.</string>
 
     <string name="settings_notifications">Notifications</string>
     <string name="settings_sync_alerts">Sync alerts</string>
     <string name="settings_sync_alerts_body">Notify me when captured records can\'t reach the server after several tries</string>
     <string name="settings_sync_alerts_denied">Allow notifications for BioPay to turn on sync alerts.</string>
 
-    <string name="settings_connection">Connection and sync</string>
-    <string name="settings_server_help">The BioPay service is managed by your app configuration.</string>
-    <string name="settings_test_connection">Test connection</string>
-    <string name="settings_connection_ok">BioPay server is reachable.</string>
     <string name="settings_sync_now">Sync now</string>
     <string name="settings_sync_queued">Sync started. BioPay will report whether the server accepted the records.</string>
     <string name="sync_running">Connecting to BioPay and sending records…</string>

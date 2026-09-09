@@ -148,7 +148,11 @@ public class Organization extends AbstractVerticle {
                 + "VALUES (@p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10, @p11, @p12, @p13, GETDATE(), GETDATE())";
         String loginSql = "INSERT INTO users (organization_code, email, username, password, first_name, role_id, active, status, "
                 + "anchor_id, user_scope, must_change_password, created_by, created_at, updated_at) "
-                + "VALUES (@p1, @p2, @p2, @p3, @p4, (SELECT TOP 1 id FROM roles WHERE role_name='Organisation Administrator' AND anchor_id IS NULL AND status=1), "
+                // Prefers this anchor's own forked "Organisation Administrator" (see
+                // Administration#saveRole) over the shared anchor_id-NULL template, so a new
+                // org-admin user picks up whatever this anchor has customized the role to.
+                + "VALUES (@p1, @p2, @p2, @p3, @p4, (SELECT TOP 1 id FROM roles WHERE role_name='Organisation Administrator' AND status=1 "
+                + "AND (anchor_id=@p5 OR anchor_id IS NULL) ORDER BY CASE WHEN anchor_id=@p5 THEN 0 ELSE 1 END), "
                 + "1, 1, @p5, 'ORGANISATION', 1, @p6, GETDATE(), GETDATE())";
         int targetAnchorId = Integer.parseInt(anchorIdVal.toString());
         pool.preparedQuery("SELECT 1 AS found FROM users WHERE id=@p1 AND user_scope='ANCHOR' AND status=1")

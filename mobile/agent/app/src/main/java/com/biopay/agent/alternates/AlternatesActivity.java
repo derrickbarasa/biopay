@@ -1,10 +1,12 @@
 package com.biopay.agent.alternates;
 
+import android.content.res.Configuration;
 import android.os.Bundle;
 import android.view.View;
 import android.widget.TextView;
 
 import androidx.appcompat.widget.SearchView;
+import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
@@ -35,9 +37,18 @@ public class AlternatesActivity extends BaseActivity {
         householdDao = new HouseholdDao(this);
         adapter = new HouseholdListAdapter(household -> startActivity(
                 HouseholdAlternatesActivity.intent(this, household.householdNumber, household.householdName)));
+        boolean isLandscape = getResources().getConfiguration().orientation == Configuration.ORIENTATION_LANDSCAPE;
+
         RecyclerView recyclerView = findViewById(R.id.recyclerHouseholds);
-        recyclerView.setLayoutManager(new LinearLayoutManager(this));
+        recyclerView.setLayoutManager(isLandscape
+                ? new GridLayoutManager(this, 2)
+                : new LinearLayoutManager(this));
         recyclerView.setAdapter(adapter);
+
+        if (isLandscape) {
+            findViewById(R.id.tvScreenTitle).setVisibility(View.GONE);
+            findViewById(R.id.tvScreenDescription).setVisibility(View.GONE);
+        }
 
         SearchView searchView = findViewById(R.id.searchView);
         SearchViewHelper.makeFullyClickable(searchView);

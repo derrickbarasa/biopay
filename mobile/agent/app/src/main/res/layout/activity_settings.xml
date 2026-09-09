@@ -32,41 +32,6 @@
             <TextView style="@style/BioPay.ScreenTitle" android:text="@string/settings_title" />
             <TextView style="@style/BioPay.SupportingText" android:layout_marginTop="4dp" android:text="@string/settings_description" />
 
-            <!-- Account -->
-            <TextView style="@style/BioPay.SectionHeader" android:text="@string/settings_account" />
-            <com.google.android.material.card.MaterialCardView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                app:cardBackgroundColor="@color/bp_surface"
-                app:cardCornerRadius="@dimen/bp_radius_surface"
-                app:cardElevation="1dp"
-                app:strokeWidth="1dp"
-                app:strokeColor="@color/bp_outline_variant">
-                <LinearLayout
-                    android:id="@+id/rowAccount"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:minHeight="72dp"
-                    android:background="?attr/selectableItemBackground"
-                    android:clickable="true"
-                    android:focusable="true"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal"
-                    android:paddingStart="16dp"
-                    android:paddingEnd="16dp"
-                    android:paddingTop="10dp"
-                    android:paddingBottom="10dp">
-                    <FrameLayout android:layout_width="42dp" android:layout_height="42dp" android:background="@drawable/bg_icon_container">
-                        <ImageView android:layout_width="20dp" android:layout_height="20dp" android:layout_gravity="center" android:contentDescription="@null" android:src="@drawable/ic_profile" app:tint="@color/bp_primary" />
-                    </FrameLayout>
-                    <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="14dp" android:layout_weight="1" android:orientation="vertical">
-                        <TextView android:id="@+id/tvAccountName" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="@color/bp_text_primary" android:textSize="15sp" android:textStyle="bold" />
-                        <TextView android:id="@+id/tvAccountSubtitle" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="2dp" android:textColor="@color/bp_text_secondary" android:textSize="13sp" />
-                    </LinearLayout>
-                    <ImageView android:layout_width="20dp" android:layout_height="20dp" android:contentDescription="@null" android:src="@drawable/ic_chevron_right" app:tint="@color/bp_outline" />
-                </LinearLayout>
-            </com.google.android.material.card.MaterialCardView>
-
             <!-- Notifications -->
             <TextView style="@style/BioPay.SectionHeader" android:text="@string/settings_notifications" />
             <com.google.android.material.card.MaterialCardView
@@ -100,12 +65,6 @@
                         android:layout_height="wrap_content" />
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
-
-            <!-- Connection and sync -->
-            <TextView style="@style/BioPay.SectionHeader" android:text="@string/settings_connection" />
-            <TextView style="@style/BioPay.SupportingText" android:text="@string/settings_server_help" />
-            <com.google.android.material.button.MaterialButton android:id="@+id/btnTestConnection" style="@style/BioPay.SecondaryButton" android:layout_width="match_parent" android:layout_marginTop="12dp" android:text="@string/settings_test_connection" />
-            <com.google.android.material.button.MaterialButton android:id="@+id/btnSyncNow" style="@style/BioPay.PrimaryButton" android:layout_marginTop="12dp" android:text="@string/settings_sync_now" app:icon="@drawable/ic_sync" />
 
             <!-- Biometrics and scanner -->
             <TextView style="@style/BioPay.SectionHeader" android:text="@string/settings_biometrics" />
@@ -199,41 +158,6 @@
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
-            <!-- Security -->
-            <TextView style="@style/BioPay.SectionHeader" android:text="@string/settings_security" />
-            <com.google.android.material.card.MaterialCardView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                app:cardBackgroundColor="@color/bp_surface"
-                app:cardCornerRadius="@dimen/bp_radius_surface"
-                app:cardElevation="1dp"
-                app:strokeWidth="1dp"
-                app:strokeColor="@color/bp_outline_variant">
-                <LinearLayout
-                    android:id="@+id/rowSecurity"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:minHeight="72dp"
-                    android:background="?attr/selectableItemBackground"
-                    android:clickable="true"
-                    android:focusable="true"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal"
-                    android:paddingStart="16dp"
-                    android:paddingEnd="16dp"
-                    android:paddingTop="10dp"
-                    android:paddingBottom="10dp">
-                    <FrameLayout android:layout_width="42dp" android:layout_height="42dp" android:background="@drawable/bg_icon_container">
-                        <ImageView android:layout_width="20dp" android:layout_height="20dp" android:layout_gravity="center" android:contentDescription="@null" android:src="@drawable/ic_lock" app:tint="@color/bp_primary" />
-                    </FrameLayout>
-                    <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="14dp" android:layout_weight="1" android:orientation="vertical">
-                        <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/settings_security" android:textColor="@color/bp_text_primary" android:textSize="15sp" android:textStyle="bold" />
-                        <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="2dp" android:text="@string/settings_change_password_intro" android:textColor="@color/bp_text_secondary" android:textSize="13sp" />
-                    </LinearLayout>
-                    <ImageView android:layout_width="20dp" android:layout_height="20dp" android:contentDescription="@null" android:src="@drawable/ic_chevron_right" app:tint="@color/bp_outline" />
-                </LinearLayout>
-            </com.google.android.material.card.MaterialCardView>
-
             <!-- Data and storage -->
             <TextView style="@style/BioPay.SectionHeader" android:text="@string/settings_data_storage" />
             <com.google.android.material.card.MaterialCardView
@@ -274,17 +198,6 @@
                 android:textAllCaps="false"
                 app:icon="@drawable/ic_mail" />
 
-            <!-- Log out -->
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnLogout"
-                style="@style/BioPay.SecondaryButton"
-                android:layout_width="match_parent"
-                android:layout_marginTop="20dp"
-                android:text="@string/menu_logout"
-                android:textColor="@color/bp_error"
-                app:icon="@drawable/ic_logout"
-                app:iconTint="@color/bp_error"
-                app:strokeColor="@color/bp_outline_variant" />
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>
 </LinearLayout>

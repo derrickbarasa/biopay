@@ -39,7 +39,17 @@ const ownScopeRank = (role: Role) => (auth.isSystemAdmin ? (role.scope === 'SYST
 const sortedRoles = computed(() => [...roles.value].sort((a, b) => ownScopeRank(a) - ownScopeRank(b)))
 const anchorNameById = computed(() => new Map(anchors.value.map((a) => [a.id, a.name])))
 function roleAnchorName(role: Role) { return role.anchorId != null ? anchorNameById.value.get(role.anchorId) ?? null : null }
-const isBuiltInRole = computed(() => !auth.isSystemAdmin && !!selectedRole.value?.builtIn)
+// System admin: no role is locked, built-in or not. Anchor administrator: every built-in role
+// is locked except "Organisation Administrator" -- they may customize their own anchor's copy
+// of it (forked into an anchor-owned row server-side on first save, see Administration#saveRole),
+// but not "Anchor Administrator" (their own role -- editable-by-self risks a self-lockout) or
+// the system-only "Super Admin" role, which anchor admins never see in their role list anyway.
+const isBuiltInRole = computed(() => {
+  if (auth.isSystemAdmin) return false
+  const role = selectedRole.value
+  if (!role?.builtIn) return false
+  return !(auth.isAnchorAdministrator && role.scope === 'ORGANISATION')
+})
 const isUnlimitedRole = computed(() => !auth.isSystemAdmin && !!selectedRole.value?.systemRole)
 const isFixedScopeRole = computed(() => selectedRole.value?.scope === 'SYSTEM')
 const canSave = computed(() => auth.can('ACCESS_ROLES') && (!auth.isSystemAdmin || form.roleId !== null || form.scope === 'SYSTEM' || !!form.anchorId) && !isBuiltInRole.value)

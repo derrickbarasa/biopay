@@ -661,6 +661,9 @@ onBeforeUnmount(() => {
                     <small>Configs</small>
                     <div class="preview-nav-item"><i class="mdi mdi-domain"></i>Organizations</div>
                     <div class="preview-nav-item"><i class="mdi mdi-map-marker-radius"></i>Locations</div>
+                    <div class="preview-nav-item"><i class="mdi mdi-api"></i>API Documentation</div>
+                    <small>Android App</small>
+                    <div class="preview-nav-item"><i class="mdi mdi-android"></i>App</div>
                     <small>User management</small>
                     <div class="preview-nav-item"><i class="mdi mdi-account-multiple-outline"></i>Users</div>
                     <div class="preview-nav-item"><i class="mdi mdi-account-tie"></i>Field officers</div>
@@ -760,13 +763,25 @@ onBeforeUnmount(() => {
                 <div class="preview-phone" aria-hidden="true">
                   <div class="preview-phone-scroll">
                     <section class="preview-phone-hero">
-                      <div class="preview-phone-brand">
-                        <img src="/favicon.svg" alt="" />
-                        <b>BioPay field workspace</b>
-                        <svg class="preview-bell" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 20h4" /></svg>
+                      <div class="preview-phone-hero-main">
+                        <div class="preview-phone-intro">
+                          <div class="preview-phone-brand">
+                            <img src="/favicon.svg" alt="" />
+                            <b>BioPay field workspace</b>
+                          </div>
+                          <h3>Hello, John Doe</h3>
+                          <div class="preview-sync"><i class="mdi mdi-cached"></i> All local records are synced</div>
+                        </div>
+                        <div class="preview-phone-donut-wrap">
+                          <b>Your summary</b>
+                          <div class="preview-phone-donut"><span>4,292<small>Total</small></span></div>
+                        </div>
                       </div>
-                      <h3>Hello, John Doe</h3>
-                      <div class="preview-sync"><i class="mdi mdi-cached"></i> All local records are synced</div>
+                      <div class="preview-phone-legend">
+                        <span><i></i>Households</span>
+                        <span><i></i>Payments</span>
+                        <span><i></i>Vouchers</span>
+                      </div>
                       <div class="preview-phone-buttons"><b><i class="mdi mdi-plus"></i> Register household</b><span><i class="mdi mdi-cached"></i> Sync now</span></div>
                     </section>
 
@@ -774,10 +789,15 @@ onBeforeUnmount(() => {
                       <header><b><i class="mdi mdi-chart-bar"></i> Operational summary</b><span>View all <i class="mdi mdi-chevron-right"></i></span></header>
                       <div class="preview-phone-kpis">
                         <div><i class="mdi mdi-account-multiple-outline"></i><strong>4,286</strong><span>Households</span></div>
-                        <div class="amber"><i class="mdi mdi-autorenew"></i><strong>0</strong><span>Pending sync</span></div>
+                        <div class="amber"><i class="mdi mdi-cached"></i><strong>0</strong><span>Pending sync</span></div>
                         <div class="green"><i class="mdi mdi-credit-card-outline"></i><strong>3,954</strong><span>Paid</span></div>
                         <div class="orange"><i class="mdi mdi-credit-card-outline"></i><strong>3</strong><span>Payment pending</span></div>
                       </div>
+                    </section>
+
+                    <section class="preview-phone-card preview-field-actions">
+                      <header><b>Field actions</b></header>
+                      <div><b><i class="mdi mdi-calendar-check"></i> Attendance</b><span><i class="mdi mdi-account-multiple-outline"></i> Alternates</span></div>
                     </section>
 
                     <section class="preview-phone-card preview-payment">
@@ -795,7 +815,7 @@ onBeforeUnmount(() => {
                     <div class="active"><i class="mdi mdi-home-outline"></i><span>Home</span></div>
                     <div><i class="mdi mdi-account-multiple-outline"></i><span>Households</span></div>
                     <div><i class="mdi mdi-credit-card-outline"></i><span>Payment</span></div>
-                    <div><i class="mdi mdi-history"></i><span>Activity</span></div>
+                    <div><i class="mdi mdi-ticket-confirmation-outline"></i><span>Vouchers</span></div>
                     <div><svg class="preview-more-icon" viewBox="0 0 18 8" aria-hidden="true"><rect x="1" y="2" width="4" height="4" rx="0.5" /><rect x="7" y="2" width="4" height="4" rx="0.5" /><rect x="13" y="2" width="4" height="4" rx="0.5" /></svg><span>More</span></div>
                   </nav>
                 </div>
@@ -1598,14 +1618,14 @@ onBeforeUnmount(() => {
 }
 .landing-root .preview-web-nav {
   min-width: 0;
-  padding: 1.8em 1.1em;
+  padding: 1.45em 1.1em;
   background: #0f766e;
   color: rgba(255, 255, 255, 0.82);
 }
-.landing-root .preview-web-nav > img { width: 78%; margin: 0 auto 2.2em; display: block; }
+.landing-root .preview-web-nav > img { width: 78%; margin: 0 auto 1.7em; display: block; }
 .landing-root .preview-web-nav small {
   display: block;
-  margin: 1.6em 0 0.5em 0.8em;
+  margin: 1.05em 0 0.38em 0.8em;
   color: rgba(255, 255, 255, 0.48);
   font-size: 0.78em;
   font-weight: 700;
@@ -1616,8 +1636,8 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 0.7em;
-  min-height: 2.45em;
-  padding: 0.55em 0.75em;
+  min-height: 2.18em;
+  padding: 0.42em 0.75em;
   border-radius: 7px;
   white-space: nowrap;
 }
@@ -1740,7 +1760,7 @@ onBeforeUnmount(() => {
 .landing-root .preview-next-payment span { color: #52615d; font-size: .9em; }
 .landing-root .preview-next-payment strong { font-size: 1.1em; }
 .landing-root .preview-next-payment > b { color: #006b5b; }
-.landing-root .preview-start-payment { display: flex; align-items: center; justify-content: center; gap: .7em; min-height: 4em; margin-top: 1.25em; border-radius: 7px; background: #006b5b; color: #fff; font-weight: 700; }
+.landing-root .preview-start-payment { display: flex; align-items: center; justify-content: center; gap: .7em; min-height: 4em; margin-top: 1.25em; border-radius: 7px; background: #e87918; color: #331300; font-weight: 700; }
 .landing-root .preview-calendar-row { display: flex; align-items: center; gap: .5em; white-space: nowrap; }
 .landing-root .preview-chart-controls { display: grid; justify-items: end; gap: .5em; }
 .landing-root .preview-chart-controls time { padding: .5em; border: 1px solid #cbd5e1; border-radius: .6em; color: #334155; }
@@ -1759,13 +1779,31 @@ onBeforeUnmount(() => {
 .landing-root .preview-phone { height: 100%; display: grid; grid-template-rows: minmax(0, 1fr) auto; background: #f5f8f7; color: #17201e; font-size: 6.5px; line-height: 1.25; }
 .landing-root .preview-phone-scroll { min-height: 0; overflow: hidden; padding: 0.85em; }
 .landing-root .preview-phone-hero { padding: 1.35em; border-radius: 11px; background: #006b5b; color: #fff; }
+.landing-root .preview-phone-hero-main { display: grid; grid-template-columns: minmax(0, 1fr) 7.3em; align-items: center; gap: 1em; }
+.landing-root .preview-phone-intro { min-width: 0; }
 .landing-root .preview-phone-brand { display: flex; align-items: center; gap: 0.9em; }
 .landing-root .preview-phone-brand img { width: 3.1em; height: 3.1em; }
-.landing-root .preview-phone-brand b { flex: 1; font-size: 1.2em; }
-.landing-root .preview-phone-brand > .preview-bell { box-sizing: content-box; width: 1.55em; height: 1.55em; padding: 0.78em; border-radius: 50%; background: rgba(255,255,255,.16); fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.landing-root .preview-phone-brand b { flex: 1; font-size: 1.08em; white-space: nowrap; }
 .landing-root .preview-phone-hero h3 { margin-top: 0.8em; color: #fff; font-size: 2.35em; letter-spacing: -0.02em; }
 .landing-root .preview-phone-hero p { margin-top: 0.25em; color: rgba(255, 255, 255, 0.8); font-size: 1.1em; }
 .landing-root .preview-sync { display: flex; gap: 0.6em; align-items: center; margin-top: 0.8em; font-size: 1.05em; }
+.landing-root .preview-phone-donut-wrap { display: grid; justify-items: center; gap: .65em; color: #cdebe4; font-size: .88em; }
+.landing-root .preview-phone-donut {
+  width: 7.2em;
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: conic-gradient(#fff 0 70%, #e87918 70% 91%, #4fc3f7 91% 100%);
+}
+.landing-root .preview-phone-donut::before { content: ''; grid-area: 1 / 1; width: 62%; aspect-ratio: 1; border-radius: 50%; background: #006b5b; }
+.landing-root .preview-phone-donut > span { z-index: 1; grid-area: 1 / 1; display: grid; justify-items: center; color: #fff; font-size: 1.25em; font-weight: 700; font-variant-numeric: tabular-nums; }
+.landing-root .preview-phone-donut small { color: #cdebe4; font-size: .62em; font-weight: 400; }
+.landing-root .preview-phone-legend { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .6em; margin-top: 1.25em; color: #cdebe4; font-size: .82em; }
+.landing-root .preview-phone-legend span { display: flex; align-items: center; gap: .45em; min-width: 0; }
+.landing-root .preview-phone-legend i { width: .62em; height: .62em; flex: 0 0 auto; border-radius: 50%; background: #fff; }
+.landing-root .preview-phone-legend span:nth-child(2) i { background: #e87918; }
+.landing-root .preview-phone-legend span:nth-child(3) i { background: #4fc3f7; }
 .landing-root .preview-phone-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 0.7em; margin-top: 0.85em; }
 .landing-root .preview-phone-buttons b,
 .landing-root .preview-phone-buttons span { display: flex; align-items: center; justify-content: center; gap: 0.55em; min-height: 3.9em; padding-inline: 0.7em; border-radius: 7px; text-align: center; }
@@ -1778,13 +1816,24 @@ onBeforeUnmount(() => {
 .landing-root .preview-phone-card header > span { color: #006b5b; font-weight: 700; }
 .landing-root .preview-phone-card header > span i { vertical-align: middle; }
 .landing-root .preview-phone-kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.25em; margin-top: 0.65em; }
-.landing-root .preview-phone-kpis > div { display: grid; justify-items: center; text-align: center; }
-.landing-root .preview-phone-kpis i { width: 3.2em; height: 3.2em; border-radius: 50%; display: grid; place-items: center; background: #d8f3ec; color: #006b5b; font-size: 1.45em; }
+.landing-root .preview-phone-kpis > div { min-height: 8.3em; display: grid; align-content: center; justify-items: center; padding: .7em .25em; border-radius: 8px; background: #d8f3ec; text-align: center; }
+.landing-root .preview-phone-kpis i { color: #006b5b; font-size: 1.45em; }
 .landing-root .preview-phone-kpis strong { margin-top: 0.35em; font-size: 1.65em; }
 .landing-root .preview-phone-kpis span { color: #52615d; font-size: 0.85em; }
-.landing-root .preview-phone-kpis .amber i { background: #fff1d6; color: #a65300; }
-.landing-root .preview-phone-kpis .green i { background: #d7f5e3; color: #18794e; }
-.landing-root .preview-phone-kpis .orange i { background: #ffe2c3; color: #a94c00; }
+.landing-root .preview-phone-kpis .amber { background: #fff1d6; }
+.landing-root .preview-phone-kpis .amber i,
+.landing-root .preview-phone-kpis .amber strong { color: #a65300; }
+.landing-root .preview-phone-kpis .green { background: #d7f5e3; }
+.landing-root .preview-phone-kpis .green i,
+.landing-root .preview-phone-kpis .green strong { color: #18794e; }
+.landing-root .preview-phone-kpis .orange { background: #ffe2c3; }
+.landing-root .preview-phone-kpis .orange i,
+.landing-root .preview-phone-kpis .orange strong { color: #a94c00; }
+.landing-root .preview-field-actions > div { display: grid; grid-template-columns: 1fr 1fr; gap: .7em; margin-top: .9em; }
+.landing-root .preview-field-actions > div > * { min-height: 3.8em; display: flex; align-items: center; justify-content: center; gap: .5em; border-radius: 7px; }
+.landing-root .preview-field-actions > div > b { background: #006b5b; color: #fff; }
+.landing-root .preview-field-actions > div > span { border: 1px solid #e87918; color: #e87918; font-weight: 700; }
+.landing-root .preview-payment { background: #fff1d6; }
 .landing-root .preview-phone-nav { position: relative; min-height: 5.8em; display: grid; grid-template-columns: repeat(5, 1fr); align-items: stretch; padding: 0.3em 0.45em 0.55em; background: #fff; box-shadow: 0 -8px 20px -18px rgba(23, 32, 30, 0.8); }
 .landing-root .preview-phone-nav > div { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 0.18em; color: #52615d; }
 .landing-root .preview-phone-nav > div i { font-size: 1.45em; line-height: 1; }

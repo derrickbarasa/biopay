@@ -1,5 +1,6 @@
 package com.biopay.agent.vouchers;
 
+import android.content.res.Configuration;
 import android.location.Location;
 import android.os.Bundle;
 import android.view.LayoutInflater;
@@ -56,6 +57,13 @@ public class VoucherRedemptionActivity extends BaseActivity {
         fingerprintDao = new FingerprintDao(this);
         householdDao = new HouseholdDao(this);
         alternateDao = new AlternateDao(this);
+
+        if (getResources().getConfiguration().orientation == Configuration.ORIENTATION_LANDSCAPE) {
+            // The toolbar already carries the title; repeating it here just burns vertical space
+            // a short landscape viewport can't spare (see the household list's landscape fix).
+            findViewById(R.id.tvScreenTitle).setVisibility(View.GONE);
+            findViewById(R.id.tvScreenDescription).setVisibility(View.GONE);
+        }
 
         voucherEmptyState = findViewById(R.id.voucherEmptyState);
         voucherEmptyBody = findViewById(R.id.tvVoucherEmptyBody);

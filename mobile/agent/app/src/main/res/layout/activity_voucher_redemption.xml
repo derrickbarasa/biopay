@@ -18,14 +18,16 @@
         android:layout_weight="1"
         android:orientation="vertical"
         android:paddingStart="16dp"
-        android:paddingTop="8dp"
+        android:paddingTop="@dimen/list_header_top_padding"
         android:paddingEnd="16dp">
 
         <TextView
+            android:id="@+id/tvScreenTitle"
             style="@style/BioPay.ScreenTitle"
             android:text="@string/voucher_title" />
 
         <TextView
+            android:id="@+id/tvScreenDescription"
             style="@style/BioPay.SupportingText"
             android:layout_marginTop="4dp"
             android:text="@string/voucher_subtitle" />
@@ -33,8 +35,8 @@
         <androidx.appcompat.widget.SearchView
             android:id="@+id/searchVouchers"
             android:layout_width="match_parent"
-            android:layout_height="56dp"
-            android:layout_marginTop="12dp"
+            android:layout_height="@dimen/list_search_height"
+            android:layout_marginTop="@dimen/list_filter_margin_top"
             android:background="@drawable/bg_icon_container"
             android:iconifiedByDefault="false"
             android:queryHint="@string/voucher_search_hint" />

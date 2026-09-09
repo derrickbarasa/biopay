@@ -32,6 +32,8 @@ import com.biopay.agent.data.FaceDao;
 import com.biopay.agent.data.FingerprintDao;
 import com.biopay.agent.data.ImageDao;
 import com.biopay.agent.face.FaceCaptureActivity;
+import com.biopay.agent.face.FaceMatchConfig;
+import com.biopay.agent.face.FaceMatcher;
 import com.biopay.agent.face.FaceRecognitionEngine;
 import com.biopay.agent.face.FaceRecognitionException;
 import com.biopay.agent.face.MlKitFaceRecognitionEngine;
@@ -454,12 +456,46 @@ public class PersonCaptureActivity extends BaseActivity {
     // ---- Face capture (real embedding pipeline; still an explicitly unvalidated prototype --
     // see MlKitFaceRecognitionEngine's javadoc) ---------------------------------------------
 
+    /** Compares the new embedding against every other beneficiary's stored face (offline, same
+     *  cross-beneficiary duplicate check {@link #checkDuplicateThenSave} already does for
+     *  fingerprints) before persisting it, so the same face can't be enrolled under two different
+     *  people. A capture/decode/decrypt problem on any one existing record is treated the same as
+     *  a real match failure -- silently skipping it would let a duplicate through undetected. */
     private void embedFace(String imagePath) {
         new Thread(() -> {
             MlKitFaceRecognitionEngine engine = new MlKitFaceRecognitionEngine(this);
             try {
                 byte[] bytes = readFile(imagePath);
                 FaceRecognitionEngine.CaptureResult result = engine.createEmbedding(bytes);
+
+                boolean duplicate = false;
+                boolean checkFailed = false;
+                for (FaceDao.FaceRecord other : faceDao.listOtherBeneficiaries(beneficiaryId, engine.modelVersion())) {
+                    try {
+                        if (FaceMatcher.matches(result.embedding, toFloatArray(new JSONArray(other.embedding)),
+                                FaceMatchConfig.UNCALIBRATED_PLACEHOLDER_THRESHOLD)) {
+                            duplicate = true;
+                            break;
+                        }
+                    } catch (org.json.JSONException | IllegalArgumentException ex) {
+                        checkFailed = true;
+                        break;
+                    }
+                }
+
+                if (duplicate) {
+                    runOnUiThread(() -> {
+                        if (isAliveForUi()) OutcomeFeedback.error(this, R.string.person_capture_face_duplicate);
+                    });
+                    return;
+                }
+                if (checkFailed) {
+                    runOnUiThread(() -> {
+                        if (isAliveForUi()) OutcomeFeedback.error(this, R.string.person_capture_face_check_failed);
+                    });
+                    return;
+                }
+
                 JSONArray embeddingJson = new JSONArray();
                 for (float v : result.embedding) embeddingJson.put(v);
                 faceDao.savePending(String.valueOf(sessionManager.getUserId()), sessionManager.getPartnerCode(),
@@ -485,6 +521,12 @@ public class PersonCaptureActivity extends BaseActivity {
                 new File(imagePath).delete();
             }
         }).start();
+    }
+
+    private static float[] toFloatArray(JSONArray array) throws org.json.JSONException {
+        float[] result = new float[array.length()];
+        for (int i = 0; i < array.length(); i++) result[i] = (float) array.getDouble(i);
+        return result;
     }
 
     private static byte[] readFile(String path) throws IOException {
@@ -516,6 +558,10 @@ public class PersonCaptureActivity extends BaseActivity {
         String[] relationshipOptions = getResources().getStringArray(R.array.alternate_relationship_options);
         etRelationship.setAdapter(new ArrayAdapter<>(this,
                 android.R.layout.simple_dropdown_item_1line, relationshipOptions));
+        etRelationship.setOnItemClickListener((parent, view, position, id) -> {
+            String inferred = RelationshipGender.infer(relationshipOptions[position]);
+            genderField.setText(inferred == null ? "" : inferred, false);
+        });
 
         AlertDialog addPersonDialog = new MaterialAlertDialogBuilder(this)
                 .setTitle(R.string.person_capture_add_another)

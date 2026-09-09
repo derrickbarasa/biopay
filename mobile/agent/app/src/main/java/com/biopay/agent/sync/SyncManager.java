@@ -61,6 +61,7 @@ public class SyncManager {
 
     /** @return true if every pending row across every table synced successfully this pass. */
     public boolean syncAll() {
+        syncVerificationMethod();
         boolean allSucceeded = true;
         allSucceeded &= syncGeography();
         allSucceeded &= syncHouseholds();
@@ -75,6 +76,24 @@ public class SyncManager {
         allSucceeded &= syncVoucherCatalogue();
         allSucceeded &= syncVoucherRedemptions();
         return allSucceeded;
+    }
+
+    /** Refreshes the on-device cached verification method (fingerprint/face/both) from the
+     *  organisation's current dashboard setting. Runs once per sync pass rather than only at
+     *  login, so an admin switching a device-affecting setting reaches an already-logged-in
+     *  officer without requiring a logout/login (see {@link SessionManager#getVerificationMethod}).
+     *  Best-effort: a failure here (e.g. offline) doesn't affect this pass's overall sync result --
+     *  the cached value simply stays whatever it was until the next successful pass. */
+    private void syncVerificationMethod() {
+        try {
+            org.json.JSONObject response = ApiClient.get(context).dispatchSync("ME", new HashMap<>());
+            org.json.JSONObject user = response.optJSONObject("user");
+            if (user != null && user.has("verificationMethod")) {
+                new SessionManager(context).updateVerificationMethod(user.optString("verificationMethod", null));
+            }
+        } catch (Exception ex) {
+            Log.w(TAG, "Verification-method refresh failed: " + ex.getMessage());
+        }
     }
 
     private boolean syncVoucherCatalogue() {

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Landscape viewports are short, so this is still well below the portrait default
+         (220dp), but sized so the BioPay wordmark under the mark actually reads. A scroll to
+         see the footer note at the very bottom is an acceptable tradeoff for that on a short
+         landscape viewport. See activity_login.xml and the default dimens.xml. -->
+    <dimen name="login_logo_max_height">180dp</dimen>
+
+    <!-- Shrinks the search/filter list header (household, alternates, attendance, payment
+         verification, voucher redemption, activity feed) so the list below it isn't reduced to a
+         single visible row on a short landscape viewport. See the default dimens.xml. -->
+    <dimen name="list_header_top_padding">4dp</dimen>
+    <dimen name="list_search_height">44dp</dimen>
+    <dimen name="list_search_margin_top">8dp</dimen>
+    <dimen name="list_filter_margin_top">6dp</dimen>
+    <dimen name="screen_title_text_size">18sp</dimen>
+    <dimen name="activity_feed_top_padding">8dp</dimen>
+</resources>

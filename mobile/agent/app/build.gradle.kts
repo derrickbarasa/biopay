@@ -65,11 +65,24 @@ android {
             dimension = "biometricDevice"
             versionNameSuffix = "-morpho642"
             buildConfigField("String", "BIOMETRIC_DEVICE_LABEL", "\"IDEMIA embedded scanner (SDK 6.42)\"")
+            // Without this, onnxruntime-android's x86/x86_64 emulator-only native libs get bundled
+            // too -- ~70MB of dead weight on every real (ARM) field device. morphoSmart615 already
+            // restricts to real-device ABIs; this flavor was just missing the same filter.
+            ndk {
+                abiFilters += listOf("armeabi", "armeabi-v7a", "arm64-v8a")
+            }
         }
         create("morphoSmart615") {
             dimension = "biometricDevice"
             versionNameSuffix = "-morpho615"
             buildConfigField("String", "BIOMETRIC_DEVICE_LABEL", "\"MorphoSmart 6.15 (Tablet)\"")
+            // The 6.15 tablets in the field are old stock still running Android 5.0/5.1 (API 21/22).
+            // onnxruntime-android 1.22.0+ (what morphoSmart642 uses) declares minSdkVersion 24 in
+            // its own manifest, which would force this flavor's floor to 24 too -- so this flavor
+            // pins the last onnxruntime-android release that supports minSdk 21 instead (1.18.0,
+            // see the dependencies block below and gradle/libs.versions.toml). Face verification
+            // works the same way on both flavors; only the onnxruntime version differs.
+            minSdk = 21
             ndk {
                 abiFilters += listOf("armeabi", "armeabi-v7a", "arm64-v8a")
             }
@@ -122,7 +135,11 @@ dependencies {
     implementation(libs.androidx.camera.camera2)
     implementation(libs.androidx.camera.lifecycle)
     implementation(libs.androidx.camera.view)
-    implementation(libs.onnxruntime.android)
+    // Different onnxruntime-android versions per flavor -- see the minSdk comment on the
+    // morphoSmart615 flavor above. Both resolve to the same ai.onnxruntime.* API that
+    // OnnxFaceEmbedder.java (shared main/ source) uses.
+    "morphoSmart642Implementation"(libs.onnxruntime.android)
+    "morphoSmart615Implementation"(libs.onnxruntime.android.legacy)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
@@ -138,7 +155,8 @@ dependencies {
 // The weights are ~98MB; checking that into git would permanently bloat a ~30MB-packed repo for
 // an artifact expected to be thrown away if IDEMIA MorphoKit licensing comes through instead. So
 // it's fetched here (idempotent, sha256-verified) rather than committed; app/src/main/assets/face/
-// is .gitignore'd.
+// is .gitignore'd. Both flavors ship onnxruntime (different versions -- see the dependencies
+// block above), so this lives in the shared src/main/ tree, not a flavor-specific one.
 val faceEmbedderAssetsDir = layout.projectDirectory.dir("src/main/assets/face").asFile
 val faceEmbedderModelFiles = mapOf(
     "virtuoturing.onnx" to Pair(

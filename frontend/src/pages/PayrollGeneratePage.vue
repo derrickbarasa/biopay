@@ -169,6 +169,84 @@ function clearSelection() {
 
 watch(dialogAnchorId, () => { genForm.value.organisationCode = null })
 
+// ---- Export / import households via Excel ----
+// Export ignores the location filters (unlike selectAllMatchingHouseholds) so the
+// spreadsheet is the full candidate list for the organisation; households are then
+// pruned inside Excel and the trimmed file re-imported to drive the actual selection.
+const exportingHouseholds = ref(false)
+const importDialog = ref(false)
+const importFileName = ref('')
+const importRows = ref<HouseholdOption[]>([])
+
+async function exportHouseholdsToExcel() {
+  exportingHouseholds.value = true
+  try {
+    const XLSX = await import('xlsx')
+    const rows: HouseholdOption[] = []
+    const pageSize = 200
+    let page = 1
+    while (rows.length < 2000) {
+      const res = await dispatch<{ results: HouseholdOption[] }>('GET_HOUSEHOLDS', {
+        organisationCode: genForm.value.organisationCode || undefined,
+        status: 1, page, pageSize,
+      })
+      rows.push(...res.results.map((h) => ({ householdNumber: h.householdNumber, householdName: h.householdName })))
+      if (res.results.length < pageSize) break
+      page += 1
+    }
+    if (!rows.length) {
+      toast.error('No active households found to export')
+      return
+    }
+    for (const h of rows) knownHouseholds.value.set(h.householdNumber, h.householdName)
+    const sheet = XLSX.utils.json_to_sheet(
+      rows.map((h) => ({ 'Household Number': h.householdNumber, 'Household Name': h.householdName })),
+    )
+    const workbook = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(workbook, sheet, 'Households')
+    XLSX.writeFile(workbook, `payment-cycle-households-${genForm.value.organisationCode || 'all'}.xlsx`)
+    toast.success(`Exported ${rows.length} households — remove the ones you don't want, then import the file back`)
+  } catch (err) {
+    toast.error(err instanceof Error ? err.message : 'Failed to export households')
+  } finally {
+    exportingHouseholds.value = false
+  }
+}
+
+function openImportDialog() {
+  importFileName.value = ''
+  importRows.value = []
+  importDialog.value = true
+}
+
+function onImportFile(event: Event) {
+  const file = (event.target as HTMLInputElement).files?.[0]
+  if (!file) return
+  importFileName.value = file.name
+  const reader = new FileReader()
+  reader.onload = async () => {
+    const XLSX = await import('xlsx')
+    const workbook = XLSX.read(new Uint8Array(reader.result as ArrayBuffer), { type: 'array' })
+    const sheet = workbook.Sheets[workbook.SheetNames[0]]
+    const parsed = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: '' })
+    importRows.value = parsed
+      .map((r) => ({
+        householdNumber: String(r['Household Number'] ?? r.householdNumber ?? r['household number'] ?? '').trim(),
+        householdName: String(r['Household Name'] ?? r.householdName ?? r['household name'] ?? '').trim(),
+      }))
+      .filter((h) => h.householdNumber)
+  }
+  reader.readAsArrayBuffer(file)
+}
+
+function confirmImport() {
+  if (!importRows.value.length) return
+  for (const h of importRows.value) if (h.householdName) knownHouseholds.value.set(h.householdNumber, h.householdName)
+  genForm.value.householdNumbers = [...new Set(importRows.value.map((h) => h.householdNumber))]
+  toast.success(`Imported ${genForm.value.householdNumbers.length} household(s) from ${importFileName.value}`)
+  importDialog.value = false
+}
+
 // ---- Amount & currency ----
 const rateLoading = ref(false)
 const rateAsOf = ref('')
@@ -331,13 +409,24 @@ onMounted(() => {
             </v-col>
           </v-row>
 
-          <div class="d-flex align-center justify-space-between mt-3 mb-2">
+          <div class="d-flex align-center justify-space-between mt-3 mb-2 flex-wrap ga-2">
             <v-btn variant="text" size="small" :disabled="!geo.stateCode && !geo.countyCode && !geo.locationCode && !geo.villageCode" @click="clearGeoFilters">
               Clear location filter
             </v-btn>
-            <v-btn variant="tonal" size="small" color="secondary" :loading="householdsLoading" :disabled="!householdOptions.length" @click="selectAllMatchingHouseholds">
-              Select all matching ({{ householdOptions.length }})
-            </v-btn>
+            <div class="d-flex ga-2 flex-wrap">
+              <v-btn
+                variant="outlined" size="small" color="secondary" prepend-icon="mdi-file-excel"
+                :loading="exportingHouseholds" :disabled="!genForm.organisationCode && auth.isAnchor" @click="exportHouseholdsToExcel"
+              >
+                Export to Excel
+              </v-btn>
+              <v-btn variant="outlined" size="small" color="secondary" prepend-icon="mdi-file-upload-outline" @click="openImportDialog">
+                Import from Excel
+              </v-btn>
+              <v-btn variant="tonal" size="small" color="secondary" :loading="householdsLoading" :disabled="!householdOptions.length" @click="selectAllMatchingHouseholds">
+                Select all matching ({{ householdOptions.length }})
+              </v-btn>
+            </div>
           </div>
 
           <v-autocomplete
@@ -431,6 +520,42 @@ onMounted(() => {
         </div>
       </v-card-text>
     </v-card>
+
+    <v-dialog v-model="importDialog" max-width="560">
+      <v-card>
+        <dialog-close-button @close="importDialog = false" />
+        <v-card-title>Import households from Excel</v-card-title>
+        <v-card-text>
+          <v-alert type="info" variant="tonal" density="compact" class="mb-3">
+            Upload the file you exported (or any .xlsx with "Household Number" / "Household Name" columns).
+            The households in this file replace your current selection.
+          </v-alert>
+          <v-file-input label="Upload .xlsx" accept=".xlsx,.xls" prepend-icon="mdi-file-upload" @change="onImportFile" />
+          <div v-if="importRows.length" class="text-caption mb-2">{{ importRows.length }} household(s) ready from {{ importFileName }}</div>
+          <v-table v-if="importRows.length" density="compact" style="max-height: 260px; overflow-y: auto">
+            <thead>
+              <tr>
+                <th>Household</th>
+                <th>Number</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="h in importRows" :key="h.householdNumber">
+                <td>{{ h.householdName || '—' }}</td>
+                <td>{{ h.householdNumber }}</td>
+              </tr>
+            </tbody>
+          </v-table>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" @click="importDialog = false">Cancel</v-btn>
+          <v-btn color="secondary" :disabled="!importRows.length" @click="confirmImport">
+            Use these households
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </div>
 </template>
 

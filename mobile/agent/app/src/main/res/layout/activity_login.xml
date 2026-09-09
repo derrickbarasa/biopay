@@ -19,10 +19,12 @@
         android:paddingBottom="32dp">
 
         <ImageView
-            android:layout_width="match_parent"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:layout_gravity="center_horizontal"
             android:adjustViewBounds="true"
             android:contentDescription="@string/biopay_logo_description"
+            android:maxHeight="@dimen/login_logo_max_height"
             android:scaleType="fitCenter"
             android:src="@drawable/biopay_logo_main" />
 

@@ -22,6 +22,11 @@ import ai.onnxruntime.OrtSession;
  * Owns the ONNX Runtime session lifecycle for the prototype VirtuoTuring face-embedding model --
  * see {@code assets/face/README.md} for provenance and its explicit unvalidated-prototype status.
  *
+ * <p>Shared by both product flavors, which pin different onnxruntime-android versions (see
+ * build.gradle.kts's dependencies block) -- morphoSmart642 uses the current release, morphoSmart615
+ * (old Android 5/6 tablets) is pinned to 1.18.0, the last release supporting its API-21 floor. The
+ * {@code ai.onnxruntime.*} API surface used below is identical across both versions.
+ *
  * <p>Loads from files copied out of APK assets into internal storage: ONNX Runtime needs a real
  * file path (not an AssetManager stream) so the model's external-data weights file resolves
  * relative to it. The copy is a one-time, best-effort presence check (not a re-verified checksum
@@ -38,7 +43,7 @@ final class OnnxFaceEmbedder {
     /** Confirmed by inspecting the graph directly (see progress.md) -- not assumed. The graph has
      *  exactly one output ("embedding"), so it's read back by index below rather than by name --
      *  {@link OrtSession.Result#get(String)} returns {@code java.util.Optional}, which needs API
-     *  24+; this app's minSdk is 21. */
+     *  24+; morphoSmart615's minSdk is 21. */
     private static final String INPUT_NAME = "input";
     private static final int INPUT_SIZE = FaceAligner.OUTPUT_SIZE;
     static final int EMBEDDING_DIMENSIONS = 512;

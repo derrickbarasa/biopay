@@ -20,6 +20,7 @@ import com.biopay.agent.data.AlternateDao;
 import com.biopay.agent.data.HouseholdDao;
 import com.biopay.agent.households.PersonCaptureActivity;
 import com.biopay.agent.households.PersonDetailActivity;
+import com.biopay.agent.households.RelationshipGender;
 import com.biopay.agent.ui.BaseActivity;
 import com.biopay.agent.ui.OutcomeFeedback;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
@@ -115,6 +116,10 @@ public class HouseholdAlternatesActivity extends BaseActivity {
         genderField.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_dropdown_item_1line, genderOptions));
         String[] relationshipOptions = getResources().getStringArray(R.array.alternate_relationship_options);
         etRelationship.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_dropdown_item_1line, relationshipOptions));
+        etRelationship.setOnItemClickListener((parent, view, position, id) -> {
+            String inferred = RelationshipGender.infer(relationshipOptions[position]);
+            genderField.setText(inferred == null ? "" : inferred, false);
+        });
 
         etName.setText(alternate.alternateName);
         etRelationship.setText(alternate.relationship, false);

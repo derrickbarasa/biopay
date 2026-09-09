@@ -10,3 +10,6 @@ logs/
 *.pem
 *.p8.pem
 .env
+
+# Android agent APKs served at /biopay/downloads (drop builds locally; not committed)
+app-releases/*.apk

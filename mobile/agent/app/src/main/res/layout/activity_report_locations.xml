@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/bp_background"
+    android:fitsSystemWindows="true"
+    android:orientation="vertical">
+
+    <com.google.android.material.appbar.MaterialToolbar
+        android:id="@+id/toolbar"
+        style="@style/BioPay.Toolbar"
+        android:title="@string/reports_locations_title"
+        app:navigationIcon="@drawable/ic_arrow_back"
+        app:navigationIconTint="@color/bp_text_primary" />
+
+    <TextView
+        android:id="@+id/tvLocationRange"
+        style="@style/BioPay.SupportingText"
+        android:layout_marginStart="16dp"
+        android:layout_marginTop="12dp"
+        android:layout_marginEnd="16dp" />
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/recyclerLocations"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_marginStart="16dp"
+        android:layout_marginTop="10dp"
+        android:layout_marginEnd="16dp"
+        android:layout_marginBottom="16dp"
+        android:layout_weight="1"
+        android:background="@drawable/bg_report_surface"
+        android:clipToPadding="false" />
+
+    <TextView
+        android:id="@+id/tvLocationsEmpty"
+        style="@style/BioPay.SupportingText"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_margin="16dp"
+        android:layout_weight="1"
+        android:gravity="center"
+        android:text="@string/reports_locations_empty"
+        android:textAlignment="center"
+        android:visibility="gone" />
+</LinearLayout>

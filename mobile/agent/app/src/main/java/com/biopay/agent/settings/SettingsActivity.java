@@ -22,27 +22,16 @@ import com.biopay.agent.face.FaceCaptureActivity;
 import com.biopay.agent.face.FaceRecognitionEngine;
 import com.biopay.agent.face.FaceRecognitionException;
 import com.biopay.agent.face.MlKitFaceRecognitionEngine;
-import com.biopay.agent.login.LoginActivity;
-import com.biopay.agent.network.ApiCallback;
-import com.biopay.agent.network.ApiClient;
-import com.biopay.agent.profile.ProfileActivity;
-import com.biopay.agent.security.SecurityActivity;
 import com.biopay.agent.session.SessionManager;
 import com.biopay.agent.sync.SyncAlertsManager;
-import com.biopay.agent.sync.SyncScheduler;
-import com.biopay.agent.sync.SyncFeedback;
 import com.biopay.agent.ui.BaseActivity;
 import com.biopay.agent.ui.OutcomeFeedback;
-import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.materialswitch.MaterialSwitch;
 import com.google.android.material.snackbar.Snackbar;
-
-import org.json.JSONObject;
 
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
-import java.util.HashMap;
 
 public class SettingsActivity extends BaseActivity {
     private SessionManager sessionManager;
@@ -78,24 +67,11 @@ public class SettingsActivity extends BaseActivity {
 
         tvScannerStatus = findViewById(R.id.tvScannerStatus);
 
-        setupAccountRow();
-        setupSecurityRow();
         setupNotifications();
         setupBiometrics();
         setupDataAndStorage();
 
-        findViewById(R.id.btnTestConnection).setOnClickListener(view -> testConnection());
-        findViewById(R.id.btnSyncNow).setOnClickListener(view -> {
-            view.setEnabled(false);
-            SyncFeedback.observe(this, this, view, SyncScheduler.triggerNow(this), () -> {
-                view.setEnabled(true);
-                setupDataAndStorage();
-            });
-            show(R.string.settings_sync_queued);
-        });
         findViewById(R.id.btnSendFeedback).setOnClickListener(view -> sendFeedback());
-        findViewById(R.id.btnLogout).setOnClickListener(view -> confirmLogout());
-
         ((TextView) findViewById(R.id.tvVersion)).setText(getString(R.string.settings_version, BuildConfig.VERSION_NAME));
     }
 
@@ -103,20 +79,6 @@ public class SettingsActivity extends BaseActivity {
     protected void onResume() {
         super.onResume();
         refreshScannerStatus();
-    }
-
-    private void setupAccountRow() {
-        ((TextView) findViewById(R.id.tvAccountName)).setText(sessionManager.getFullName());
-        String partnerCode = sessionManager.getPartnerCode();
-        ((TextView) findViewById(R.id.tvAccountSubtitle)).setText(
-                partnerCode == null || partnerCode.isEmpty() ? sessionManager.getEmail() : partnerCode);
-        findViewById(R.id.rowAccount).setOnClickListener(v ->
-                startActivity(new Intent(this, ProfileActivity.class)));
-    }
-
-    private void setupSecurityRow() {
-        findViewById(R.id.rowSecurity).setOnClickListener(v ->
-                startActivity(new Intent(this, SecurityActivity.class)));
     }
 
     private void setupNotifications() {
@@ -250,38 +212,4 @@ public class SettingsActivity extends BaseActivity {
         }
     }
 
-    private void testConnection() {
-        findViewById(R.id.btnTestConnection).setEnabled(false);
-        ApiClient.get(this).dispatch("ME", new HashMap<>(), new ApiCallback() {
-            @Override public void onSuccess(JSONObject response) {
-                findViewById(R.id.btnTestConnection).setEnabled(true);
-                show(R.string.settings_connection_ok);
-            }
-            @Override public void onError(String message, String responseCode) {
-                findViewById(R.id.btnTestConnection).setEnabled(true);
-                Snackbar.make(findViewById(android.R.id.content), message, Snackbar.LENGTH_LONG).show();
-            }
-        });
-    }
-
-    private void confirmLogout() {
-        new MaterialAlertDialogBuilder(this)
-                .setTitle(R.string.logout_title)
-                .setMessage(R.string.logout_message)
-                .setNegativeButton(R.string.cancel, null)
-                .setPositiveButton(R.string.logout_confirm, (dialog, which) -> logout())
-                .show();
-    }
-
-    private void logout() {
-        sessionManager.clear();
-        Intent intent = new Intent(this, LoginActivity.class);
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-        startActivity(intent);
-        finish();
-    }
-
-    private void show(int stringId) {
-        Snackbar.make(findViewById(android.R.id.content), stringId, Snackbar.LENGTH_SHORT).show();
-    }
 }

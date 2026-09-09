@@ -1,5 +1,6 @@
 package com.biopay.agent.feed;
 
+import android.content.res.Configuration;
 import android.os.Bundle;
 import android.view.View;
 
@@ -31,6 +32,11 @@ public class ActivityFeedActivity extends BaseActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_activity_feed);
         setupBackToolbar(R.id.toolbar);
+
+        if (getResources().getConfiguration().orientation == Configuration.ORIENTATION_LANDSCAPE) {
+            findViewById(R.id.tvScreenTitle).setVisibility(View.GONE);
+            findViewById(R.id.tvScreenDescription).setVisibility(View.GONE);
+        }
 
         activityDao = new ActivityDao(this);
         adapter = new ActivityFeedAdapter();

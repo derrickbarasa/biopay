@@ -85,6 +85,20 @@ public class FaceDao {
         return results;
     }
 
+    /** Every other beneficiary's stored face (same model version, offline, no extra live capture)
+     *  -- for the same cross-beneficiary duplicate check {@link
+     *  com.biopay.agent.data.FingerprintDao#templatesExcludingBeneficiary} already does for
+     *  fingerprints, so the same face can't be enrolled under two different people. */
+    public List<FaceRecord> listOtherBeneficiaries(String excludeBeneficiaryId, String modelVersion) {
+        List<FaceRecord> results = new ArrayList<>();
+        try (Cursor cursor = dbHelper.getReadableDatabase().query("faces", null,
+                "beneficiary_id<>? AND model_version=?",
+                new String[]{excludeBeneficiaryId, modelVersion}, null, null, null)) {
+            while (cursor.moveToNext()) results.add(fromCursor(cursor));
+        }
+        return results;
+    }
+
     /** Whether this beneficiary has any face capture at all, regardless of which model version
      *  produced it -- for UI "captured?" checks (e.g. household edit screen) that don't care
      *  which prototype/production model was in use at capture time, unlike {@link

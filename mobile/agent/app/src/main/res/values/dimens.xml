@@ -3,12 +3,30 @@
     <!-- Mirrors the authenticated dashboard shape system: restrained surfaces and controls. -->
     <dimen name="bp_radius_surface">10dp</dimen>
     <dimen name="bp_radius_control">8dp</dimen>
+    <dimen name="bp_radius_report">6dp</dimen>
+
+    <!-- Portrait default: plenty of vertical room, so the brand mark can read at full size.
+         values-land overrides this much smaller so it can't push the login fields off-screen on
+         a short landscape viewport (see activity_login.xml). -->
+    <dimen name="login_logo_max_height">220dp</dimen>
 
     <!-- Compact phones: preserve usable content width without sacrificing touch targets. -->
     <dimen name="home_content_horizontal_padding">12dp</dimen>
     <dimen name="home_content_top_padding">16dp</dimen>
     <dimen name="home_hero_padding">16dp</dimen>
     <dimen name="main_navigation_height">56dp</dimen>
+
+    <!-- Search/filter list screens (households, alternates, attendance, payment verification,
+         voucher redemption, activity feed): portrait has height to spare, but on a short
+         landscape viewport this header block plus the bottom nav bar was eating most of the
+         screen, leaving room for a single list row. values-land shrinks these so the list itself
+         gets the space. -->
+    <dimen name="list_header_top_padding">8dp</dimen>
+    <dimen name="list_search_height">56dp</dimen>
+    <dimen name="list_search_margin_top">16dp</dimen>
+    <dimen name="list_filter_margin_top">12dp</dimen>
+    <dimen name="screen_title_text_size">24sp</dimen>
+    <dimen name="activity_feed_top_padding">24dp</dimen>
     <dimen name="main_navigation_label_size">11sp</dimen>
     <!-- Material's default gap between a nav item's icon and its label (mtrl_navigation_bar_item_default_margin)
          is 8dp, which read as a wide, disconnected gap once the bar was tightened. Overriding this

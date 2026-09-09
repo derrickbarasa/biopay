@@ -377,7 +377,14 @@ public class Administration extends AbstractVerticle {
                 + "STRING_AGG(p.permission_name, ',') AS permission_names FROM roles r LEFT JOIN role_permissions rp ON rp.role_id=r.id AND rp.status=1 LEFT JOIN permissions p ON p.id=rp.permission_id "
                 + (browseAll
                     ? "WHERE r.status=1 "
-                    : "WHERE r.status=1 AND r.role_scope<>'SYSTEM' AND ((r.anchor_id IS NULL AND r.role_name IN ('Anchor Administrator','Organisation Administrator')) OR r.anchor_id=@p1) ")
+                    // The NOT EXISTS guard drops the shared NULL-anchor template once this anchor
+                    // has forked its own copy (see saveRole) -- without it, an anchor that has
+                    // customized "Organisation Administrator" would see both its own row and the
+                    // unmodified template under the same name.
+                    : "WHERE r.status=1 AND r.role_scope<>'SYSTEM' AND ("
+                        + "(r.anchor_id IS NULL AND r.role_name IN ('Anchor Administrator','Organisation Administrator') "
+                        + "AND NOT EXISTS (SELECT 1 FROM roles r2 WHERE r2.anchor_id=@p1 AND r2.role_name=r.role_name AND r2.status=1)) "
+                        + "OR r.anchor_id=@p1) ")
                 + "GROUP BY r.id,r.role_name,r.description,r.anchor_id,r.organization_code,r.role_scope,r.status,r.created_at,r.updated_at ORDER BY r.role_name";
         pool.preparedQuery(sql).execute(browseAll ? Tuple.tuple() : Tuple.of(anchorId)).onFailure(e->dbFail(message,e)).onSuccess(rows->{
             JsonArray out=new JsonArray(); for(Row r:rows){String roleName=Rows.str(r,"role_name");String names=Rows.str(r,"permission_names");boolean builtIn="Super Admin".equals(roleName)||"Anchor Administrator".equals(roleName)||"Organisation Administrator".equals(roleName);out.add(new JsonObject().put("id",Rows.intVal(r,"id")).put("name",roleName).put("description",Rows.str(r,"description")).put("scope",Rows.str(r,"role_scope")).put("anchorId",Rows.intVal(r,"anchor_id")).put("builtIn",builtIn).put("systemRole","SYSTEM".equalsIgnoreCase(Rows.str(r,"role_scope"))).put("status",Rows.intVal(r,"status")).put("permissions",names==null?new JsonArray():new JsonArray(java.util.Arrays.asList(names.split(",")))));}
@@ -417,9 +424,38 @@ public class Administration extends AbstractVerticle {
                     .execute(Tuple.of(name,p.getString("description"),scope,roleId))
                     .compose(rows->rows.size()==0?Future.failedFuture("Role not found or is system-managed"):Future.succeededFuture(Rows.intVal(rows.iterator().next(),"id")));
         }else{
-            roleFuture=pool.preparedQuery("UPDATE roles SET role_name=@p1,description=@p2,role_scope=@p3,updated_at=GETDATE() OUTPUT INSERTED.id WHERE id=@p4 AND anchor_id=@p5")
-                    .execute(Tuple.of(name,p.getString("description"),scope,roleId,anchorId))
-                    .compose(rows->rows.size()==0?Future.failedFuture("Role not found or is system-managed"):Future.succeededFuture(Rows.intVal(rows.iterator().next(),"id")));
+            Integer editAnchorId=anchorId;
+            // "Organisation Administrator" ships as one shared, anchor_id-NULL template row every
+            // anchor's org-admin users resolve against (see the seed script and getRoles' fallback
+            // clause below) -- an anchor administrator is allowed to customize their own anchor's
+            // copy, but a plain UPDATE would either match nothing (anchor_id filter excludes NULL)
+            // or, if it didn't, silently rewrite every other anchor's org admins too. So the first
+            // edit forks it into an anchor-owned row instead; later edits find that row via its own
+            // anchor_id and just UPDATE it like any other tenant role.
+            roleFuture=pool.preparedQuery("SELECT role_name, anchor_id FROM roles WHERE id=@p1").execute(Tuple.of(roleId))
+                    .compose(lookupRows->{
+                        if(lookupRows.size()==0) return Future.failedFuture("Role not found or is system-managed");
+                        Row existing=lookupRows.iterator().next();
+                        boolean isOrgAdminTemplate = Rows.intVal(existing,"anchor_id")==null && "Organisation Administrator".equals(Rows.str(existing,"role_name"));
+                        if(isOrgAdminTemplate){
+                            Integer templateRoleId=roleId;
+                            return pool.preparedQuery("INSERT INTO roles (role_name,description,anchor_id,role_scope,status,created_at) OUTPUT INSERTED.id VALUES (@p1,@p2,@p3,@p4,1,GETDATE())")
+                                    .execute(Tuple.of(name,p.getString("description"),editAnchorId,scope))
+                                    .map(rows->Rows.intVal(rows.iterator().next(),"id"))
+                                    // Repoint this anchor's own org-admin users off the shared template
+                                    // and onto their new fork -- otherwise the customization silently
+                                    // does not apply to anyone (new users would pick it up via
+                                    // Organization#createOrganization's own anchor-first lookup, but
+                                    // already-existing users are still pointed at templateRoleId).
+                                    .compose(newRoleId -> pool.preparedQuery(
+                                            "UPDATE users SET role_id=@p1 WHERE role_id=@p2 AND anchor_id=@p3 AND user_scope='ORGANISATION'")
+                                            .execute(Tuple.of(newRoleId,templateRoleId,editAnchorId))
+                                            .map(v -> newRoleId));
+                        }
+                        return pool.preparedQuery("UPDATE roles SET role_name=@p1,description=@p2,role_scope=@p3,updated_at=GETDATE() OUTPUT INSERTED.id WHERE id=@p4 AND anchor_id=@p5")
+                                .execute(Tuple.of(name,p.getString("description"),scope,roleId,editAnchorId))
+                                .compose(rows->rows.size()==0?Future.failedFuture("Role not found or is system-managed"):Future.succeededFuture(Rows.intVal(rows.iterator().next(),"id")));
+                    });
         }
         roleFuture.compose(id->pool.preparedQuery("DELETE FROM role_permissions WHERE role_id=@p1").execute(Tuple.of(id)).map(id))
                 // One batched multi-row INSERT instead of one round trip per permission -- a

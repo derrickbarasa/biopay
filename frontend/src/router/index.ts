@@ -135,6 +135,8 @@ const router = createRouter({
           component: () => import('@/pages/AttendancePage.vue'),
           meta: { roles: ['ANCHOR', 'ORGANISATION'], permission: 'ACCESS_ATTENDANCE', title: 'Attendance' },
         },
+        { path: 'android-app', name: 'android-app', component: () => import('@/pages/AndroidAppPage.vue'), meta: { title: 'Android App' } },
+        { path: 'api-documentation', name: 'api-documentation', component: () => import('@/pages/ApiDocumentationPage.vue'), meta: { title: 'API Documentation' } },
         { path: 'settings', name: 'settings', component: () => import('@/pages/SettingsPage.vue'), meta: { title: 'Settings' } },
         { path: 'subscription', name: 'subscription', component: () => import('@/pages/SubscriptionPage.vue'), meta: { roles: ['ANCHOR'], anchorSubscription: true, permission: 'ACCESS_SUBSCRIPTION', title: 'Subscription' } },
       ],

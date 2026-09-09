@@ -1,10 +1,12 @@
 package com.biopay.agent.attendance;
 
 import android.content.Intent;
+import android.content.res.Configuration;
 import android.os.Bundle;
 import android.view.View;
 
 import androidx.appcompat.widget.SearchView;
+import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
@@ -34,9 +36,18 @@ public class AttendanceActivity extends BaseActivity {
         adapter = new HouseholdListAdapter(household ->
                 startActivity(AttendanceBeneficiariesActivity.intentFor(this, household.householdNumber)));
 
+        boolean isLandscape = getResources().getConfiguration().orientation == Configuration.ORIENTATION_LANDSCAPE;
+
         RecyclerView recyclerView = findViewById(R.id.recyclerHouseholds);
-        recyclerView.setLayoutManager(new LinearLayoutManager(this));
+        recyclerView.setLayoutManager(isLandscape
+                ? new GridLayoutManager(this, 2)
+                : new LinearLayoutManager(this));
         recyclerView.setAdapter(adapter);
+
+        if (isLandscape) {
+            findViewById(R.id.tvScreenTitle).setVisibility(View.GONE);
+            findViewById(R.id.tvScreenDescription).setVisibility(View.GONE);
+        }
 
         SearchView searchView = findViewById(R.id.searchView);
         SearchViewHelper.makeFullyClickable(searchView);

@@ -157,4 +157,15 @@ public class SessionManager {
         String stored = prefs.getString(KEY_VERIFICATION_METHOD, null);
         return stored == null || stored.isEmpty() ? "BIOMETRIC" : stored;
     }
+
+    /** Refreshes just the cached verification method, called from {@code SyncManager} each sync
+     *  pass so a dashboard admin's change reaches an already-logged-in device without requiring
+     *  a logout/login. See the "ME" processing code, which is the only other reader/writer of
+     *  this preference besides login/offline-login. */
+    public void updateVerificationMethod(String verificationMethod) {
+        if (verificationMethod == null || verificationMethod.isEmpty()) {
+            return;
+        }
+        prefs.edit().putString(KEY_VERIFICATION_METHOD, verificationMethod).apply();
+    }
 }

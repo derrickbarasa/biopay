@@ -113,6 +113,13 @@ const navSections: NavSection[] = [
       { title: 'Anchors', icon: 'mdi-bank-outline', to: '/app/anchors', roles: ['ANCHOR'], systemOnly: true },
       { title: 'Organizations', icon: 'mdi-domain', to: '/app/organizations', roles: ['ANCHOR'], permission: 'ACCESS_ORGANISATIONS' },
       { title: 'Locations', icon: 'mdi-map-marker-radius', to: '/app/locations', roles: ['ANCHOR', 'ORGANISATION'], permission: 'ACCESS_LOCATIONS' },
+      { title: 'API Documentation', icon: 'mdi-api', to: '/app/api-documentation' },
+    ],
+  },
+  {
+    title: 'Android App',
+    items: [
+      { title: 'App', icon: 'mdi-android', to: '/app/android-app' },
     ],
   },
   {

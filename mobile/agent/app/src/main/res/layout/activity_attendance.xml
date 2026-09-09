@@ -19,15 +19,15 @@
         android:layout_height="wrap_content"
         android:orientation="vertical"
         android:paddingStart="16dp"
-        android:paddingTop="8dp"
+        android:paddingTop="@dimen/list_header_top_padding"
         android:paddingEnd="16dp">
-        <TextView style="@style/BioPay.ScreenTitle" android:text="@string/attendance_title" />
-        <TextView style="@style/BioPay.SupportingText" android:layout_marginTop="4dp" android:text="@string/attendance_description" />
+        <TextView android:id="@+id/tvScreenTitle" style="@style/BioPay.ScreenTitle" android:text="@string/attendance_title" />
+        <TextView android:id="@+id/tvScreenDescription" style="@style/BioPay.SupportingText" android:layout_marginTop="4dp" android:text="@string/attendance_description" />
         <androidx.appcompat.widget.SearchView
             android:id="@+id/searchView"
             android:layout_width="match_parent"
-            android:layout_height="56dp"
-            android:layout_marginTop="16dp"
+            android:layout_height="@dimen/list_search_height"
+            android:layout_marginTop="@dimen/list_search_margin_top"
             android:background="@drawable/bg_icon_container"
             android:iconifiedByDefault="false"
             android:queryHint="@string/attendance_search_hint" />

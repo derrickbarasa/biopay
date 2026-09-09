@@ -45,8 +45,6 @@
                     <View style="@style/BioPay.RowDivider" />
                     <include layout="@layout/row_more_item" android:id="@+id/rowSettings" />
                     <View style="@style/BioPay.RowDivider" />
-                    <include layout="@layout/row_more_item" android:id="@+id/rowSecurity" />
-                    <View style="@style/BioPay.RowDivider" />
                     <include layout="@layout/row_more_item" android:id="@+id/rowSyncCenter" />
                     <View style="@style/BioPay.RowDivider" />
                     <include layout="@layout/row_more_item" android:id="@+id/rowAttendance" />
@@ -58,6 +56,17 @@
                     <include layout="@layout/row_more_item" android:id="@+id/rowReports" />
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnLogout"
+                style="@style/BioPay.SecondaryButton"
+                android:layout_width="match_parent"
+                android:layout_marginTop="20dp"
+                android:text="@string/menu_logout"
+                android:textColor="@color/bp_error"
+                app:icon="@drawable/ic_logout"
+                app:iconTint="@color/bp_error"
+                app:strokeColor="@color/bp_outline_variant" />
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>
 

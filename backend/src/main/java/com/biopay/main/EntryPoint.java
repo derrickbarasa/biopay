@@ -34,16 +34,19 @@ import com.biopay.services.Payment;
 import com.biopay.services.Payroll;
 import com.biopay.services.Subscription;
 import com.biopay.services.Voucher;
+import com.biopay.utilities.AppReleaseStore;
 import com.biopay.utilities.JwtSupport;
 import com.biopay.utilities.Logging;
 import com.biopay.utilities.PermissionPolicy;
 
 /**
- * HTTP surface for biopay. Deliberately just two routes:
+ * HTTP surface for biopay. Deliberately just a few routes:
  *
  * <ul>
  *   <li>{@code /biopay/authentication} -- unauthenticated. Only accepts the
  *       session-establishing processing codes (login, refresh).</li>
+ *   <li>{@code /biopay/downloads/:filename} -- unauthenticated. Serves the
+ *       Android agent APKs from {@link AppReleaseStore}.</li>
  *   <li>{@code /biopay/api/v1/req} -- JWT-protected. Every other processing
  *       code (organisations, officers, households, payments, payroll,
  *       dashboard, biometric sync) is dispatched from here by name over the
@@ -170,6 +173,37 @@ public class EntryPoint extends AbstractVerticle {
                     response.end(badRequest("Error occurred: " + ex.getMessage()).toString());
                 }
             });
+        });
+
+        // ---- /biopay/downloads/:filename (public: Android agent APKs) -----
+        // Unauthenticated on purpose -- a field officer needs to install the app before they can
+        // ever sign in, and the download link is shared to devices directly (email, WhatsApp, a
+        // QR code), never through the logged-in dashboard session.
+
+        router.route("/biopay/downloads/*").handler(CorsHandler.create()
+                .addOriginWithRegex(allowedOriginRegex)
+                .allowedMethod(io.vertx.core.http.HttpMethod.GET)
+                .allowedMethod(io.vertx.core.http.HttpMethod.OPTIONS));
+
+        router.route("/biopay/downloads/:filename").handler(rtc -> {
+            String filename = rtc.pathParam("filename");
+            if (filename == null || !filename.matches("[A-Za-z0-9._-]+\\.apk")) {
+                rtc.response().setStatusCode(400).end();
+                return;
+            }
+            if (!AppReleaseStore.exists(filename)) {
+                rtc.response().setStatusCode(404).end("This app build is not available yet. Please contact your administrator.");
+                return;
+            }
+            try {
+                byte[] bytes = AppReleaseStore.read(filename);
+                rtc.response()
+                        .putHeader("Content-Type", "application/vnd.android.package-archive")
+                        .putHeader("Content-Disposition", "attachment; filename=\"" + filename + "\"")
+                        .end(io.vertx.core.buffer.Buffer.buffer(bytes));
+            } catch (Exception ex) {
+                rtc.response().setStatusCode(404).end();
+            }
         });
 
         // ---- /biopay/api/v1/req (JWT-protected: everything else) ----------

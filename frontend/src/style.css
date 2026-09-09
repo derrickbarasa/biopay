@@ -95,13 +95,25 @@ body {
 .v-overlay[role='dialog'] .v-btn--variant-outlined:not(.v-btn--icon) {
   background-color: #f8fafc;
 }
+/* A field whose floating label has nothing above it but the dialog's title/subtitle (no
+ * section header, no preceding field) floats close enough to this container's own top edge
+ * that the label -- which legitimately paints a few pixels above its field's box, by design --
+ * gets clipped by this same overflow-y: auto the instant that gap shrinks (e.g. Roles &
+ * Permissions' "Role name"/"Access scope" row, the very first thing after the dialog subtitle).
+ * Whether that gap is "enough" depends on incidental content above the field (a section header
+ * happens to give other dialogs enough clearance) rather than anything guaranteed, so the fix
+ * belongs here once, on the clipping boundary itself, not on whichever dialog happens to be
+ * reported next. 10px comfortably clears a floating label's overshoot at every field density
+ * this app uses. */
 .v-overlay[role='dialog'] .v-card-text {
   min-height: 0;
+  padding-top: 10px;
   overflow-y: auto;
   overscroll-behavior: contain;
 }
 .v-overlay[role='dialog'] .v-card > form {
   min-height: 0;
+  padding-top: 10px;
   overflow-y: auto;
   overscroll-behavior: contain;
 }
