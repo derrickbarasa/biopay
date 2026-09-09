@@ -61,9 +61,8 @@ const { dialogAnchorId: bulkDialogAnchorId, dialogOrganizations: bulkDialogOrgan
 const loading = ref(true)
 const households = ref<HouseholdRow[]>([])
 
-// Both roles see everything in their scope immediately -- the backend already
-// treats an unset anchor/organisation filter as "show all" (`IS NULL OR ...`),
-// so the picker below narrows the view without ever blocking it.
+// The backend treats an unset anchor/organisation filter as "show all", so the
+// picker below narrows the view without ever blocking it.
 const scopeReady = computed(() => true)
 const saving = ref(false)
 
@@ -73,7 +72,7 @@ const locations = ref<GeoNode[]>([])
 const villages = ref<GeoNode[]>([])
 const organizations = ref<{ organisationCode: string; name: string }[]>([])
 
-// ---- Filters -- each one its own backend query parameter, no client-side search ----
+// Each filter is its own backend query parameter; no client-side search.
 const filters = ref({
   organisationCode: null as string | null,
   stateCode: null as string | null,
@@ -109,14 +108,13 @@ const headers = [
   { title: 'Actions', key: 'actions', sortable: false, align: 'start' as const },
 ]
 
-// ---- Name-not-code lookups -- the table shows organisation/village names, not their
-// internal codes, using the same organizations/villages lists already fetched for filters.
+// The table shows organisation/village names, not their internal codes.
 const orgNameByCode = computed(() => new Map(organizations.value.map((o) => [o.organisationCode, o.name])))
 const villageNameByCode = computed(() => new Map(villages.value.map((v) => [v.code, v.name])))
 function orgName(code?: string) { return (code && orgNameByCode.value.get(code)) || code || '—' }
 function villageName(code?: string) { return (code && villageNameByCode.value.get(code)) || code || '—' }
 
-// ---- Client-side breakdown graphs over the currently loaded (filtered) rows ----
+// Breakdown graphs computed client-side over the currently loaded (filtered) rows.
 const genderBreakdown = computed(() => householdGenderBreakdown(households.value))
 
 const ageBreakdown = computed(() => {
@@ -144,8 +142,7 @@ const statusBreakdown = computed(() => REVIEW_STATUSES.map((s) => ({
   color: s === 'APPROVED' ? '#16A34A' : s === 'REJECTED' ? '#DC2626' : '#F59E0B',
 })))
 
-// Groups the loaded rows by a free-text attribute (vulnerability / legal status),
-// counting blanks as "Unspecified". Used for the two attribute breakdown charts.
+// Groups rows by a free-text attribute, counting blanks as "Unspecified".
 function groupByAttribute(pick: (h: HouseholdRow) => string | undefined, label: (value?: string) => string = (value) => value || 'Not recorded') {
   const counts = new Map<string, number>()
   for (const h of households.value) {
@@ -179,14 +176,10 @@ const countiesForState = (stateCode: string) => stateCode ? counties.value.filte
 const locationsForCounty = (countyCode: string) => countyCode ? locations.value.filter((l) => l.countyCode === countyCode) : locations.value
 const villagesForLocation = (locationCode: string) => locationCode ? villages.value.filter((v) => v.locationCode === locationCode) : villages.value
 
-// Sourced from GET_HOUSEHOLD_LOCATIONS, not GET_STATES/COUNTIES/LOCATIONS/VILLAGES: those
-// read the anchor's curated geo_states/geo_counties/... catalogue, which a household's own
-// state_code/county_code/payam_code/boma_code columns are NOT tied to -- a household
-// registered via mobile's manual-entry path stores the officer's typed place name directly
-// in those columns with no catalogue node ever created for it. Filtering (and the "Village"
-// column's name lookup below) against the catalogue therefore silently missed those
-// households. Sourcing the dropdowns/lookup from the households actually on file instead
-// fixes that and keeps the two in sync by construction.
+// Sourced from GET_HOUSEHOLD_LOCATIONS, not GET_STATES/COUNTIES/LOCATIONS/VILLAGES: a household's
+// state/county/location/village columns aren't tied to the anchor's geo catalogue (mobile's
+// manual-entry path stores free-typed place names with no catalogue node), so filtering and the
+// "Village" name lookup against the catalogue would silently miss those households.
 async function loadGeo() {
   const targetAnchorId = auth.isSystemAdmin ? selectedAnchorId.value : undefined
   try {
@@ -236,8 +229,7 @@ async function load() {
   }
 }
 
-// Every select filter re-queries immediately; the text filter debounces via onSearchInput
-// instead (bound directly on the field), so typing doesn't fire a request per keystroke.
+// Select filters re-query immediately; the text filter debounces via onSearchInput instead.
 // Cascading geo filters clear their narrower selections when a broader one changes.
 watch(() => filters.value.stateCode, () => { filters.value.countyCode = null; filters.value.locationCode = null; filters.value.villageCode = null; load() })
 watch(() => filters.value.countyCode, () => { filters.value.locationCode = null; filters.value.villageCode = null; load() })
@@ -252,9 +244,7 @@ watch(() => filters.value.legalStatus, load)
 watch(() => filters.value.dateFrom, load)
 watch(() => filters.value.dateTo, load)
 
-// Super Admin picking a different anchor resets whatever organisation was
-// selected under the previous one, then reloads both the organisation list
-// and the (now re-scoped) household list.
+// A Super Admin switching anchors resets the organisation filter and reloads both lists.
 watch(selectedAnchorId, () => { filters.value.organisationCode = null; loadGeo(); load() })
 
 function clearFilters() {
@@ -262,7 +252,6 @@ function clearFilters() {
   load()
 }
 
-// Exports the currently loaded (i.e. filtered) household rows to CSV.
 function exportCsv() {
   if (!households.value.length) {
     toast.error('No households to export')
@@ -303,10 +292,7 @@ async function remove(row: HouseholdRow) {
   }
 }
 
-// ---- Import CSV (one template upload = one village's batch) --------------------
-// Renamed from "Bulk Upload" -- same underlying flow, still CSV-based. The template
-// now only includes the fields the user actually selects, rather than always every field.
-
+// Import CSV: one template upload is scoped to one village's batch.
 const bulkDialog = ref(false)
 const bulkOrganisationCode = ref<string | null>(null)
 const bulkStateCode = ref('')

@@ -30,9 +30,7 @@ const dateFilter = ref<string | null>(null)
 const clockFilter = ref<string | null>(null)
 const organisationFilter = ref<string | null>(null)
 
-// Both roles see everything in their scope immediately -- the backend already
-// treats an unset anchor/organisation filter as "show all" (`IS NULL OR ...`),
-// so the picker below narrows the view without ever blocking it.
+// Always true: an unset anchor/organisation filter already means "show all" server-side.
 const scopeReady = computed(() => true)
 
 const headers = [
@@ -54,7 +52,6 @@ function attendanceShareLabel(count: number) {
   return records.value.length ? `${Math.round((count / records.value.length) * 100)}% of filtered records` : 'No attendance recorded'
 }
 
-// Name-not-code lookup, matching the pattern used on Households/Officers.
 const orgNameByCode = computed(() => new Map(organizations.value.map((o) => [o.organisationCode, o.name])))
 function orgName(code?: string) { return (code && orgNameByCode.value.get(code)) || code || '—' }
 

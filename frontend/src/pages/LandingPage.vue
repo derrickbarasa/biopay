@@ -71,9 +71,14 @@ function trackScrollDir() {
 }
 
 // Nav hides the instant the page moves and drops back in once scrolling settles.
+// Guarded to real scrolling only (scrollY past a small threshold): a scroll event
+// can fire with zero user input -- scroll anchoring as hero images load, for
+// instance -- and this class also drives pointer-events:none while hidden (see
+// .nav-hidden below), so an ungated hide could silently swallow the very first
+// click on "Log in" or any nav link before the visitor has scrolled at all.
 const navHidden = ref(false)
 function handleNavScroll() {
-  if (mobileNavOpen.value) {
+  if (mobileNavOpen.value || window.scrollY < 24) {
     navHidden.value = false
     return
   }

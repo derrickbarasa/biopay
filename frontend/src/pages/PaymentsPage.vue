@@ -48,8 +48,7 @@ const detailLoading = ref(false)
 const detailError = ref('')
 const detailPayment = ref<PaymentRow | null>(null)
 
-// Both roles see everything in their scope immediately -- the backend already
-// treats an unset anchor/organisation filter as "show all" (`IS NULL OR ...`),
+// An unset anchor/organisation filter already means "show all" on the backend,
 // so the picker below narrows the view without ever blocking it.
 const scopeReady = computed(() => true)
 
@@ -63,7 +62,6 @@ const headers = [
   { title: 'Actions', key: 'actions', sortable: false, align: 'start' as const },
 ]
 
-// Name-not-code lookup, matching the pattern used elsewhere in the dashboard.
 const orgNameByCode = computed(() => new Map(organizations.value.map((o) => [o.organisationCode, o.name])))
 function orgName(code?: string) { return (code && orgNameByCode.value.get(code)) || code || '—' }
 
@@ -140,8 +138,7 @@ async function loadOrganizations() {
   }
 }
 
-// Super Admin picking a different anchor resets whatever organisation was
-// selected under the previous one, then reloads both lists.
+// Switching anchor resets any organisation filter from the previous one, then reloads both lists.
 watch(selectedAnchorId, () => { organisationFilter.value = null; loadOrganizations(); load() })
 
 onMounted(() => {
@@ -199,8 +196,7 @@ async function markFailed(row: PaymentRow) {
   }
 }
 
-// Permission-gated -- default only for the System Owner (who bypasses permission checks
-// entirely), hidden for every other role until explicitly granted PAY_ONLINE from the Roles page.
+// Hidden for every role until explicitly granted PAY_ONLINE from the Roles page.
 async function payOnline(row: PaymentRow) {
   if (!await confirmAction({
     title: 'Pay online?',

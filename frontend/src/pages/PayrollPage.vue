@@ -56,19 +56,12 @@ const organizations = ref<{ organisationCode: string; name: string; anchorId?: n
 const statusFilter = ref<string | null>(null)
 const organisationFilter = ref<string | null>(null)
 
-// Both roles see everything in their scope immediately -- the backend already
-// treats an unset anchor/organisation filter as "show all" (`IS NULL OR ...`),
+// An unset anchor/organisation filter already means "show all" on the backend,
 // so the picker below narrows the view without ever blocking it.
 const scopeReady = computed(() => true)
 
-// Explicit widths (Vuetify applies each as the column's own inline style) instead of letting
-// the table auto-shrink every column to fit the card: without them, a value as long as
-// "PENDING_APPROVAL" or a two-date period got squeezed narrower than its own content and
-// either clipped (the status chip) or wrapped across three lines (the period), and the whole
-// row could end up wider than intended with the Actions column pushed past the visible edge.
-// Fixed widths mean the table is exactly as wide as it needs to be and scrolls horizontally
-// on a narrow viewport instead -- both v-table__wrapper (this table) and .view-table-scroll
-// (the View dialog's table) already provide that scroll container.
+// Fixed widths keep long values ("PENDING_APPROVAL", a two-date period) from clipping
+// or wrapping; the table scrolls horizontally instead (both table wrappers support it).
 const headers = [
   { title: 'Cycle', key: 'cycleCode', width: 190, nowrap: true },
   { title: 'Organization', key: 'organisationCode', width: 160, nowrap: true },
@@ -116,8 +109,7 @@ async function loadOrganizations() {
   }
 }
 
-// Super Admin picking a different anchor resets whatever organisation was
-// selected under the previous one, then reloads both lists.
+// Switching anchor resets any organisation filter from the previous one, then reloads both lists.
 watch(selectedAnchorId, () => { organisationFilter.value = null; loadOrganizations(); load() })
 
 onMounted(() => {
@@ -153,8 +145,7 @@ function openWizard() {
   router.push({ name: 'payroll-generate' })
 }
 
-// ---- Approve flow (anchor only) -- line items load alongside so the maker's rejects
-//      (per-row checkboxes below) can be sent before the rest of the cycle is approved ----
+// ---- Approve flow: line items load alongside so rejects can be sent before approval ----
 const approveDialog = ref(false)
 const approveTarget = ref<Cycle | null>(null)
 const approveOtp = ref('')
@@ -225,8 +216,7 @@ async function confirmApprove() {
   }
 }
 
-// The cycle's own generator (maker) can trim it down -- reject individual households they
-// picked -- any time before a checker approves it, without needing anchor-admin approval rights.
+// The cycle's own maker can reject individual households any time before a checker approves it.
 function isMakerOf(cycle: Cycle) {
   return !!auth.user?.id && cycle.makerId === auth.user.id
 }
@@ -301,10 +291,7 @@ const viewDialog = ref(false)
 const viewTarget = ref<Cycle | null>(null)
 const viewItems = ref<PaymentLine[]>([])
 const viewLoading = ref(false)
-// Distinct from "loaded fine, zero rows": GET_PAYROLL failing (e.g. the backend being
-// unreachable) also leaves viewItems empty, and conflating the two showed a calm "No
-// households in this cycle" for a cycle that actually does have households whose fetch just
-// failed -- misleading enough to read as a real data problem instead of a request that needs retrying.
+// Kept separate from "loaded fine, zero rows" -- a fetch failure must not read as an empty cycle.
 const viewError = ref(false)
 
 async function openView(cycle: Cycle) {
@@ -341,9 +328,7 @@ function genderLabel(gender?: string | null) {
   if (gender === 'F') return 'Female'
   return '—'
 }
-// The line-item cycle_code column is anchor/organisation-scoped payment data, not a full
-// household record -- send the maker/checker to the same household detail page HouseholdsPage
-// itself links to, rather than duplicating that record's fields into this dialog.
+// A payment line isn't a full household record, so send the maker/checker to the household detail page instead.
 function viewHousehold(line: PaymentLine) {
   viewDialog.value = false
   router.push({ name: 'household-detail', params: { householdNumber: line.householdNumber } })
@@ -398,9 +383,7 @@ function viewHousehold(line: PaymentLine) {
           </v-tooltip>
           <v-chip v-else size="small" :color="statusColor[item.status] ?? 'grey'" variant="tonal">{{ item.status }}</v-chip>
         </template>
-        <!-- Icon-only actions, each named by a tooltip rather than an inline label: the label
-             text ("Approve", "Disburse", ...) was what pushed this cell past the card's edge --
-             up to four buttons wide before a row even reaches its status-dependent maximum. -->
+        <!-- Icon-only actions (tooltip-labeled) keep this cell from overflowing at up to four buttons wide. -->
         <template #item.actions="{ item }">
           <div class="actions-cell">
             <v-tooltip text="View details" location="top">

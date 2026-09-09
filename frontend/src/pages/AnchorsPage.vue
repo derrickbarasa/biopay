@@ -104,7 +104,7 @@ async function toggleStatus(item: Anchor) {
   }
 }
 
-// Auto-fills the capital when a country is picked; still a plain editable field afterwards.
+// Auto-fills the capital when a country is picked; still editable afterwards.
 watch(() => anchor.country, (country, previous) => {
   if (country && country !== previous) anchor.city = capitalFor(country) || anchor.city
 })

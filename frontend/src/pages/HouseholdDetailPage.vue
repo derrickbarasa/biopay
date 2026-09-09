@@ -14,12 +14,6 @@ import {
   vulnerabilityLabel,
 } from '@/constants/householdClassifications'
 
-// Dedicated, full-page household view (replaces the old popup dialog). Renders
-// every field the GET_HOUSEHOLD / GET_ALTERNATES endpoints currently return.
-// Fields not yet exposed by the backend (marital status, ID number, dependants,
-// captured images, payment/audit history) are tracked in progress.md as backend
-// follow-ups and intentionally not faked here.
-
 interface Alternate {
   alternateNumber?: string
   alternateName?: string
@@ -306,10 +300,6 @@ async function printVoucher() {
   }
 }
 
-// ---- Edit household (UPDATE_HOUSEHOLD already existed on the backend; this wires
-// it into the UI, which previously offered no way to correct a household's own
-// details after registration). ------------------------------------------------
-
 const editDialog = ref(false)
 const editing = ref(false)
 const editForm = ref({
@@ -318,9 +308,8 @@ const editForm = ref({
   vulnerabilityStatuses: [] as string[], legalStatus: '',
 })
 
-// Bound to each geo select's own change event (not a watcher on the whole form),
-// so resetting dependent fields only happens when the user actively picks a new
-// parent value -- never when openEdit() below populates the form in one go.
+// Bound to each select's own change event, not a form-wide watcher, so dependent
+// fields reset only on an active pick -- never when openEdit() populates the form.
 function onEditStateChange() { editForm.value.countyCode = ''; editForm.value.locationCode = ''; editForm.value.villageCode = '' }
 function onEditCountyChange() { editForm.value.locationCode = ''; editForm.value.villageCode = '' }
 function onEditLocationChange() { editForm.value.villageCode = '' }
@@ -374,7 +363,6 @@ async function saveEdit() {
   }
 }
 
-// Exports this household's alternates to CSV.
 function exportAlternates() {
   if (!alternates.value.length) {
     toast.error('No alternates to export')
@@ -389,13 +377,8 @@ function exportAlternates() {
   downloadCsv(`alternates-${householdNumber.value}.csv`, csv)
 }
 
-// ---- Add alternate (+ optional photo) -----------------------------------------
-// Creates the alternate via CREATE_ALTERNATE (already anchor/org scoped, same as
-// CREATE_HOUSEHOLD), then -- if a photo was picked -- uploads it via the existing
-// mobile-facing UPLOAD_IMAGE code, keyed to the new alternateNumber with
-// beneficiaryType 2 (alternate), matching the app-wide 1=head/2=alternate
-// convention. Nothing new is invented on the backend for either step.
-
+// A picked photo uploads via UPLOAD_IMAGE with beneficiaryType 2, matching the
+// app-wide 1=head/2=alternate convention.
 const addAltDialog = ref(false)
 const addingAlt = ref(false)
 const altForm = ref({ alternateName: '', relationship: '', phoneNumber: '', gender: '', age: null as number | null })

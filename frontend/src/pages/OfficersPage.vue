@@ -49,9 +49,7 @@ const geoLoading = ref(true)
 
 const filters = ref({ organisationCode: null as string | null, active: null as string | null })
 
-// Both roles see everything in their scope immediately -- the backend already
-// treats an unset anchor/organisation filter as "show all" (`IS NULL OR ...`),
-// so the picker below narrows the view without ever blocking it.
+// Always true: an unset anchor/organisation filter already means "show all" server-side.
 const scopeReady = computed(() => true)
 
 const headers = [
@@ -63,7 +61,6 @@ const headers = [
   { title: 'Actions', key: 'actions', sortable: false, align: 'start' as const },
 ]
 
-// Name-not-code lookups, matching the pattern used on Households.
 const orgNameByCode = computed(() => new Map(organizations.value.map((o) => [o.organisationCode, o.name])))
 const stateNameByCode = computed(() => new Map(states.value.map((s) => [s.code, s.name])))
 const countyNameByCode = computed(() => new Map(counties.value.map((c) => [c.code, c.name])))
@@ -74,8 +71,7 @@ function stateName(code?: string) { return (code && stateNameByCode.value.get(co
 function countyName(code?: string) { return (code && countyNameByCode.value.get(code)) || code || '—' }
 function locationNodeName(code?: string) { return (code && locationNameByCode.value.get(code)) || code || '—' }
 function villageName(code?: string) { return (code && villageNameByCode.value.get(code)) || code || '—' }
-// Villages can share a name across different states/counties, so any display of an
-// assigned location must show the full path, not just the village.
+// Villages can share a name across states/counties, so show the full path, not just the village.
 function locationPath(loc: OfficerLocation) {
   return [stateName(loc.stateCode), countyName(loc.countyCode), locationNodeName(loc.payamCode), villageName(loc.bomaCode)].join(' › ')
 }
@@ -209,7 +205,7 @@ async function setOfficerActive(officer: Officer, active: boolean) {
   }
 }
 
-// ---- Assign locations (geotagging -- which villages/counties an officer covers) ----
+// ---- Assign locations ----
 const locationDialog = ref(false)
 const locationTarget = ref<Officer | null>(null)
 const locationForm = ref({ stateCode: '', countyCode: '', locationCode: '', villageCode: '' })

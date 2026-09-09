@@ -16,13 +16,10 @@ const form=reactive({email:'',username:'',firstName:'',otherNames:'',userScope:'
 const editForm=reactive({id:0,email:'',firstName:'',otherNames:'',roleId:null as number|null,userScope:'ORGANISATION'})
 const headers=[{title:'User',key:'email'},{title:'Scope',key:'userScope'},{title:'Role',key:'roleName'},{title:'Status',key:'status'},{title:'Actions',key:'actions',sortable:false,align:'start' as const}]
 const availableRoles=computed(()=>roles.value.filter(r=>r.scope===form.userScope&&(r.builtIn||!auth.isSystemAdmin||r.anchorId===form.targetAnchorId)));
-// Only an existing Super Admin can mint another one -- a tenantless, permission-bypass identity
-// with no anchor/organisation, so it's offered here only for auth.isSystemAdmin, not auth.isAnchor.
+// Only an existing Super Admin can mint another SYSTEM-scope (tenantless) user.
 const scopeOptions=computed(()=>auth.isSystemAdmin?['SYSTEM','ANCHOR','ORGANISATION']:['ANCHOR','ORGANISATION']);
 const availableEditRoles=computed(()=>roles.value.filter(r=>r.scope===editForm.userScope));
 const availableOrganisations=computed(()=>auth.isSystemAdmin?orgs.value.filter(o=>o.anchorId===form.targetAnchorId):orgs.value)
-// GET_ORGANIZATIONS is safe for org-scoped callers too -- it just returns their own org --
-// so this always fetches, letting the Scope column show a name instead of a raw partner code.
 const orgNameByCode=computed(()=>new Map(orgs.value.map(o=>[o.organisationCode,o.name])));
 function orgName(code?:string){return (code&&orgNameByCode.value.get(code))||code||'—'}
 async function load(){loading.value=true;try{const [u,r,o]=await Promise.all([dispatch<{results:UserRow[]}>('GET_USERS'),dispatch<{results:Role[]}>('GET_ROLES'),dispatch<{results:Org[]}>('GET_ORGANIZATIONS')]);users.value=u.results??[];roles.value=r.results??[];orgs.value=o.results??[];if(auth.isSystemAdmin){const a=await dispatch<{results:Anchor[]}>('GET_ANCHORS');anchors.value=a.results??[]}}catch(e){toast.error(e instanceof Error?e.message:'Unable to load users')}finally{loading.value=false}}

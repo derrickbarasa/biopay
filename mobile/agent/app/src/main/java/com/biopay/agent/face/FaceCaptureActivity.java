@@ -39,21 +39,16 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * Dumb capture-and-validate screen: shows a live back-camera preview (the officer is always
- * photographing someone else, never themselves), runs a fast ML Kit
- * detector on each frame purely for on-screen guidance (enable/disable the capture button, show
- * a status chip), and on capture writes a still JPEG to a cache file and returns its path.
- * Deliberately owns no embedding/storage/enrollment logic itself -- see {@link
- * MlKitFaceRecognitionEngine}, which re-validates the actual captured still authoritatively and
- * is the only place identity matching would ever be attempted.
+ * Back-camera capture-and-validate screen (officer photographs someone else, never themselves).
+ * On-frame ML Kit detection only drives capture-button/status-chip UI; no embedding/storage
+ * logic here -- see {@link MlKitFaceRecognitionEngine} for actual identity matching.
  */
 public class FaceCaptureActivity extends BaseActivity {
 
     public static final String EXTRA_RESULT_IMAGE_PATH = "face_capture_image_path";
-    /** Optional string-resource id overriding the on-screen guidance copy -- callers that actually
-     *  save or match the captured photo (enrollment, payment verification) must pass one of
+    /** Callers that save/match the captured photo (enrollment, payment verification) must pass
      *  {@link R.string#face_capture_guidance_enroll} / {@link R.string#face_capture_guidance_verify}
-     *  so the officer isn't told "nothing is saved" while capturing a real beneficiary photo. */
+     *  here -- otherwise the default self-test guidance ("nothing is saved") is shown instead. */
     public static final String EXTRA_GUIDANCE_TEXT_RES = "face_capture_guidance_text_res";
 
     private PreviewView previewView;

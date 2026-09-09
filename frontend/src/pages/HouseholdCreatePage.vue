@@ -8,11 +8,6 @@ import { useAnchorScope } from '@/composables/useAnchorScope'
 import { useOrgCascade } from '@/composables/useOrgCascade'
 import { LEGAL_STATUS_OPTIONS, VULNERABILITY_OPTIONS } from '@/constants/householdClassifications'
 
-// Dedicated full page for "Add Household" (replaces the old in-dialog form on
-// HouseholdsPage). Mirrors the HouseholdDetailPage/PayrollGeneratePage
-// pattern: its own route so registration, the duplicate-candidate review and
-// the location cascade all get real breathing room.
-
 interface GeoNode {
   code: string
   name: string
@@ -80,9 +75,7 @@ function goToList() {
   router.push({ name: 'households' })
 }
 
-// Screens the entry against existing households before creating. If any possible
-// duplicates come back, they're shown and creation waits for an explicit "Register
-// anyway"; a clean check registers immediately.
+// Screens for duplicates first; a clean check saves immediately, otherwise waits for "Register anyway".
 async function attemptSave() {
   if (!form.value.householdName.trim()) {
     toast.error('Head of household name is required')

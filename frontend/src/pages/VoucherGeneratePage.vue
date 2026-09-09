@@ -8,11 +8,6 @@ import { useAnchorScope } from '@/composables/useAnchorScope'
 import { useOrgCascade } from '@/composables/useOrgCascade'
 import { applyVoucherAmount, type VoucherAmountRow } from '@/utils/voucherAmounts'
 
-// Dedicated full page for "Generate Vouchers by Area" (replaces the old
-// in-dialog wizard on VouchersPage). Mirrors the PayrollGeneratePage pattern:
-// its own route so the picker gets real breathing room and the maker can
-// step back to the vouchers list without losing the list's own filters.
-
 interface GeoNode {
   code: string
   name: string
@@ -103,8 +98,7 @@ function resetScope() {
   rows.value = []
 }
 
-// Every active household in the chosen geographic scope, one page at a time (GET_HOUSEHOLDS caps
-// pageSize at 200 server-side), stopping at BULK_ISSUE_VOUCHERS' own 500-row limit.
+// Pages through GET_HOUSEHOLDS (200/page server-side cap), stopping at BULK_ISSUE_VOUCHERS' 500-row limit.
 async function loadScopeHouseholds() {
   rows.value = []
   if (!selectedScopeCode.value) return
@@ -175,8 +169,7 @@ function applyFlatAmountToAll() {
     toast.error('Enter a positive amount to apply to every household')
     return
   }
-  // Replace the array instead of mutating Vuetify table-slot row proxies in place.
-  // This guarantees every visible page and every row sent to the API receives the value.
+  // Replace the array rather than mutate table-slot row proxies in place, so every row updates.
   rows.value = applyVoucherAmount(rows.value, amount)
   toast.success(`${amount.toLocaleString()} applied to ${rows.value.length} household${rows.value.length === 1 ? '' : 's'}`)
 }

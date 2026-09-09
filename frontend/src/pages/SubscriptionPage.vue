@@ -58,8 +58,6 @@ const filteredSubscriptions = computed(() => allSubscriptions.value.filter((a) =
   return true
 }))
 
-/** Currencies available for renewal records -- USD is the platform default, the rest cover
- *  the anchors this system already operates across (see the org/anchor Country picker). */
 const CURRENCIES = ['USD', 'KES', 'UGX', 'SSP', 'ETB', 'TZS', 'RWF', 'NGN', 'XAF', 'GBP', 'EUR']
 
 const renewForm = ref({ amount: null as number | null, currency: 'USD', anchorId: null as number | null })
@@ -171,9 +169,7 @@ function escapeHtml(s: string): string {
   ))
 }
 
-// Opens a print-ready receipt in a new window -- the same pattern as the household
-// voucher print, so "download" here means "print / save as PDF" via the browser,
-// consistent with how the rest of the product handles printable documents.
+// "Download" means print/save-as-PDF via a print-ready window, not a real file download.
 async function downloadReceipt(invoice: Invoice) {
   downloadingReceipt.value = invoice.invoiceNumber
   try {

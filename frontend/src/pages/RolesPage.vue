@@ -2,6 +2,7 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { dispatch } from '@/api/client'
 import { useToast } from '@/composables/useToast'
+import { useConfirm } from '@/composables/useConfirm'
 import { useAuthStore } from '@/stores/auth'
 import { PERMISSION_GROUPS, isLegacyPermission, permissionActionLabel } from '@/constants/permissionCatalog'
 
@@ -13,6 +14,10 @@ interface PermissionGroup { key: string; label: string; description: string; ico
 
 const toast = useToast()
 const auth = useAuthStore()
+const { confirmAction } = useConfirm()
+
+const SENSITIVE_CODES = new Set(['PAY_ONLINE', 'ACCESS_PAYMENTS', 'ACCESS_PAYMENT_CYCLES', 'ACCESS_VOUCHERS'])
+
 const loading = ref(false)
 const saving = ref(false)
 const permissionDialog = ref(false)
@@ -21,39 +26,26 @@ const roles = ref<Role[]>([])
 const permissions = ref<Permission[]>([])
 const anchors = ref<Anchor[]>([])
 const selectedAnchorId = ref<number | null>(null)
-const selected = ref<number | null>(null)
+const tableSearch = ref('')
 const permissionSearch = ref('')
+const dialog = ref(false)
+const openModules = ref<string[]>([])
 const form = reactive({ roleId: null as number | null, name: '', description: '', scope: 'ORGANISATION', permissionIds: [] as number[], anchorId: null as number | null })
 const newPermission = reactive({ name: '', displayName: '', groupKey: 'REPORTS', description: '' })
 
 const assignablePermissions = computed(() => permissions.value.filter((permission) => !isLegacyPermission(permission.name)))
-const selectedRole = computed(() => roles.value.find((role) => role.id === selected.value))
-// Whichever scope the current session itself belongs to reads first -- a Super Admin
-// wants to see the Super Admin role at the top of their own roles list, not buried
-// under every anchor/organisation role that happens to sort ahead of it alphabetically.
-const sortedRoles = computed(() => {
-  const ownScopeRank = (role: Role) => (auth.isSystemAdmin ? (role.scope === 'SYSTEM' ? 0 : 1) : (role.scope === auth.role ? 0 : 1))
-  return [...roles.value].sort((a, b) => ownScopeRank(a) - ownScopeRank(b))
-})
+const selectedRole = computed(() => roles.value.find((role) => role.id === form.roleId))
+const ownScopeRank = (role: Role) => (auth.isSystemAdmin ? (role.scope === 'SYSTEM' ? 0 : 1) : (role.scope === auth.role ? 0 : 1))
+const sortedRoles = computed(() => [...roles.value].sort((a, b) => ownScopeRank(a) - ownScopeRank(b)))
 const anchorNameById = computed(() => new Map(anchors.value.map((a) => [a.id, a.name])))
 function roleAnchorName(role: Role) { return role.anchorId != null ? anchorNameById.value.get(role.anchorId) ?? null : null }
-// The Super Admin has full system access, so no role or permission is locked to them -- these
-// built-in-role locks only ever apply to an Anchor Administrator managing their own tenant's roles.
 const isBuiltInRole = computed(() => !auth.isSystemAdmin && !!selectedRole.value?.builtIn)
 const isUnlimitedRole = computed(() => !auth.isSystemAdmin && !!selectedRole.value?.systemRole)
-// The Super Admin role's scope has nowhere sensible to move to (there is no picker option for
-// "System"), so its scope field alone stays fixed even though everything else about the role
-// -- name, description, permissions -- opens up for the Super Admin like any other role.
 const isFixedScopeRole = computed(() => selectedRole.value?.scope === 'SYSTEM')
-// Creating a brand-new Anchor/Organisation-scoped role needs a target anchor -- chosen right
-// here in the editor, not as a page-wide precondition -- since a role has to belong to some
-// anchor. A System-scoped role belongs to no anchor, so it never needs one. Editing an existing
-// role never does either: an Anchor Administrator's own anchor is always known from their
-// session, and the Super Admin can save changes to any anchor's role without narrowing the
-// page down to that one tenant first.
 const canSave = computed(() => auth.can('ACCESS_ROLES') && (!auth.isSystemAdmin || form.roleId !== null || form.scope === 'SYSTEM' || !!form.anchorId) && !isBuiltInRole.value)
 const selectedPermissionCount = computed(() => form.permissionIds.filter((id) => assignablePermissions.value.some((permission) => permission.id === id)).length)
-const allPermissionsSelected = computed(() => assignablePermissions.value.length > 0 && selectedPermissionCount.value === assignablePermissions.value.length)
+
+function isSensitive(code: string) { return SENSITIVE_CODES.has(code) }
 
 const permissionGroups = computed<PermissionGroup[]>(() => {
   const query = permissionSearch.value.trim().toLowerCase()
@@ -79,16 +71,33 @@ function groupSelectedCount(group: PermissionGroup) {
 function isGroupFullySelected(group: PermissionGroup) {
   return group.items.length > 0 && groupSelectedCount(group) === group.items.length
 }
-function isGroupPartiallySelected(group: PermissionGroup) {
-  const count = groupSelectedCount(group)
-  return count > 0 && count < group.items.length
-}
 function toggleGroup(group: PermissionGroup) {
   const ids = new Set(group.items.map((item) => item.permission.id))
   form.permissionIds = isGroupFullySelected(group)
     ? form.permissionIds.filter((id) => !ids.has(id))
     : [...new Set([...form.permissionIds, ...ids])]
 }
+function togglePermission(id: number) {
+  if (isBuiltInRole.value) return
+  const index = form.permissionIds.indexOf(id)
+  if (index >= 0) form.permissionIds.splice(index, 1)
+  else form.permissionIds.push(id)
+}
+
+const headers = computed(() => [
+  { title: 'Name', key: 'name' },
+  { title: 'Description', key: 'description' },
+  { title: 'Scope', key: 'scope' },
+  { title: 'Permissions', key: 'permissionCount' },
+  ...(auth.isSystemAdmin && !selectedAnchorId.value ? [{ title: 'Anchor', key: 'anchorName' }] : []),
+  { title: 'Actions', key: 'actions', sortable: false, align: 'end' as const },
+])
+const tableRows = computed(() => sortedRoles.value.map((role) => ({
+  ...role,
+  permissionCount: role.permissions.filter((code) => !isLegacyPermission(code)).length,
+  anchorName: roleAnchorName(role) ?? '—',
+})))
+function scopeLabel(scope: string) { return scope === 'SYSTEM' ? 'System' : scope === 'ANCHOR' ? 'Anchor' : 'Organisation' }
 
 async function load(preferredRoleId?: number | null) {
   loading.value = true
@@ -99,8 +108,10 @@ async function load(preferredRoleId?: number | null) {
     ])
     roles.value = roleResponse.results ?? []
     permissions.value = permissionResponse.results ?? []
-    const target = roles.value.find((role) => role.id === preferredRoleId) ?? roles.value.find((role) => role.id === selected.value) ?? sortedRoles.value[0]
-    if (target) edit(target)
+    if (preferredRoleId != null) {
+      const target = roles.value.find((role) => role.id === preferredRoleId)
+      if (target) fillForm(target)
+    }
   } catch (error) {
     toast.error(error instanceof Error ? error.message : 'Unable to load roles')
   } finally {
@@ -108,8 +119,7 @@ async function load(preferredRoleId?: number | null) {
   }
 }
 
-function edit(role: Role) {
-  selected.value = role.id
+function fillForm(role: Role) {
   Object.assign(form, {
     roleId: role.id,
     name: role.name,
@@ -118,13 +128,20 @@ function edit(role: Role) {
     permissionIds: permissions.value.filter((permission) => role.permissions.includes(permission.name) && !isLegacyPermission(permission.name)).map((permission) => permission.id),
     anchorId: role.anchorId ?? null,
   })
+}
+
+function openEdit(role: Role) {
+  fillForm(role)
   permissionSearch.value = ''
+  openModules.value = permissionGroups.value.map((g) => g.key)
+  dialog.value = true
 }
 
 function createRole() {
-  selected.value = null
   Object.assign(form, { roleId: null, name: '', description: '', scope: 'ORGANISATION', permissionIds: [], anchorId: selectedAnchorId.value })
   permissionSearch.value = ''
+  openModules.value = permissionGroups.value.map((g) => g.key)
+  dialog.value = true
 }
 
 async function save() {
@@ -145,6 +162,7 @@ async function save() {
     const wasNew = form.roleId === null
     await dispatch('SAVE_ROLE', { ...form, targetAnchorId: auth.isSystemAdmin && wasNew ? form.anchorId : undefined })
     toast.success(wasNew ? 'Role created' : 'Role permissions updated')
+    dialog.value = false
     await load()
   } catch (error) {
     toast.error(error instanceof Error ? error.message : 'Unable to save role')
@@ -153,31 +171,34 @@ async function save() {
   }
 }
 
-const deleting = ref(false)
-const deleteRoleDialog = ref(false)
-
-async function confirmDeleteRole() {
-  if (form.roleId === null) return
-  deleting.value = true
+async function removeRole(role: Role) {
+  if (!await confirmAction({
+    title: 'Delete role?',
+    message: `Delete "${role.name}"? Roles still assigned to a user can't be deleted -- reassign them first.`,
+    confirmLabel: 'Delete role',
+    color: 'error',
+  })) return
   try {
-    await dispatch('DELETE_ROLE', { roleId: form.roleId, targetAnchorId: auth.isSystemAdmin ? selectedAnchorId.value : undefined })
+    await dispatch('DELETE_ROLE', { roleId: role.id, targetAnchorId: auth.isSystemAdmin ? selectedAnchorId.value : undefined })
     toast.success('Role deleted')
-    deleteRoleDialog.value = false
-    createRole()
+    dialog.value = false
     await load()
   } catch (error) {
     toast.error(error instanceof Error ? error.message : 'Unable to delete role')
-  } finally {
-    deleting.value = false
   }
 }
 
 async function deletePermission(permission: Permission) {
-  if (!confirm(`Delete the "${permission.displayName || permission.name}" permission? Any role that has it will lose it.`)) return
+  if (!await confirmAction({
+    title: 'Delete permission?',
+    message: `Delete the "${permission.displayName || permission.name}" permission? Any role that has it will lose it.`,
+    confirmLabel: 'Delete permission',
+    color: 'error',
+  })) return
   try {
     await dispatch('DELETE_PERMISSION', { permissionId: permission.id })
     toast.success('Permission deleted')
-    await load(selected.value)
+    await load(form.roleId)
   } catch (error) {
     toast.error(error instanceof Error ? error.message : 'Unable to delete permission')
   }
@@ -198,7 +219,7 @@ async function createPermission() {
     await dispatch('CREATE_PERMISSION', { ...newPermission })
     toast.success('Permission created')
     permissionDialog.value = false
-    await load(selected.value)
+    await load(form.roleId)
   } catch (error) {
     toast.error(error instanceof Error ? error.message : 'Unable to create permission')
   } finally {
@@ -213,135 +234,144 @@ onMounted(async () => {
   }
   await load()
 })
-watch(selectedAnchorId, () => { selected.value = null; void load() })
+watch(selectedAnchorId, () => void load())
 </script>
 
 <template>
   <div class="roles-page">
-    <header class="page-head">
+    <div class="page-heading d-flex align-center justify-space-between mb-5 ga-4">
       <div>
-        <div class="title-row">
-          <h1>Roles &amp; permissions</h1>
-          <v-chip size="small" variant="tonal" color="success">{{ auth.isSystemAdmin ? 'System policy control' : 'Anchor policy control' }}</v-chip>
-        </div>
-        <p>{{ auth.isSystemAdmin ? 'Your Super Admin access is permanent. Every anchor\'s roles are shown below -- choose one to focus on just that tenant, or create a new role for it.' : 'Create a role, then choose exactly what people with that role can view or change.' }}</p>
+        <h1 class="page-title">Roles &amp; permissions</h1>
+        <p>{{ auth.isSystemAdmin ? "Every anchor's roles, in one place." : 'Create a role, then choose what it can access.' }}</p>
       </div>
-      <div class="head-actions">
+      <div class="d-flex ga-2">
         <v-btn v-if="auth.isSystemAdmin" variant="outlined" prepend-icon="mdi-shield-plus-outline" @click="openCreatePermission">Create permission</v-btn>
-        <v-btn v-if="auth.can('ACCESS_ROLES')" color="secondary" prepend-icon="mdi-plus" @click="createRole">Create role</v-btn>
+        <v-btn v-if="auth.can('ACCESS_ROLES')" color="secondary" prepend-icon="mdi-plus" @click="createRole">New role</v-btn>
       </div>
-    </header>
-
-    <div class="role-workspace">
-      <aside class="role-list" aria-label="Available roles">
-        <div class="role-list-head">
-          <div class="role-list-heading"><strong>Roles</strong><span>{{ roles.length }}</span></div>
-          <v-select
-            v-if="auth.isSystemAdmin" v-model="selectedAnchorId" :items="anchors" item-title="name" item-value="id" clearable
-            label="Anchor" variant="outlined" density="compact" hide-details class="role-list-anchor-filter"
-          />
-        </div>
-        <v-skeleton-loader v-if="loading" type="list-item-two-line@3" />
-        <template v-else>
-          <button v-for="role in sortedRoles" :key="role.id" type="button" :class="{ active: selected === role.id }" @click="edit(role)">
-            <span>{{ role.name }}</span>
-            <small>{{ role.systemRole ? 'Unlimited platform access' : `${role.permissions.filter((permission) => !isLegacyPermission(permission)).length} permissions` }} · {{ role.scope === 'SYSTEM' ? 'System' : role.scope === 'ANCHOR' ? 'Anchor' : 'Organisation' }}{{ auth.isSystemAdmin && !selectedAnchorId && roleAnchorName(role) ? ` · ${roleAnchorName(role)}` : '' }}</small>
-          </button>
-        </template>
-        <p v-if="!loading && !roles.length" class="empty-copy">No roles yet. Create the first role.</p>
-      </aside>
-
-      <main class="role-editor">
-        <div class="editor-head">
-          <div>
-            <h2>{{ form.roleId === null ? 'Create a role' : `Edit ${selectedRole?.name ?? 'role'}` }}</h2>
-            <p>{{ isUnlimitedRole ? 'Permanent platform access. This Super Admin role cannot be reduced, reassigned, or changed.' : form.roleId === null ? 'Name the role and assign only the access it needs.' : isBuiltInRole ? 'This built-in tenant administrator role is locked to its defined scope.' : 'Changes apply to every user assigned to this role.' }}</p>
-          </div>
-          <div class="selection-total" aria-live="polite"><strong>{{ selectedPermissionCount }}</strong><span>selected</span></div>
-        </div>
-
-        <div class="role-fields">
-          <v-select v-if="auth.isSystemAdmin && form.roleId === null && form.scope !== 'SYSTEM'" v-model="form.anchorId" :items="anchors" item-title="name" item-value="id" label="Anchor" variant="outlined" density="compact" class="wide" />
-          <v-text-field v-model="form.name" label="Role name" placeholder="e.g. Regional Coordinator" variant="outlined" density="compact" required :disabled="isBuiltInRole" />
-          <v-select
-            v-model="form.scope"
-            :items="auth.isSystemAdmin
-              ? [{ title: 'Organisation', value: 'ORGANISATION' }, { title: 'Anchor', value: 'ANCHOR' }, { title: 'System', value: 'SYSTEM' }]
-              : [{ title: 'Organisation', value: 'ORGANISATION' }, { title: 'Anchor', value: 'ANCHOR' }]"
-            label="Access scope" variant="outlined" density="compact" :disabled="isBuiltInRole || isFixedScopeRole"
-          />
-          <v-textarea v-model="form.description" label="Description" placeholder="What this role is for" variant="outlined" rows="2" density="compact" class="wide" :disabled="isBuiltInRole" />
-        </div>
-
-        <div class="permission-heading">
-          <div><h3>Assign permissions</h3><p>Permissions are grouped by the part of BioPay they control.</p></div>
-          <v-chip v-if="allPermissionsSelected" size="small" color="primary" variant="tonal">Full access</v-chip>
-        </div>
-        <v-text-field v-model="permissionSearch" label="Search permissions" prepend-inner-icon="mdi-magnify" clearable density="compact" hide-details class="permission-search" />
-
-        <div class="permission-groups">
-          <section v-for="group in permissionGroups" :key="group.key" class="permission-group">
-            <div class="group-head">
-              <div class="group-identity">
-                <v-icon :icon="group.icon" size="21" />
-                <div><h4>{{ group.label }}</h4><p>{{ group.description }}</p></div>
-              </div>
-              <label class="select-all">
-                <v-checkbox-btn :model-value="isGroupFullySelected(group)" :indeterminate="isGroupPartiallySelected(group)" :disabled="isBuiltInRole" color="primary" density="compact" @update:model-value="toggleGroup(group)" />
-                <span>{{ groupSelectedCount(group) }}/{{ group.items.length }}</span><strong>Select all</strong>
-              </label>
-            </div>
-            <div class="permission-options">
-              <label v-for="item in group.items" :key="item.permission.id" :class="{ selected: form.permissionIds.includes(item.permission.id) }">
-                <v-checkbox-btn v-model="form.permissionIds" :value="item.permission.id" :disabled="isBuiltInRole" color="primary" />
-                <span><strong>{{ item.actionLabel }}</strong><small>{{ item.permission.description }}</small></span>
-                <v-btn
-                  v-if="auth.isSystemAdmin && !item.permission.systemDefined"
-                  icon="mdi-trash-can-outline" size="x-small" variant="text" color="error"
-                  :title="`Delete ${item.actionLabel}`" @click.stop.prevent="deletePermission(item.permission)"
-                />
-              </label>
-            </div>
-          </section>
-          <div v-if="!loading && !permissionGroups.length" class="empty-copy">No permissions match your search.</div>
-        </div>
-
-        <div class="editor-actions">
-          <p v-if="!canSave">{{ isUnlimitedRole ? 'Super Admin access is enforced by the platform and cannot be changed.' : isBuiltInRole ? 'Built-in tenant administrator permissions are managed by BioPay policy.' : auth.isSystemAdmin && form.roleId === null && form.scope !== 'SYSTEM' && !form.anchorId ? 'Choose an anchor for this role.' : 'Your role can view roles but cannot change them.' }}</p>
-          <v-btn v-if="canSave && form.roleId !== null" variant="outlined" color="error" prepend-icon="mdi-trash-can-outline" @click="deleteRoleDialog = true">Delete role</v-btn>
-          <v-btn color="secondary" :loading="saving" :disabled="!canSave" prepend-icon="mdi-content-save-outline" @click="save">{{ form.roleId === null ? 'Create role' : 'Save permissions' }}</v-btn>
-        </div>
-      </main>
     </div>
 
-    <v-dialog v-model="permissionDialog" max-width="560">
-      <v-card class="permission-editor">
-        <dialog-close-button @close="permissionDialog = false" />
-        <v-card-title>Create permission</v-card-title>
-        <v-card-subtitle>Add a permission to one of the dashboard groups.</v-card-subtitle>
-        <v-card-text>
-          <v-select v-model="newPermission.groupKey" :items="PERMISSION_GROUPS" item-title="label" item-value="key" label="Permission group" variant="outlined" />
-          <v-text-field v-model="newPermission.displayName" label="Checkbox label" placeholder="Example: View audit log" variant="outlined" />
-          <v-text-field v-model="newPermission.name" label="Permission code" placeholder="VIEW_AUDIT_LOG" variant="outlined" hint="Use a stable code that the related feature can check." persistent-hint />
-          <v-textarea v-model="newPermission.description" label="Description" rows="2" variant="outlined" class="mt-3" />
-        </v-card-text>
-        <v-card-actions>
+    <v-card variant="flat" border>
+      <v-card-text v-if="auth.isSystemAdmin">
+        <v-select
+          v-model="selectedAnchorId" :items="anchors" item-title="name" item-value="id" clearable
+          label="Anchor" density="compact" hide-details style="max-width: 260px" prepend-inner-icon="mdi-bank-outline"
+        />
+      </v-card-text>
+      <v-data-table :headers="headers" :items="tableRows" :search="tableSearch" :loading="loading">
+        <template #item.scope="{ item }"><v-chip size="small" variant="tonal">{{ scopeLabel(item.scope) }}</v-chip></template>
+        <template #item.permissionCount="{ item }">{{ item.systemRole ? 'Unlimited' : item.permissionCount }}</template>
+        <template #item.description="{ item }">{{ item.description || '—' }}</template>
+        <template #item.actions="{ item }">
+          <v-btn icon="mdi-pencil" variant="text" size="small" :aria-label="`Edit ${item.name}`" @click="openEdit(item)" />
+          <v-btn
+            v-if="canSave && !item.builtIn && !item.systemRole" icon="mdi-delete-outline" variant="text" size="small" color="error"
+            :aria-label="`Delete ${item.name}`" @click="removeRole(item)"
+          />
+        </template>
+        <template #no-data>No roles yet. Create the first one.</template>
+      </v-data-table>
+    </v-card>
+
+    <v-dialog v-model="dialog" max-width="760" scrollable>
+      <v-card class="role-editor" variant="flat" border>
+        <div class="editor-heading">
+          <div>
+            <div class="editor-title">{{ form.roleId === null ? 'Create role' : `Edit ${selectedRole?.name ?? 'role'}` }}</div>
+            <p>{{ isUnlimitedRole ? 'Permanent platform access -- this role cannot be changed.' : isBuiltInRole ? 'This built-in role is locked to its defined scope.' : 'Changes apply to every user assigned to this role.' }}</p>
+          </div>
+          <dialog-close-button @close="dialog = false" />
+        </div>
+
+        <v-form>
+          <div class="identity-grid">
+            <v-text-field v-model="form.name" label="Role name" placeholder="e.g. Regional Coordinator" :disabled="isBuiltInRole" density="compact" hide-details="auto" />
+            <v-select
+              v-model="form.scope"
+              :items="auth.isSystemAdmin
+                ? [{ title: 'Organisation', value: 'ORGANISATION' }, { title: 'Anchor', value: 'ANCHOR' }, { title: 'System', value: 'SYSTEM' }]
+                : [{ title: 'Organisation', value: 'ORGANISATION' }, { title: 'Anchor', value: 'ANCHOR' }]"
+              label="Access scope" :disabled="isBuiltInRole || isFixedScopeRole" density="compact" hide-details="auto"
+            />
+          </div>
+          <v-select
+            v-if="auth.isSystemAdmin && form.roleId === null && form.scope !== 'SYSTEM'" v-model="form.anchorId"
+            :items="anchors" item-title="name" item-value="id" label="Anchor" density="compact" hide-details="auto" class="mt-3"
+          />
+          <v-textarea v-model="form.description" label="Description" placeholder="What this role is for" rows="2" density="compact" hide-details="auto" class="mt-3" :disabled="isBuiltInRole" />
+
+          <section class="permissions-section">
+            <div class="permissions-heading-row">
+              <div><h3>Permissions</h3><p>Grouped by the part of BioPay they control.</p></div>
+              <div class="permissions-meta">
+                <span>{{ selectedPermissionCount }} of {{ assignablePermissions.length }} selected</span>
+                <v-btn v-if="selectedPermissionCount" size="small" variant="text" :disabled="isBuiltInRole" @click="form.permissionIds = []">Clear all</v-btn>
+              </div>
+            </div>
+            <v-text-field v-model="permissionSearch" placeholder="Filter permissions…" prepend-inner-icon="mdi-magnify" density="compact" hide-details clearable class="mb-3" />
+
+            <v-expansion-panels v-model="openModules" multiple variant="accordion" class="permission-modules">
+              <v-expansion-panel v-for="group in permissionGroups" :key="group.key" :value="group.key">
+                <v-expansion-panel-title>
+                  <div class="module-title-row">
+                    <v-icon :icon="group.icon" size="19" />
+                    <span>{{ group.label }}</span>
+                    <v-chip size="x-small" variant="tonal">{{ groupSelectedCount(group) }}/{{ group.items.length }}</v-chip>
+                    <v-btn size="x-small" variant="text" :disabled="isBuiltInRole" @click.stop="toggleGroup(group)">
+                      {{ isGroupFullySelected(group) ? 'Clear' : 'Select all' }}
+                    </v-btn>
+                  </div>
+                </v-expansion-panel-title>
+                <v-expansion-panel-text>
+                  <p class="module-description">{{ group.description }}</p>
+                  <div class="permission-chip-row">
+                    <v-chip
+                      v-for="item in group.items" :key="item.permission.id"
+                      :color="form.permissionIds.includes(item.permission.id) ? (isSensitive(item.permission.name) ? 'error' : 'primary') : undefined"
+                      :variant="form.permissionIds.includes(item.permission.id) ? 'flat' : 'outlined'"
+                      :disabled="isBuiltInRole"
+                      :closable="auth.isSystemAdmin && !item.permission.systemDefined"
+                      :title="item.permission.description || item.actionLabel"
+                      @click="togglePermission(item.permission.id)"
+                      @click:close="deletePermission(item.permission)"
+                    >
+                      <v-icon v-if="form.permissionIds.includes(item.permission.id)" start size="14">mdi-check</v-icon>
+                      {{ item.actionLabel }}
+                    </v-chip>
+                  </div>
+                </v-expansion-panel-text>
+              </v-expansion-panel>
+            </v-expansion-panels>
+            <p v-if="!permissionGroups.length" class="empty-copy">No permissions match "{{ permissionSearch }}".</p>
+          </section>
+        </v-form>
+
+        <v-card-actions class="editor-actions">
+          <p v-if="!canSave" class="lock-copy">{{ isUnlimitedRole ? 'Super Admin access is fixed by the platform.' : isBuiltInRole ? 'This role is managed by BioPay policy.' : auth.isSystemAdmin && form.roleId === null && form.scope !== 'SYSTEM' && !form.anchorId ? 'Choose an anchor for this role.' : 'You can view roles but not change them.' }}</p>
+          <v-btn v-if="canSave && form.roleId !== null" variant="outlined" color="error" @click="removeRole(selectedRole!)">Delete role</v-btn>
           <v-spacer />
-          <v-btn variant="text" @click="permissionDialog = false">Cancel</v-btn>
-          <v-btn color="secondary" :loading="creatingPermission" @click="createPermission">Create permission</v-btn>
+          <v-btn variant="text" @click="dialog = false">Cancel</v-btn>
+          <v-btn color="secondary" :loading="saving" :disabled="!canSave" @click="save">{{ form.roleId === null ? 'Create role' : 'Save changes' }}</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
 
-    <v-dialog v-model="deleteRoleDialog" max-width="440">
-      <v-card>
-        <dialog-close-button @close="deleteRoleDialog = false" />
-        <v-card-title>Delete "{{ selectedRole?.name }}"?</v-card-title>
-        <v-card-text>This cannot be undone. Roles still assigned to a user can't be deleted -- reassign them first.</v-card-text>
-        <v-card-actions>
+    <v-dialog v-model="permissionDialog" max-width="560">
+      <v-card class="role-editor" variant="flat" border>
+        <div class="editor-heading">
+          <div>
+            <div class="editor-title">Create permission</div>
+            <p>Add a permission to one of the dashboard groups.</p>
+          </div>
+          <dialog-close-button @close="permissionDialog = false" />
+        </div>
+        <v-select v-model="newPermission.groupKey" :items="PERMISSION_GROUPS" item-title="label" item-value="key" label="Permission group" density="compact" hide-details="auto" />
+        <v-text-field v-model="newPermission.displayName" label="Checkbox label" placeholder="Example: View audit log" density="compact" hide-details="auto" class="mt-3" />
+        <v-text-field v-model="newPermission.name" label="Permission code" placeholder="VIEW_AUDIT_LOG" hint="Use a stable code the related feature can check." persistent-hint density="compact" class="mt-3" />
+        <v-textarea v-model="newPermission.description" label="Description" rows="2" density="compact" hide-details="auto" class="mt-3" />
+        <v-card-actions class="editor-actions">
           <v-spacer />
-          <v-btn variant="text" @click="deleteRoleDialog = false">Cancel</v-btn>
-          <v-btn color="error" :loading="deleting" @click="confirmDeleteRole">Delete role</v-btn>
+          <v-btn variant="text" @click="permissionDialog = false">Cancel</v-btn>
+          <v-btn color="secondary" :loading="creatingPermission" @click="createPermission">Create permission</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -350,62 +380,33 @@ watch(selectedAnchorId, () => { selected.value = null; void load() })
 
 <style scoped>
 .roles-page { width: 100%; }
-.page-head { display: flex; justify-content: space-between; align-items: center; gap: 20px; margin-bottom: 24px; }
-.page-head h1 { font-size: 2rem; letter-spacing: -.03em; }
-.page-head p, .editor-head p, .permission-heading p, .group-identity p { color: #64748b; }
-.page-head p { margin-top: 4px; max-width: 68ch; }
-.title-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.head-actions { display: flex; align-items: center; gap: 10px; }
-.role-workspace { display: grid; grid-template-columns: 270px minmax(0, 1fr); gap: 18px; align-items: start; }
-.role-list, .role-editor { background: #fff; border: 1px solid #e2e8f0; border-radius: 16px; }
-.role-list { padding: 10px; display: flex; flex-direction: column; gap: 7px; position: sticky; top: 18px; }
-.role-list-head { display: flex; flex-direction: column; gap: 8px; padding: 8px 8px 10px; color: #334155; }
-.role-list-heading { display: flex; justify-content: space-between; align-items: center; }
-.role-list-anchor-filter { max-width: 100%; }
-.role-list-anchor-filter :deep(.v-field) { font-size: .82rem; }
-.role-list-head span { min-width: 24px; height: 24px; display: grid; place-items: center; border-radius: 999px; background: #e2e8f0; font-size: .75rem; font-weight: 700; }
-.role-list button { width: 100%; text-align: left; background: transparent; border: 1px solid transparent; border-radius: 12px; padding: 13px 12px; color: #334155; cursor: pointer; }
-.role-list button:hover { background: #f8fafc; }
-.role-list button:focus-visible { outline: 3px solid rgba(13, 148, 136, .25); outline-offset: 1px; }
-.role-list button.active { border-color: #99f6e4; background: #f0fdfa; }
-.role-list button span, .role-list button small { display: block; }
-.role-list button span { font-weight: 750; }
-.role-list button small { color: #64748b; margin-top: 3px; }
-.role-editor { padding: 24px; }
-.editor-head, .permission-heading, .group-head, .editor-actions { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
-.editor-head { padding-bottom: 22px; border-bottom: 1px solid #e2e8f0; }
-.editor-head h2 { font-size: 1.3rem; letter-spacing: -.02em; color: #0f172a; }
-.editor-head p, .permission-heading p { margin-top: 3px; font-size: .86rem; }
-.selection-total { display: flex; flex-direction: column; align-items: center; min-width: 74px; padding: 9px 12px; border-radius: 12px; background: #f0fdfa; color: #115e59; }
-.selection-total strong { font-size: 1.15rem; line-height: 1; }
-.selection-total span { font-size: .72rem; margin-top: 3px; }
-.role-fields { display: grid; grid-template-columns: minmax(0, 1fr) 220px; gap: 0 16px; margin-top: 22px; }
-.wide { grid-column: 1 / -1; }
-.permission-heading { margin: 4px 0 14px; }
-.permission-heading h3 { font-size: 1rem; color: #1e293b; }
-.permission-search { max-width: 420px; margin-bottom: 16px; }
-.permission-groups { display: flex; flex-direction: column; gap: 14px; }
-.permission-group { border: 1px solid #e2e8f0; border-radius: 14px; overflow: hidden; }
-.group-head { padding: 14px 16px; background: #f8fafc; }
-.group-identity { display: flex; align-items: flex-start; gap: 11px; min-width: 0; }
-.group-identity :deep(.v-icon) { color: #0f766e; margin-top: 1px; }
-.group-identity h4 { color: #1e293b; font-size: .9rem; }
-.group-identity p { margin-top: 2px; font-size: .76rem; }
-.select-all { display: flex; align-items: center; white-space: nowrap; cursor: pointer; color: #475569; font-size: .75rem; }
-.select-all > span { margin-right: 7px; color: #64748b; }
-.permission-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; background: #e2e8f0; }
-.permission-options label { display: flex; gap: 8px; min-height: 72px; padding: 11px 13px; background: #fff; cursor: pointer; transition: background-color .16s ease; }
-.permission-options label:hover { background: #f8fafc; }
-.permission-options label.selected { background: #f0fdfa; }
-.permission-options label:last-child:nth-child(odd) { grid-column: 1 / -1; }
-.permission-options label > span { flex: 1; min-width: 0; }
-.permission-options strong, .permission-options small { display: block; }
-.permission-options strong { color: #1e293b; font-size: .82rem; margin-top: 3px; }
-.permission-options small { color: #64748b; font-size: .74rem; margin-top: 3px; line-height: 1.35; }
-.editor-actions { margin-top: 22px; padding-top: 18px; border-top: 1px solid #e2e8f0; justify-content: flex-end; }
-.editor-actions p { color: #92400e; font-size: .8rem; margin-right: auto; }
-.empty-copy { color: #64748b; font-size: .82rem; padding: 16px 10px; }
-.permission-editor { border-radius: 16px !important; }
-@media (max-width: 900px) { .role-workspace { grid-template-columns: 1fr; } .role-list { position: static; } }
-@media (max-width: 680px) { .page-head, .editor-head, .permission-heading, .group-head { align-items: flex-start; flex-direction: column; } .head-actions { width: 100%; flex-direction: column; } .page-head :deep(.v-btn) { width: 100%; } .role-editor { padding: 18px; } .role-fields, .permission-options { grid-template-columns: 1fr; } .wide { grid-column: auto; } .select-all { align-self: stretch; } .editor-actions { align-items: stretch; flex-direction: column; } }
+.page-heading h1 { color: #0f172a; letter-spacing: -.025em; }
+.page-heading p { color: #64748b; font-size: .9rem; margin: 5px 0 0; }
+.role-editor { padding: clamp(18px, 2.4vw, 26px); border-color: #cbd5e1 !important; background: #fff !important; }
+.editor-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; margin-bottom: 16px; }
+.editor-title { color: #0f172a; font-size: 1.15rem; font-weight: 750; letter-spacing: -.02em; }
+.editor-heading p { color: #64748b; font-size: .82rem; margin: 3px 0 0; }
+.identity-grid { display: grid; grid-template-columns: 1fr 220px; column-gap: 16px; }
+.permissions-section { border-top: 1px solid #e2e8f0; margin-top: 18px; padding-top: 16px; }
+.permissions-heading-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 12px; }
+.permissions-heading-row h3 { font-size: 1rem; color: #1e293b; }
+.permissions-heading-row p { color: #64748b; font-size: .82rem; margin: 3px 0 0; }
+.permissions-meta { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.permissions-meta > span { color: #64748b; font-size: .78rem; white-space: nowrap; }
+.permission-modules { border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; }
+.permission-modules :deep(.v-expansion-panel-title) { min-height: 46px; }
+.module-title-row { display: flex; align-items: center; gap: 8px; width: 100%; }
+.module-title-row span { font-size: .88rem; font-weight: 650; color: #1e293b; }
+.module-title-row .v-btn { margin-left: auto; margin-right: 8px; }
+.module-description { color: #64748b; font-size: .78rem; margin: 0 0 10px; }
+.permission-chip-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.editor-actions { padding: 0; margin-top: 18px; }
+.lock-copy { color: #92400e; font-size: .8rem; margin-right: auto; }
+.empty-copy { color: #64748b; font-size: .82rem; padding: 16px 4px; }
+@media (max-width: 680px) {
+  .page-heading { align-items: flex-start !important; flex-direction: column; }
+  .identity-grid { grid-template-columns: 1fr; }
+  .editor-actions { flex-wrap: wrap; }
+  .editor-actions :deep(.v-btn) { flex: 1; }
+}
 </style>

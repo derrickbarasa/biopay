@@ -33,7 +33,7 @@
     <string name="home_sync_now">Sync now</string>
     <string name="home_local_ready">Local data ready</string>
     <string name="home_sync_clear">All local records are synced</string>
-    <string name="home_subscription_grace">Subscription expired - %1$d day(s) left before your organisation is locked out. Ask your anchor administrator to renew.</string>
+    <string name="home_subscription_grace">Subscription expired -- %1$d day(s) left before lockout. Ask your anchor administrator to renew.</string>
     <string name="home_sync_pending">%1$d record(s) waiting to sync</string>
     <string name="home_overview">Operational summary</string>
     <string name="home_field_actions">Field actions</string>
@@ -63,7 +63,7 @@
     <string name="home_summary_donut_title">Your summary</string>
     <string name="home_summary_donut_description">Field summary: households, pending payments and vouchers. Tap for the full report.</string>
     <string name="home_location_unavailable">Location unavailable. Grant location permission and try again outdoors.</string>
-    <string name="my_location_description">The pin marks your last known GPS fix; the shaded ring shows roughly how accurate it is. Works fully offline -- no map tiles or connectivity needed.</string>
+    <string name="my_location_description">Pin: your last known GPS fix. Ring: roughly how accurate it is. Works fully offline.</string>
     <string name="my_location_coordinates">%1$.5f, %2$.5f</string>
     <string name="my_location_accuracy">Accuracy: within %1$.0f m</string>
     <string name="my_location_accuracy_unknown">Accuracy unknown</string>
@@ -399,7 +399,7 @@
     <string name="generated_payment_amount">Amount</string>
     <string name="generated_payment_proceed">Proceed to verification</string>
     <string name="generated_payment_empty_title">No unpaid household is ready yet</string>
-    <string name="generated_payment_empty_body">Tap Sync payments to check the latest generated cycle. A household appears here only when its unpaid payment and enrolled verification data are available on this device.</string>
+    <string name="generated_payment_empty_body">Tap Sync payments to check the latest cycle. Only shows households with unpaid payment and verification data on this device.</string>
     <plurals name="generated_payment_count">
         <item quantity="one">%1$d unpaid household</item>
         <item quantity="other">%1$d unpaid households</item>

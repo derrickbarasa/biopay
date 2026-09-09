@@ -43,8 +43,7 @@ const form = ref({
   modules: [] as string[],
 })
 
-// Auto-fills the capital when a country is picked; still a plain editable field afterwards
-// in case the operator wants to record a different city.
+// Auto-fills the capital when a country is picked; still editable afterwards.
 watch(() => form.value.country, (country, previous) => {
   if (country && country !== previous) form.value.capitalCity = capitalFor(country) || form.value.capitalCity
 })

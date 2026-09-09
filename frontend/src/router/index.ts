@@ -153,6 +153,7 @@ router.beforeEach(() => {
 
 router.afterEach((to) => {
   routeNavigating.value = false
+  recoveringLazyRoute = false
   const pageTitle = to.meta.title as string | undefined
   document.title = pageTitle ? `${pageTitle} | BioPay` : 'BioPay | biometric payment infrastructure'
 })

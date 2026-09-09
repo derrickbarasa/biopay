@@ -50,8 +50,7 @@ const summary = ref<Record<string, any>>({})
 const tableSearch = ref('')
 const organizations = ref<OrganizationOption[]>([])
 
-// Both roles see everything in their scope immediately -- the backend already
-// treats an unset anchor/organisation filter as "show all" (`IS NULL OR ...`),
+// An unset anchor/organisation filter already means "show all" on the backend,
 // so the picker below narrows the view without ever blocking it.
 const scopeReady = computed(() => true)
 const householdOptions = ref<HouseholdOption[]>([])
@@ -59,9 +58,7 @@ const householdsLoading = ref(false)
 const orgNameByCode = computed(() => new Map(organizations.value.map((o) => [o.organisationCode, o.name])))
 function orgName(code?: string) { return (code && orgNameByCode.value.get(code)) || code || '—' }
 
-// ---- Village name lookup -- shared by the Village column, following the same
-// client-side code->name lookup convention as HouseholdsPage/LocationsPage
-// (villageName()/orgName()). ----
+// ---- Village name lookup, for the Village column ----
 const villages = ref<GeoNode[]>([])
 const villageNameByCode = computed(() => new Map(villages.value.map((v) => [v.code, v.name])))
 function villageName(code?: string) { return (code && villageNameByCode.value.get(code)) || code || '—' }
@@ -140,8 +137,7 @@ async function loadOrganizations() {
   }
 }
 
-// Super Admin picking a different anchor resets whatever organisation was
-// selected under the previous one, then reloads both lists.
+// Switching anchor resets any organisation filter from the previous one, then reloads both lists.
 watch(selectedAnchorId, () => { organisationFilter.value = null; loadOrganizations(); load() })
 
 onMounted(async () => {

@@ -7,12 +7,6 @@ import { useToast } from '@/composables/useToast'
 import { useAnchorScope } from '@/composables/useAnchorScope'
 import { useOrgCascade } from '@/composables/useOrgCascade'
 
-// Dedicated full page for the "Generate Payment Cycle" flow (replaces the old
-// in-dialog wizard on PayrollPage). Kept as its own route so the maker can
-// step back to the payment-cycles list without losing the list's own filters,
-// and so each wizard step gets real breathing room for the geography picker
-// and the removable-households table below.
-
 interface HouseholdOption {
   householdNumber: string
   householdName: string
@@ -53,9 +47,7 @@ function prevStep() {
   if (step.value > 1) step.value -= 1
 }
 
-// ---- Geography cascade (state -> county -> location -> village), same hierarchy
-// used on the Households page, so cycles can be generated for a whole village,
-// location, county, or state at once instead of only "by organisation". ----
+// Geography cascade: state -> county -> location -> village, same hierarchy as the Households page.
 const states = ref<GeoNode[]>([])
 const counties = ref<GeoNode[]>([])
 const locations = ref<GeoNode[]>([])
@@ -79,14 +71,10 @@ function clearGeoFilters() {
   geo.value = { stateCode: null, countyCode: null, locationCode: null, villageCode: null }
 }
 
-// Sourced from GET_HOUSEHOLD_LOCATIONS, not GET_STATES/COUNTIES/LOCATIONS/VILLAGES: those
-// read the anchor's curated geo_states/geo_counties/... catalogue, which a household's own
-// state_code/county_code/payam_code/boma_code columns are NOT tied to -- a household
-// registered via mobile's manual-entry path stores the officer's typed place name directly
-// in those columns with no catalogue node ever created for it. Filtering against the
-// catalogue therefore silently offered/matched nothing for those households. Sourcing the
-// dropdowns from the households actually on file (scoped to the chosen organisation, same as
-// the household list itself) fixes that and keeps the two in sync by construction.
+// Sourced from GET_HOUSEHOLD_LOCATIONS, not GET_STATES/COUNTIES/LOCATIONS/VILLAGES: a household's
+// state/county/location/village columns aren't tied to the anchor's geo catalogue (mobile's
+// manual-entry path stores free-typed place names with no catalogue node), so filtering against
+// the catalogue silently matched nothing. Sourcing dropdowns from households on file keeps both in sync.
 async function loadGeoLookups() {
   const scope = { organisationCode: genForm.value.organisationCode || undefined }
   try {
@@ -105,9 +93,7 @@ async function loadGeoLookups() {
   }
 }
 
-// ---- Household picker ----
-// GET_HOUSEHOLDS caps pageSize at 200 server-side, so page through it; capped
-// at 2000 households as a sane upper bound for a single generate run.
+// GET_HOUSEHOLDS caps pageSize at 200 server-side, so page through it; capped at 2000 households.
 async function fetchActiveHouseholds(): Promise<HouseholdOption[]> {
   const rows: HouseholdOption[] = []
   const pageSize = 200
@@ -130,9 +116,7 @@ async function fetchActiveHouseholds(): Promise<HouseholdOption[]> {
 
 const householdOptions = ref<HouseholdOption[]>([])
 const householdsLoading = ref(false)
-// Names survive filter changes, so a household picked while filtering by one
-// village still shows its name in the removable table below after the filter
-// moves on to another village/location/county/state.
+// Names survive filter changes, so a picked household keeps its name in the table below.
 const knownHouseholds = ref<Map<string, string>>(new Map())
 
 const householdItems = computed(() =>
@@ -161,18 +145,14 @@ watch(
   () => { if (!auth.isAnchor || genForm.value.organisationCode) loadHouseholdOptions() },
 )
 
-// The location dropdowns are scoped to the chosen organisation (see loadGeoLookups above), so
-// switching organisation needs a fresh fetch -- and any filter already picked under the old
-// organisation is very likely meaningless (or plain absent) under the new one.
+// Location dropdowns are scoped to the chosen organisation, so switching it needs a fresh fetch.
 watch(() => genForm.value.organisationCode, () => {
   clearGeoFilters()
   loadGeoLookups()
 })
 
-// Adds every household currently matching the geography/organisation filter
-// above to the selection (union, not overwrite), so a maker can build up a
-// cycle across several villages -- e.g. "select all" for Village A, then
-// narrow the filter to Village B and "select all" again.
+// Unions with the existing selection (doesn't overwrite), so filtering to a new
+// village and selecting again builds up the cycle instead of replacing it.
 function selectAllMatchingHouseholds() {
   const existing = new Set(genForm.value.householdNumbers)
   for (const h of householdOptions.value) existing.add(h.householdNumber)
@@ -227,10 +207,8 @@ const otpSent = ref(false)
 const sendingOtp = ref(false)
 const generating = ref(false)
 
-// Also used to resend: the send button stays available (not hidden once otpSent), matching
-// PayrollPage's own approve dialog. Requesting again supersedes the previous code -- the
-// backend always verifies against the most recently issued one -- so the stale entry is
-// cleared here to avoid submitting a code that can no longer succeed.
+// Doubles as resend: a new request supersedes the previous code (backend verifies the
+// most recently issued one), so the stale entry is cleared here.
 async function sendGenerateOtp() {
   sendingOtp.value = true
   try {
@@ -254,9 +232,7 @@ async function confirmGenerate() {
   generating.value = true
   try {
     // An Anchor Administrator generating for their own organisation is already the
-    // approving authority, so the backend self-checks the cycle instead of leaving it
-    // pending -- see Payroll.java's `generate()`. A System Admin making it on an
-    // organisation's behalf still needs that organisation's own anchor to approve it.
+    // approving authority, so the backend auto-approves (see Payroll.java's `generate()`).
     const result = await dispatch<{ autoApproved?: boolean }>('GENERATE_PAYROLL', {
       ...genForm.value,
       otpCode: genForm.value.otpCode.trim(),
@@ -296,8 +272,6 @@ onMounted(() => {
 
     <v-card variant="flat" border>
       <v-card-text>
-        <!-- Custom step header: completed steps turn orange (secondary) with a
-             check, the active step is teal (primary), upcoming steps stay grey. -->
         <div class="d-flex align-center mb-6 step-header">
           <template v-for="(label, idx) in STEPS" :key="label">
             <div class="d-flex flex-column align-center step-node">
