@@ -9,6 +9,8 @@ import com.biopay.agent.BuildConfig;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.util.Locale;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import javax.crypto.SecretKeyFactory;
 import javax.crypto.spec.PBEKeySpec;
@@ -67,14 +69,31 @@ public final class OfflineAccessManager {
         }
     }
 
+    // PBKDF2 at PBKDF2_ITERATIONS is deliberately slow (that's the point, as a local password
+    // verifier) but that means it can run for a noticeable stretch on the underpowered CPUs of
+    // the embedded terminals this app targets. Neither call site (post-login, post-password-change)
+    // needs the result before moving on -- it's a durable cache for a *future* offline login -- so
+    // it's dispatched here off the caller's thread rather than blocking it (the main thread, at
+    // both call sites) until it completes.
+    private static final ExecutorService BACKGROUND = Executors.newSingleThreadExecutor();
+
     private final SharedPreferences prefs;
 
     public OfflineAccessManager(Context context) {
         prefs = context.getApplicationContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
     }
 
-    /** Saves/rotates the local password verifier after the server accepts the credentials. */
-    public boolean cacheAuthenticatedIdentity(String password, int userId, String email,
+    /** Saves/rotates the local password verifier after the server accepts the credentials.
+     * Runs the PBKDF2 derivation and the preference write on a background thread; returns
+     * immediately since no caller needs to wait on the result before proceeding. */
+    public void cacheAuthenticatedIdentity(String password, int userId, String email,
+            String firstName, String lastName, Integer anchorId, String partnerCode,
+            String verificationMethod, int offlineAccessDays) {
+        BACKGROUND.execute(() -> cacheAuthenticatedIdentityBlocking(password, userId, email,
+                firstName, lastName, anchorId, partnerCode, verificationMethod, offlineAccessDays));
+    }
+
+    private boolean cacheAuthenticatedIdentityBlocking(String password, int userId, String email,
             String firstName, String lastName, Integer anchorId, String partnerCode,
             String verificationMethod, int offlineAccessDays) {
         try {
