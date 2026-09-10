@@ -19,34 +19,35 @@ import ai.onnxruntime.OrtException;
 import ai.onnxruntime.OrtSession;
 
 /**
- * Owns the ONNX Runtime session lifecycle for the prototype VirtuoTuring face-embedding model --
- * see {@code assets/face/README.md} for provenance and its explicit unvalidated-prototype status.
+ * Owns the ONNX Runtime session lifecycle for the SFace face-embedding model (OpenCV Zoo,
+ * Apache 2.0) -- see {@code assets/face/README.md} for provenance, benchmark, and why it replaced
+ * the earlier VirtuoTuring prototype (no published benchmark, near-zero adoption).
  *
  * <p>Shared by both product flavors, which pin different onnxruntime-android versions (see
  * build.gradle.kts's dependencies block) -- morphoSmart642 uses the current release, morphoSmart615
  * (old Android 5/6 tablets) is pinned to 1.18.0, the last release supporting its API-21 floor. The
  * {@code ai.onnxruntime.*} API surface used below is identical across both versions.
  *
- * <p>Loads from files copied out of APK assets into internal storage: ONNX Runtime needs a real
- * file path (not an AssetManager stream) so the model's external-data weights file resolves
- * relative to it. The copy is a one-time, best-effort presence check (not a re-verified checksum
- * on every load) -- acceptable for a prototype reachable only from the hidden Settings test
- * screen, not for a production path.
+ * <p>Loads from a file copied out of APK assets into internal storage: ONNX Runtime needs a real
+ * file path (not an AssetManager stream). The copy is a one-time, best-effort presence check (not
+ * a re-verified checksum on every load) -- acceptable for a model reachable only from the hidden
+ * Settings test screen, not for a production path.
  */
 final class OnnxFaceEmbedder {
 
     private static final String TAG = "OnnxFaceEmbedder";
     static final String MODEL_ASSET_DIR = "face";
-    static final String MODEL_FILE = "virtuoturing.onnx";
-    static final String WEIGHTS_FILE = "best_embedder.onnx.data";
+    static final String MODEL_FILE = "sface.onnx";
 
-    /** Confirmed by inspecting the graph directly (see progress.md) -- not assumed. The graph has
-     *  exactly one output ("embedding"), so it's read back by index below rather than by name --
-     *  {@link OrtSession.Result#get(String)} returns {@code java.util.Optional}, which needs API
-     *  24+; morphoSmart615's minSdk is 21. */
-    private static final String INPUT_NAME = "input";
+    /** Confirmed by loading the graph directly with Python's onnx package (see progress.md and
+     *  assets/face/README.md) -- not assumed from docs, which for this model are unreliable (the
+     *  official OpenCV doc pages 403; the Python demo only exposes the opaque cv.FaceRecognizerSF
+     *  wrapper, not the raw tensor names). The graph has exactly one output ("fc1"), so it's read
+     *  back by index below rather than by name -- {@link OrtSession.Result#get(String)} returns
+     *  {@code java.util.Optional}, which needs API 24+; morphoSmart615's minSdk is 21. */
+    private static final String INPUT_NAME = "data";
     private static final int INPUT_SIZE = FaceAligner.OUTPUT_SIZE;
-    static final int EMBEDDING_DIMENSIONS = 512;
+    static final int EMBEDDING_DIMENSIONS = 128;
 
     private final OrtEnvironment environment;
     private final OrtSession session;
@@ -54,7 +55,6 @@ final class OnnxFaceEmbedder {
     OnnxFaceEmbedder(Context context) throws FaceRecognitionException {
         try {
             File modelFile = copyAssetIfNeeded(context, MODEL_FILE);
-            copyAssetIfNeeded(context, WEIGHTS_FILE); // must sit alongside modelFile for external data
             environment = OrtEnvironment.getEnvironment();
             session = environment.createSession(modelFile.getAbsolutePath(), new OrtSession.SessionOptions());
         } catch (OrtException | IOException ex) {
@@ -93,7 +93,9 @@ final class OnnxFaceEmbedder {
         }
     }
 
-    /** NCHW, RGB, pixels scaled to [-1,1] per the model card (see assets/face/README.md). */
+    /** NCHW, RGB, raw pixel values 0-255 -- confirmed from OpenCV's face_recognize.cpp, which
+     *  feeds this model via {@code blobFromImage(scalefactor=1, mean=(0,0,0), swapRB=true)}; no
+     *  scaling to [0,1] or [-1,1] like the old VirtuoTuring model (see assets/face/README.md). */
     private static FloatBuffer toNchwFloatBuffer(Bitmap bitmap) {
         int size = INPUT_SIZE;
         int[] pixels = new int[size * size];
@@ -105,9 +107,9 @@ final class OnnxFaceEmbedder {
         float[] b = new float[channelStride];
         for (int i = 0; i < pixels.length; i++) {
             int pixel = pixels[i];
-            r[i] = (((pixel >> 16) & 0xFF) / 127.5f) - 1f;
-            g[i] = (((pixel >> 8) & 0xFF) / 127.5f) - 1f;
-            b[i] = ((pixel & 0xFF) / 127.5f) - 1f;
+            r[i] = (pixel >> 16) & 0xFF;
+            g[i] = (pixel >> 8) & 0xFF;
+            b[i] = pixel & 0xFF;
         }
         FloatBuffer buffer = FloatBuffer.allocate(3 * channelStride);
         buffer.put(r).put(g).put(b);

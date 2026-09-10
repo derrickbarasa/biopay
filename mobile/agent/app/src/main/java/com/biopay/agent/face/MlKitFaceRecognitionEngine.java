@@ -22,20 +22,23 @@ import java.util.concurrent.TimeoutException;
  * The only {@link FaceRecognitionEngine} implementation in this app. Detection (find a single,
  * well-framed face) is real and fully functional via ML Kit -- a free, on-device, Google-shipped
  * SDK. Google does not publicly distribute a face-identification (embedding) model, so the
- * embedding half is backed by a separate, explicitly-labeled <b>prototype</b>: the
- * VirtuoTuring/virtuoturing-face-embedder ONNX model run via {@link OnnxFaceEmbedder} -- see
- * {@code assets/face/README.md} and {@code progress.md} for its provenance, license, and why it
- * must not be mistaken for a validated production model (zero community adoption, ~23,660-image
- * training set, no published accuracy benchmark). The intended production path is IDEMIA
- * MorphoKit, pending separate licensing; this prototype exists to prove out the
- * capture-&gt;align-&gt;embed-&gt;match pipeline in the meantime and is expected to be replaced,
- * not extended, once that licensing is settled.
+ * embedding half is backed by OpenCV Zoo's SFace ONNX model run via {@link OnnxFaceEmbedder} --
+ * see {@code assets/face/README.md} and {@code progress.md} for full provenance. SFace replaced an
+ * earlier VirtuoTuring-based prototype that had zero published accuracy benchmark and near-zero
+ * community adoption; SFace instead has a published benchmark (99.60% LFW) and an Apache 2.0
+ * license that, unlike the higher-scoring InsightFace buffalo_l/antelopev2 models (non-commercial
+ * research license only), does not block commercial use. The intended production path is still
+ * IDEMIA MorphoKit, pending separate licensing; SFace exists to prove out the
+ * capture-&gt;align-&gt;embed-&gt;match pipeline with a real benchmarked model in the meantime and
+ * is expected to be replaced, not extended, once that licensing is settled. It is still not a
+ * substitute for real acceptance testing against this deployment's actual beneficiaries, devices,
+ * and lighting conditions -- see {@link FaceMatchConfig}.
  */
 public class MlKitFaceRecognitionEngine implements FaceRecognitionEngine {
 
-    /** Flags this as the unvalidated prototype so nothing downstream can mistake it for a
-     *  production-grade model tag if it's ever synced/compared against a real one later. */
-    public static final String MODEL_VERSION = "virtuoturing-embedder-v1-PROTOTYPE-unvalidated";
+    /** Names the model+source so nothing downstream can mistake this for IDEMIA MorphoKit or
+     *  assume accuracy figures beyond SFace's own published LFW benchmark. */
+    public static final String MODEL_VERSION = "opencv-sface-2021dec";
 
     private static final long DETECT_TIMEOUT_SECONDS = 10;
 

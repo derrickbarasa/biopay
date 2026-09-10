@@ -1,6 +1,7 @@
 .idea/
 
-# Prototype face-embedding model weights -- fetched by the `fetchFaceEmbedderModel` Gradle task
-# (see mobile/agent/app/build.gradle.kts), not committed: ~98MB, explicitly disposable prototype.
+# Face-embedding model weights -- fetched by the `fetchFaceEmbedderModel` Gradle task (see
+# mobile/agent/app/build.gradle.kts), not committed: ~37MB, expected to be replaced by IDEMIA
+# MorphoKit once that licensing lands.
 mobile/agent/app/src/main/assets/face/*.onnx
 mobile/agent/app/src/main/assets/face/*.onnx.data

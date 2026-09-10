@@ -77,7 +77,8 @@ public class HouseholdFormActivity extends BaseActivity {
     /** Which registration methods this screen offers, gated by the organisation's
      *  verificationMethod setting (see SessionManager.getVerificationMethod()) -- extended from
      *  the fingerprint-only lockdown once face capture had a real, working embedding pipeline to
-     *  offer (still an explicitly unvalidated prototype, hence the accuracy notice in the UI). */
+     *  offer (accept threshold still not calibrated for this deployment, hence the accuracy
+     *  notice in the UI). */
     private String[] registrationOptions;
     private String[] registrationLabels;
 

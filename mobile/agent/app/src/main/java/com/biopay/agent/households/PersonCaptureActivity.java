@@ -513,8 +513,8 @@ public class PersonCaptureActivity extends BaseActivity {
         }
     }
 
-    // ---- Face capture (real embedding pipeline; still an explicitly unvalidated prototype --
-    // see MlKitFaceRecognitionEngine's javadoc) ---------------------------------------------
+    // ---- Face capture (real embedding pipeline; accept threshold still not calibrated for
+    // this deployment -- see MlKitFaceRecognitionEngine's javadoc) --------------------------
 
     /** Compares the new embedding against every other beneficiary's stored face (offline, same
      *  cross-beneficiary duplicate check {@link #checkDuplicateThenSave} already does for

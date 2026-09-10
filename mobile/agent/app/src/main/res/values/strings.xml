@@ -156,7 +156,7 @@
     <string name="section_vulnerability_literacy">Eligibility and support needs</string>
     <string name="section_biometric_registration">Registration method</string>
     <string name="biometric_registration_note">Choose how this household will enroll. You can capture now or finish the household and capture later.</string>
-    <string name="face_accuracy_notice">Face verification accuracy hasn\'t been fully validated yet - fingerprint is more reliable until then.</string>
+    <string name="face_accuracy_notice">Face verification hasn\'t been calibrated for this deployment yet - fingerprint is more reliable until then.</string>
     <string name="field_household_name">Household name</string>
     <string name="field_id_number">ID number</string>
     <string name="field_phone_number">Phone number</string>
@@ -522,10 +522,10 @@
     <string name="settings_scanner_connected">Connected</string>
     <string name="settings_scanner_disconnected">Not connected</string>
     <string name="settings_face_title">Face recognition</string>
-    <string name="settings_face_body">Face capture and matching work as a prototype - accuracy hasn\'t been fully validated yet. You can test it below.</string>
+    <string name="settings_face_body">Face capture and matching use a benchmarked open-source model, but the accept threshold hasn\'t been calibrated for this deployment yet. You can test it below.</string>
     <string name="settings_test_face">Test face capture</string>
     <string name="face_test_running">Checking capture…</string>
-    <string name="face_test_embedding_ok">Embedding computed (prototype model, not yet validated): %1$d dimensions, quality score %2$.2f.</string>
+    <string name="face_test_embedding_ok">Embedding computed (uncalibrated threshold): %1$d dimensions, quality score %2$.2f.</string>
     <string name="face_test_capture_failed">Capture problem: %1$s</string>
 
     <string name="face_capture_title">Face capture</string>

@@ -123,8 +123,9 @@ public class SettingsActivity extends BaseActivity {
     }
 
     /** Runs the real capture-&gt;align-&gt;embed pipeline end to end and reports the honest outcome
-     *  -- nothing here is saved or synced. The embedding comes from the explicitly-unvalidated
-     *  prototype model; see {@link MlKitFaceRecognitionEngine} for its provenance/status. */
+     *  -- nothing here is saved or synced. The embedding comes from a benchmarked open-source
+     *  model whose accept threshold is not yet calibrated for this deployment; see
+     *  {@link MlKitFaceRecognitionEngine} for its provenance/status. */
     private void runFaceDetectionTest(String imagePath) {
         TextView tvFaceBody = findViewById(R.id.tvFaceBody);
         tvFaceBody.setText(R.string.face_test_running);

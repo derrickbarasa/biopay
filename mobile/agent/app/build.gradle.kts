@@ -104,9 +104,9 @@ android {
         }
     }
     androidResources {
-        // The prototype face-embedder weights (~98MB, see assets/face/) gain nothing from AAPT's
-        // default deflate pass and it only slows the build -- store them uncompressed.
-        noCompress += listOf("onnx", "data")
+        // The face-embedder weights (~37MB, see assets/face/) gain nothing from AAPT's default
+        // deflate pass and it only slows the build -- store them uncompressed.
+        noCompress += listOf("onnx")
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_1_8
@@ -148,24 +148,26 @@ dependencies {
     "morphoSmart615Implementation"(fileTree(mapOf("dir" to "src/morphoSmart615/libs", "include" to listOf("*.jar"))))
 }
 
-// ---- Prototype face-embedding model (NOT committed to git) --------------------------------
+// ---- Interim free face-embedding model (NOT committed to git) ------------------------------
 //
-// VirtuoTuring/virtuoturing-face-embedder (Hugging Face, MIT license). This is an explicitly
-// unvalidated prototype -- see MlKitFaceRecognitionEngine's javadoc and progress.md for why.
-// The weights are ~98MB; checking that into git would permanently bloat a ~30MB-packed repo for
+// OpenCV Zoo's SFace (face_recognition_sface_2021dec.onnx, Apache 2.0). Replaces the earlier
+// VirtuoTuring prototype: SFace has a published benchmark (99.60% LFW), is maintained by a
+// reputable first-party source (opencv.org), and Apache 2.0 does not block commercial use --
+// unlike InsightFace's buffalo_l/antelopev2, which score higher but are license-restricted to
+// non-commercial research only. Still not IDEMIA MorphoKit: this is a benchmarked, commercially
+// licensable bridge model while MorphoKit licensing is pending, not a claim of KYC-grade
+// production validation for this deployment's actual population/devices/lighting -- see
+// MlKitFaceRecognitionEngine's javadoc and progress.md for the full rationale and status.
+// The weights are ~37MB; checking that into git would permanently bloat a ~30MB-packed repo for
 // an artifact expected to be thrown away if IDEMIA MorphoKit licensing comes through instead. So
 // it's fetched here (idempotent, sha256-verified) rather than committed; app/src/main/assets/face/
 // is .gitignore'd. Both flavors ship onnxruntime (different versions -- see the dependencies
 // block above), so this lives in the shared src/main/ tree, not a flavor-specific one.
 val faceEmbedderAssetsDir = layout.projectDirectory.dir("src/main/assets/face").asFile
 val faceEmbedderModelFiles = mapOf(
-    "virtuoturing.onnx" to Pair(
-        "https://huggingface.co/VirtuoTuring/virtuoturing-face-embedder/resolve/main/virtuoturing.onnx",
-        "c0e9d280e0dd4051b4c95f47b0a317937151e455e03a0354fede8f3423973c2d"
-    ),
-    "best_embedder.onnx.data" to Pair(
-        "https://huggingface.co/VirtuoTuring/virtuoturing-face-embedder/resolve/main/best_embedder.onnx.data",
-        "a811d5f8b7543dc7a10a118dead56ab5999a655893bab09a5a1cb2451d4a8873"
+    "sface.onnx" to Pair(
+        "https://github.com/opencv/opencv_zoo/raw/main/models/face_recognition_sface/face_recognition_sface_2021dec.onnx",
+        "0ba9fbfa01b5270c96627c4ef784da859931e02f04419c829e83484087c34e79"
     )
 )
 
@@ -182,7 +184,7 @@ fun sha256Of(file: File): String {
 }
 
 tasks.register("fetchFaceEmbedderModel") {
-    description = "Downloads the prototype face-embedding model into assets/face/ if missing, verifying sha256."
+    description = "Downloads the face-embedding model into assets/face/ if missing, verifying sha256."
     outputs.dir(faceEmbedderAssetsDir)
     doLast {
         faceEmbedderAssetsDir.mkdirs()
@@ -190,7 +192,7 @@ tasks.register("fetchFaceEmbedderModel") {
             val (url, expectedSha256) = urlAndSha
             val dest = File(faceEmbedderAssetsDir, fileName)
             if (dest.exists() && sha256Of(dest) == expectedSha256) return@forEach
-            logger.lifecycle("Downloading prototype face-embedder asset: $fileName")
+            logger.lifecycle("Downloading face-embedder asset: $fileName")
             URL(url).openStream().use { input -> dest.outputStream().use { output -> input.copyTo(output) } }
             val actualSha256 = sha256Of(dest)
             if (actualSha256 != expectedSha256) {

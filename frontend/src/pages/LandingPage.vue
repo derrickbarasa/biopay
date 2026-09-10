@@ -108,9 +108,12 @@ function submitDemo() {
   demoSubmitted.value = true
 }
 
-// Hero carousel -- five value props, each with a full-bleed background photo.
-// Project-owned carousel images live in frontend/public/hero/. Their complete
-// compositions are kept visible in the hero rather than cropped to full bleed.
+// Hero carousel -- five value props, each with a full-bleed background photo
+// (Remitcore-style: the photo fills the stage edge to edge, tinted by the
+// scrim, rather than boxed in). Project-owned carousel images live in
+// frontend/public/hero/, shot/composed wide (~2.3:1, matching the stage) with
+// the subject and the on-screen product result already centred and clear of
+// the frame edges, so a plain `cover center` needs no per-slide crop tuning.
 const heroSlides = [
   {
     icon: 'cash', tone: 'primary', eyebrow: 'Cash transfers',
@@ -1186,9 +1189,13 @@ onBeforeUnmount(() => {
 .landing-root .mobile-nav a.active { color: var(--color-accent); }
 .landing-root .mobile-nav a:focus-visible { outline: 2px solid var(--color-primary); outline-offset: -2px; }
 
-/* Hero artwork is close to square, so it is fitted inside the first screen
-   instead of being enlarged and cropped like a conventional full-bleed photo. */
-.landing-root .hero-visual { position: relative; isolation: isolate; overflow: hidden; height: min(560px, calc(100svh - var(--nav-height))); min-height: min(500px, calc(100svh - var(--nav-height))); display: flex; flex-direction: column; justify-content: center; border-top: none; border-bottom: 0; padding: clamp(1.6rem, 4vh, 3.1rem) 0; background: var(--color-primary-deep); }
+/* Full-stage photo treatment (Remitcore-style): each photo fills the stage
+   edge to edge with `cover`, no letterboxing. The source photos are shot
+   wide (~2.3:1, matching the stage's own aspect ratio -- see heroSlides
+   above), so `cover center` barely has to trim anything; there is no
+   zoom/scale on top of it either, just a plain opacity crossfade, so the
+   photo is never enlarged past its native size. */
+.landing-root .hero-visual { position: relative; isolation: isolate; overflow: hidden; height: min(clamp(480px, 44vw, 640px), calc(100svh - var(--nav-height))); min-height: min(500px, calc(100svh - var(--nav-height))); display: flex; flex-direction: column; justify-content: center; border-top: none; border-bottom: 0; padding: clamp(1.6rem, 4vh, 3.1rem) 0; background: var(--color-primary-deep); }
 .landing-root .hero-colorwash {
   position: absolute;
   inset: -8%;
@@ -1204,32 +1211,26 @@ onBeforeUnmount(() => {
 .landing-root .hero-scrim { position: absolute; inset: 0; }
 .landing-root .hero-image {
   position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  width: auto;
-  aspect-ratio: 1402 / 1122;
+  inset: 0;
   opacity: 0;
-  background-size: 100% 100%;
+  background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
-  -webkit-mask-image: linear-gradient(90deg, transparent 0%, rgba(0, 0, 0, .05) 7%, rgba(0, 0, 0, .18) 16%, rgba(0, 0, 0, .42) 26%, rgba(0, 0, 0, .72) 34%, #000 44%);
-  mask-image: linear-gradient(90deg, transparent 0%, rgba(0, 0, 0, .05) 7%, rgba(0, 0, 0, .18) 16%, rgba(0, 0, 0, .42) 26%, rgba(0, 0, 0, .72) 34%, #000 44%);
   filter: saturate(1.05) contrast(1.02);
-  transform: scale(1.015);
-  transform-origin: right center;
-  transition: opacity 900ms ease, transform 7s ease;
+  transition: opacity 900ms ease;
   z-index: -2;
 }
-.landing-root .hero-image.active { opacity: 1; transform: scale(1); }
-/* Neutral dark-to-clear scrim (not a colour wash) so the photo reads true on the
-   right; it clears by ~58% of the width so the subject isn't hidden behind text
-   on the left. A soft bottom fade keeps the dot/arrow controls legible too. */
+.landing-root .hero-image.active { opacity: 1; }
+/* The photograph remains visible under the words, as in the reference. The
+   masked backdrop filter softens only the left copy zone and releases the
+   image completely before the principal subjects on the right. */
 .landing-root .hero-scrim {
   z-index: -1;
-  background:
-    linear-gradient(90deg, rgba(3, 12, 11, .76) 0%, rgba(3, 12, 11, .56) 30%, rgba(3, 12, 11, .22) 45%, rgba(3, 12, 11, 0) 57%),
-    linear-gradient(0deg, rgba(3, 12, 11, .35) 0%, rgba(3, 12, 11, 0) 22%);
+  background: linear-gradient(90deg, rgba(3, 18, 16, .74) 0%, rgba(3, 18, 16, .58) 32%, rgba(3, 18, 16, .22) 52%, rgba(3, 18, 16, 0) 70%);
+  -webkit-backdrop-filter: blur(3px) saturate(.92);
+  backdrop-filter: blur(3px) saturate(.92);
+  -webkit-mask-image: linear-gradient(90deg, #000 0%, #000 38%, rgba(0, 0, 0, .72) 52%, transparent 70%);
+  mask-image: linear-gradient(90deg, #000 0%, #000 38%, rgba(0, 0, 0, .72) 52%, transparent 70%);
 }
 .landing-root .hero-visual .wrap { position: relative; z-index: 1; width: 100%; }
 .landing-root .hero-copy { max-width: 34rem; }
@@ -1307,17 +1308,10 @@ onBeforeUnmount(() => {
 .landing-root .hero-arrow.next { right: 20px; }
 @media (max-width: 780px) {
   .landing-root .hero-arrow { display: none; }
-  .landing-root .hero-image {
-    inset: 0;
-    width: auto;
-    aspect-ratio: auto;
-    background-size: 100% auto;
-    background-position: center;
-    -webkit-mask-image: linear-gradient(180deg, transparent 0%, #000 14%, #000 86%, transparent 100%);
-    mask-image: linear-gradient(180deg, transparent 0%, #000 14%, #000 86%, transparent 100%);
-    transform-origin: center;
-  }
-  .landing-root .hero-scrim { background: linear-gradient(90deg, rgba(3, 12, 11, .9) 0%, rgba(3, 12, 11, .72) 72%, rgba(3, 12, 11, .42) 100%); }
+  /* Same edge-to-edge `cover` treatment as desktop -- the per-slide `focus`
+     position (set inline from heroSlides) still applies here, it just isn't
+     overridden by this breakpoint. */
+  .landing-root .hero-scrim { background: linear-gradient(180deg, rgba(3, 18, 16, .38) 0%, rgba(3, 18, 16, .5) 55%, rgba(3, 18, 16, .86) 100%); }
   .landing-root .hero-copy { max-width: min(34rem, 92%); }
 }
 
@@ -1681,7 +1675,7 @@ onBeforeUnmount(() => {
   align-content: start;
   padding: 1.1em 4.2em 1em 1.1em;
   border: 1px solid #dfe7e4;
-  border-radius: 14px;
+  border-radius: 8px;
   background: #fff;
 }
 .landing-root .preview-metric > span { overflow-wrap: anywhere; color: #64748b; font-size: 0.82em; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; white-space: normal; }
@@ -1704,7 +1698,7 @@ onBeforeUnmount(() => {
 .landing-root .preview-metric.amber > i { background: #ffe2c3; color: #a94c00; }
 .landing-root .preview-metric.slate > i { background: #f1f5f9; color: #475569; }
 .landing-root .preview-analytics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.75em; margin-top: 0.75em; }
-.landing-root .preview-chart-card { min-width: 0; padding: 1.15em 1.3em 0.8em; border: 1px solid #dfe7e4; border-radius: 10px; background: #fff; }
+.landing-root .preview-chart-card { min-width: 0; padding: 1.15em 1.3em 0.8em; border: 1px solid #dfe7e4; border-radius: 8px; background: #fff; }
 .landing-root .preview-chart-card header { display: flex; align-items: start; justify-content: space-between; gap: 1em; }
 .landing-root .preview-chart-card header > div { display: grid; gap: 0.45em; }
 .landing-root .preview-chart-card header strong { color: #0f172a; font-size: 1.05em; }
@@ -1722,7 +1716,7 @@ onBeforeUnmount(() => {
 .landing-root .preview-operations { display: grid; align-items: stretch; grid-template-columns: minmax(0, 1.45fr) minmax(0, 0.95fr); gap: 0.75em; margin-top: 0.75em; }
 .landing-root .preview-ranking,
 .landing-root .preview-recent,
-.landing-root .preview-totals { min-width: 0; padding: 1.1em 1.3em; border: 1px solid #dfe7e4; border-radius: 10px; background: #fff; }
+.landing-root .preview-totals { min-width: 0; padding: 1.1em 1.3em; border: 1px solid #dfe7e4; border-radius: 8px; background: #fff; }
 .landing-root .preview-ranking > header,
 .landing-root .preview-recent > header { display: flex; align-items: start; justify-content: space-between; gap: 1em; }
 .landing-root .preview-ranking header > div,
@@ -1778,7 +1772,7 @@ onBeforeUnmount(() => {
    payment assignments and five ordinary navigation destinations. */
 .landing-root .preview-phone { height: 100%; display: grid; grid-template-rows: minmax(0, 1fr) auto; background: #f5f8f7; color: #17201e; font-size: 6.5px; line-height: 1.25; }
 .landing-root .preview-phone-scroll { min-height: 0; overflow: hidden; padding: 0.85em; }
-.landing-root .preview-phone-hero { padding: 1.35em; border-radius: 11px; background: #006b5b; color: #fff; }
+.landing-root .preview-phone-hero { padding: 1.35em; border-radius: 8px; background: #006b5b; color: #fff; }
 .landing-root .preview-phone-hero-main { display: grid; grid-template-columns: minmax(0, 1fr) 7.3em; align-items: center; gap: 1em; }
 .landing-root .preview-phone-intro { min-width: 0; }
 .landing-root .preview-phone-brand { display: flex; align-items: center; gap: 0.9em; }
@@ -1809,7 +1803,7 @@ onBeforeUnmount(() => {
 .landing-root .preview-phone-buttons span { display: flex; align-items: center; justify-content: center; gap: 0.55em; min-height: 3.9em; padding-inline: 0.7em; border-radius: 7px; text-align: center; }
 .landing-root .preview-phone-buttons b { background: #fff; color: #004d42; }
 .landing-root .preview-phone-buttons span { border: 1px solid rgba(255, 255, 255, 0.78); color: #fff; font-weight: 700; }
-.landing-root .preview-phone-card { margin-top: 0.85em; padding: 1em; border: 1px solid #cbd5d1; border-radius: 9px; background: #fff; }
+.landing-root .preview-phone-card { margin-top: 0.85em; padding: 1em; border: 1px solid #cbd5d1; border-radius: 8px; background: #fff; }
 .landing-root .preview-phone-card header { display: flex; align-items: center; justify-content: space-between; }
 .landing-root .preview-phone-card header b { display: flex; align-items: center; gap: 0.6em; font-size: 1.25em; }
 .landing-root .preview-phone-card header b i { display: grid; place-items: center; width: 3em; height: 3em; border-radius: 50%; background: #e6f8f3; color: #006b5b; font-size: 1.3em; }
@@ -1986,6 +1980,6 @@ onBeforeUnmount(() => {
 
 @media (min-width: 2200px) {
   .landing-root .hero-copy { max-width: 37.5rem; }
-  .landing-root .hero-visual { height: min(580px, calc(100svh - var(--nav-height))); min-height: min(540px, calc(100svh - var(--nav-height))); }
+  .landing-root .hero-visual { height: min(640px, calc(100svh - var(--nav-height))); min-height: min(600px, calc(100svh - var(--nav-height))); }
 }
 </style>
