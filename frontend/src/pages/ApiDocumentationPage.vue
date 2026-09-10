@@ -115,12 +115,6 @@ const generatePayrollExample = `{
   "otpCode": "482913"
 }`
 
-const updatePaymentExample = `{
-  "processingCode": "UPDATE_PAYMENT_STATUS",
-  "paymentReference": "PMT00042",
-  "status": "PAID"
-}`
-
 const householdFields = [
   { field: 'organisationCode', required: true, notes: 'Your organisation code (Organisation accounts can omit it; it is inferred from your login).' },
   { field: 'householdName', required: true, notes: 'Full name of the household head.' },
@@ -320,11 +314,9 @@ const payrollFields = [
           </tbody>
         </v-table>
 
-        <h3 class="text-body-1 font-weight-medium mb-1">Update an individual payment — <code>UPDATE_PAYMENT_STATUS</code></h3>
-        <div class="code-block">
-          <pre>{{ updatePaymentExample }}</pre>
-          <v-btn size="x-small" variant="text" icon="mdi-content-copy" class="copy-btn" @click="copy(updatePaymentExample)" />
-        </div>
+        <v-alert type="info" variant="tonal" density="compact">
+          Individual payment status is not manually editable. A payment becomes paid only after beneficiary verification in the field, or through authorised online recovery after a recorded field failure.
+        </v-alert>
       </v-card-text>
     </v-card>
 

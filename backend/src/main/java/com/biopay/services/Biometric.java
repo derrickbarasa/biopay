@@ -599,7 +599,7 @@ public class Biometric extends AbstractVerticle {
         return results;
     }
 
-    // ---- SYNC_PAYMENTS (offline reference: already generated/paid) ------------------
+    // ---- SYNC_PAYMENTS (only released cycle payments are payable in the field) ------
 
     private void syncPayments(Message<Object> message) {
         JsonObject payload = new JsonObject(message.body().toString());
@@ -611,7 +611,7 @@ public class Biometric extends AbstractVerticle {
                         + "LEFT JOIN households h ON h.household_number=pay.household_number "
                         + "AND h.organization_code=pay.organization_code "
                         + "WHERE pay.organization_code=@p1 AND pay.rejected=0 "
-                        + "AND (pay.payment_cycle_id IS NULL OR pc.status IN ('APPROVED','DISBURSED')) "
+                        + "AND (pay.payment_cycle_id IS NULL OR pc.status='DISBURSED') "
                         + "ORDER BY pay.created_at DESC")
                 .execute(Tuple.of(partnerCode))
                 .onFailure(err -> onDbError(message, err))
@@ -659,7 +659,7 @@ public class Biometric extends AbstractVerticle {
                     + "WHERE id=@p1 AND organization_code=@p2 AND household_number=@p3 AND status=0 "
                     + "AND rejected=0 AND (payment_cycle_id IS NULL OR EXISTS (SELECT 1 "
                     + "FROM payment_cycles pc WHERE pc.id=payments.payment_cycle_id "
-                    + "AND pc.status IN ('APPROVED','DISBURSED')))";
+                    + "AND pc.status='DISBURSED'))";
             pool.preparedQuery(failSql)
                     .execute(Tuple.of(paymentId, partnerCode, householdNumber))
                     .onFailure(err -> onDbError(message, err))
@@ -682,7 +682,7 @@ public class Biometric extends AbstractVerticle {
                     + "WHERE id=@p7 AND organization_code=@p8 AND household_number=@p9 AND status=0 "
                     + "AND rejected=0 AND (payment_cycle_id IS NULL OR EXISTS (SELECT 1 "
                     + "FROM payment_cycles pc WHERE pc.id=payments.payment_cycle_id "
-                    + "AND pc.status IN ('APPROVED','DISBURSED')))";
+                    + "AND pc.status='DISBURSED'))";
             pool.preparedQuery(update)
                     .execute(Tuple.of(String.valueOf(payload.getValue("actorId")),
                             payload.getString("fingerprintUuid"), payload.getString("faceUuid"),

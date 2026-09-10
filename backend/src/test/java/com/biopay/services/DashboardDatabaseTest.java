@@ -65,7 +65,8 @@ class DashboardDatabaseTest {
         assertEquals(m.getDouble("totalPaymentsAmount"), cash, .001);
         assertEquals(m.getDouble("voucherRedeemedAmount"), vouchers, .001);
         assertEquals(cash + vouchers, m.getDouble("combinedAmount"), .001);
-        int paymentCount = Rows.intVal(query("SELECT COUNT(*) AS v FROM payments", Tuple.tuple()).iterator().next(), "v");
+        int paymentCount = Rows.intVal(query("SELECT COUNT(*) AS v FROM payments pay LEFT JOIN payment_cycles pc ON pc.id=pay.payment_cycle_id "
+                + "WHERE pay.rejected=0 AND (pay.payment_cycle_id IS NULL OR pc.status='DISBURSED')", Tuple.tuple()).iterator().next(), "v");
         assertEquals(Math.min(paymentCount, 10), m.getJsonArray("recentTransactions").size());
     }
     @Test void eachChartPeriodMatchesRecordedEvents() throws Exception {

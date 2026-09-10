@@ -341,13 +341,15 @@ async function submitCode() {
 .btn-accent:hover { background-color: #ea580c !important; }
 
 /* ---- Method chooser -- colour-chip icon rows instead of plain bordered list items ---- */
-.method-list { display: flex; flex-direction: column; gap: 10px; }
+.method-list { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .method-item {
   display: flex;
-  align-items: center;
-  gap: 14px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
   width: 100%;
-  padding: 14px 16px;
+  height: 100%;
+  padding: 18px 16px;
   background: #fff;
   border: 1.5px solid #e6ebf0;
   border-radius: 16px;
@@ -355,6 +357,7 @@ async function submitCode() {
   cursor: pointer;
   transition: border-color .15s ease, box-shadow .15s ease, transform .15s ease;
 }
+.method-item .method-chevron { display: none; }
 .method-item:hover:not(:disabled) {
   border-color: #0d9488;
   box-shadow: 0 10px 24px -16px rgba(13, 148, 136, .45);
@@ -412,5 +415,6 @@ async function submitCode() {
 
 @media (max-width: 430px) {
   .form-wrap { max-width: 360px; }
+  .method-list { grid-template-columns: 1fr; }
 }
 </style>

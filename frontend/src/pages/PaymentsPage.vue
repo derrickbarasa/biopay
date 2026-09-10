@@ -164,38 +164,6 @@ function exportCsv() {
   URL.revokeObjectURL(url)
 }
 
-async function markPaid(row: PaymentRow) {
-  if (!await confirmAction({
-    title: 'Mark payment as paid?',
-    message: `Confirm that ${row.householdName} received this payment. This changes the programme ledger.`,
-    confirmLabel: 'Mark as paid',
-    color: 'secondary',
-  })) return
-  try {
-    await dispatch('UPDATE_PAYMENT_STATUS', { id: row.id, status: 1 })
-    toast.success('Payment marked as paid')
-    await load()
-  } catch (err) {
-    toast.error(err instanceof Error ? err.message : 'Update failed')
-  }
-}
-
-async function markFailed(row: PaymentRow) {
-  if (!await confirmAction({
-    title: 'Mark payment as failed?',
-    message: `${row.householdName}'s field payment did not go through. It moves to Failed so it can be recovered.`,
-    confirmLabel: 'Mark as failed',
-    color: 'error',
-  })) return
-  try {
-    await dispatch('UPDATE_PAYMENT_STATUS', { id: row.id, status: 2 })
-    toast.success('Payment marked as failed')
-    await load()
-  } catch (err) {
-    toast.error(err instanceof Error ? err.message : 'Update failed')
-  }
-}
-
 // Hidden for every role until explicitly granted PAY_ONLINE from the Roles page.
 async function payOnline(row: PaymentRow) {
   if (!await confirmAction({
@@ -392,12 +360,6 @@ function printReceipt(row: PaymentRow) {
             </template></v-tooltip>
             <v-tooltip v-if="item.status === 1" text="Print receipt" location="top"><template #activator="{ props: tip }">
               <v-btn v-bind="tip" icon="mdi-receipt-text-outline" variant="text" size="small" color="primary" :aria-label="`Print receipt for ${item.householdName}`" @click="printReceipt(item)" />
-            </template></v-tooltip>
-            <v-tooltip v-if="auth.can('ACCESS_PAYMENTS') && item.status === 0" text="Mark paid" location="top"><template #activator="{ props: tip }">
-              <v-btn v-bind="tip" icon="mdi-check-circle-outline" variant="text" size="small" color="success" :aria-label="`Mark payment to ${item.householdName} as paid`" @click="markPaid(item)" />
-            </template></v-tooltip>
-            <v-tooltip v-if="auth.can('ACCESS_PAYMENTS') && item.status === 0" text="Mark failed" location="top"><template #activator="{ props: tip }">
-              <v-btn v-bind="tip" icon="mdi-close-circle-outline" variant="text" size="small" color="error" :aria-label="`Mark payment to ${item.householdName} as failed`" @click="markFailed(item)" />
             </template></v-tooltip>
             <v-tooltip v-if="auth.can('PAY_ONLINE') && item.status === 2" text="Pay online" location="top"><template #activator="{ props: tip }">
               <v-btn v-bind="tip" icon="mdi-credit-card-outline" variant="text" size="small" color="secondary" :aria-label="`Pay ${item.householdName}'s failed payment online`" @click="payOnline(item)" />

@@ -242,14 +242,14 @@ async function saveRejections() {
 
 async function disburse(cycle: Cycle) {
   if (!await confirmAction({
-    title: 'Disburse payment cycle?',
-    message: `${cycle.cycleCode} will be posted to the payment ledger for ${cycle.householdCount} household(s).`,
-    confirmLabel: 'Disburse cycle',
+    title: 'Release payment funds?',
+    message: `${cycle.cycleCode} will release ${cycle.householdCount} pending payment(s) to field officers for beneficiary verification. No payment will be marked paid by this action.`,
+    confirmLabel: 'Release funds',
     color: 'secondary',
   })) return
   try {
     await dispatch('DISBURSE_PAYROLL', { cycleCode: cycle.cycleCode })
-    toast.success('Payroll cycle disbursed')
+    toast.success('Funds released for beneficiary verification')
     await load()
   } catch (err) {
     toast.error(err instanceof Error ? err.message : 'Disbursement failed')

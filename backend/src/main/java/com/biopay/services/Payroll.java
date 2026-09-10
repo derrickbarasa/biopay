@@ -496,14 +496,16 @@ public class Payroll extends AbstractVerticle {
                         return;
                     }
                     int cycleId = Rows.intVal(rows.iterator().next(), "id");
+                    // Disbursement releases approved entitlements to the field. It does not
+                    // prove that a beneficiary received money: each payment remains pending
+                    // until RECORD_FIELD_PAYMENT records a successful biometric verification,
+                    // or PAY_PAYMENT_ONLINE recovers it after a failed field attempt.
                     pool.preparedQuery("UPDATE payment_cycles SET status='DISBURSED', disbursed_at=GETDATE(), updated_at=GETDATE() WHERE id=@p1")
                             .execute(Tuple.of(cycleId))
-                            .compose(u -> pool.preparedQuery("UPDATE payments SET status=1 WHERE payment_cycle_id=@p1 AND rejected=0")
-                                    .execute(Tuple.of(cycleId)))
                             .onFailure(err -> onDbError(message, err))
                             .onSuccess(u -> reply(message, new JsonObject()
                                     .put("responseCode", "000")
-                                    .put("responseMessage", "Payroll cycle disbursed")));
+                                    .put("responseMessage", "Payment funds released for beneficiary verification")));
                 });
     }
 

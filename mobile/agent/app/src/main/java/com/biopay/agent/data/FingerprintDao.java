@@ -135,6 +135,31 @@ public class FingerprintDao {
         public byte[] template;
     }
 
+    /** This same person's own previously stored templates for every finger position other than
+     * {@code excludingFingerNumber} (the one currently being captured/recaptured) -- the candidate
+     * pool for catching the same physical finger being scanned into two different position slots
+     * on the hand-picker. */
+    public List<StoredFinger> templatesForBeneficiaryExcludingFinger(String beneficiaryId, int excludingFingerNumber) {
+        List<StoredFinger> templates = new ArrayList<>();
+        try (Cursor cursor = dbHelper.getReadableDatabase().query("fingerprints",
+                new String[]{"fingerprint_number", "fingerprint_template"},
+                "beneficiary_id=? AND fingerprint_number<>?",
+                new String[]{beneficiaryId, String.valueOf(excludingFingerNumber)}, null, null, null)) {
+            while (cursor.moveToNext()) {
+                StoredFinger t = new StoredFinger();
+                t.fingerNumber = cursor.getInt(0);
+                t.template = Base64.decode(cursor.getString(1), Base64.NO_WRAP);
+                templates.add(t);
+            }
+        }
+        return templates;
+    }
+
+    public static class StoredFinger {
+        public int fingerNumber;
+        public byte[] template;
+    }
+
     public List<PendingFingerprint> listPending() {
         List<PendingFingerprint> results = new ArrayList<>();
         try (Cursor cursor = dbHelper.getReadableDatabase().query("fingerprints", null,

@@ -13,3 +13,6 @@ logs/
 
 # Android agent APKs served at /biopay/downloads (drop builds locally; not committed)
 app-releases/*.apk
+
+# User-uploaded files (photos, documents) -- runtime data, not committed
+uploads/

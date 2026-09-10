@@ -85,7 +85,7 @@ public class Payment extends AbstractVerticle {
                 + "WHERE (@p1 IS NULL OR pay.organization_code=@p1) AND (@p2 IS NULL OR pay.status=@p2) "
                 + "AND (@p3 IS NULL OR pay.date_from >= @p3) AND (@p4 IS NULL OR pay.date_from <= @p4) "
                 + "AND (@p8 IS NULL OR p.anchor_id=@p8) AND pay.rejected=0 "
-                + "AND (pay.payment_cycle_id IS NULL OR pc.status IN ('APPROVED','DISBURSED')) "
+                + "AND (pay.payment_cycle_id IS NULL OR pc.status='DISBURSED') "
                 + "ORDER BY pay.created_at DESC OFFSET @p5 ROWS FETCH NEXT @p6 ROWS ONLY";
 
         pool.preparedQuery(sql)
@@ -115,7 +115,7 @@ public class Payment extends AbstractVerticle {
 
         pool.preparedQuery("SELECT pay.* FROM payments pay LEFT JOIN payment_cycles pc ON pc.id=pay.payment_cycle_id "
                         + "WHERE pay.id=@p1 AND pay.rejected=0 "
-                        + "AND (pay.payment_cycle_id IS NULL OR pc.status IN ('APPROVED','DISBURSED'))" + scopeClause)
+                        + "AND (pay.payment_cycle_id IS NULL OR pc.status='DISBURSED')" + scopeClause)
                 .execute(isAnchor(payload) ? Tuple.of(id, isSystemAdmin(payload), TenantScope.anchorId(payload)) : Tuple.of(id, payload.getString("partnerCode", "")))
                 .onFailure(err -> onDbError(message, err))
                 .onSuccess(rows -> {
@@ -130,36 +130,13 @@ public class Payment extends AbstractVerticle {
                 });
     }
 
-    // ---- UPDATE_PAYMENT_STATUS (e.g. mark verified/paid after biometric match) ----
+    // ---- UPDATE_PAYMENT_STATUS (retained as a rejected legacy operation) ------------
 
     private void updateStatus(Message<Object> message) {
-        JsonObject payload = new JsonObject(message.body().toString());
-        Integer id = payload.getInteger("id");
-        Integer status = payload.getInteger("status");
-        if (id == null || status == null) {
-            replyError(message, "id and status are required");
-            return;
-        }
-        String scopeClause = isAnchor(payload) ? " AND (@p4=1 OR anchor_id=@p5)" : " AND organization_code=@p4";
-        Object actorId = payload.getValue("actorId");
-        String sql = "UPDATE payments SET status=@p1, verified_by=@p2, verified_at=GETDATE(), updated_at=GETDATE() "
-                + "WHERE id=@p3 AND rejected=0 AND (payment_cycle_id IS NULL OR EXISTS (SELECT 1 "
-                + "FROM payment_cycles pc WHERE pc.id=payments.payment_cycle_id "
-                + "AND pc.status IN ('APPROVED','DISBURSED')))" + scopeClause;
-        Tuple params = isAnchor(payload)
-                ? Tuple.of(status, actorId, id, isSystemAdmin(payload), TenantScope.anchorId(payload))
-                : Tuple.of(status, actorId, id, payload.getString("partnerCode", ""));
-
-        pool.preparedQuery(sql)
-                .execute(params)
-                .onFailure(err -> onDbError(message, err))
-                .onSuccess(rows -> {
-                    if (rows.rowCount() > 0) {
-                        reply(message, new JsonObject().put("responseCode", "000").put("responseMessage", "Payment status updated"));
-                    } else {
-                        replyError(message, "Payment not found or not in your organisation");
-                    }
-                });
+        // A dashboard status toggle cannot supply trustworthy verification evidence. Failed is
+        // recorded by the field attempt; Paid is set only by verified field payment or authorised
+        // online recovery of that failure.
+        replyError(message, "Payment status is set by beneficiary verification or approved online recovery");
     }
 
     // ---- DELETE_PAYMENT (only if not yet disbursed) --------------------------------
@@ -169,9 +146,10 @@ public class Payment extends AbstractVerticle {
         Integer id = payload.getInteger("id");
         String scopeClause = isAnchor(payload) ? " AND (@p2=1 OR anchor_id=@p3)" : " AND organization_code=@p2";
 
+        // Released cycle entitlements belong to the cycle audit trail and cannot be deleted here.
+        // Pre-release line changes are handled by REJECT_PAYROLL_ITEMS.
         pool.preparedQuery("DELETE FROM payments WHERE id=@p1 AND status=0 AND rejected=0 "
-                        + "AND (payment_cycle_id IS NULL OR EXISTS (SELECT 1 FROM payment_cycles pc "
-                        + "WHERE pc.id=payments.payment_cycle_id AND pc.status IN ('APPROVED','DISBURSED')))" + scopeClause)
+                        + "AND payment_cycle_id IS NULL" + scopeClause)
                 .execute(isAnchor(payload) ? Tuple.of(id, isSystemAdmin(payload), TenantScope.anchorId(payload)) : Tuple.of(id, payload.getString("partnerCode", "")))
                 .onFailure(err -> onDbError(message, err))
                 .onSuccess(rows -> {
@@ -201,7 +179,7 @@ public class Payment extends AbstractVerticle {
         String sql = "UPDATE payments SET status=1, payment_channel='ONLINE', online_reference=@p1, verified_by=@p2, "
                 + "verified_at=GETDATE(), updated_at=GETDATE() WHERE id=@p3 AND status=2 AND rejected=0 "
                 + "AND (payment_cycle_id IS NULL OR EXISTS (SELECT 1 FROM payment_cycles pc "
-                + "WHERE pc.id=payments.payment_cycle_id AND pc.status IN ('APPROVED','DISBURSED')))" + scopeClause;
+                + "WHERE pc.id=payments.payment_cycle_id AND pc.status='DISBURSED'))" + scopeClause;
         Tuple params = isAnchor(payload)
                 ? Tuple.of(reference, actorId, id, isSystemAdmin(payload), TenantScope.anchorId(payload))
                 : Tuple.of(reference, actorId, id, payload.getString("partnerCode", ""));
@@ -239,7 +217,7 @@ public class Payment extends AbstractVerticle {
                 + "LEFT JOIN payment_cycles pc ON pc.id=pay.payment_cycle_id "
                 + "WHERE (@p1 IS NULL OR pay.organization_code=@p1) AND (@p3 IS NULL OR p.anchor_id=@p3) "
                 + "AND pay.rejected=0 "
-                + "AND (pay.payment_cycle_id IS NULL OR pc.status IN ('APPROVED','DISBURSED'))";
+                + "AND (pay.payment_cycle_id IS NULL OR pc.status='DISBURSED')";
 
         pool.preparedQuery(sql)
                 .execute(Tuple.of(partnerCode).addBoolean(systemAdmin).addInteger(anchorId))

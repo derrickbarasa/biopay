@@ -399,32 +399,56 @@ public class PersonCaptureActivity extends BaseActivity {
         return !isFinishing() && !isDestroyed();
     }
 
-    /** Runs after a fresh capture, before it's persisted: compares the new template against
-     *  every other beneficiary's stored fingerprint (offline, no extra live scan) so the same
-     *  finger can't be enrolled under two different people. Reused the {@code device} connection
-     *  the capture just opened rather than reopening it. */
+    /** Runs after a fresh capture, before it's persisted: first compares the new template against
+     *  this same person's own other already-captured fingers (offline) so the same physical finger
+     *  can't be scanned into two different position slots on the hand-picker, then -- only if that
+     *  passes -- against every other beneficiary's stored fingerprint so the same finger can't be
+     *  enrolled under two different people. Reused the {@code device} connection the capture just
+     *  opened rather than reopening it. */
     private void checkDuplicateThenSave(BiometricDevice device, int fingerPosition, byte[] template, AlertDialog dialog) {
+        List<FingerprintDao.StoredFinger> ownOtherFingers =
+                fingerprintDao.templatesForBeneficiaryExcludingFinger(beneficiaryId, fingerPosition);
         List<FingerprintDao.BeneficiaryTemplate> others = fingerprintDao.templatesExcludingBeneficiary(beneficiaryId);
         new Thread(() -> {
+            boolean sameFingerReused = false;
+            int reusedAsPosition = -1;
             boolean duplicate = false;
             boolean checkFailed = false;
-            for (FingerprintDao.BeneficiaryTemplate other : others) {
-                BiometricDevice.MatchResult result = device.templatesMatch(template, other.template);
+            for (FingerprintDao.StoredFinger own : ownOtherFingers) {
+                BiometricDevice.MatchResult result = device.templatesMatch(template, own.template);
                 if (result == BiometricDevice.MatchResult.MATCHED) {
-                    duplicate = true;
+                    sameFingerReused = true;
+                    reusedAsPosition = own.fingerNumber;
                     break;
                 } else if (result == BiometricDevice.MatchResult.ERROR) {
                     checkFailed = true;
                     break;
                 }
             }
+            if (!sameFingerReused && !checkFailed) {
+                for (FingerprintDao.BeneficiaryTemplate other : others) {
+                    BiometricDevice.MatchResult result = device.templatesMatch(template, other.template);
+                    if (result == BiometricDevice.MatchResult.MATCHED) {
+                        duplicate = true;
+                        break;
+                    } else if (result == BiometricDevice.MatchResult.ERROR) {
+                        checkFailed = true;
+                        break;
+                    }
+                }
+            }
+            boolean isSameFingerReused = sameFingerReused;
+            int finalReusedAsPosition = reusedAsPosition;
             boolean isDuplicate = duplicate;
             boolean hadError = checkFailed;
             runOnUiThread(() -> {
                 device.close();
                 if (!isAliveForUi()) return;
                 dialog.dismiss();
-                if (isDuplicate) {
+                if (isSameFingerReused) {
+                    OutcomeFeedback.error(this, getString(R.string.person_capture_fingerprint_same_finger,
+                            FingerPosition.fullLabel(finalReusedAsPosition)));
+                } else if (isDuplicate) {
                     OutcomeFeedback.error(this, R.string.person_capture_fingerprint_duplicate);
                 } else if (hadError) {
                     OutcomeFeedback.error(this, R.string.person_capture_fingerprint_check_failed);

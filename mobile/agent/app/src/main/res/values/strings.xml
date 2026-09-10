@@ -245,6 +245,7 @@
     <string name="person_capture_fingerprint_success">Fingerprint captured successfully</string>
     <string name="person_capture_face_success">Face captured successfully</string>
     <string name="person_capture_fingerprint_duplicate">Fingerprint capture failed: this fingerprint is already registered to another person</string>
+    <string name="person_capture_fingerprint_same_finger">Fingerprint capture failed: this matches the scan already stored for %1$s. Scan a different finger for this position</string>
     <string name="person_capture_fingerprint_check_failed">Fingerprint capture failed: could not verify against existing records. Please try again</string>
     <string name="person_capture_face_duplicate">Face capture failed: this face is already registered to another person</string>
     <string name="person_capture_face_check_failed">Face capture failed: could not verify against existing records. Please try again</string>
