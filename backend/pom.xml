@@ -42,16 +42,6 @@
             <artifactId>dotenv-java</artifactId>
             <version>3.2.0</version>
         </dependency>
-        <dependency>
-            <groupId>org.apache.commons</groupId>
-            <artifactId>commons-text</artifactId>
-            <version>1.13.1</version>
-        </dependency>
-        <dependency>
-            <groupId>com.sun.mail</groupId>
-            <artifactId>javax.mail</artifactId>
-            <version>1.6.2</version>
-        </dependency>
         <!-- Modern, actively-maintained BCrypt (handles $2a/$2b/$2y uniformly). -->
         <dependency>
             <groupId>at.favre.lib</groupId>
