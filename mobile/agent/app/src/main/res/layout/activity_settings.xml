@@ -124,7 +124,8 @@
                         android:layout_marginStart="58dp"
                         android:text="@string/settings_test_scanner"
                         android:textAllCaps="false"
-                        app:icon="@drawable/ic_sync" />
+                        android:drawableStart="@drawable/ic_sync"
+                        android:drawablePadding="8dp" />
 
                     <View android:layout_width="match_parent" android:layout_height="1dp" android:layout_marginStart="16dp" android:layout_marginEnd="16dp" android:background="@color/bp_surface_variant" />
 
@@ -154,7 +155,8 @@
                         android:layout_marginBottom="10dp"
                         android:text="@string/settings_test_face"
                         android:textAllCaps="false"
-                        app:icon="@drawable/ic_face" />
+                        android:drawableStart="@drawable/ic_face"
+                        android:drawablePadding="8dp" />
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
@@ -196,7 +198,8 @@
                 android:layout_marginTop="6dp"
                 android:text="@string/settings_send_feedback"
                 android:textAllCaps="false"
-                app:icon="@drawable/ic_mail" />
+                android:drawableStart="@drawable/ic_mail"
+                android:drawablePadding="8dp" />
 
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>

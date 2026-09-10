@@ -34,6 +34,8 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
  * Household head + alternates for one household, each with Clock In / Clock Out actions that
@@ -59,6 +61,13 @@ public class AttendanceBeneficiariesActivity extends BaseActivity {
     private AttendanceDao attendanceDao;
     private SessionManager sessionManager;
     private String householdNumber;
+    private final ExecutorService scannerOpenExecutor = Executors.newSingleThreadExecutor();
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        scannerOpenExecutor.shutdownNow();
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -132,36 +141,64 @@ public class AttendanceBeneficiariesActivity extends BaseActivity {
         }
 
         BiometricDevice device = BiometricDeviceFactory.create();
-        try {
-            device.open(this, null);
-        } catch (BiometricDeviceException ex) {
-            OutcomeFeedback.error(this, R.string.attendance_verify_error);
-            return;
-        } catch (Throwable ex) {
-            // A missing/mismatched vendor native library throws an unchecked UnsatisfiedLinkError,
-            // not the checked exception open() declares -- confirmed on-device (see PersonCaptureActivity's
-            // matching fix). Caught broadly so a hardware/library problem degrades to the same
-            // honest message instead of crashing the app.
-            android.util.Log.e("AttendanceBeneficiaries", "BiometricDevice.open() failed unexpectedly", ex);
-            OutcomeFeedback.error(this, R.string.attendance_verify_error);
-            return;
-        }
 
         android.view.View dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_verify_progress, null);
         dialogView.setBackgroundColor(ContextCompat.getColor(this, BeneficiaryTone.background(beneficiary)));
         TextView tvProgress = dialogView.findViewById(R.id.tvVerifyProgress);
+        tvProgress.setText(R.string.fingerprint_connecting_scanner);
+        boolean[] cancelled = {false};
         AlertDialog dialog = new MaterialAlertDialogBuilder(this)
                 .setTitle(getString(R.string.verify_method_title, beneficiary.name))
                 .setView(dialogView)
                 .setCancelable(false)
                 .setNegativeButton(R.string.attendance_cancel, (d, which) -> {
+                    cancelled[0] = true;
                     device.cancelLiveAcquisition();
                     device.close();
                 })
                 .create();
         dialog.show();
 
-        attemptVerify(device, templates, 0, tvProgress, dialog, beneficiary, clock);
+        // Morpho open() powers the embedded sensor, waits for its AIDL service and retries USB
+        // enumeration -- that can take several seconds and must never run on Android's UI thread
+        // (blocking it there starves Android's own USB-permission dialog, so the very first
+        // capture/verify attempt on a device -- before that permission is granted -- always
+        // failed). See FingerprintVerifyActivity.startVerify() for the same pattern.
+        scannerOpenExecutor.execute(() -> {
+            BiometricDeviceException openError = null;
+            Throwable unexpectedError = null;
+            try {
+                device.open(this, null);
+            } catch (BiometricDeviceException ex) {
+                openError = ex;
+            } catch (Throwable ex) {
+                // A missing/mismatched vendor native library throws an unchecked UnsatisfiedLinkError,
+                // not the checked exception open() declares -- confirmed on-device (see
+                // PersonCaptureActivity's matching fix). Caught broadly so a hardware/library
+                // problem degrades to the same honest message instead of crashing the app.
+                unexpectedError = ex;
+            }
+            BiometricDeviceException finalOpenError = openError;
+            Throwable finalUnexpectedError = unexpectedError;
+            runOnUiThread(() -> {
+                if (cancelled[0]) return;
+                if (finalOpenError != null || finalUnexpectedError != null) {
+                    if (finalUnexpectedError != null) {
+                        android.util.Log.e("AttendanceBeneficiaries", "BiometricDevice.open() failed unexpectedly", finalUnexpectedError);
+                    }
+                    if (!isFinishing() && !isDestroyed()) {
+                        dialog.dismiss();
+                        OutcomeFeedback.error(this, R.string.attendance_verify_error);
+                    }
+                    return;
+                }
+                if (isFinishing() || isDestroyed()) {
+                    device.close();
+                    return;
+                }
+                attemptVerify(device, templates, 0, tvProgress, dialog, beneficiary, clock);
+            });
+        });
     }
 
     private void attemptVerify(BiometricDevice device, List<FingerprintDao.StoredTemplate> templates, int index,

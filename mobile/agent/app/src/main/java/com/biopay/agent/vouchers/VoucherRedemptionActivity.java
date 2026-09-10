@@ -34,6 +34,8 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /** Offline voucher ledger; issued rows can continue into IDEMIA 1:1 fingerprint redemption. */
 public class VoucherRedemptionActivity extends BaseActivity {
@@ -48,6 +50,12 @@ public class VoucherRedemptionActivity extends BaseActivity {
     private List<VoucherDao.Voucher> allVouchers = new ArrayList<>();
     private int checkedFilterId = R.id.chipVoucherAll;
     private String currentQuery = "";
+    private final ExecutorService scannerOpenExecutor = Executors.newSingleThreadExecutor();
+
+    @Override protected void onDestroy() {
+        super.onDestroy();
+        scannerOpenExecutor.shutdownNow();
+    }
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
@@ -211,30 +219,60 @@ public class VoucherRedemptionActivity extends BaseActivity {
             return;
         }
         BiometricDevice device = BiometricDeviceFactory.create();
-        try {
-            device.open(this, null);
-        } catch (BiometricDeviceException error) {
-            OutcomeFeedback.error(this, R.string.attendance_verify_error);
-            return;
-        } catch (Throwable error) {
-            android.util.Log.e("VoucherRedemption", "BiometricDevice.open() failed unexpectedly", error);
-            OutcomeFeedback.error(this, R.string.attendance_verify_error);
-            return;
-        }
+
         View content = LayoutInflater.from(this).inflate(R.layout.dialog_verify_progress, null);
         content.setBackgroundColor(ContextCompat.getColor(this, BeneficiaryTone.background(beneficiary)));
         TextView progress = content.findViewById(R.id.tvVerifyProgress);
+        progress.setText(R.string.fingerprint_connecting_scanner);
+        boolean[] cancelled = {false};
         AlertDialog dialog = new MaterialAlertDialogBuilder(this)
                 .setTitle(getString(R.string.verify_method_title, beneficiary.name))
                 .setView(content)
                 .setCancelable(false)
                 .setNegativeButton(R.string.attendance_cancel, (ignored, which) -> {
+                    cancelled[0] = true;
                     device.cancelLiveAcquisition();
                     device.close();
                 })
                 .create();
         dialog.show();
-        attempt(device, templates, 0, progress, dialog, voucher);
+
+        // Morpho open() powers the embedded sensor, waits for its AIDL service and retries USB
+        // enumeration -- that can take several seconds and must never run on Android's UI thread
+        // (blocking it there starves Android's own USB-permission dialog, so the very first
+        // capture/verify attempt on a device -- before that permission is granted -- always
+        // failed). See FingerprintVerifyActivity.startVerify() for the same pattern.
+        scannerOpenExecutor.execute(() -> {
+            BiometricDeviceException openError = null;
+            Throwable unexpectedError = null;
+            try {
+                device.open(this, null);
+            } catch (BiometricDeviceException error) {
+                openError = error;
+            } catch (Throwable error) {
+                unexpectedError = error;
+            }
+            BiometricDeviceException finalOpenError = openError;
+            Throwable finalUnexpectedError = unexpectedError;
+            runOnUiThread(() -> {
+                if (cancelled[0]) return;
+                if (finalOpenError != null || finalUnexpectedError != null) {
+                    if (finalUnexpectedError != null) {
+                        android.util.Log.e("VoucherRedemption", "BiometricDevice.open() failed unexpectedly", finalUnexpectedError);
+                    }
+                    if (!isFinishing() && !isDestroyed()) {
+                        dialog.dismiss();
+                        OutcomeFeedback.error(this, R.string.attendance_verify_error);
+                    }
+                    return;
+                }
+                if (isFinishing() || isDestroyed()) {
+                    device.close();
+                    return;
+                }
+                attempt(device, templates, 0, progress, dialog, voucher);
+            });
+        });
     }
 
     private void attempt(BiometricDevice device, List<FingerprintDao.StoredTemplate> templates,

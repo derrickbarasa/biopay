@@ -56,6 +56,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
  * Captures a person's chosen biometric method(s) -- fingerprint, face, or both -- and ties each
@@ -134,6 +136,7 @@ public class PersonCaptureActivity extends BaseActivity {
     private ImageView ivPersonPhoto;
     private TextView tvPhotoRowStatus;
     private MaterialButton btnCapturePhoto;
+    private final ExecutorService scannerOpenExecutor = Executors.newSingleThreadExecutor();
 
     private final ActivityResultLauncher<Intent> faceCaptureLauncher =
             registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {
@@ -226,6 +229,12 @@ public class PersonCaptureActivity extends BaseActivity {
         }
     }
 
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        scannerOpenExecutor.shutdownNow();
+    }
+
     /** (Re)targets the screen at a person -- used for the initial launch and again, in place,
      *  when "Add another person" creates a new alternate to capture next. Re-entrant: checks
      *  what this person already has captured (e.g. resuming after an earlier interruption, or
@@ -302,53 +311,80 @@ public class PersonCaptureActivity extends BaseActivity {
 
     private void captureFingerprint(int fingerPosition) {
         BiometricDevice device = BiometricDeviceFactory.create();
-        try {
-            device.open(this, null);
-        } catch (BiometricDeviceException ex) {
-            OutcomeFeedback.error(this, R.string.attendance_verify_error);
-            return;
-        } catch (Throwable ex) {
-            // The vendor SDK's open() only declares BiometricDeviceException, but a missing/
-            // mismatched native library on a given device throws an unchecked UnsatisfiedLinkError
-            // instead (confirmed on-device: "libNativeMorphoSmartSDK_6.42.0.0.so not found") --
-            // caught broadly here so a hardware/library problem degrades to the same honest
-            // message rather than crashing the app. (The pre-existing verify() call sites in
-            // VoucherRedemptionActivity/AttendanceBeneficiariesActivity only catch the checked
-            // exception and share this same latent risk -- out of scope to fix here, but worth
-            // hardening the same way if this recurs there.)
-            Log.e(TAG, "BiometricDevice.open() failed unexpectedly", ex);
-            OutcomeFeedback.error(this, R.string.attendance_verify_error);
-            return;
-        }
+
         View content = LayoutInflater.from(this).inflate(R.layout.dialog_verify_progress, null);
         TextView progress = content.findViewById(R.id.tvVerifyProgress);
+        progress.setText(R.string.fingerprint_connecting_scanner);
+        boolean[] cancelled = {false};
         AlertDialog dialog = new MaterialAlertDialogBuilder(this)
                 .setTitle(FingerPosition.fullLabel(fingerPosition))
                 .setView(content)
                 .setCancelable(false)
                 .setNegativeButton(R.string.attendance_cancel, (ignored, which) -> {
+                    cancelled[0] = true;
                     device.cancelLiveAcquisition();
                     device.close();
                 })
                 .create();
         dialog.show();
 
-        device.startCapture(fingerPosition, new CaptureCallback() {
-            @Override public void onProgress(String message) { progress.setText(message); }
-            @Override public void onPreviewFrame(Bitmap frame) { }
-
-            @Override public void onCaptured(byte[] template, Bitmap finalImage) {
-                progress.setText(R.string.person_capture_checking_duplicate);
-                checkDuplicateThenSave(device, fingerPosition, template, dialog);
+        // Morpho open() powers the embedded sensor, waits for its AIDL service and retries USB
+        // enumeration -- that can take several seconds and must never run on Android's UI thread
+        // (blocking it there starves Android's own USB-permission dialog, so the very first
+        // capture attempt on a device -- before that permission is granted -- always failed).
+        // See FingerprintVerifyActivity.startVerify() for the same pattern.
+        scannerOpenExecutor.execute(() -> {
+            BiometricDeviceException openError = null;
+            Throwable unexpectedError = null;
+            try {
+                device.open(this, null);
+            } catch (BiometricDeviceException ex) {
+                openError = ex;
+            } catch (Throwable ex) {
+                // The vendor SDK's open() only declares BiometricDeviceException, but a missing/
+                // mismatched native library on a given device throws an unchecked
+                // UnsatisfiedLinkError instead (confirmed on-device:
+                // "libNativeMorphoSmartSDK_6.42.0.0.so not found") -- caught broadly here so a
+                // hardware/library problem degrades to the same honest message rather than
+                // crashing the app.
+                unexpectedError = ex;
             }
+            BiometricDeviceException finalOpenError = openError;
+            Throwable finalUnexpectedError = unexpectedError;
+            runOnUiThread(() -> {
+                if (cancelled[0]) return;
+                if (finalOpenError != null || finalUnexpectedError != null) {
+                    if (finalUnexpectedError != null) {
+                        Log.e(TAG, "BiometricDevice.open() failed unexpectedly", finalUnexpectedError);
+                    }
+                    if (isAliveForUi()) {
+                        dialog.dismiss();
+                        OutcomeFeedback.error(this, R.string.attendance_verify_error);
+                    }
+                    return;
+                }
+                if (!isAliveForUi()) {
+                    device.close();
+                    return;
+                }
+                device.startCapture(fingerPosition, new CaptureCallback() {
+                    @Override public void onProgress(String message) { progress.setText(message); }
+                    @Override public void onPreviewFrame(Bitmap frame) { }
 
-            @Override public void onError(int errorCode, String message) {
-                device.close();
-                if (!isAliveForUi()) return;
-                dialog.dismiss();
-                OutcomeFeedback.error(PersonCaptureActivity.this,
-                        getString(R.string.person_capture_failed, message));
-            }
+                    @Override public void onCaptured(byte[] template, Bitmap finalImage) {
+                        progress.setText(R.string.person_capture_checking_duplicate);
+                        checkDuplicateThenSave(device, fingerPosition, template, dialog);
+                    }
+
+                    @Override public void onError(int errorCode, String message) {
+                        device.close();
+                        if (!isAliveForUi()) return;
+                        dialog.dismiss();
+                        OutcomeFeedback.error(PersonCaptureActivity.this,
+                                getString(R.string.person_capture_failed, message));
+                    }
+                });
+            });
         });
     }
 

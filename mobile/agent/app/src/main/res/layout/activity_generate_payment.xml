@@ -64,7 +64,8 @@
                     android:layout_height="44dp"
                     android:text="@string/generated_payment_sync"
                     android:textAllCaps="false"
-                    app:icon="@drawable/ic_sync" />
+                    android:drawableStart="@drawable/ic_sync"
+                    android:drawablePadding="8dp" />
             </LinearLayout>
 
             <LinearLayout

@@ -85,7 +85,7 @@
                     <TextView android:id="@+id/tvPaymentAmounts" style="@style/BioPay.SupportingText" android:layout_marginTop="8dp" />
                     <com.google.android.material.button.MaterialButton android:id="@+id/btnViewPayments"
                         style="@style/Widget.Material3.Button.TextButton" android:layout_width="wrap_content" android:layout_height="48dp"
-                        android:layout_gravity="end" android:text="@string/reports_view_payments" app:icon="@drawable/ic_chevron_right" app:iconGravity="textEnd" />
+                        android:layout_gravity="end" android:text="@string/reports_view_payments" android:drawableEnd="@drawable/ic_chevron_right" android:drawablePadding="4dp" />
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
@@ -137,14 +137,14 @@
                 android:background="@drawable/bg_report_surface" android:orientation="vertical" />
             <com.google.android.material.button.MaterialButton android:id="@+id/btnViewLocations"
                 style="@style/Widget.Material3.Button.TextButton" android:layout_width="wrap_content" android:layout_height="48dp"
-                android:layout_gravity="end" android:text="@string/reports_view_locations" app:icon="@drawable/ic_chevron_right" app:iconGravity="textEnd" />
+                android:layout_gravity="end" android:text="@string/reports_view_locations" android:drawableEnd="@drawable/ic_chevron_right" android:drawablePadding="4dp" />
 
             <TextView style="@style/BioPay.SectionHeader" android:text="@string/reports_recent_activity" />
             <LinearLayout android:id="@+id/recentContainer" android:layout_width="match_parent" android:layout_height="wrap_content"
                 android:background="@drawable/bg_report_surface" android:orientation="vertical" />
             <com.google.android.material.button.MaterialButton android:id="@+id/btnViewActivity"
                 style="@style/Widget.Material3.Button.TextButton" android:layout_width="wrap_content" android:layout_height="48dp"
-                android:layout_gravity="end" android:text="@string/reports_view_activity" app:icon="@drawable/ic_chevron_right" app:iconGravity="textEnd" />
+                android:layout_gravity="end" android:text="@string/reports_view_activity" android:drawableEnd="@drawable/ic_chevron_right" android:drawablePadding="4dp" />
 
             <com.google.android.material.button.MaterialButton android:id="@+id/btnOpenSync" style="@style/BioPay.PrimaryButton"
                 android:layout_marginTop="18dp" android:text="@string/reports_open_sync" app:icon="@drawable/ic_sync" />

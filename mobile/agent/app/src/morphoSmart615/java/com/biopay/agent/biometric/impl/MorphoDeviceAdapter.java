@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.graphics.Bitmap;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.util.Log;
 import android.widget.ImageView;
 
@@ -48,6 +49,8 @@ public class MorphoDeviceAdapter implements BiometricDevice, Observer {
 
     private static final String TAG = "MorphoDeviceAdapter";
     private static final int TIMEOUT_SECONDS = 30;
+    private static final int ENUMERATION_ATTEMPTS = 40;
+    private static final long ENUMERATION_RETRY_MS = 250;
 
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private MorphoDevice morphoDevice;
@@ -71,12 +74,21 @@ public class MorphoDeviceAdapter implements BiometricDevice, Observer {
         try {
             USBManager.getInstance().initialize(activity, "com.morpho.morphosample.USB_ACTION");
             MorphoDevice probe = new MorphoDevice();
-            probe.initUsbDevicesNameEnum(0);
-            String sensorName = probe.getUsbDeviceName(0);
+            // The SDK mutates this Integer in place as an out-parameter via native/reflection code
+            // and rejects the JVM's cached Integer.valueOf(0) singleton (logging "Error, initialize
+            // Integer with new Integer(0)") -- it must be a genuinely new, unshared instance.
+            probe.initUsbDevicesNameEnum(new Integer(0));
+            String sensorName = null;
+            for (int attempt = 1; attempt <= ENUMERATION_ATTEMPTS; attempt++) {
+                sensorName = probe.getUsbDeviceName(0);
+                if (sensorName != null && !sensorName.isEmpty()) break;
+                SystemClock.sleep(ENUMERATION_RETRY_MS);
+            }
             return sensorName != null && !sensorName.isEmpty();
         } catch (Throwable ex) {
             // See the 6.42 adapter's isAvailable() for why this must catch Throwable, not just
             // Exception: a missing native .so throws UnsatisfiedLinkError (an Error).
+            Log.e(TAG, "Scanner availability check failed", ex);
             return false;
         }
     }
@@ -86,8 +98,13 @@ public class MorphoDeviceAdapter implements BiometricDevice, Observer {
         this.previewView = previewView;
         USBManager.getInstance().initialize(activity, "com.morpho.morphosample.USB_ACTION");
         MorphoDevice device = new MorphoDevice();
-        device.initUsbDevicesNameEnum(0);
-        String sensorName = device.getUsbDeviceName(0);
+        device.initUsbDevicesNameEnum(new Integer(0));
+        String sensorName = null;
+        for (int attempt = 1; attempt <= ENUMERATION_ATTEMPTS; attempt++) {
+            sensorName = device.getUsbDeviceName(0);
+            if (sensorName != null && !sensorName.isEmpty()) break;
+            SystemClock.sleep(ENUMERATION_RETRY_MS);
+        }
         if (sensorName == null || sensorName.isEmpty()) {
             throw new BiometricDeviceException("No fingerprint scanner detected", ErrorCodes.MORPHOERR_UNAVAILABLE);
         }
@@ -118,7 +135,17 @@ public class MorphoDeviceAdapter implements BiometricDevice, Observer {
             int detectModeChoice = DetectionMode.MORPHO_ENROLL_DETECT_MODE.getValue()
                     | DetectionMode.MORPHO_FORCE_FINGER_ON_TOP_DETECT_MODE.getValue();
 
-            int ret = morphoDevice.capture(TIMEOUT_SECONDS, 0, 0, fingerPosition,
+            // The 4th parameter is NOT a finger-position selector -- the SDK's capture() just
+            // digitizes whatever finger is physically on the sensor; this app's own fingerPosition
+            // is only used afterwards to label the resulting template for storage. The original
+            // nca reference this adapter was ported from (MorphoTabletFPSensorDevice) always
+            // passes the literal 1 here. Threading fingerPosition (1-10) through in its place
+            // happened to still be accepted for right-hand values (1-5, small ints) but the SDK
+            // rejects 6-10 outright with MORPHOERR_BADPARAMETER (-5) -- confirmed on-device, this
+            // is exactly why every left-hand finger failed instantly instead of even engaging the
+            // sensor, while right-hand fingers engaged (if inconsistently, since 2-5 were still
+            // the wrong value for whatever this parameter actually controls).
+            int ret = morphoDevice.capture(TIMEOUT_SECONDS, 0, 0, 1,
                     TemplateType.MORPHO_PK_ISO_FMR_2011, TemplateFVPType.MORPHO_NO_PK_FVP, 512,
                     EnrollmentType.ONE_ACQUISITIONS, LatentDetection.LATENT_DETECT_ENABLE,
                     Coder.MORPHO_DEFAULT_CODER, detectModeChoice, templateList, callbackCmd, this);
@@ -127,6 +154,8 @@ public class MorphoDeviceAdapter implements BiometricDevice, Observer {
                 Template template = templateList.getTemplate(0);
                 postCaptured(template.getData(), null);
             } else {
+                Log.e(TAG, "capture(fingerPosition=" + fingerPosition + ") failed: ret=" + ret
+                        + ", nbTemplate=" + templateList.getNbTemplate());
                 postCaptureError(ret);
             }
         }).start();
@@ -196,7 +225,9 @@ public class MorphoDeviceAdapter implements BiometricDevice, Observer {
         referenceList.putTemplate(reference);
 
         // far=5: same raw value startVerify() above uses -- 6.15.3.0 has no FalseAcceptanceRate enum.
-        int ret = morphoDevice.verifyMatch(5, candidateList, referenceList, Integer.valueOf(0));
+        // Must be a genuinely new Integer, not the cached Integer.valueOf(0) singleton -- see
+        // initUsbDevicesNameEnum()'s callers above for why (same SDK out-parameter mutation).
+        int ret = morphoDevice.verifyMatch(5, candidateList, referenceList, new Integer(0));
         if (ret == ErrorCodes.MORPHO_OK) return MatchResult.MATCHED;
         if (ret == ErrorCodes.MORPHOERR_NO_HIT) return MatchResult.NO_MATCH;
         Log.e(TAG, "templatesMatch: unexpected verifyMatch return code " + ret);

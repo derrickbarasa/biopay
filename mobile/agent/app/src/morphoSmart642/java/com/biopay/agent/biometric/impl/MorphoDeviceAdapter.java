@@ -293,7 +293,15 @@ public class MorphoDeviceAdapter implements BiometricDevice, Observer {
             int detectModeChoice = DetectionMode.MORPHO_ENROLL_DETECT_MODE.getValue()
                     | DetectionMode.MORPHO_FORCE_FINGER_ON_TOP_DETECT_MODE.getValue();
 
-            int ret = morphoDevice.capture(TIMEOUT_SECONDS, 0, 0, fingerPosition,
+            // The 4th parameter is a template COUNT, not a finger-position selector -- the SDK's
+            // capture() just digitizes whatever finger is physically on the sensor; this app's own
+            // fingerPosition is only used afterwards to label the resulting template for storage.
+            // The original dca reference this adapter was ported from (FingerprintsActivity) always
+            // passes the literal 1 here ("Here fingerNumber = 1, so we will get only one template").
+            // Threading fingerPosition (1-10) through in its place doesn't crash on this SDK version
+            // (unlike 6.15.3.0, which rejects values above 5 outright with MORPHOERR_BADPARAMETER)
+            // but is still the wrong value for whatever this parameter actually controls.
+            int ret = morphoDevice.capture(TIMEOUT_SECONDS, 0, 0, 1,
                     TemplateType.MORPHO_PK_ISO_FMR_2011, TemplateFVPType.MORPHO_NO_PK_FVP, 512,
                     EnrollmentType.ONE_ACQUISITIONS, LatentDetection.LATENT_DETECT_ENABLE,
                     Coder.MORPHO_DEFAULT_CODER, detectModeChoice,
