@@ -72,13 +72,15 @@ async function load() {
   }
 }
 
-watch([dateFilter, clockFilter, organisationFilter], load)
-watch(selectedAnchorId, () => { organisationFilter.value = null; loadOrganizations(); load() })
+// Filters apply only when Submit is pressed (see the template) -- no reload on every pick.
+// Switching anchor still refreshes the organisation option list right away.
+watch(selectedAnchorId, () => { organisationFilter.value = null; loadOrganizations() })
 
 function clearFilters() {
   dateFilter.value = null
   clockFilter.value = null
   organisationFilter.value = null
+  load()
 }
 
 async function loadOrganizations() {
@@ -119,7 +121,7 @@ function exportCsv() {
 <template>
   <div>
     <div class="d-flex align-center justify-space-between mb-4">
-      <h1 class="text-h5 font-weight-bold">Attendance</h1>
+      <h1 class="page-title">Attendance</h1>
       <v-btn v-if="scopeReady && auth.can('DOWNLOAD_REPORTS')" color="secondary" prepend-icon="mdi-download" @click="exportCsv">Export CSV</v-btn>
     </div>
 
@@ -182,7 +184,8 @@ function exportCsv() {
           <v-col cols="6" sm="4" md="3">
             <v-text-field v-model="tableSearch" prepend-inner-icon="mdi-magnify" label="Search" clearable hide-details density="compact" />
           </v-col>
-          <v-col cols="auto">
+          <v-col cols="auto" class="d-flex align-center ga-2 flex-wrap">
+            <v-btn class="filter-submit" color="primary" @click="load">Submit</v-btn>
             <v-btn variant="text" size="small" @click="clearFilters">Clear filters</v-btn>
           </v-col>
         </v-row>

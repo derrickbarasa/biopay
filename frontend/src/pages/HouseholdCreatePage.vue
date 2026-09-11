@@ -139,7 +139,7 @@ onMounted(() => {
   <div>
     <div class="d-flex align-center mb-4 ga-3">
       <v-btn icon="mdi-arrow-left" variant="text" aria-label="Back to households" @click="goToList" />
-      <h1 class="text-h5 font-weight-bold mb-0">Add Household</h1>
+      <h1 class="page-title">Add Household</h1>
     </div>
 
     <v-card variant="flat" border>
@@ -213,7 +213,7 @@ onMounted(() => {
         </v-alert>
 
         <div class="d-flex justify-end ga-3 mt-4">
-          <v-btn variant="text" @click="goToList">Cancel</v-btn>
+          <v-btn variant="flat" color="error" @click="goToList">Cancel</v-btn>
           <v-btn
             v-if="duplicateCandidates.length"
             color="warning" variant="flat" :loading="saving" @click="save"

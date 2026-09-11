@@ -14,7 +14,7 @@ const state = reactive({
   title: '',
   message: '',
   confirmLabel: 'Continue',
-  color: 'primary' as ConfirmColor,
+  color: 'secondary' as ConfirmColor,
 })
 
 let resolvePending: ((confirmed: boolean) => void) | null = null
@@ -33,7 +33,7 @@ export function useConfirm() {
       title: options.title,
       message: options.message,
       confirmLabel: options.confirmLabel ?? 'Continue',
-      color: options.color ?? 'primary',
+      color: options.color ?? 'secondary',
     })
     return new Promise<boolean>((resolve) => { resolvePending = resolve })
   }

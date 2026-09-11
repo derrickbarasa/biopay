@@ -22,6 +22,11 @@ interface Cycle {
   status: string
   rejectionReason?: string
   makerId?: number
+  makerAt?: string
+  checkerId?: number
+  checkerAt?: string
+  disbursedAt?: string
+  createdAt?: string
 }
 
 interface PaymentLine {
@@ -91,11 +96,12 @@ async function load() {
   }
 }
 
-watch([statusFilter, organisationFilter], load)
+// Filters apply only when Submit is pressed (see the template) -- no reload on every pick.
 
 function clearFilters() {
   statusFilter.value = null
   organisationFilter.value = null
+  load()
 }
 
 async function loadOrganizations() {
@@ -109,8 +115,9 @@ async function loadOrganizations() {
   }
 }
 
-// Switching anchor resets any organisation filter from the previous one, then reloads both lists.
-watch(selectedAnchorId, () => { organisationFilter.value = null; loadOrganizations(); load() })
+// Switching anchor resets any organisation filter from the previous one and refreshes the
+// organisation option list; the payment cycles table itself still waits for Submit.
+watch(selectedAnchorId, () => { organisationFilter.value = null; loadOrganizations() })
 
 onMounted(() => {
   load()
@@ -118,7 +125,7 @@ onMounted(() => {
 })
 
 const statusColor: Record<string, string> = {
-  DRAFT: 'grey', PENDING_APPROVAL: 'warning', APPROVED: 'info', DISBURSED: 'success', REJECTED: 'error',
+  DRAFT: 'grey', PENDING_APPROVAL: 'warning', APPROVED: 'warning', DISBURSED: 'success', REJECTED: 'error',
 }
 
 const orgNameByCode = computed(() => new Map(organizations.value.map((o) => [o.organisationCode, o.name])))
@@ -286,59 +293,17 @@ async function confirmReject() {
   }
 }
 
-// ---- View more (read-only line-item panel, any cycle status) ----
-const viewDialog = ref(false)
-const viewTarget = ref<Cycle | null>(null)
-const viewItems = ref<PaymentLine[]>([])
-const viewLoading = ref(false)
-// Kept separate from "loaded fine, zero rows" -- a fetch failure must not read as an empty cycle.
-const viewError = ref(false)
-
-async function openView(cycle: Cycle) {
-  viewTarget.value = cycle
-  viewItems.value = []
-  viewError.value = false
-  viewDialog.value = true
-  viewLoading.value = true
-  try {
-    const res = await dispatch<{ payments: PaymentLine[] }>('GET_PAYROLL', { cycleCode: cycle.cycleCode })
-    viewItems.value = res.payments ?? []
-  } catch (err) {
-    viewError.value = true
-    toast.error(err instanceof Error ? err.message : 'Failed to load payments')
-  } finally {
-    viewLoading.value = false
-  }
-}
-
-function itemStatusText(item: PaymentLine) {
-  if (item.rejected) return 'Rejected'
-  if (item.status === 1) return 'Disbursed'
-  if (item.approved) return 'Approved'
-  return 'Pending'
-}
-function itemStatusColor(item: PaymentLine) {
-  if (item.rejected) return 'error'
-  if (item.status === 1) return 'success'
-  if (item.approved) return 'info'
-  return 'warning'
-}
-function genderLabel(gender?: string | null) {
-  if (gender === 'M') return 'Male'
-  if (gender === 'F') return 'Female'
-  return '—'
-}
-// A payment line isn't a full household record, so send the maker/checker to the household detail page instead.
-function viewHousehold(line: PaymentLine) {
-  viewDialog.value = false
-  router.push({ name: 'household-detail', params: { householdNumber: line.householdNumber } })
+// "View details" opens the payment cycle's own page (not a popup) so the full
+// household-level breakdown gets real screen space and a shareable URL.
+function openView(cycle: Cycle) {
+  router.push({ name: 'payroll-detail', params: { cycleCode: cycle.cycleCode } })
 }
 </script>
 
 <template>
   <div>
     <div class="d-flex align-center justify-space-between mb-4">
-      <h1 class="text-h5 font-weight-bold">Payment Cycles</h1>
+      <h1 class="page-title">Payment Cycles</h1>
       <v-btn v-if="scopeReady && auth.can('ACCESS_PAYMENT_CYCLES')" color="secondary" prepend-icon="mdi-calendar-month-outline" @click="openWizard">Generate Payment Cycle</v-btn>
     </div>
 
@@ -362,7 +327,8 @@ function viewHousehold(line: PaymentLine) {
           <v-col cols="6" sm="4" md="3">
             <v-text-field v-model="tableSearch" prepend-inner-icon="mdi-magnify" label="Search" clearable hide-details density="compact" />
           </v-col>
-          <v-col cols="auto">
+          <v-col cols="auto" class="filter-actions">
+            <v-btn class="filter-submit" color="primary" @click="load">Submit</v-btn>
             <v-btn variant="text" size="small" @click="clearFilters">Clear filters</v-btn>
           </v-col>
         </v-row>
@@ -473,9 +439,9 @@ function viewHousehold(line: PaymentLine) {
         </v-card-text>
         <v-card-actions>
           <v-spacer />
-          <v-btn variant="text" @click="approveDialog = false">Cancel</v-btn>
-          <v-btn v-if="auth.isAnchor" color="secondary" :loading="approving" :disabled="!approveOtp" @click="confirmApprove">Approve</v-btn>
-          <v-btn v-else color="secondary" :loading="approving" :disabled="!approveRejectedIds.size" @click="saveRejections">Save changes</v-btn>
+          <v-btn variant="flat" color="error" @click="approveDialog = false">Cancel</v-btn>
+          <v-btn v-if="auth.isAnchor" variant="flat" color="secondary" :loading="approving" :disabled="!approveOtp" @click="confirmApprove">Approve</v-btn>
+          <v-btn v-else variant="flat" color="secondary" :loading="approving" :disabled="!approveRejectedIds.size" @click="saveRejections">Save changes</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -490,91 +456,17 @@ function viewHousehold(line: PaymentLine) {
         </v-card-text>
         <v-card-actions>
           <v-spacer />
-          <v-btn variant="text" @click="rejectDialog = false">Cancel</v-btn>
-          <v-btn color="error" :loading="rejecting" @click="confirmReject">Reject cycle</v-btn>
+          <v-btn variant="flat" color="error" @click="rejectDialog = false">Cancel</v-btn>
+          <v-btn variant="flat" color="error" :loading="rejecting" @click="confirmReject">Reject cycle</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
 
-    <!-- View more: full household-level breakdown for any cycle status -->
-    <v-dialog v-model="viewDialog" max-width="820">
-      <v-card v-if="viewTarget">
-        <dialog-close-button @close="viewDialog = false" />
-        <v-card-title>{{ viewTarget.cycleCode }} — Payments</v-card-title>
-        <v-card-subtitle class="pb-0">{{ orgName(viewTarget.organisationCode) }} · {{ viewTarget.periodStart }} – {{ viewTarget.periodEnd }}</v-card-subtitle>
-        <v-card-text>
-          <dl class="view-summary">
-            <div class="view-summary-item">
-              <dt>Households</dt>
-              <dd class="num-cell">{{ viewTarget.householdCount }}</dd>
-            </div>
-            <div class="view-summary-item">
-              <dt>Currency</dt>
-              <dd>{{ viewTarget.currency ?? 'USD' }} <span class="view-summary-muted">rate {{ viewTarget.exchangeRate ?? 1 }}</span></dd>
-            </div>
-            <div class="view-summary-item">
-              <dt>Amount out</dt>
-              <dd class="num-cell">{{ fmtAmount(viewTarget.amountOut ?? viewTarget.totalAmount) }}</dd>
-            </div>
-            <div class="view-summary-item">
-              <dt>Amount in</dt>
-              <dd class="num-cell">{{ fmtAmount(viewTarget.amountIn ?? viewTarget.totalAmount) }}</dd>
-            </div>
-          </dl>
-
-          <div v-if="viewLoading" class="d-flex justify-center my-6"><v-progress-circular indeterminate color="secondary" /></div>
-          <v-alert v-else-if="viewError" type="error" variant="tonal" density="compact">
-            Couldn't load this cycle's households.
-            <template #append>
-              <v-btn variant="text" size="small" @click="openView(viewTarget)">Retry</v-btn>
-            </template>
-          </v-alert>
-          <v-alert v-else-if="!viewItems.length" type="info" variant="tonal" density="compact">No households in this cycle.</v-alert>
-          <div v-else class="view-table-scroll">
-            <v-table density="compact" style="max-height: 420px; overflow-y: auto">
-              <thead>
-                <tr>
-                  <th>Household</th>
-                  <th>Village</th>
-                  <th>Gender</th>
-                  <th class="text-right">Amount out</th>
-                  <th class="text-right">Amount in</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="line in viewItems" :key="line.id">
-                  <td>
-                    <button type="button" class="household-link" @click="viewHousehold(line)">{{ line.householdName }}</button>
-                    <div class="view-summary-muted">{{ line.householdNumber }}</div>
-                  </td>
-                  <td>{{ line.bomaCode || '—' }}</td>
-                  <td>{{ genderLabel(line.gender) }}</td>
-                  <td class="text-right num-cell">{{ fmtAmount(line.amountOut ?? line.amount) }}</td>
-                  <td class="text-right num-cell">{{ fmtAmount(line.amountIn ?? line.amount) }}</td>
-                  <td>
-                    <v-tooltip v-if="line.rejected && line.rejectionReason" :text="line.rejectionReason" location="top">
-                      <template #activator="{ props: tip }">
-                        <v-chip v-bind="tip" size="small" :color="itemStatusColor(line)" variant="tonal">{{ itemStatusText(line) }}</v-chip>
-                      </template>
-                    </v-tooltip>
-                    <v-chip v-else size="small" :color="itemStatusColor(line)" variant="tonal">{{ itemStatusText(line) }}</v-chip>
-                  </td>
-                </tr>
-              </tbody>
-            </v-table>
-          </div>
-        </v-card-text>
-        <v-card-actions>
-          <v-spacer />
-          <v-btn variant="text" @click="viewDialog = false">Close</v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
   </div>
 </template>
 
 <style scoped>
+.filter-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 /* This table is wider than its card on most screens now that every column has a real,
    unsqueezed width (see the `headers` comment above), so it scrolls horizontally inside
    Vuetify's own `.v-table__wrapper` -- but style.css hides scrollbars everywhere by default
@@ -602,56 +494,5 @@ function viewHousehold(line: PaymentLine) {
    see DESIGN.md's "Data Stays Still" rule. */
 .num-cell {
   font-variant-numeric: tabular-nums;
-}
-
-.view-summary {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-  gap: 16px;
-  padding: 12px 14px;
-  margin: 0 0 16px;
-  background: #F8FAFC;
-  border: 1px solid #E2E8F0;
-  border-radius: 10px;
-}
-.view-summary-item { min-width: 0; }
-.view-summary dt {
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-  color: #64748B;
-  margin-bottom: 2px;
-}
-.view-summary dd {
-  margin: 0;
-  font-size: 0.95rem;
-  font-weight: 700;
-  color: #0F172A;
-}
-.view-summary-muted {
-  font-size: 0.78rem;
-  font-weight: 400;
-  color: #64748B;
-}
-
-.view-table-scroll {
-  max-width: 100%;
-  overflow-x: auto;
-}
-
-.household-link {
-  background: none;
-  border: none;
-  padding: 0;
-  font: inherit;
-  font-weight: 600;
-  color: #0F766E;
-  cursor: pointer;
-  text-align: left;
-}
-.household-link:hover,
-.household-link:focus-visible {
-  text-decoration: underline;
 }
 </style>

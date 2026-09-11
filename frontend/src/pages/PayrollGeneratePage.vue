@@ -345,7 +345,7 @@ onMounted(() => {
   <div>
     <div class="d-flex align-center mb-4 ga-3">
       <v-btn icon="mdi-arrow-left" variant="text" aria-label="Back to payment cycles" @click="goToList" />
-      <h1 class="text-h5 font-weight-bold mb-0">Generate Payment Cycle</h1>
+      <h1 class="page-title">Generate Payment Cycle</h1>
     </div>
 
     <v-card variant="flat" border>
@@ -371,21 +371,25 @@ onMounted(() => {
 
         <!-- Step 1: Period -->
         <div v-if="step === 1">
-          <v-select
-            v-if="auth.isSystemAdmin"
-            v-model="dialogAnchorId"
-            :items="anchors" item-title="name" item-value="id"
-            label="Anchor" class="mb-2" placeholder="Choose an anchor" required
-          />
-          <v-select
-            v-if="auth.isAnchor"
-            v-model="genForm.organisationCode"
-            :items="dialogOrganizations" item-title="name" item-value="organisationCode"
-            label="Organisation" class="mb-2" placeholder="Choose an organisation"
-            :disabled="auth.isSystemAdmin && !dialogAnchorId" required
-          />
-          <v-text-field v-model="genForm.periodStart" label="Period start" type="date" />
-          <v-text-field v-model="genForm.periodEnd" label="Period end" type="date" />
+          <v-row dense>
+            <v-col v-if="auth.isSystemAdmin" cols="12" sm="6">
+              <v-select
+                v-model="dialogAnchorId"
+                :items="anchors" item-title="name" item-value="id"
+                label="Anchor" placeholder="Choose an anchor" required
+              />
+            </v-col>
+            <v-col v-if="auth.isAnchor" cols="12" sm="6">
+              <v-select
+                v-model="genForm.organisationCode"
+                :items="dialogOrganizations" item-title="name" item-value="organisationCode"
+                label="Organisation" placeholder="Choose an organisation"
+                :disabled="auth.isSystemAdmin && !dialogAnchorId" required
+              />
+            </v-col>
+            <v-col cols="12" sm="6"><v-text-field v-model="genForm.periodStart" label="Period start" type="date" /></v-col>
+            <v-col cols="12" sm="6"><v-text-field v-model="genForm.periodEnd" label="Period end" type="date" /></v-col>
+          </v-row>
           <div class="d-flex justify-end">
             <v-btn color="secondary" :disabled="!canNextStep1" @click="step = 2">Next</v-btn>
           </div>
@@ -549,8 +553,8 @@ onMounted(() => {
         </v-card-text>
         <v-card-actions>
           <v-spacer />
-          <v-btn variant="text" @click="importDialog = false">Cancel</v-btn>
-          <v-btn color="secondary" :disabled="!importRows.length" @click="confirmImport">
+          <v-btn variant="flat" color="error" @click="importDialog = false">Cancel</v-btn>
+          <v-btn variant="flat" color="secondary" :disabled="!importRows.length" @click="confirmImport">
             Use these households
           </v-btn>
         </v-card-actions>

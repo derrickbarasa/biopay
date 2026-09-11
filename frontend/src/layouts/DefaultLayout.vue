@@ -4,13 +4,11 @@ import { useRoute, useRouter } from 'vue-router'
 import { useDisplay } from 'vuetify'
 import { useAuthStore } from '@/stores/auth'
 import { dispatch } from '@/api/client'
-import { useToast } from '@/composables/useToast'
 import { useIdleLogout } from '@/composables/useIdleLogout'
 
 const auth = useAuthStore()
 const router = useRouter()
 const route = useRoute()
-const toast = useToast()
 const { mdAndUp } = useDisplay()
 const drawer = ref(mdAndUp.value)
 const { showPrompt: showIdlePrompt, confirmStillHere, logoutNow } = useIdleLogout()
@@ -31,38 +29,43 @@ interface SubscriptionStatus {
   expiresAt?: string
   daysToExpiry?: number
   daysToArchive?: number
+  anchorActive?: boolean
 }
-const subscription = ref<SubscriptionStatus>({ status: 'NONE' })
-const renewing = ref(false)
+const subscription = ref<SubscriptionStatus>({ status: 'NONE', anchorActive: true })
 
 async function fetchSubscription() {
   if (auth.isSystemAdmin || !auth.user?.anchorId) return
   try {
     const res = await dispatch<{ results: SubscriptionStatus }>('GET_SUBSCRIPTION')
-    subscription.value = res.results ?? { status: 'NONE' }
+    subscription.value = res.results ?? { status: 'NONE', anchorActive: true }
   } catch {
     // Fail-open: never block the app because the status check itself failed.
-    subscription.value = { status: 'NONE' }
+    subscription.value = { status: 'NONE', anchorActive: true }
   }
 }
 
-async function renewSubscription() {
-  renewing.value = true
-  try {
-    await dispatch('RENEW_SUBSCRIPTION')
-    toast.success('Subscription renewed')
-    await fetchSubscription()
-  } catch (err) {
-    toast.error(err instanceof Error ? err.message : 'Renewal failed')
-  } finally {
-    renewing.value = false
-  }
+function goToMakePayment() {
+  router.push('/app/subscription/pay')
 }
 
-// The Subscription page itself must stay reachable even when archived -- otherwise
-// there's no way to see invoices or reach the renew action that unlocks everything else.
-const isArchived = computed(() => !auth.isSystemAdmin && !!auth.user?.anchorId && subscription.value.status === 'ARCHIVED' && route.name !== 'subscription')
+// The Subscription and Make Payment pages must stay reachable even when archived --
+// otherwise there's no way to see invoices or reach the payment flow that unlocks
+// everything else.
+const isArchived = computed(() => !auth.isSystemAdmin && !!auth.user?.anchorId && subscription.value.status === 'ARCHIVED'
+  && route.name !== 'subscription' && route.name !== 'subscription-pay')
 const inGrace = computed(() => !auth.isSystemAdmin && !!auth.user?.anchorId && subscription.value.status === 'GRACE')
+
+// A deactivated anchor's own admin account can't even log in (see Auth#loginUser), so this
+// only ever fires for organisation/field-officer sessions whose anchor was deactivated after
+// they were already signed in -- a distinct condition from subscription ARCHIVED (the anchor
+// itself still functions there; here it's been switched off entirely).
+const isAnchorDeactivated = computed(() => !auth.isSystemAdmin && !auth.isAnchorAdministrator
+  && !!auth.user?.anchorId && subscription.value.anchorActive === false)
+
+// An archived anchor administrator can only reach the Subscription/Make Payment pages
+// (and Log out, which lives outside visibleSections) until they pay; the sidebar itself
+// is trimmed down to match instead of just relying on the content-area gate below.
+const navLockedToSubscription = computed(() => isArchived.value && auth.isAnchorAdministrator)
 
 onMounted(fetchSubscription)
 
@@ -113,13 +116,13 @@ const navSections: NavSection[] = [
       { title: 'Anchors', icon: 'mdi-bank-outline', to: '/app/anchors', roles: ['ANCHOR'], systemOnly: true },
       { title: 'Organizations', icon: 'mdi-domain', to: '/app/organizations', roles: ['ANCHOR'], permission: 'ACCESS_ORGANISATIONS' },
       { title: 'Locations', icon: 'mdi-map-marker-radius', to: '/app/locations', roles: ['ANCHOR', 'ORGANISATION'], permission: 'ACCESS_LOCATIONS' },
-      { title: 'API Documentation', icon: 'mdi-api', to: '/app/api-documentation' },
+      { title: 'API Documentation', icon: 'mdi-api', to: '/app/api-documentation', permission: 'ACCESS_API_DOCS' },
     ],
   },
   {
     title: 'Android App',
     items: [
-      { title: 'App', icon: 'mdi-android', to: '/app/android-app' },
+      { title: 'App', icon: 'mdi-android', to: '/app/android-app', permission: 'ACCESS_ANDROID_APP' },
     ],
   },
   {
@@ -129,6 +132,7 @@ const navSections: NavSection[] = [
       { title: 'Field Officers', icon: 'mdi-account-tie', to: '/app/officers', roles: ['ANCHOR', 'ORGANISATION'], permission: 'ACCESS_SUPERVISORS' },
       { title: 'Roles & Permissions', icon: 'mdi-shield-account-outline', to: '/app/roles', roles: ['ANCHOR'], permission: 'ACCESS_ROLES' },
       { title: 'Subscription', icon: 'mdi-credit-card-outline', to: '/app/subscription', roles: ['ANCHOR'], anchorSubscription: true, permission: 'ACCESS_SUBSCRIPTION' },
+      { title: 'Billing', icon: 'mdi-cash-check', to: '/app/billing', roles: ['ANCHOR'], systemOnly: true },
     ],
   },
   {
@@ -140,6 +144,7 @@ const navSections: NavSection[] = [
 ]
 
 function itemVisible(item: NavItem): boolean {
+  if (navLockedToSubscription.value) return item.to === '/app/subscription'
   return (!item.roles || auth.isSystemAdmin || (!!auth.role && item.roles.includes(auth.role)))
     && (!item.module || auth.hasModule(item.module))
     && (!item.permission || auth.can(item.permission))
@@ -243,7 +248,7 @@ function onNavClick(event: MouseEvent | KeyboardEvent, to: string) {
   </v-app-bar>
 
   <v-main class="dashboard-main">
-    <v-container fluid class="pa-3 pa-md-5">
+    <v-container fluid class="pa-3 px-md-5 py-md-3">
       <v-dialog v-model="showIdlePrompt" max-width="420" persistent>
         <v-card>
           <dialog-close-button @close="confirmStillHere" />
@@ -272,34 +277,58 @@ function onNavClick(event: MouseEvent | KeyboardEvent, to: string) {
             You have {{ subscription.daysToArchive ?? 0 }} day(s) of grace left before data is archived.
           </div>
           <v-spacer />
-          <v-btn v-if="auth.isAnchorAdministrator" color="warning" variant="flat" size="small" :loading="renewing" @click="renewSubscription">
-            Renew now
+          <v-btn v-if="auth.isAnchorAdministrator" color="warning" variant="flat" size="small" @click="goToMakePayment">
+            Make payment
           </v-btn>
         </div>
       </v-alert>
 
-      <!-- Archived: grace exhausted -> gate access behind renewal. -->
-      <div v-if="isArchived" class="archived-gate">
+      <!-- Anchor deactivated: distinct from subscription expiry -- the anchor itself was
+           switched off by the platform owner, so there's no self-service remedy for anyone
+           under it (org or field officer alike); both simply see "Contact your anchor". -->
+      <div v-if="isAnchorDeactivated" class="archived-gate">
+        <v-card variant="flat" border class="pa-8 text-center" max-width="520">
+          <v-icon icon="mdi-domain-off" size="48" color="error" class="mb-3" />
+          <p class="lockout-heading mb-2">Contact Your Anchor</p>
+          <p class="text-body-2 text-medium-emphasis mb-4">This organisation's anchor has been deactivated. Access is restored once the anchor is reactivated.</p>
+          <v-btn variant="text" size="small" prepend-icon="mdi-logout" @click="handleLogout">Log out</v-btn>
+        </v-card>
+      </div>
+
+      <!-- Archived: grace exhausted -> gate access behind payment. Message and available
+           actions differ by role: the anchor administrator can act directly; an organisation
+           user is told to contact the anchor above them; a field officer is locked out of the
+           dashboard entirely and told to contact their own organisation above them. -->
+      <div v-else-if="isArchived" class="archived-gate">
         <v-card variant="flat" border class="pa-8 text-center" max-width="520">
           <v-icon icon="mdi-lock-clock" size="48" color="error" class="mb-3" />
           <h2 class="text-h6 font-weight-bold mb-2">Subscription expired</h2>
-          <p class="text-body-2 text-medium-emphasis mb-4">
-            The 4-day grace period has ended and your data is archived. Renew the subscription
-            to restore access.
-          </p>
-          <v-btn v-if="auth.isAnchorAdministrator" color="secondary" :loading="renewing" @click="renewSubscription">
-            Renew subscription
-          </v-btn>
-          <p v-else class="text-caption text-medium-emphasis">
-            Please contact your anchor administrator to renew.
-          </p>
-          <div class="mt-4 d-flex ga-2 justify-center">
-            <v-btn
-              v-if="auth.isAnchorAdministrator" variant="text" size="small" prepend-icon="mdi-credit-card-outline"
-              @click="onNavClick($event, '/app/subscription')"
-            >View subscription</v-btn>
+
+          <template v-if="auth.isAnchorAdministrator">
+            <p class="text-body-2 text-medium-emphasis mb-4">
+              The 4-day grace period has ended and your data is archived. Make a payment to restore access.
+            </p>
+            <v-btn color="secondary" @click="goToMakePayment">Make payment</v-btn>
+            <div class="mt-4 d-flex ga-2 justify-center">
+              <v-btn variant="text" size="small" prepend-icon="mdi-credit-card-outline" @click="onNavClick($event, '/app/subscription')">View subscription</v-btn>
+              <v-btn variant="text" size="small" prepend-icon="mdi-logout" @click="handleLogout">Log out</v-btn>
+            </div>
+          </template>
+          <template v-else-if="auth.isSupervisor">
+            <p class="lockout-heading mb-2">Contact Your Org</p>
+            <p class="text-body-2 text-medium-emphasis mb-4">
+              Your organisation's anchor has an expired subscription, so field officer access is locked.
+              Ask your organisation to contact their anchor to restore access.
+            </p>
             <v-btn variant="text" size="small" prepend-icon="mdi-logout" @click="handleLogout">Log out</v-btn>
-          </div>
+          </template>
+          <template v-else>
+            <p class="lockout-heading mb-2">Contact Your Anchor</p>
+            <p class="text-body-2 text-medium-emphasis mb-4">
+              This organisation's anchor has an expired subscription. Access is restored once the anchor makes a payment.
+            </p>
+            <v-btn variant="text" size="small" prepend-icon="mdi-logout" @click="handleLogout">Log out</v-btn>
+          </template>
         </v-card>
       </div>
 
@@ -337,6 +366,7 @@ function onNavClick(event: MouseEvent | KeyboardEvent, to: string) {
 .dashboard-main::-webkit-scrollbar-thumb { border: 3px solid transparent; border-radius: 999px; background: #94a3b8; background-clip: padding-box; }
 .dashboard-main::-webkit-scrollbar-thumb:hover { background: #64748b; background-clip: padding-box; }
 .archived-gate { display: flex; justify-content: center; padding-top: 8vh; }
+.lockout-heading { margin: 0; color: #0f172a; font-size: 1.6rem; font-weight: 800; letter-spacing: -.01em; }
 @media (max-width: 600px) {
   .role-chip, .user-name { display: none; }
   .app-bar :deep(.v-breadcrumbs) { padding-inline: 8px; }

@@ -118,13 +118,14 @@ async function load() {
   }
 }
 
-watch([statusFilter, organisationFilter, dateFromFilter, dateToFilter], load)
+// Filters apply only when Submit is pressed (see the template) -- no reload on every pick.
 
 function clearFilters() {
   statusFilter.value = null
   organisationFilter.value = null
   dateFromFilter.value = null
   dateToFilter.value = null
+  load()
 }
 
 async function loadOrganizations() {
@@ -138,8 +139,9 @@ async function loadOrganizations() {
   }
 }
 
-// Switching anchor resets any organisation filter from the previous one, then reloads both lists.
-watch(selectedAnchorId, () => { organisationFilter.value = null; loadOrganizations(); load() })
+// Switching anchor resets any organisation filter from the previous one and refreshes the
+// organisation option list; the payments table itself still waits for Submit.
+watch(selectedAnchorId, () => { organisationFilter.value = null; loadOrganizations() })
 
 onMounted(() => {
   load()
@@ -257,7 +259,7 @@ function printReceipt(row: PaymentRow) {
 <template>
   <div>
     <div class="d-flex align-center justify-space-between mb-4">
-      <h1 class="text-h5 font-weight-bold">Payments</h1>
+      <h1 class="page-title">Payments</h1>
       <v-btn v-if="scopeReady && auth.can('DOWNLOAD_REPORTS')" color="secondary" prepend-icon="mdi-download" @click="exportCsv">Export CSV</v-btn>
     </div>
 
@@ -336,7 +338,8 @@ function printReceipt(row: PaymentRow) {
           <v-col cols="6" sm="4" md="3">
             <v-text-field v-model="tableSearch" prepend-inner-icon="mdi-magnify" label="Search" clearable hide-details density="compact" />
           </v-col>
-          <v-col cols="auto">
+          <v-col cols="auto" class="filter-actions">
+            <v-btn class="filter-submit" color="primary" @click="load">Submit</v-btn>
             <v-btn variant="text" size="small" @click="clearFilters">Clear filters</v-btn>
           </v-col>
         </v-row>
@@ -408,6 +411,7 @@ function printReceipt(row: PaymentRow) {
 </template>
 
 <style scoped>
+.filter-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .payment-actions { display: flex; align-items: center; gap: 2px; min-width: max-content; }
 .payment-detail-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 0; }
 .payment-detail-grid > div { min-width: 0; padding: 14px; border: 1px solid #e2e8f0; border-radius: 12px; background: #f8fafc; }

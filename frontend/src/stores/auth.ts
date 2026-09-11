@@ -53,7 +53,7 @@ export const useAuthStore = defineStore('auth', () => {
   })
 
   const roleLabel = computed(() => {
-    if (isSystemAdmin.value) return 'Super Admin'
+    if (isSystemAdmin.value) return 'Platform Owner'
     switch (role.value) {
       case 'ANCHOR': return 'Anchor Administrator'
       case 'ORGANISATION': return 'Organisation Administrator'

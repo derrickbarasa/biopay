@@ -142,7 +142,7 @@ const payrollFields = [
 <template>
   <div>
     <div class="mb-4">
-      <h1 class="text-h5 font-weight-bold">API Documentation</h1>
+      <h1 class="page-title">API Documentation</h1>
       <p class="text-caption text-medium-emphasis mb-0">
         Integrate an external system with BioPay: upload households, generate payment cycles, add alternates,
         and read back records using the same REST API the dashboard itself uses.

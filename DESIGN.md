@@ -11,6 +11,8 @@ colors:
   canvas: "#F8FAFC"
   surface: "#FFFFFF"
   border: "#E2E8F0"
+  field-border: "#0F172A"
+  cancel-red: "#D64545"
 typography:
   headline:
     fontFamily: "Ubuntu, sans-serif"
@@ -101,7 +103,9 @@ Controls use gently rounded 8px corners. Standard application surfaces use 10px 
 
 ### Buttons
 
-Primary operational actions use Action Orange with bold sentence-case labels. Text buttons remain visually quiet for refresh, navigation, and secondary actions. Every interactive control retains a visible focus state.
+Primary operational actions use Action Orange with regular-weight (not bold) sentence-case labels. Text buttons remain visually quiet for refresh, navigation, and secondary actions. Every interactive control retains a visible focus state.
+
+**Dialogs and popups:** the primary/confirm action uses Action Orange; the Cancel action uses a red flat background (`error`), never a plain text button, so the two choices read as distinct commitments.
 
 ### Cards / Containers
 
@@ -109,7 +113,7 @@ Cards are white, border-led, and shadowless. Metric cards are compact and pair o
 
 ### Inputs / Fields
 
-Inputs use Vuetify's comfortable outlined treatment, 8px corners, and a consistent two-pixel field outline variable. Error and disabled states retain the component library's semantic behavior.
+Inputs use Vuetify's comfortable outlined treatment, 8px corners, and a thin (1px, 1.5px on focus) solid black/ink field outline -- not Vuetify's default translucent grey. Error and disabled states retain the component library's semantic behavior (red outline on error, teal on focus).
 
 ### Navigation
 

@@ -8,42 +8,51 @@ const props = withDefaults(defineProps<{
   variant?: 'donut' | 'pie'
   showLabels?: boolean
   showLegendPercent?: boolean
-}>(), { variant: 'donut', showLegendPercent: true })
+  /** SVG viewBox size in px; the drawn circle scales with it. Default fits the
+   *  compact side-by-side layout used everywhere except a "centered" chart. */
+  size?: number
+  /** Uses the featured dashboard layout with a centered chart and a legend
+   *  beside it, as used by DashboardPage.vue's Registration Trend card. */
+  centered?: boolean
+}>(), { variant: 'donut', showLegendPercent: true, size: 200, centered: false })
 
-const size = 200
-const radius = 84
-const thickness = 26
-const center = size / 2
+const size = computed(() => props.size)
+const radius = computed(() => size.value * 0.42)
+const thickness = computed(() => size.value * 0.13)
+const center = computed(() => size.value / 2)
 const hoverIndex = ref<number | null>(null)
 
 const palette = computed(() => props.colors ?? ['#0D9488', '#F59E0B', '#16A34A', '#0F766E', '#EA580C', '#94A3B8'])
 const total = computed(() => props.data.reduce((sum, d) => sum + d.value, 0) || 0)
 
-function polar(angle: number, r: number) {
+function polar(cx: number, angle: number, r: number) {
   const rad = (angle - 90) * (Math.PI / 180)
-  return { x: center + r * Math.cos(rad), y: center + r * Math.sin(rad) }
+  return { x: cx + r * Math.cos(rad), y: cx + r * Math.sin(rad) }
 }
 
 const slices = computed(() => {
+  const c = center.value
+  const r = radius.value
+  const t = thickness.value
   const denom = total.value || 1
   let startAngle = 0
   return props.data.map((d, i) => {
     const fraction = d.value / denom
     const endAngle = startAngle + fraction * 360
-    const outerStart = polar(startAngle, radius)
-    const outerEnd = polar(endAngle, radius)
-    const innerStart = polar(endAngle, radius - thickness)
-    const innerEnd = polar(startAngle, radius - thickness)
+    const outerStart = polar(c, startAngle, r)
+    const outerEnd = polar(c, endAngle, r)
+    const innerStart = polar(c, endAngle, r - t)
+    const innerEnd = polar(c, startAngle, r - t)
     const largeArc = endAngle - startAngle > 180 ? 1 : 0
-    const fullCircle = `M ${center - radius} ${center} A ${radius} ${radius} 0 1 1 ${center + radius} ${center} A ${radius} ${radius} 0 1 1 ${center - radius} ${center} Z`
+    const fullCircle = `M ${c - r} ${c} A ${r} ${r} 0 1 1 ${c + r} ${c} A ${r} ${r} 0 1 1 ${c - r} ${c} Z`
     const path = props.variant === 'pie'
       ? (fraction >= 0.9999
           ? fullCircle
-          : `M ${center} ${center} L ${outerStart.x} ${outerStart.y} A ${radius} ${radius} 0 ${largeArc} 1 ${outerEnd.x} ${outerEnd.y} Z`)
+          : `M ${c} ${c} L ${outerStart.x} ${outerStart.y} A ${r} ${r} 0 ${largeArc} 1 ${outerEnd.x} ${outerEnd.y} Z`)
       : (fraction >= 0.9999
-          ? `${fullCircle} M ${center - (radius - thickness)} ${center} A ${radius - thickness} ${radius - thickness} 0 1 0 ${center + (radius - thickness)} ${center} A ${radius - thickness} ${radius - thickness} 0 1 0 ${center - (radius - thickness)} ${center} Z`
-          : `M ${outerStart.x} ${outerStart.y} A ${radius} ${radius} 0 ${largeArc} 1 ${outerEnd.x} ${outerEnd.y} L ${innerStart.x} ${innerStart.y} A ${radius - thickness} ${radius - thickness} 0 ${largeArc} 0 ${innerEnd.x} ${innerEnd.y} Z`)
-    const labelPoint = polar(startAngle + fraction * 180, props.variant === 'pie' ? radius * .62 : radius - thickness / 2)
+          ? `${fullCircle} M ${c - (r - t)} ${c} A ${r - t} ${r - t} 0 1 0 ${c + (r - t)} ${c} A ${r - t} ${r - t} 0 1 0 ${c - (r - t)} ${c} Z`
+          : `M ${outerStart.x} ${outerStart.y} A ${r} ${r} 0 ${largeArc} 1 ${outerEnd.x} ${outerEnd.y} L ${innerStart.x} ${innerStart.y} A ${r - t} ${r - t} 0 ${largeArc} 0 ${innerEnd.x} ${innerEnd.y} Z`)
+    const labelPoint = polar(c, startAngle + fraction * 180, props.variant === 'pie' ? r * .62 : r - t / 2)
     const slice = {
       path,
       color: palette.value[i % palette.value.length],
@@ -59,8 +68,8 @@ const slices = computed(() => {
 </script>
 
 <template>
-  <div class="pie-wrap">
-    <div class="pie-svg-wrap">
+  <div class="pie-wrap" :class="{ 'pie-wrap--centered': centered }">
+    <div class="pie-svg-wrap" :style="{ width: `${size}px`, height: `${size}px` }">
       <svg :viewBox="`0 0 ${size} ${size}`" class="pie-svg" role="img" :aria-label="variant === 'pie' ? 'Pie chart' : 'Donut chart'">
         <circle
           v-if="total === 0"
@@ -123,5 +132,33 @@ const slices = computed(() => {
 @media (max-width: 380px) {
   .pie-wrap { grid-template-columns: 108px minmax(0, 1fr); gap: 12px; }
   .pie-svg-wrap { width: 108px; height: 108px; }
+}
+
+/* Featured dashboard variant: chart and legend share one balanced row. */
+.pie-wrap--centered {
+  grid-template-columns: minmax(200px, 1fr) minmax(180px, 220px);
+  align-items: center;
+  gap: 20px;
+  padding-block: 8px 12px;
+}
+.pie-wrap--centered .pie-svg-wrap { justify-self: center; max-width: 100%; }
+.pie-wrap--centered .pie-total { font-size: 1.6rem; }
+.pie-wrap--centered .pie-total-label { font-size: .72rem; }
+.pie-wrap--centered .legend {
+  width: 100%;
+  gap: 10px;
+  font-size: .8rem;
+}
+.pie-wrap--centered .legend-row { justify-content: flex-start; }
+.pie-wrap--centered .legend-label { flex: 1; }
+.pie-wrap--centered .swatch { width: 11px; height: 11px; }
+.pie-wrap--centered .legend-value { font-size: .76rem; }
+@media (max-width: 600px) {
+  .pie-wrap--centered {
+    grid-template-columns: 1fr;
+    justify-items: center;
+    gap: 12px;
+  }
+  .pie-wrap--centered .legend { width: min(100%, 230px); }
 }
 </style>

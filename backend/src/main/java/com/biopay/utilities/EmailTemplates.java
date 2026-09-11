@@ -161,6 +161,59 @@ public final class EmailTemplates {
         return shell(body);
     }
 
+    /** A password-reset link, styled the same as every other BioPay transactional email
+     *  (branded shell, teal call-to-action) instead of the plain unstyled link this used to
+     *  be sent as. GET alone on the link never resets anything -- the reset-password page
+     *  itself still requires the token plus a chosen new password. */
+    public static String passwordResetEmail(String resetUrl, int expiryMinutes) {
+        String body =
+                "<h1 style=\"margin:0 0 10px;font-size:21px;line-height:1.35;color:#0f172a;font-weight:700;\">"
+                        + "Reset your password</h1>"
+                        + "<p style=\"margin:0 0 24px;font-size:14px;line-height:1.6;color:#64748b;\">"
+                        + "We received a request to reset the password on your BioPay account. Choose a new "
+                        + "password using the button below.</p>"
+                        + "<table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" align=\"center\" style=\"margin:0 auto 24px;\"><tr>"
+                        + "<td bgcolor=\"#f59e0b\" style=\"background:#f59e0b;border-radius:8px;\">"
+                        + "<a href=\"" + escapeHtml(resetUrl) + "\" style=\"display:inline-block;padding:13px 26px;font-size:14px;font-weight:700;color:#0f172a;text-decoration:none;\">"
+                        + "Reset password</a></td></tr></table>"
+                        + "<p style=\"margin:0 0 6px;font-size:13px;line-height:1.6;color:#64748b;\">"
+                        + "This link expires in " + expiryMinutes + " minutes and can only be used once.</p>"
+                        + "<p style=\"margin:0;font-size:13px;line-height:1.6;color:#64748b;\">"
+                        + "Didn't request this? You can safely ignore this email &mdash; your password hasn't been "
+                        + "changed.</p>";
+        return shell(body);
+    }
+
+    /** Sent when the platform owner "pushes" a payment link to an anchor whose subscription
+     *  needs renewing (see Subscription.java's SEND_SUBSCRIPTION_PUSH_PAYMENT_LINK) -- shows
+     *  the exact amount due and any note the platform owner added, and links straight to the
+     *  anchor's own Make Payment screen where they choose Card or Mobile Money. */
+    public static String subscriptionPushPaymentEmail(String anchorName, String amountLabel, String comment, String payUrl) {
+        String greeting = anchorName == null || anchorName.isBlank() ? "" : "Dear " + escapeHtml(anchorName.trim()) + ",<br>";
+        String safeComment = comment == null ? "" : escapeHtml(comment.trim());
+        String body =
+                "<h1 style=\"margin:0 0 10px;font-size:21px;line-height:1.35;color:#0f172a;font-weight:700;\">"
+                        + "Subscription payment requested</h1>"
+                        + "<p style=\"margin:0 0 22px;font-size:14px;line-height:1.6;color:#64748b;\">"
+                        + greeting + "BioPay is requesting payment to renew your anchor's subscription.</p>"
+                        + "<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" "
+                        + "style=\"margin:0 0 24px;text-align:left;background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;\">"
+                        + "<tr><td style=\"padding:16px 18px;\">"
+                        + "<div style=\"font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#64748b;\">Amount due</div>"
+                        + "<div style=\"margin-top:4px;font-size:22px;font-weight:800;color:#0f766e;\">" + escapeHtml(amountLabel) + "</div>"
+                        + (safeComment.isEmpty() ? "" : "<div style=\"margin-top:12px;font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#64748b;\">Note from BioPay</div>"
+                                + "<div style=\"margin-top:4px;font-size:13px;line-height:1.55;color:#475569;\">" + safeComment + "</div>")
+                        + "</td></tr></table>"
+                        + "<table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" align=\"center\" style=\"margin:0 auto 24px;\"><tr>"
+                        + "<td bgcolor=\"#f59e0b\" style=\"background:#f59e0b;border-radius:8px;\">"
+                        + "<a href=\"" + escapeHtml(payUrl) + "\" style=\"display:inline-block;padding:13px 26px;font-size:14px;font-weight:700;color:#0f172a;text-decoration:none;\">"
+                        + "Pay now</a></td></tr></table>"
+                        + "<p style=\"margin:0;font-size:13px;line-height:1.6;color:#64748b;\">"
+                        + "Sign in to BioPay and choose Card or Mobile Money (M-Pesa, Airtel Money or MTN MoMo) to complete payment. "
+                        + "If you believe this was sent in error, contact BioPay support before paying.</p>";
+        return shell(body);
+    }
+
     static String escapeHtml(String value) {
         if (value == null) return "";
         return value.replace("&", "&amp;")

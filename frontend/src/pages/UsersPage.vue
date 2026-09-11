@@ -36,7 +36,7 @@ onMounted(load)
 </script>
 <template>
  <div class="admin-page">
-  <header class="admin-head"><div><div class="title-row"><h1>Users</h1><v-chip size="small" variant="tonal" color="primary">{{ auth.isSystemAdmin?'System oversight':auth.isAnchor?'Anchor-wide access':'Organisation access' }}</v-chip></div></div><v-btn v-if="auth.can('ACCESS_USERS')" color="secondary" prepend-icon="mdi-account-plus-outline" @click="openCreate">Add user</v-btn></header>
+  <header class="admin-head"><div><div class="title-row"><h1 class="page-title">Users</h1><v-chip size="small" variant="tonal" color="primary">{{ auth.isSystemAdmin?'System oversight':auth.isAnchor?'Anchor-wide access':'Organisation access' }}</v-chip></div></div><v-btn v-if="auth.can('ACCESS_USERS')" color="secondary" prepend-icon="mdi-account-plus-outline" @click="openCreate">Add user</v-btn></header>
   <v-card border flat class="admin-card"><div class="table-tools"><v-text-field v-model="search" prepend-inner-icon="mdi-magnify" label="Search users" hide-details density="compact" variant="outlined"/><v-select v-model="roleFilter" :items="roleFilterOptions" label="Filter by role" clearable hide-details density="compact" variant="outlined" class="role-filter"/><span>{{ filteredUsers.length }} accounts</span></div>
    <v-data-table :headers="headers" :items="filteredUsers" :search="search" :loading="loading">
     <template #item.email="{item}"><div class="py-2"><strong>{{ item.firstName }} {{ item.otherNames }}</strong><div class="text-caption text-medium-emphasis">{{ item.email }}</div></div></template>
@@ -50,15 +50,15 @@ onMounted(load)
    <v-select v-else-if="auth.isAnchor" v-model="form.userScope" :items="['ANCHOR','ORGANISATION']" label="Access scope" variant="outlined"/>
    <v-select v-if="auth.isSystemAdmin&&form.userScope!=='SYSTEM'" v-model="form.targetAnchorId" :items="anchors" item-title="name" item-value="id" label="Anchor" variant="outlined" placeholder="Choose an anchor" @update:model-value="selectTargetAnchor"/>
    <v-select v-if="form.userScope==='ORGANISATION'&&auth.isAnchor" v-model="form.organisationCode" :items="availableOrganisations" item-title="name" item-value="organisationCode" label="Organisation" variant="outlined" placeholder="Choose an organisation" :disabled="auth.isSystemAdmin&&!form.targetAnchorId"/>
-   <p v-if="form.userScope==='SYSTEM'" class="text-caption text-medium-emphasis" style="grid-column:1/-1">A Super Admin has permanent, tenantless access to every anchor and organisation.</p>
+   <p v-if="form.userScope==='SYSTEM'" class="text-caption text-medium-emphasis" style="grid-column:1/-1">A Platform Owner has permanent, tenantless access to every anchor and organisation.</p>
    <v-text-field v-model="form.firstName" label="First name" placeholder="e.g. Jane" variant="outlined" required/><v-text-field v-model="form.otherNames" label="Other names" placeholder="e.g. Mwangi" variant="outlined"/>
    <v-text-field v-model="form.email" label="Email" type="email" placeholder="e.g. jane.mwangi@example.org" variant="outlined" required/><v-text-field v-model="form.username" label="Username" placeholder="e.g. jane.mwangi" variant="outlined" required/>
    <v-select v-model="form.roleId" :items="availableRoles" item-title="name" item-value="id" label="Role" variant="outlined" required/>
-  </v-card-text><v-card-actions><v-spacer/><v-btn variant="text" @click="dialog=false">Cancel</v-btn><v-btn color="secondary" :loading="saving" @click="create">Create user</v-btn></v-card-actions></v-card></v-dialog>
+  </v-card-text><v-card-actions><v-spacer/><v-btn variant="flat" color="error" @click="dialog=false">Cancel</v-btn><v-btn variant="flat" color="secondary" :loading="saving" @click="create">Create user</v-btn></v-card-actions></v-card></v-dialog>
   <v-dialog v-model="editDialog" max-width="660"><v-card class="pa-2"><dialog-close-button @close="editDialog=false"/><v-card-title>View / edit user</v-card-title><v-card-text class="form-grid">
    <v-text-field :model-value="editForm.email" label="Email" variant="outlined" readonly/><v-select v-model="editForm.roleId" :items="availableEditRoles" item-title="name" item-value="id" label="Role" variant="outlined" :loading="editLoading"/>
    <v-text-field v-model="editForm.firstName" label="First name" variant="outlined"/><v-text-field v-model="editForm.otherNames" label="Other names" variant="outlined"/>
-  </v-card-text><v-card-actions><v-spacer/><v-btn variant="text" @click="editDialog=false">Cancel</v-btn><v-btn v-if="auth.can('ACCESS_USERS')" color="secondary" :loading="editSaving" @click="saveEdit">Save changes</v-btn></v-card-actions></v-card></v-dialog>
+  </v-card-text><v-card-actions><v-spacer/><v-btn variant="flat" color="error" @click="editDialog=false">Cancel</v-btn><v-btn v-if="auth.can('ACCESS_USERS')" variant="flat" color="secondary" :loading="editSaving" @click="saveEdit">Save changes</v-btn></v-card-actions></v-card></v-dialog>
  </div>
 </template>
 <style scoped>

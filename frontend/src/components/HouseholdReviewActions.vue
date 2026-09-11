@@ -144,7 +144,7 @@ async function reject() {
         <v-card-actions class="pa-4 pt-0">
           <v-spacer />
           <v-btn variant="text" @click="rejectDialog = false">Cancel</v-btn>
-          <v-btn color="error" :loading="rejecting" :disabled="!rejectionReason.trim()" @click="reject">
+          <v-btn variant="flat" color="error" :loading="rejecting" :disabled="!rejectionReason.trim()" @click="reject">
             Reject household
           </v-btn>
         </v-card-actions>

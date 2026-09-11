@@ -15,6 +15,7 @@ import io.vertx.sqlclient.Row;
 import io.vertx.sqlclient.Tuple;
 import com.biopay.databases.Datasource;
 import com.biopay.utilities.Crypto;
+import com.biopay.utilities.EmailTemplates;
 import com.biopay.utilities.Env;
 import com.biopay.utilities.Hashing;
 import com.biopay.utilities.JwtSupport;
@@ -567,9 +568,8 @@ public class Auth extends AbstractVerticle {
                     eventBus.send("EMAIL", new JsonObject()
                             .put("mailTo", email)
                             .put("subject", "Reset your BioPay password")
-                            .put("msg", "Click the link below to set a new password. This link expires in "
-                                    + RESET_TOKEN_MINUTES + " minutes and can only be used once.<br><br>"
-                                    + "<a href=\"" + link + "\">" + link + "</a>"));
+                            .put("msg", EmailTemplates.passwordResetEmail(link, RESET_TOKEN_MINUTES))
+                            .put("inlineImages", EmailTemplates.logoInlineImages()));
                 });
     }
 

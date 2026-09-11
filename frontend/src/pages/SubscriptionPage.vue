@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { dispatch } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
@@ -38,11 +39,11 @@ interface AnchorSubscription {
 
 const auth = useAuthStore()
 const toast = useToast()
+const router = useRouter()
 
 const loading = ref(true)
 const subscription = ref<SubscriptionStatus>({ status: 'NONE' })
 const invoices = ref<Invoice[]>([])
-const renewing = ref(false)
 const downloadingReceipt = ref<string | null>(null)
 
 // The super admin can see every anchor's subscription, not just their own.
@@ -58,19 +59,15 @@ const filteredSubscriptions = computed(() => allSubscriptions.value.filter((a) =
   return true
 }))
 
-const CURRENCIES = ['USD', 'KES', 'UGX', 'SSP', 'ETB', 'TZS', 'RWF', 'NGN', 'XAF', 'GBP', 'EUR']
-
-const renewForm = ref({ amount: null as number | null, currency: 'USD', anchorId: null as number | null })
-const renewDialog = ref(false)
-
 const statusColor: Record<string, string> = { ACTIVE: 'success', GRACE: 'warning', ARCHIVED: 'error', NONE: 'grey' }
 
 const allSubsHeaders = [
-  { title: 'Anchor', key: 'anchorName' },
+  { title: 'Anchor Name', key: 'anchorName' },
   { title: 'Status', key: 'status' },
   { title: 'Plan', key: 'planCode' },
   { title: 'Expires', key: 'expiresAt' },
   { title: 'Days to expiry', key: 'daysToExpiry' },
+  { title: 'Actions', key: 'actions', sortable: false, align: 'start' as const },
 ]
 
 const headers = [
@@ -134,33 +131,11 @@ onMounted(async () => {
 })
 watch(selectedAnchorId, () => { void load() })
 
-function openRenew() {
-  renewForm.value = { amount: null, currency: 'USD', anchorId: selectedAnchorId.value }
-  renewDialog.value = true
-}
-
-async function confirmRenew() {
-  if (auth.isSystemAdmin && !renewForm.value.anchorId) {
-    toast.error('Choose an anchor to renew')
-    return
-  }
-  renewing.value = true
-  try {
-    await dispatch('RENEW_SUBSCRIPTION', {
-      targetAnchorId: auth.isSystemAdmin ? renewForm.value.anchorId : undefined,
-      amount: renewForm.value.amount ?? undefined,
-      currency: renewForm.value.amount != null ? renewForm.value.currency : undefined,
-    })
-    if (auth.isSystemAdmin) selectedAnchorId.value = renewForm.value.anchorId
-    toast.success('Subscription renewed')
-    renewDialog.value = false
-    await load()
-    await loadAllSubscriptions()
-  } catch (err) {
-    toast.error(err instanceof Error ? err.message : 'Renewal failed')
-  } finally {
-    renewing.value = false
-  }
+// Actions column / own-status "Make Payment" both land on the same page; for the super
+// admin acting on behalf of an anchor, pass which one along so it doesn't have to be
+// re-selected there.
+function goToMakePayment(anchorId?: number, anchorName?: string) {
+  router.push({ path: '/app/subscription/pay', query: anchorId ? { anchorId: String(anchorId), anchorName: anchorName ?? '' } : {} })
 }
 
 function escapeHtml(s: string): string {
@@ -227,14 +202,9 @@ const statusHeadline = computed(() => {
 
 <template>
   <div>
-    <div class="d-flex align-center justify-space-between mb-4">
-      <div>
-        <h1 class="text-h5 font-weight-bold">Subscription</h1>
-        <p class="text-body-2 text-medium-emphasis mt-1">Manage your anchor's subscription, and view payment history and receipts.</p>
-      </div>
-      <v-btn v-if="auth.isAnchor && auth.can('ACCESS_SUBSCRIPTION')" color="secondary" prepend-icon="mdi-autorenew" :loading="renewing" @click="openRenew">
-        Renew subscription
-      </v-btn>
+    <div class="mb-4">
+      <h1 class="page-title">Subscription</h1>
+      <p class="text-body-2 text-medium-emphasis mt-1">Manage your anchor's subscription, and view payment history and receipts.</p>
     </div>
 
     <v-progress-linear v-if="loading" indeterminate color="primary" class="mb-4" />
@@ -251,10 +221,17 @@ const statusHeadline = computed(() => {
             <span v-if="subscription.graceDays">{{ subscription.graceDays }}-day grace period after expiry.</span>
           </div>
         </div>
+        <v-spacer />
+        <v-btn
+          v-if="subscription.status !== 'ACTIVE' && auth.can('ACCESS_SUBSCRIPTION')"
+          color="secondary" prepend-icon="mdi-credit-card-outline"
+          @click="goToMakePayment(auth.isSystemAdmin ? selectedAnchorId ?? undefined : undefined, auth.isSystemAdmin ? allSubscriptions.find((a) => a.anchorId === selectedAnchorId)?.anchorName : undefined)"
+        >
+          Make Payment
+        </v-btn>
       </div>
       <p class="text-caption text-medium-emphasis mt-3 mb-0">
-        Pricing is per your agreement with BioPay — renewal here records the payment and extends access by one month,
-        it does not process a card or bank charge itself.
+        Pricing is set on the Billing page — a payment here records itself for the platform owner to confirm and extends access by one month once confirmed.
       </p>
     </v-card>
 
@@ -273,6 +250,13 @@ const statusHeadline = computed(() => {
           <v-chip size="small" :color="statusColor[item.status] ?? 'grey'" variant="tonal">{{ item.status }}</v-chip>
         </template>
         <template #item.expiresAt="{ item }">{{ displayDate(item.expiresAt) }}</template>
+        <template #item.actions="{ item }">
+          <v-btn
+            v-if="item.status !== 'ACTIVE'" variant="text" size="small" color="secondary" prepend-icon="mdi-credit-card-outline"
+            @click.stop="goToMakePayment(item.anchorId, item.anchorName)"
+          >Make Payment</v-btn>
+          <span v-else class="text-caption text-medium-emphasis">—</span>
+        </template>
         <template #no-data>
           <div class="text-center text-medium-emphasis py-6">No anchors found.</div>
         </template>
@@ -305,29 +289,6 @@ const statusHeadline = computed(() => {
         </template>
       </v-data-table>
     </v-card>
-
-    <v-dialog v-model="renewDialog" max-width="440">
-      <v-card>
-        <dialog-close-button @close="renewDialog = false" />
-        <v-card-title>Renew subscription</v-card-title>
-        <v-card-text>
-          <p class="text-body-2 text-medium-emphasis mb-3">
-            Extends access by one month from the later of today or the current expiry. Recording an amount here is
-            optional and only for your own payment records — it does not charge anything.
-          </p>
-          <v-select v-if="auth.isSystemAdmin" v-model="renewForm.anchorId" :items="allSubscriptions" item-title="anchorName" item-value="anchorId" label="Anchor" density="compact" class="mb-2" />
-          <v-row dense>
-            <v-col cols="7"><v-text-field v-model.number="renewForm.amount" label="Amount paid (optional)" type="number" density="compact" /></v-col>
-            <v-col cols="5"><v-select v-model="renewForm.currency" :items="CURRENCIES" label="Currency" density="compact" /></v-col>
-          </v-row>
-        </v-card-text>
-        <v-card-actions>
-          <v-spacer />
-          <v-btn variant="text" @click="renewDialog = false">Cancel</v-btn>
-          <v-btn color="secondary" :loading="renewing" @click="confirmRenew">Confirm renewal</v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
   </div>
 </template>
 

@@ -60,7 +60,7 @@ public class Administration extends AbstractVerticle {
 
     private void getAnchors(Message<Object> message) {
         JsonObject p = data(message);
-        if (!anchor(p)) { fail(message, "Only the super admin or an anchor administrator can view anchor settings"); return; }
+        if (!anchor(p)) { fail(message, "Only the platform owner or an anchor administrator can view anchor settings"); return; }
         // An anchor is its Anchor Administrator's own row in `users` (user_scope='ANCHOR'),
         // not a separate table -- so "every anchor" is every such row. The system admin can
         // browse every anchor (for the anchor-picker on admin@biopay.com's sessions); a plain
@@ -86,7 +86,7 @@ public class Administration extends AbstractVerticle {
 
     private void createAnchor(Message<Object> message) {
         JsonObject p = data(message);
-        if (!systemAdmin(p)) { fail(message, "Only the super admin can create anchors"); return; }
+        if (!systemAdmin(p)) { fail(message, "Only the platform owner can create anchors"); return; }
         String name = strOrEmpty(p.getString("name")).trim();
         String authorisedName = strOrEmpty(p.getString("authorisedName")).trim();
         String authorisedEmail = strOrEmpty(p.getString("authorisedEmail")).trim().toLowerCase();
@@ -123,7 +123,7 @@ public class Administration extends AbstractVerticle {
 
     private void updateAnchor(Message<Object> message) {
         JsonObject p = data(message);
-        if (!anchor(p)) { fail(message, "Only the super admin or an anchor administrator can update anchor settings"); return; }
+        if (!anchor(p)) { fail(message, "Only the platform owner or an anchor administrator can update anchor settings"); return; }
         int targetAnchorId = systemAdmin(p)
                 ? p.getInteger("targetAnchorId", Integer.parseInt(p.getValue("anchorId").toString()))
                 : Integer.parseInt(p.getValue("anchorId").toString());
@@ -141,7 +141,7 @@ public class Administration extends AbstractVerticle {
      *  it can be reactivated the same way. */
     private void toggleAnchorStatus(Message<Object> message) {
         JsonObject p = data(message);
-        if (!systemAdmin(p)) { fail(message, "Only the super admin can delete or restore an anchor"); return; }
+        if (!systemAdmin(p)) { fail(message, "Only the platform owner can delete or restore an anchor"); return; }
         Integer targetAnchorId = p.getInteger("targetAnchorId");
         Integer status = p.getInteger("status");
         if (targetAnchorId == null || status == null) { fail(message, "targetAnchorId and status are required"); return; }
@@ -221,14 +221,14 @@ public class Administration extends AbstractVerticle {
     /** Only an existing Super Admin can mint another one -- a tenantless, permission-bypass
      * identity with no anchor/organisation, so it skips every anchor-scoped check above. */
     private void createSuperAdmin(Message<Object> message, JsonObject p, String email) {
-        if (!systemAdmin(p)) { fail(message,"Only a super admin can create another super admin"); return; }
+        if (!systemAdmin(p)) { fail(message,"Only a platform owner can create another platform owner"); return; }
         String firstName = strOrEmpty(p.getString("firstName")).trim();
         if (email.isEmpty() || firstName.isEmpty()) { fail(message,"Email and first name are required"); return; }
         String username=p.getString("username",email.split("@")[0]).trim();
         String tempPassword = Utilities.generateRandomPassword(10);
-        pool.preparedQuery("SELECT TOP 1 id FROM roles WHERE role_name='Super Admin' AND anchor_id IS NULL AND role_scope='SYSTEM' AND status=1")
+        pool.preparedQuery("SELECT TOP 1 id FROM roles WHERE role_name='Platform Owner' AND anchor_id IS NULL AND role_scope='SYSTEM' AND status=1")
                 .execute()
-                .compose(roleRows -> roleRows.size()==0 ? Future.failedFuture("Super Admin role not found")
+                .compose(roleRows -> roleRows.size()==0 ? Future.failedFuture("Platform Owner role not found")
                         : pool.preparedQuery("INSERT INTO users (email,username,password,first_name,other_names,role_id,active,status,user_scope,anchor_id,is_system_admin,must_change_password,created_by,created_at,updated_at) "
                                 + "VALUES (@p1,@p2,@p3,@p4,@p5,@p6,1,1,'SYSTEM',NULL,1,1,@p7,GETDATE(),GETDATE())")
                         .execute(Tuple.of(email,username,Passwords.hash(tempPassword),firstName,p.getString("otherNames"),
@@ -237,11 +237,11 @@ public class Administration extends AbstractVerticle {
                 .onSuccess(r -> {
                     eventBus.send("EMAIL", new JsonObject()
                             .put("mailTo", email)
-                            .put("subject", "Your BioPay Super Admin Account")
+                            .put("subject", "Your BioPay Platform Owner Account")
                             .put("msg", EmailTemplates.firstTimePasswordEmail(
-                                    firstName, "Your BioPay Super Admin account", tempPassword))
+                                    firstName, "Your BioPay Platform Owner account", tempPassword))
                             .put("inlineImages", EmailTemplates.logoInlineImages()));
-                    ok(message,"Super Admin created. Temporary password sent by email",null);
+                    ok(message,"Platform Owner created. Temporary password sent by email",null);
                 });
     }
 
@@ -307,7 +307,7 @@ public class Administration extends AbstractVerticle {
                                 .onFailure(e -> dbFail(message, e))
                                 .onSuccess(cntRows -> {
                                     if (Rows.intVal(cntRows.iterator().next(), "cnt") <= 1) {
-                                        fail(message, "At least one Super Admin must remain active");
+                                        fail(message, "At least one Platform Owner must remain active");
                                         return;
                                     }
                                     doToggleUserStatus(message, p, userId, status);
@@ -387,13 +387,13 @@ public class Administration extends AbstractVerticle {
                         + "OR r.anchor_id=@p1) ")
                 + "GROUP BY r.id,r.role_name,r.description,r.anchor_id,r.organization_code,r.role_scope,r.status,r.created_at,r.updated_at ORDER BY r.role_name";
         pool.preparedQuery(sql).execute(browseAll ? Tuple.tuple() : Tuple.of(anchorId)).onFailure(e->dbFail(message,e)).onSuccess(rows->{
-            JsonArray out=new JsonArray(); for(Row r:rows){String roleName=Rows.str(r,"role_name");String names=Rows.str(r,"permission_names");boolean builtIn="Super Admin".equals(roleName)||"Anchor Administrator".equals(roleName)||"Organisation Administrator".equals(roleName);out.add(new JsonObject().put("id",Rows.intVal(r,"id")).put("name",roleName).put("description",Rows.str(r,"description")).put("scope",Rows.str(r,"role_scope")).put("anchorId",Rows.intVal(r,"anchor_id")).put("builtIn",builtIn).put("systemRole","SYSTEM".equalsIgnoreCase(Rows.str(r,"role_scope"))).put("status",Rows.intVal(r,"status")).put("permissions",names==null?new JsonArray():new JsonArray(java.util.Arrays.asList(names.split(",")))));}
+            JsonArray out=new JsonArray(); for(Row r:rows){String roleName=Rows.str(r,"role_name");String names=Rows.str(r,"permission_names");boolean builtIn="Platform Owner".equals(roleName)||"Anchor Administrator".equals(roleName)||"Organisation Administrator".equals(roleName);out.add(new JsonObject().put("id",Rows.intVal(r,"id")).put("name",roleName).put("description",Rows.str(r,"description")).put("scope",Rows.str(r,"role_scope")).put("anchorId",Rows.intVal(r,"anchor_id")).put("builtIn",builtIn).put("systemRole","SYSTEM".equalsIgnoreCase(Rows.str(r,"role_scope"))).put("status",Rows.intVal(r,"status")).put("permissions",names==null?new JsonArray():new JsonArray(java.util.Arrays.asList(names.split(",")))));}
             ok(message,"Roles found",out);
         });
     }
 
     private void saveRole(Message<Object> message) {
-        JsonObject p=data(message); if(!anchor(p)){fail(message,"Only the super admin or an anchor administrator can manage roles");return;}
+        JsonObject p=data(message); if(!anchor(p)){fail(message,"Only the platform owner or an anchor administrator can manage roles");return;}
         boolean isSystemAdmin=systemAdmin(p);
         Integer anchorId=TenantScope.anchorId(p);
         Integer roleId=p.getInteger("roleId"); String name=p.getString("name","").trim(); JsonArray ids=p.getJsonArray("permissionIds",new JsonArray());
@@ -404,7 +404,7 @@ public class Administration extends AbstractVerticle {
         // never allowed for anyone else, at creation or edit.
         boolean systemScopeAllowed = "SYSTEM".equals(scope) && isSystemAdmin;
         if(!"ANCHOR".equals(scope) && !"ORGANISATION".equals(scope) && !systemScopeAllowed){fail(message,"Role scope must be Anchor or Organisation");return;}
-        if(roleId==null && ("Super Admin".equalsIgnoreCase(name) || "Anchor Administrator".equalsIgnoreCase(name) || "Organisation Administrator".equalsIgnoreCase(name))){fail(message,"That role name is reserved for a built-in administrator");return;}
+        if(roleId==null && ("Platform Owner".equalsIgnoreCase(name) || "Anchor Administrator".equalsIgnoreCase(name) || "Organisation Administrator".equalsIgnoreCase(name))){fail(message,"That role name is reserved for a built-in administrator");return;}
         // A brand-new tenant role (Anchor/Organisation scope) has to belong to some anchor, so
         // creating one still needs a target chosen first -- unless it's SYSTEM-scoped, which by
         // definition belongs to no anchor. Editing an existing role never does: an Anchor
@@ -478,7 +478,7 @@ public class Administration extends AbstractVerticle {
 
     private void deleteRole(Message<Object> message) {
         JsonObject p=data(message);
-        if(!anchor(p)){fail(message,"Only a super admin or an anchor administrator can manage roles");return;}
+        if(!anchor(p)){fail(message,"Only a platform owner or an anchor administrator can manage roles");return;}
         Integer roleId=p.getInteger("roleId");
         if(roleId==null){fail(message,"Role is required");return;}
         boolean isSystemAdmin=systemAdmin(p);
@@ -490,7 +490,7 @@ public class Administration extends AbstractVerticle {
                 .compose(roleRows -> {
                     if (roleRows.size()==0) return Future.failedFuture("Role not found");
                     String roleName = Rows.str(roleRows.iterator().next(),"role_name");
-                    if ("Super Admin".equals(roleName) || "Anchor Administrator".equals(roleName) || "Organisation Administrator".equals(roleName)) {
+                    if ("Platform Owner".equals(roleName) || "Anchor Administrator".equals(roleName) || "Organisation Administrator".equals(roleName)) {
                         return Future.failedFuture("Built-in administrator roles cannot be deleted");
                     }
                     return pool.preparedQuery("SELECT COUNT(*) AS c FROM users WHERE role_id=@p1").execute(Tuple.of(roleId));
@@ -508,7 +508,7 @@ public class Administration extends AbstractVerticle {
 
     private void deletePermission(Message<Object> message) {
         JsonObject p=data(message);
-        if (!systemAdmin(p)) { fail(message, "Only the super admin can delete permissions"); return; }
+        if (!systemAdmin(p)) { fail(message, "Only the platform owner can delete permissions"); return; }
         Integer permissionId=p.getInteger("permissionId");
         if(permissionId==null){fail(message,"Permission is required");return;}
         pool.preparedQuery("SELECT system_defined FROM permissions WHERE id=@p1").execute(Tuple.of(permissionId))

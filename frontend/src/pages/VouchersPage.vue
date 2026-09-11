@@ -63,13 +63,6 @@ const villages = ref<GeoNode[]>([])
 const villageNameByCode = computed(() => new Map(villages.value.map((v) => [v.code, v.name])))
 function villageName(code?: string) { return (code && villageNameByCode.value.get(code)) || code || '—' }
 
-let householdDebounce: ReturnType<typeof setTimeout> | null = null
-
-function onHouseholdFilterInput() {
-  if (householdDebounce) clearTimeout(householdDebounce)
-  householdDebounce = setTimeout(load, 400)
-}
-
 const issueDialog = ref(false)
 const bulkDialog = ref(false)
 const redeemDialog = ref(false)
@@ -124,7 +117,7 @@ async function load() {
   }
 }
 
-watch(organisationFilter, load)
+// Filters apply only when Submit is pressed (see the template) -- no reload on every pick.
 
 async function loadOrganizations() {
   try {
@@ -137,8 +130,9 @@ async function loadOrganizations() {
   }
 }
 
-// Switching anchor resets any organisation filter from the previous one, then reloads both lists.
-watch(selectedAnchorId, () => { organisationFilter.value = null; loadOrganizations(); load() })
+// Switching anchor resets any organisation filter from the previous one and refreshes the
+// organisation option list; the vouchers table itself still waits for Submit.
+watch(selectedAnchorId, () => { organisationFilter.value = null; loadOrganizations() })
 
 onMounted(async () => {
   load()
@@ -365,20 +359,29 @@ function statusColor(status: string) {
 
     <template v-if="scopeReady">
     <div class="voucher-summary-grid mb-4">
-      <v-card class="summary-card" variant="flat" border>
-        <div class="summary-label">Issued (awaiting redemption)</div>
-        <div class="summary-value">{{ currency(summary.issuedAmount) }}</div>
-        <div class="summary-detail">{{ summary.issuedCount ?? 0 }} vouchers</div>
+      <v-card class="summary-card tone-amber" variant="flat" border>
+        <div class="summary-icon" aria-hidden="true"><v-icon icon="mdi-clock-alert-outline" size="20" /></div>
+        <div class="summary-copy">
+          <div class="summary-label">Issued (awaiting redemption)</div>
+          <div class="summary-value">{{ currency(summary.issuedAmount) }}</div>
+          <div class="summary-detail">{{ summary.issuedCount ?? 0 }} vouchers</div>
+        </div>
       </v-card>
-      <v-card class="summary-card" variant="flat" border>
-        <div class="summary-label">Redeemed</div>
-        <div class="summary-value">{{ currency(summary.redeemedAmount) }}</div>
-        <div class="summary-detail">{{ summary.redeemedCount ?? 0 }} vouchers</div>
+      <v-card class="summary-card tone-green" variant="flat" border>
+        <div class="summary-icon" aria-hidden="true"><v-icon icon="mdi-ticket-confirmation-outline" size="20" /></div>
+        <div class="summary-copy">
+          <div class="summary-label">Redeemed</div>
+          <div class="summary-value">{{ currency(summary.redeemedAmount) }}</div>
+          <div class="summary-detail">{{ summary.redeemedCount ?? 0 }} vouchers</div>
+        </div>
       </v-card>
-      <v-card class="summary-card" variant="flat" border>
-        <div class="summary-label">Voided</div>
-        <div class="summary-value">{{ summary.voidCount ?? 0 }}</div>
-        <div class="summary-detail">&nbsp;</div>
+      <v-card class="summary-card tone-red" variant="flat" border>
+        <div class="summary-icon" aria-hidden="true"><v-icon icon="mdi-close-circle-outline" size="20" /></div>
+        <div class="summary-copy">
+          <div class="summary-label">Voided</div>
+          <div class="summary-value">{{ summary.voidCount ?? 0 }}</div>
+          <div class="summary-detail">&nbsp;</div>
+        </div>
       </v-card>
     </div>
 
@@ -394,10 +397,11 @@ function statusColor(status: string) {
         />
         <v-text-field
           v-model="householdFilter" prepend-inner-icon="mdi-magnify" label="Household name" clearable
-          hide-details density="compact" style="max-width: 240px" @update:model-value="onHouseholdFilterInput" @click:clear="load"
+          hide-details density="compact" style="max-width: 240px" @keyup.enter="load"
         />
-        <v-select v-model="statusFilter" :items="['ISSUED', 'REDEEMED', 'VOID']" label="Status" clearable hide-details density="compact" style="max-width: 200px" @update:model-value="load" />
+        <v-select v-model="statusFilter" :items="['ISSUED', 'REDEEMED', 'VOID']" label="Status" clearable hide-details density="compact" style="max-width: 200px" />
         <v-text-field v-model="tableSearch" prepend-inner-icon="mdi-magnify" label="Search" clearable hide-details density="compact" style="max-width: 220px" />
+        <v-btn class="filter-submit" color="primary" @click="load">Submit</v-btn>
       </v-card-text>
       <v-data-table :headers="headers" :items="vouchers" :search="tableSearch" :loading="loading">
         <template #item.householdName="{ item }">{{ item.householdName || '—' }}</template>
@@ -448,7 +452,7 @@ function statusColor(status: string) {
             <v-text-field v-model="form.expiresAt" label="Expires on (optional)" type="date" density="compact" />
           </div>
           <div class="editor-actions">
-            <v-btn variant="text" @click="issueDialog = false">Cancel</v-btn>
+            <v-btn variant="flat" color="error" @click="issueDialog = false">Cancel</v-btn>
             <v-btn color="secondary" type="submit" :loading="saving" prepend-icon="mdi-ticket-confirmation-outline">Issue voucher</v-btn>
           </div>
         </v-form>
@@ -491,7 +495,7 @@ function statusColor(status: string) {
         <v-card-actions>
           <v-spacer />
           <v-btn variant="text" @click="bulkDialog = false">Close</v-btn>
-          <v-btn color="secondary" :loading="saving" :disabled="!bulkRows.length || (auth.isAnchor && !bulkOrganisationCode)" @click="submitBulk">Issue All</v-btn>
+          <v-btn variant="flat" color="secondary" :loading="saving" :disabled="!bulkRows.length || (auth.isAnchor && !bulkOrganisationCode)" @click="submitBulk">Issue All</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -509,8 +513,8 @@ function statusColor(status: string) {
         </v-card-text>
         <v-card-actions>
           <v-spacer />
-          <v-btn variant="text" @click="redeemDialog = false">Cancel</v-btn>
-          <v-btn color="success" :loading="saving" @click="confirmRedeem">Confirm Redemption</v-btn>
+          <v-btn variant="flat" color="error" @click="redeemDialog = false">Cancel</v-btn>
+          <v-btn variant="flat" color="secondary" :loading="saving" @click="confirmRedeem">Confirm Redemption</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -519,7 +523,16 @@ function statusColor(status: string) {
 
 <style scoped>
 .voucher-summary-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
-.summary-card { padding: 16px 18px !important; }
+.summary-card {
+  --summary-color: #0d9488; --summary-soft: #e6fffb;
+  display: grid; grid-template-columns: minmax(0, 1fr) 38px; align-items: start; gap: 12px;
+  padding: 16px 18px !important;
+}
+.summary-card.tone-amber { --summary-color: #b45309; --summary-soft: #fff7ed; }
+.summary-card.tone-green { --summary-color: #15803d; --summary-soft: #f0fdf4; }
+.summary-card.tone-red { --summary-color: #b91c1c; --summary-soft: #fef2f2; }
+.summary-icon { grid-column: 2; grid-row: 1; display: grid; place-items: center; width: 38px; height: 38px; border-radius: 50%; color: var(--summary-color); background: var(--summary-soft); }
+.summary-copy { grid-column: 1; grid-row: 1; min-width: 0; }
 .summary-label { color: #64748b; font-size: .72rem; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; }
 .summary-value { color: #0f172a; font-size: 1.25rem; font-weight: 750; letter-spacing: -.02em; margin-top: 6px; }
 .summary-detail { color: #64748b; font-size: .74rem; margin-top: 4px; }

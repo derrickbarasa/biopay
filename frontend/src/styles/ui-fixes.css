@@ -21,13 +21,61 @@
  * bottom/inline-start, __end's top/bottom/inline-end, __notch::before's top and
  * __notch::after's bottom all key off --v-field-border-width, so one override
  * makes every segment and every side (top, bottom, both end-caps) consistently
- * 2px with no seam, whether the field is focused or not. */
+ * thin with no seam, whether the field is focused or not.
+ *
+ * Field borders are also recolored to a thin solid black/near-ink line rather
+ * than Vuetify's default translucent on-surface grey -- the grey read as a
+ * "thick grey border" once the width override above pushed it past a hairline. */
 .v-field--variant-outlined .v-field__outline {
-  --v-field-border-width: 2px;
+  --v-field-border-width: 1px;
+  --v-field-border-opacity: 1;
+  color: #0F172A;
+}
+.v-field--variant-outlined.v-field--focused .v-field__outline {
+  --v-field-border-width: 1.5px;
+  color: #0D9488;
+}
+.v-field--variant-outlined.v-field--error .v-field__outline {
+  color: #D64545;
 }
 
 .v-card--border {
-  border-width: 1.5px !important;
+  border-width: 1px !important;
+}
+
+/* Button labels should read as regular weight, not bold -- Vuetify's default
+ * button font-weight (500) reads noticeably heavy set in Ubuntu. */
+.v-btn {
+  font-weight: 400 !important;
+  letter-spacing: normal;
+}
+
+/* Compact filter fields are 40px high, while Vuetify's default button is only 36px.
+ * Keep every filter Submit action on the same control-height rhythm as its fields. */
+.dashboard-main .filter-submit {
+  height: 40px !important;
+  min-height: 40px !important;
+}
+
+/* Keep neutral disabled controls plainly neutral. Orange actions receive their own
+ * branded unavailable state below, so their purpose remains recognizable. */
+.v-btn.v-btn--disabled:not(.v-btn--variant-text):not(.v-btn--variant-plain):not(.v-btn--variant-outlined) {
+  background-color: #E2E8F0 !important;
+  color: #94A3B8 !important;
+  opacity: 1 !important;
+}
+
+/* Action Orange remains the action cue before a form is complete: a soft amber surface
+ * with dark-orange text communicates "not ready yet", while the enabled state continues
+ * to use the full #F59E0B secondary color. Covers flat/elevated and tonal secondary
+ * actions such as Next, Upload, Generate, Apply, Confirm and Submit. */
+.v-btn.v-btn--disabled:is(.bg-secondary, .text-secondary):not(.v-btn--variant-text):not(.v-btn--variant-plain):not(.v-btn--variant-outlined) {
+  background-color: var(--bp-action-disabled-bg) !important;
+  color: var(--bp-action-disabled-text) !important;
+}
+.v-btn.v-btn--disabled .v-btn__overlay,
+.v-btn.v-btn--disabled .v-btn__underlay {
+  opacity: 0 !important;
 }
 
 /* Vuetify's default disabled-field opacity (0.38, the Material Design spec value) fades
@@ -79,4 +127,37 @@
   overflow: visible;
   text-overflow: clip;
   line-height: 1.4;
+}
+
+/* Vuetify card headings default to a single clipped line. Dialog instructions can be
+ * longer than the available width (especially beside the close button), so preserve
+ * the full copy and let both title and subtitle grow naturally. */
+.v-overlay[role='dialog'] .v-card-title,
+.v-overlay[role='dialog'] .v-card-subtitle {
+  white-space: normal !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
+  overflow-wrap: anywhere;
+}
+.v-overlay[role='dialog'] .v-card-subtitle {
+  padding-right: 56px !important;
+}
+.v-overlay[role='dialog'] .editor-heading > :first-child {
+  min-width: 0;
+  padding-right: 44px;
+}
+.v-overlay[role='dialog'] .editor-heading p,
+.v-overlay[role='dialog'] .editor-title {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 600px) {
+  .dashboard-main .filter-submit {
+    height: 44px !important;
+    min-height: 44px !important;
+  }
+  .dashboard-main .v-input--density-compact {
+    --v-input-control-height: 44px;
+  }
 }

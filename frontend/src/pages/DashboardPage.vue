@@ -5,6 +5,7 @@ import { useAuthStore } from '@/stores/auth'
 import { dispatch } from '@/api/client'
 import ChartPeriodPicker from '@/components/ChartPeriodPicker.vue'
 import DashboardChart from '@/components/DashboardChart.vue'
+import PieChart from '@/components/PieChart.vue'
 import { dateKey, filledSeries, dashboardCurrency, type ChartPeriod, type ChartPoint } from '@/utils/dashboard'
 
 const auth = useAuthStore()
@@ -126,6 +127,12 @@ const dashboardCards = computed<MetricCard[]>(() => {
   const cashAmount = auth.isAnchor ? metrics.value.totalPaymentsAmount : metrics.value.totalPaymentsReceivedAmount
   const cashCount = auth.isAnchor ? metrics.value.totalPaymentsCount : metrics.value.totalPaymentsReceivedCount
 
+  if (auth.isSystemAdmin) {
+    cards.push({
+      label: 'Anchors', value: metrics.value.totalAnchors ?? 0,
+      detail: 'Active anchor institutions on the platform', icon: 'mdi-bank', tone: 'slate',
+    })
+  }
   if (auth.isAnchor && auth.can('ACCESS_ORGANISATIONS')) {
     cards.push({
       label: 'Organizations', value: metrics.value.totalOrganizations ?? 0,
@@ -139,24 +146,17 @@ const dashboardCards = computed<MetricCard[]>(() => {
       detail: 'Active beneficiary records; all review statuses', icon: 'mdi-home-group', tone: 'green',
     })
   }
-  if (auth.hasModule('CASH_TRANSFERS') || auth.hasModule('VOUCHERS')) {
+  if ((auth.hasModule('CASH_TRANSFERS') || auth.hasModule('VOUCHERS')) && (auth.can('ACCESS_PAYMENTS') || auth.can('ACCESS_VOUCHERS'))) {
     cards.push({
-      label: auth.isAnchor ? 'Value disbursed' : 'Value received',
+      label: auth.isAnchor ? 'Value Disbursed' : 'Value Received',
       value: currency(metrics.value.combinedAmount),
-      detail: `${currency(cashAmount)} cash · ${currency(metrics.value.voucherRedeemedAmount)} vouchers`,
+      detail: `${cashCount ?? 0} cash payment${cashCount === 1 ? '' : 's'} (${currency(cashAmount)}) · ${metrics.value.voucherRedeemedCount ?? 0} voucher${metrics.value.voucherRedeemedCount === 1 ? '' : 's'} (${currency(metrics.value.voucherRedeemedAmount)})`,
       icon: 'mdi-cash-multiple', tone: 'amber',
     })
   }
   if (auth.hasModule('VOUCHERS') && auth.can('ACCESS_VOUCHERS')) {
     cards.push({ label: 'Vouchers redeemed', value: metrics.value.voucherRedeemedCount ?? 0,
       detail: currency(metrics.value.voucherRedeemedAmount) + ' redeemed', icon: 'mdi-ticket-confirmation-outline', tone: 'teal' })
-  }
-  if (auth.hasModule('CASH_TRANSFERS') && auth.can('ACCESS_PAYMENTS')) {
-    cards.push({
-      label: auth.isAnchor ? 'Payments completed' : 'Payments received', value: cashCount ?? 0,
-      detail: `${currency(cashAmount)} successfully processed`,
-      icon: 'mdi-check-circle-outline', tone: 'teal',
-    })
   }
   if (auth.isAnchor && auth.hasModule('CASH_TRANSFERS') && auth.can('ACCESS_PAYMENT_CYCLES')) {
     cards.push({
@@ -171,9 +171,10 @@ const dashboardCards = computed<MetricCard[]>(() => {
     })
   }
   if (auth.can('ACCESS_HOUSEHOLDS')) {
+    const scopeDetail = auth.isAnchor ? 'Across accessible organizations' : 'Ready for verification'
     cards.push({
-      label: 'Registered fingerprints', value: metrics.value.registeredFingerprints ?? 0,
-      detail: auth.isAnchor ? 'Across accessible organizations' : 'Ready for verification',
+      label: 'Registered Fingerprints', value: metrics.value.registeredFingerprints ?? 0,
+      detail: `${scopeDetail} · ${metrics.value.faceScanned ?? 0} face${metrics.value.faceScanned === 1 ? '' : 's'} scanned`,
       icon: 'mdi-fingerprint', tone: 'teal',
     })
   }
@@ -212,7 +213,7 @@ const alternatePeriodTotal = computed(() => alternatesSeries.value.reduce((total
     <header class="dashboard-heading">
       <div class="heading-copy">
         <img src="/biopay_logo_horizontal.svg" alt="BioPay" class="dashboard-logo" />
-        <h1>Welcome back, {{ auth.fullName }}</h1>
+        <h1 class="page-title">Welcome back, {{ auth.fullName }}</h1>
       </div>
       <div class="dashboard-actions">
         <v-btn size="small" variant="text" prepend-icon="mdi-refresh" :loading="loading" @click="load">Refresh</v-btn>
@@ -262,26 +263,25 @@ const alternatePeriodTotal = computed(() => alternatesSeries.value.reduce((total
           <p v-if="paymentChartLoading" role="status" class="chart-loading-message">Loading payment activity...</p>
           <DashboardChart
             v-if="!paymentChartLoading && !paymentChartError" :data="cashSeries" :secondary-data="voucherSeries" money series-label="Cash" secondary-label="Vouchers"
-            color="#0D9488" secondary-color="#F59E0B" :ariaLabel="`Cash and voucher payment volume for ${periodCaption(paymentPeriod, paymentDate)}`"
+            color="#0D9488" secondary-color="#F59E0B" secondary-as-line :ariaLabel="`Cash and voucher payment volume for ${periodCaption(paymentPeriod, paymentDate)}`"
           />
         </v-card>
-        <v-card variant="flat" border class="chart-panel">
+        <v-card variant="flat" border class="chart-panel pie-panel">
           <v-progress-linear v-if="registrationChartLoading" indeterminate color="primary" class="chart-loading" />
           <div class="panel-heading">
             <div>
-              <h3>Registration trend</h3><p class="chart-context">{{ periodCaption(registrationPeriod, registrationDate) }} &middot; all registrations, including inactive records</p>
-              <div class="chart-legend"><span class="legend-household">Households</span><span class="legend-alternate">Alternates</span></div>
+              <h3>Registration Trend</h3><p class="chart-context">{{ periodCaption(registrationPeriod, registrationDate) }} &middot; all registrations, including inactive records</p>
             </div>
             <div class="chart-card-actions">
               <ChartPeriodPicker v-model:period="registrationPeriod" v-model:date="registrationDate" control-label="Choose registration chart date" />
-              <div v-if="!registrationChartLoading && !registrationChartError" class="panel-totals"><span>{{ householdPeriodTotal }} households</span><span>{{ alternatePeriodTotal }} alternates</span></div>
             </div>
           </div>
           <v-alert v-if="registrationChartError" type="error" variant="tonal" density="compact" class="chart-error">{{ registrationChartError }}<v-btn size="small" variant="text" @click="loadRegistrationChart">Retry</v-btn></v-alert>
           <p v-if="registrationChartLoading" role="status" class="chart-loading-message">Loading registration activity...</p>
-          <DashboardChart
-            v-if="!registrationChartLoading && !registrationChartError" :data="householdsSeries" :secondary-data="alternatesSeries" series-label="Households" secondary-label="Alternates"
-            color="#15803D" secondary-color="#0EA5E9" :ariaLabel="`Household and alternate registration trend for ${periodCaption(registrationPeriod, registrationDate)}`"
+          <PieChart
+            v-if="!registrationChartLoading && !registrationChartError"
+            :data="[{ label: 'Households', value: householdPeriodTotal }, { label: 'Alternates', value: alternatePeriodTotal }]"
+            :colors="['#15803D', '#0EA5E9']" variant="pie" :size="200" centered class="pie-panel-chart"
           />
         </v-card>
       </section>
@@ -371,9 +371,11 @@ const alternatePeriodTotal = computed(() => alternatesSeries.value.reduce((total
 .metric-label { color: #64748b; font-size: .61rem; font-weight: 700; letter-spacing: .025em; text-transform: uppercase; white-space: normal; overflow-wrap: anywhere; }
 .metric-value { margin-top: 4px; color: #0f172a; font-size: clamp(1rem, .94rem + .2vw, 1.16rem); font-weight: 760; letter-spacing: -.025em; line-height: 1.15; font-variant-numeric: tabular-nums; white-space: normal; overflow-wrap: anywhere; }
 .metric-detail { margin-top: 5px; color: #64748b; font-size: .61rem; line-height: 1.25; overflow-wrap: anywhere; }
-.analytics-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 12px; }
+.analytics-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: stretch; gap: 12px; margin-top: 12px; }
 .chart-panel, .ranking-panel, .activity-panel, .totals-panel { border-color: #e2e8f0 !important; border-radius: 14px !important; }
 .chart-panel { position: relative; min-width: 0; overflow: hidden; padding: 16px 16px 8px; }
+.pie-panel { display: flex; flex-direction: column; }
+.pie-panel-chart { flex: 1 1 auto; align-content: center; min-height: 0; }
 .chart-loading { position: absolute; inset: 0 0 auto; }
 .panel-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding-bottom: 10px; }
 .panel-heading > div { min-width: 0; }

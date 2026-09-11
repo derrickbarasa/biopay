@@ -306,7 +306,7 @@ async function submitBulk() {
   <div>
     <div class="d-flex align-center justify-space-between mb-4">
       <div>
-        <h1 class="text-h5 font-weight-bold">Locations</h1>
+        <h1 class="page-title">Locations</h1>
         <p class="text-caption text-medium-emphasis mb-0">
           Configure the state / county / location / village hierarchy your organisations register households against.
         </p>
@@ -438,8 +438,8 @@ async function submitBulk() {
         </v-card-text>
         <v-card-actions>
           <v-spacer />
-          <v-btn variant="text" @click="dialog = false">Cancel</v-btn>
-          <v-btn color="secondary" :loading="saving" @click="save">{{ editing ? 'Save changes' : 'Create' }}</v-btn>
+          <v-btn variant="flat" color="error" @click="dialog = false">Cancel</v-btn>
+          <v-btn variant="flat" color="secondary" :loading="saving" @click="save">{{ editing ? 'Save changes' : 'Create' }}</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -496,7 +496,7 @@ async function submitBulk() {
         <v-card-actions>
           <v-spacer />
           <v-btn variant="text" @click="bulkDialog = false">Close</v-btn>
-          <v-btn color="secondary" :loading="bulkUploading" :disabled="!bulkReady" @click="submitBulk">Upload</v-btn>
+          <v-btn variant="flat" color="secondary" :loading="bulkUploading" :disabled="!bulkReady" @click="submitBulk">Upload</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>

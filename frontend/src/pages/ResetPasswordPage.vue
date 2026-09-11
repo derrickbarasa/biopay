@@ -94,7 +94,7 @@ async function handleSubmit() {
                       <v-btn :icon="showConfirmPassword ? 'mdi-eye-off' : 'mdi-eye'" variant="text" density="compact" :aria-label="showConfirmPassword ? 'Hide password' : 'Show password'" @click="showConfirmPassword = !showConfirmPassword" />
                     </template>
                   </v-text-field>
-                  <v-btn type="submit" block color="primary" size="large" :loading="loading" :disabled="!token" class="mt-4">
+                  <v-btn type="submit" block color="secondary" size="large" :loading="loading" :disabled="!token" class="mt-4">
                     Reset password
                   </v-btn>
                 </v-form>

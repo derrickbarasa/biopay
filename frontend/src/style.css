@@ -42,6 +42,10 @@ body {
 :root {
   --bp-radius-surface: 10px;
   --bp-radius-control: 8px;
+  --bp-dialog-header-bg: #f0fdfa;
+  --bp-dialog-header-border: #ccfbf1;
+  --bp-action-disabled-bg: #fde7b0;
+  --bp-action-disabled-text: #92400e;
 }
 
 .v-application { font-family: 'Ubuntu', sans-serif !important; }
@@ -79,6 +83,57 @@ body {
   max-height: calc(100dvh - 24px);
   overflow: hidden;
 }
+
+/* Dialog headings use one quiet brand-tinted band, whether the dialog is built
+   with Vuetify's title/subtitle API or one of the richer editor headers. */
+.v-overlay[role='dialog'] .v-card > .v-card-item,
+.v-overlay[role='dialog'] .v-card > .v-card-title,
+.v-overlay[role='dialog'] .v-card > .v-card-subtitle,
+.v-overlay[role='dialog'] .v-card > .editor-heading {
+  background-color: var(--bp-dialog-header-bg);
+}
+.v-overlay[role='dialog'] .v-card > .v-card-item,
+.v-overlay[role='dialog'] .v-card > .v-card-subtitle,
+.v-overlay[role='dialog'] .v-card > .v-card-title:not(:has(+ .v-card-subtitle)),
+.v-overlay[role='dialog'] .v-card > .editor-heading {
+  border-bottom: 1px solid var(--bp-dialog-header-border);
+}
+.v-overlay[role='dialog'] .v-card > .v-card-item {
+  padding: 12px 16px;
+}
+.v-overlay[role='dialog'] .v-card > .v-card-title {
+  padding-top: 12px;
+  padding-bottom: 10px;
+}
+.v-overlay[role='dialog'] .v-card > .v-card-title:has(+ .v-card-subtitle) {
+  padding-bottom: 3px;
+}
+.v-overlay[role='dialog'] .v-card > .v-card-subtitle {
+  padding-top: 0;
+  padding-bottom: 12px;
+}
+
+/* Rich editor cards carry their own outer padding. Pull only their heading band
+   to the card edges while keeping the existing text and form alignment intact. */
+.v-overlay[role='dialog'] .role-editor > .editor-heading,
+.v-overlay[role='dialog'] .org-editor > .editor-heading {
+  margin: calc(0px - clamp(18px, 2.4vw, 26px)) calc(0px - clamp(18px, 2.4vw, 26px)) 2px;
+  padding: 14px clamp(18px, 2.4vw, 26px) 10px;
+}
+.v-overlay[role='dialog'] .officer-editor > .editor-heading,
+.v-overlay[role='dialog'] .voucher-editor > .editor-heading {
+  margin: -22px -24px 2px;
+  padding: 14px 24px 10px;
+}
+.v-overlay[role='dialog'] .v-card.pa-2 > .v-card-title,
+.v-overlay[role='dialog'] .v-card.pa-2 > .v-card-subtitle {
+  margin-inline: -8px;
+  padding-inline: 24px;
+}
+.v-overlay[role='dialog'] .v-card.pa-2 > .v-card-title {
+  margin-top: -8px;
+  padding-top: 16px;
+}
 .dialog-close-button {
   position: absolute !important;
   z-index: 3;
@@ -108,6 +163,7 @@ body {
 .v-overlay[role='dialog'] .v-card-text {
   min-height: 0;
   padding-top: 10px;
+  padding-bottom: 12px;
   overflow-y: auto;
   overscroll-behavior: contain;
 }
@@ -122,12 +178,24 @@ body {
 
 /* Shared page-header title, tightened for a comfortable fit at 100% browser zoom. */
 .page-title {
-  font-size: clamp(1.2rem, 1.02rem + .5vw, 1.45rem);
-  font-weight: 700;
+  font-size: clamp(1.2rem, 1.02rem + .5vw, 1.45rem) !important;
+  font-weight: 700 !important;
   color: #0f172a;
   letter-spacing: -.02em;
-  margin: 0;
-  line-height: 1.25;
+  margin: 0 !important;
+  line-height: 1.25 !important;
+}
+
+/* Keep operational page headers compact so the first useful content appears
+   promptly without crowding the title or its primary action. */
+.dashboard-main :is(header, div).mb-4:has(.page-title),
+.dashboard-main :is(header, div).mb-5:has(.page-title),
+.dashboard-main .admin-head,
+.dashboard-main .page-heading {
+  margin-bottom: 12px !important;
+}
+.dashboard-main :is(header, div):has(> .page-title) > p {
+  margin: 4px 0 0 !important;
 }
 
 /* Vuetify centers dialogs on the whole browser window, but the authenticated

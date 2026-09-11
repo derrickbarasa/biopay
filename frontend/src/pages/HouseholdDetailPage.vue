@@ -124,6 +124,27 @@ const infoFields = computed(() => {
   return fields
 })
 
+// Captured by the Android field app at registration (device GPS/network last-known-fix,
+// requested once at login -- see LocationHelper/HomeActivity in mobile/agent), synced up as
+// part of the household record. Households registered before that permission was ever
+// granted, or via the web dashboard, have no coordinates -- the map is omitted for those.
+const coordinates = computed(() => {
+  const lat = Number(detail.value?.latitude)
+  const lon = Number(detail.value?.longitude)
+  return Number.isFinite(lat) && Number.isFinite(lon) && (lat !== 0 || lon !== 0) ? { lat, lon } : null
+})
+const mapEmbedUrl = computed(() => {
+  const c = coordinates.value
+  if (!c) return ''
+  const delta = 0.003
+  const bbox = [c.lon - delta, c.lat - delta, c.lon + delta, c.lat + delta].join('%2C')
+  return `https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=mapnik&marker=${c.lat}%2C${c.lon}`
+})
+const mapLinkUrl = computed(() => {
+  const c = coordinates.value
+  return c ? `https://www.openstreetmap.org/?mlat=${c.lat}&mlon=${c.lon}#map=17/${c.lat}/${c.lon}` : ''
+})
+
 function revokePhotos() {
   for (const u of photoUrls.value) URL.revokeObjectURL(u)
   photoUrls.value = []
@@ -474,7 +495,7 @@ onMounted(() => { load(); loadNameLookups() })
           <v-icon icon="mdi-account-outline" size="28" />
         </v-avatar>
         <div>
-          <h1 class="text-h5 font-weight-bold mb-0">
+          <h1 class="page-title">
             {{ detail?.householdName ?? 'Household' }}
           </h1>
           <div class="text-body-2 text-medium-emphasis">{{ householdNumber }}</div>
@@ -536,6 +557,29 @@ onMounted(() => { load(); loadNameLookups() })
                 <div class="text-body-1">{{ f.value }}</div>
               </v-col>
             </v-row>
+          </v-card-text>
+        </v-card>
+
+        <v-card variant="flat" border class="mb-4">
+          <v-card-title class="text-subtitle-1 font-weight-bold d-flex align-center">
+            Location
+            <v-spacer />
+            <v-btn v-if="coordinates" variant="text" size="small" prepend-icon="mdi-open-in-new" :href="mapLinkUrl" target="_blank" rel="noopener">
+              Open larger map
+            </v-btn>
+          </v-card-title>
+          <v-divider />
+          <v-card-text>
+            <template v-if="coordinates">
+              <iframe
+                class="household-map" :src="mapEmbedUrl" title="Household registration location" loading="lazy"
+                referrerpolicy="no-referrer-when-downgrade"
+              />
+              <div class="text-caption text-medium-emphasis mt-2">{{ coordinates.lat.toFixed(6) }}, {{ coordinates.lon.toFixed(6) }} &middot; from the registering field officer's device location</div>
+            </template>
+            <div v-else class="text-medium-emphasis">
+              No location on file for this household. Coordinates are captured automatically by the BioPay Android field app at registration.
+            </div>
           </v-card-text>
         </v-card>
 
@@ -776,8 +820,8 @@ onMounted(() => { load(); loadNameLookups() })
         </v-card-text>
         <v-card-actions class="pa-4 pt-0">
           <v-spacer />
-          <v-btn variant="text" @click="editDialog = false">Cancel</v-btn>
-          <v-btn color="secondary" :loading="editing" @click="saveEdit">Save</v-btn>
+          <v-btn variant="flat" color="error" @click="editDialog = false">Cancel</v-btn>
+          <v-btn variant="flat" color="secondary" :loading="editing" @click="saveEdit">Save</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -816,8 +860,8 @@ onMounted(() => { load(); loadNameLookups() })
         </v-card-text>
         <v-card-actions class="pa-4 pt-0">
           <v-spacer />
-          <v-btn variant="text" @click="addAltDialog = false">Cancel</v-btn>
-          <v-btn color="secondary" :loading="addingAlt" @click="saveAlternate">Save</v-btn>
+          <v-btn variant="flat" color="error" @click="addAltDialog = false">Cancel</v-btn>
+          <v-btn variant="flat" color="secondary" :loading="addingAlt" @click="saveAlternate">Save</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -825,6 +869,13 @@ onMounted(() => { load(); loadNameLookups() })
 </template>
 
 <style scoped>
+.household-map {
+  width: 100%;
+  height: 260px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+}
+
 .household-detail-header,
 .household-detail-heading,
 .household-detail-actions {

@@ -8,7 +8,7 @@ web
 
 ## Users
 
-BioPay administrators operate at three scopes: the System Owner across the platform, Anchor Administrators across the organisations under one anchor, and Organisation Administrators within one organisation. They use the dashboard to understand programme activity, spot work requiring attention, and move into operational workflows.
+BioPay administrators operate at three scopes: the Platform Owner across the platform, Anchor Administrators across the organisations under one anchor, and Organisation Administrators within one organisation. They use the dashboard to understand programme activity, spot work requiring attention, and move into operational workflows.
 
 ## Product Purpose
 

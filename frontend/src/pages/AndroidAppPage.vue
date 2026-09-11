@@ -55,7 +55,7 @@ const usageNotes = [
 <template>
   <div>
     <div class="mb-4">
-      <h1 class="text-h5 font-weight-bold">Android App</h1>
+      <h1 class="page-title">Android App</h1>
       <p class="text-caption text-medium-emphasis mb-0">
         Download the BioPay field agent app to as many devices as you need, and see how to install and use it.
       </p>

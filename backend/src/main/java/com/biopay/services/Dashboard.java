@@ -114,6 +114,15 @@ public class Dashboard extends AbstractVerticle {
         Future<Integer> registeredFingerprints = scalarInt(
                 "SELECT COUNT(*) AS v FROM fingerprints f JOIN organizations p ON p.organization_code=f.organization_code "
                         + "WHERE (@p1 IS NULL OR p.anchor_id=@p1) AND f.status=1", Tuple.of(anchorId));
+        Future<Integer> faceScanned = scalarInt(
+                "SELECT COUNT(*) AS v FROM faces f JOIN organizations p ON p.organization_code=f.organization_code "
+                        + "WHERE (@p1 IS NULL OR p.anchor_id=@p1) AND f.status=1", Tuple.of(anchorId));
+        // Platform-wide count, only surfaced to system admins (see totalAnchors below) --
+        // cheap enough to always run rather than branch the Future.all index list. An anchor
+        // is a `users` row with user_scope='ANCHOR' (the standalone `anchors` table was
+        // dropped in migration 030_anchors_into_users.sql), same model Subscription.java
+        // queries elsewhere -- `status=1` here is the anchor's own active/deactivated flag.
+        Future<Integer> totalAnchors = scalarInt("SELECT COUNT(*) AS v FROM users WHERE user_scope='ANCHOR' AND status=1", Tuple.tuple());
         Future<Integer> pendingPayrolls = scalarInt(
                 "SELECT COUNT(*) AS v FROM payment_cycles WHERE (@p1 IS NULL OR anchor_id=@p1) AND status='PENDING_APPROVAL'", Tuple.of(anchorId));
         Future<Row> generatedPayrolls = pool.preparedQuery(
@@ -179,7 +188,7 @@ public class Dashboard extends AbstractVerticle {
 
         Future.all(java.util.List.of(totalOrganizations, totalHouseholds, totalAlternates, paymentsAgg, voucherAgg,
                         activeOfficers, registeredFingerprints, pendingPayrolls, generatedPayrolls, latestPayroll,
-                        recentTransactions, amountsByOrganisation))
+                        recentTransactions, amountsByOrganisation, faceScanned, totalAnchors))
                 .onFailure(err -> onDbError(message, err))
                 .onSuccess(cf -> {
                     Row payments = cf.resultAt(3);
@@ -188,29 +197,33 @@ public class Dashboard extends AbstractVerticle {
                     Row latestCycle = cf.resultAt(9);
                     double paymentsAmount = Rows.dbl(payments, "total");
                     double voucherAmount = Rows.dbl(vouchers, "total");
+                    JsonObject results = new JsonObject()
+                            .put("totalOrganizations", (Integer) cf.resultAt(0))
+                            .put("totalHouseholds", (Integer) cf.resultAt(1))
+                            .put("totalAlternates", (Integer) cf.resultAt(2))
+                            .put("totalPaymentsCount", Rows.intVal(payments, "cnt"))
+                            .put("totalPaymentsAmount", paymentsAmount)
+                            .put("voucherRedeemedCount", Rows.intVal(vouchers, "cnt"))
+                            .put("voucherRedeemedAmount", voucherAmount)
+                            .put("combinedAmount", paymentsAmount + voucherAmount)
+                            .put("activeOfficers", (Integer) cf.resultAt(5))
+                            .put("registeredFingerprints", (Integer) cf.resultAt(6))
+                            .put("faceScanned", (Integer) cf.resultAt(12))
+                            .put("pendingPayrolls", (Integer) cf.resultAt(7))
+                            .put("generatedCycles", Rows.intVal(generated, "cnt"))
+                            .put("totalGeneratedAmount", Rows.dbl(generated, "total"))
+                            .put("latestPayroll", latestCycle == null ? null : new JsonObject()
+                                    .put("cycleCode", Rows.str(latestCycle, "cycle_code"))
+                                    .put("status", Rows.str(latestCycle, "status"))
+                                    .put("totalAmount", Rows.dbl(latestCycle, "total_amount")))
+                            .put("recentTransactions", (JsonArray) cf.resultAt(10))
+                            .put("amountsByOrganisation", (JsonArray) cf.resultAt(11));
+                    // Platform-wide anchor count is a system-owner-only figure; anchor admins never see it.
+                    if (isSystemAdmin(payload)) results.put("totalAnchors", (Integer) cf.resultAt(13));
                     reply(message, new JsonObject()
                             .put("responseCode", "000")
                             .put("responseMessage", "OK")
-                            .put("results", new JsonObject()
-                                    .put("totalOrganizations", (Integer) cf.resultAt(0))
-                                    .put("totalHouseholds", (Integer) cf.resultAt(1))
-                                    .put("totalAlternates", (Integer) cf.resultAt(2))
-                                    .put("totalPaymentsCount", Rows.intVal(payments, "cnt"))
-                                    .put("totalPaymentsAmount", paymentsAmount)
-                                    .put("voucherRedeemedCount", Rows.intVal(vouchers, "cnt"))
-                                    .put("voucherRedeemedAmount", voucherAmount)
-                                    .put("combinedAmount", paymentsAmount + voucherAmount)
-                                    .put("activeOfficers", (Integer) cf.resultAt(5))
-                                    .put("registeredFingerprints", (Integer) cf.resultAt(6))
-                                    .put("pendingPayrolls", (Integer) cf.resultAt(7))
-                                    .put("generatedCycles", Rows.intVal(generated, "cnt"))
-                                    .put("totalGeneratedAmount", Rows.dbl(generated, "total"))
-                                    .put("latestPayroll", latestCycle == null ? null : new JsonObject()
-                                            .put("cycleCode", Rows.str(latestCycle, "cycle_code"))
-                                            .put("status", Rows.str(latestCycle, "status"))
-                                            .put("totalAmount", Rows.dbl(latestCycle, "total_amount")))
-                                    .put("recentTransactions", (JsonArray) cf.resultAt(10))
-                                    .put("amountsByOrganisation", (JsonArray) cf.resultAt(11))));
+                            .put("results", results));
                 });
     }
 
@@ -223,6 +236,8 @@ public class Dashboard extends AbstractVerticle {
                 "SELECT COUNT(*) AS v FROM alternates WHERE organization_code=@p1 AND status=1", Tuple.of(partnerCode));
         Future<Integer> registeredFingerprints = scalarInt(
                 "SELECT COUNT(*) AS v FROM fingerprints WHERE organization_code=@p1 AND status=1", Tuple.of(partnerCode));
+        Future<Integer> faceScanned = scalarInt(
+                "SELECT COUNT(*) AS v FROM faces WHERE organization_code=@p1 AND status=1", Tuple.of(partnerCode));
         Future<Row> paymentsAgg = pool.preparedQuery(
                         "SELECT COUNT(*) AS cnt, ISNULL(SUM(amount),0) AS total FROM payments WHERE organization_code=@p1 AND status=1 AND rejected=0")
                 .execute(Tuple.of(partnerCode))
@@ -244,7 +259,7 @@ public class Dashboard extends AbstractVerticle {
                 .map(rows -> rows.iterator().next());
 
         Future.all(java.util.List.of(totalHouseholds, totalAlternates, registeredFingerprints, paymentsAgg, voucherAgg,
-                        pendingPayroll, generatedPayrolls))
+                        pendingPayroll, generatedPayrolls, faceScanned))
                 .onFailure(err -> onDbError(message, err))
                 .onSuccess(cf -> {
                     Row payments = cf.resultAt(3);
@@ -265,6 +280,7 @@ public class Dashboard extends AbstractVerticle {
                                     .put("totalHouseholds", (Integer) cf.resultAt(0))
                                     .put("totalAlternates", (Integer) cf.resultAt(1))
                                     .put("registeredFingerprints", (Integer) cf.resultAt(2))
+                                    .put("faceScanned", (Integer) cf.resultAt(7))
                                     .put("totalPaymentsReceivedCount", Rows.intVal(payments, "cnt"))
                                     .put("totalPaymentsReceivedAmount", paymentsAmount)
                                     .put("voucherRedeemedCount", Rows.intVal(vouchers, "cnt"))

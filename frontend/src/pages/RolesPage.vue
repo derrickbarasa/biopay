@@ -356,16 +356,16 @@ watch(selectedAnchorId, () => void load())
         </v-form>
 
         <v-card-actions class="editor-actions">
-          <p v-if="!canSave" class="lock-copy">{{ isUnlimitedRole ? 'Super Admin access is fixed by the platform.' : isBuiltInRole ? 'This role is managed by BioPay policy.' : auth.isSystemAdmin && form.roleId === null && form.scope !== 'SYSTEM' && !form.anchorId ? 'Choose an anchor for this role.' : 'You can view roles but not change them.' }}</p>
+          <p v-if="!canSave" class="lock-copy">{{ isUnlimitedRole ? 'Platform Owner access is fixed by the platform.' : isBuiltInRole ? 'This role is managed by BioPay policy.' : auth.isSystemAdmin && form.roleId === null && form.scope !== 'SYSTEM' && !form.anchorId ? 'Choose an anchor for this role.' : 'You can view roles but not change them.' }}</p>
           <v-btn v-if="canSave && form.roleId !== null" variant="outlined" color="error" @click="removeRole(selectedRole!)">Delete role</v-btn>
           <v-spacer />
-          <v-btn variant="text" @click="dialog = false">Cancel</v-btn>
-          <v-btn color="secondary" :loading="saving" :disabled="!canSave" @click="save">{{ form.roleId === null ? 'Create role' : 'Save changes' }}</v-btn>
+          <v-btn variant="flat" color="error" @click="dialog = false">Cancel</v-btn>
+          <v-btn variant="flat" color="secondary" :loading="saving" :disabled="!canSave" @click="save">{{ form.roleId === null ? 'Create role' : 'Save changes' }}</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
 
-    <v-dialog v-model="permissionDialog" max-width="560">
+    <v-dialog v-model="permissionDialog" max-width="640">
       <v-card class="role-editor" variant="flat" border>
         <div class="editor-heading">
           <div>
@@ -374,14 +374,16 @@ watch(selectedAnchorId, () => void load())
           </div>
           <dialog-close-button @close="permissionDialog = false" />
         </div>
-        <v-select v-model="newPermission.groupKey" :items="PERMISSION_GROUPS" item-title="label" item-value="key" label="Permission group" density="compact" hide-details="auto" />
-        <v-text-field v-model="newPermission.displayName" label="Checkbox label" placeholder="Example: View audit log" density="compact" hide-details="auto" class="mt-3" />
-        <v-text-field v-model="newPermission.name" label="Permission code" placeholder="VIEW_AUDIT_LOG" hint="Use a stable code the related feature can check." persistent-hint density="compact" class="mt-3" />
-        <v-textarea v-model="newPermission.description" label="Description" rows="2" density="compact" hide-details="auto" class="mt-3" />
+        <v-row dense>
+          <v-col cols="12" sm="6"><v-select v-model="newPermission.groupKey" :items="PERMISSION_GROUPS" item-title="label" item-value="key" label="Permission group" density="compact" hide-details="auto" /></v-col>
+          <v-col cols="12" sm="6"><v-text-field v-model="newPermission.displayName" label="Checkbox label" placeholder="Example: View audit log" density="compact" hide-details="auto" /></v-col>
+          <v-col cols="12" sm="6"><v-text-field v-model="newPermission.name" label="Permission code" placeholder="VIEW_AUDIT_LOG" hint="Use a stable code the related feature can check." persistent-hint density="compact" /></v-col>
+          <v-col cols="12" sm="6"><v-textarea v-model="newPermission.description" label="Description" rows="2" density="compact" hide-details="auto" /></v-col>
+        </v-row>
         <v-card-actions class="editor-actions">
           <v-spacer />
-          <v-btn variant="text" @click="permissionDialog = false">Cancel</v-btn>
-          <v-btn color="secondary" :loading="creatingPermission" @click="createPermission">Create permission</v-btn>
+          <v-btn variant="flat" color="error" @click="permissionDialog = false">Cancel</v-btn>
+          <v-btn variant="flat" color="secondary" :loading="creatingPermission" @click="createPermission">Create permission</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>

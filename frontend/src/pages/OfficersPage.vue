@@ -339,7 +339,7 @@ async function assignLocation() {
             A temporary password will be generated and emailed to this officer.
           </v-alert>
           <div class="editor-actions">
-            <v-btn variant="text" @click="dialog = false">Cancel</v-btn>
+            <v-btn variant="flat" color="error" @click="dialog = false">Cancel</v-btn>
             <v-btn color="secondary" type="submit" :loading="saving" prepend-icon="mdi-check">Save</v-btn>
           </div>
         </v-form>

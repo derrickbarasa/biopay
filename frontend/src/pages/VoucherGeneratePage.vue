@@ -39,7 +39,11 @@ const purpose = ref('')
 const expiresAt = ref('')
 const rows = ref<VoucherAmountRow[]>([])
 const rowHeaders = [
-  { title: 'Household', key: 'householdName' },
+  { title: 'Household Number', key: 'householdNumber' },
+  { title: 'Household Name', key: 'householdName' },
+  { title: 'State', key: 'stateCode' },
+  { title: 'County', key: 'countyCode' },
+  { title: 'Village', key: 'bomaCode' },
   { title: 'Amount', key: 'amount' },
 ]
 const saving = ref(false)
@@ -53,6 +57,10 @@ let geoLoaded = false
 const countiesForState = (code: string | null) => (code ? counties.value.filter((c) => c.stateCode === code) : counties.value)
 const locationsForCounty = (code: string | null) => (code ? locations.value.filter((l) => l.countyCode === code) : locations.value)
 const villagesForLocation = (code: string | null) => (code ? villages.value.filter((v) => v.locationCode === code) : villages.value)
+
+const stateName = (code?: string) => (code && states.value.find((s) => s.code === code)?.name) || code || '—'
+const countyName = (code?: string) => (code && counties.value.find((c) => c.code === code)?.name) || code || '—'
+const villageName = (code?: string) => (code && villages.value.find((v) => v.code === code)?.name) || code || '—'
 
 async function loadGeo() {
   if (geoLoaded && !auth.isSystemAdmin) return
@@ -104,7 +112,7 @@ async function loadScopeHouseholds() {
   if (!selectedScopeCode.value) return
   householdsLoading.value = true
   try {
-    const collected: { householdNumber: string; householdName: string; amount: number }[] = []
+    const collected: VoucherAmountRow[] = []
     const pageSize = 200
     let page = 1
     while (collected.length < 500) {
@@ -112,12 +120,15 @@ async function loadScopeHouseholds() {
         : generationLevel.value === 'COUNTY' ? { countyCode: countyCode.value }
           : generationLevel.value === 'LOCATION' ? { locationCode: locationCode.value }
             : { villageCode: villageSelected.value }
-      const res = await dispatch<{ results: { householdNumber: string; householdName: string }[] }>('GET_HOUSEHOLDS', {
+      const res = await dispatch<{ results: { householdNumber: string; householdName: string; stateCode?: string; countyCode?: string; bomaCode?: string }[] }>('GET_HOUSEHOLDS', {
         organisationCode: organisationCode.value || undefined, targetAnchorId: auth.isSystemAdmin ? dialogAnchorId.value ?? undefined : undefined, ...geographicFilter, status: 1, page, pageSize,
       })
       for (const h of res.results) {
         if (collected.length >= 500) break
-        collected.push({ householdNumber: h.householdNumber, householdName: h.householdName, amount: flatAmount.value ?? 0 })
+        collected.push({
+          householdNumber: h.householdNumber, householdName: h.householdName, amount: flatAmount.value ?? 0,
+          stateCode: h.stateCode, countyCode: h.countyCode, bomaCode: h.bomaCode,
+        })
       }
       if (res.results.length < pageSize) break
       page++
@@ -213,7 +224,7 @@ onMounted(async () => {
   <div>
     <div class="d-flex align-center mb-4 ga-3">
       <v-btn icon="mdi-arrow-left" variant="text" aria-label="Back to vouchers" @click="goToList" />
-      <h1 class="text-h5 font-weight-bold mb-0">Generate Vouchers by Area</h1>
+      <h1 class="page-title">Generate Vouchers by Area</h1>
     </div>
 
     <v-card variant="flat" border>
@@ -222,39 +233,43 @@ onMounted(async () => {
           Choose a state, county, location or village. Every active household in that area will be prepared for voucher generation.
         </v-alert>
 
-        <v-select
-          v-if="auth.isSystemAdmin" v-model="dialogAnchorId" :items="anchors" item-title="name" item-value="id"
-          label="Anchor" class="mb-3" placeholder="Choose an anchor" required
-        />
-        <v-select
-          v-if="auth.isAnchor" v-model="organisationCode" :items="dialogOrganizations"
-          item-title="name" item-value="organisationCode" label="Organisation" class="mb-3"
-          placeholder="Choose an organisation" :disabled="auth.isSystemAdmin && !dialogAnchorId" required
-        />
-        <v-select
-          v-model="generationLevel"
-          :items="[{ title: 'State', value: 'STATE' }, { title: 'County', value: 'COUNTY' }, { title: 'Location', value: 'LOCATION' }, { title: 'Village', value: 'VILLAGE' }]"
-          label="Generate for" density="compact" class="mb-3" style="max-width: 260px"
-        />
-        <div class="d-flex ga-3 flex-wrap mb-3">
+        <div class="voucher-scope-grid">
+          <v-select
+            v-if="auth.isSystemAdmin" v-model="dialogAnchorId" :items="anchors" item-title="name" item-value="id"
+            label="Anchor" placeholder="Choose an anchor" density="compact" hide-details required
+          />
+          <v-select
+            v-if="auth.isAnchor" v-model="organisationCode" :items="dialogOrganizations"
+            item-title="name" item-value="organisationCode" label="Organisation"
+            placeholder="Choose an organisation" density="compact" hide-details
+            :disabled="auth.isSystemAdmin && !dialogAnchorId" required
+          />
+          <v-select
+            v-model="generationLevel"
+            :items="[{ title: 'State', value: 'STATE' }, { title: 'County', value: 'COUNTY' }, { title: 'Location', value: 'LOCATION' }, { title: 'Village', value: 'VILLAGE' }]"
+            label="Generate for" density="compact" hide-details
+          />
           <v-select
             v-model="stateCode" :items="states" item-title="name" item-value="code" label="State"
-            clearable hide-details density="compact" style="max-width: 200px" :disabled="auth.isAnchor && !organisationCode" @update:model-value="onStateChange"
+            clearable hide-details density="compact" :disabled="auth.isAnchor && !organisationCode" @update:model-value="onStateChange"
           />
           <v-select
             v-if="generationLevel !== 'STATE'"
             v-model="countyCode" :items="countiesForState(stateCode)" item-title="name" item-value="code" label="County"
-            clearable hide-details density="compact" style="max-width: 200px" @update:model-value="onCountyChange"
+            clearable hide-details density="compact" :disabled="!stateCode"
+            @update:model-value="onCountyChange"
           />
           <v-select
             v-if="generationLevel === 'LOCATION' || generationLevel === 'VILLAGE'"
             v-model="locationCode" :items="locationsForCounty(countyCode)" item-title="name" item-value="code" label="Location"
-            clearable hide-details density="compact" style="max-width: 200px" @update:model-value="onLocationChange"
+            clearable hide-details density="compact" :disabled="!countyCode"
+            @update:model-value="onLocationChange"
           />
           <v-select
             v-if="generationLevel === 'VILLAGE'"
             v-model="villageSelected" :items="villagesForLocation(locationCode)" item-title="name" item-value="code" label="Village"
-            clearable hide-details density="compact" style="max-width: 200px" @update:model-value="loadScopeHouseholds"
+            clearable hide-details density="compact" :disabled="!locationCode"
+            @update:model-value="loadScopeHouseholds"
           />
         </div>
 
@@ -264,19 +279,29 @@ onMounted(async () => {
         </v-alert>
 
         <template v-if="rows.length">
-          <div class="d-flex align-center ga-3 flex-wrap mb-3">
+          <div class="voucher-detail-grid">
             <v-text-field
               v-model.number="flatAmount" label="Amount per voucher" type="number" density="compact"
-              min="0" hide-details style="max-width: 200px" @keydown.enter.prevent="applyFlatAmountToAll"
+              min="0" hide-details @keydown.enter.prevent="applyFlatAmountToAll"
             />
-            <v-btn size="small" color="secondary" variant="flat" :disabled="!rows.length" @click="applyFlatAmountToAll">Apply to all households</v-btn>
-            <v-spacer />
-            <span class="text-caption text-medium-emphasis">{{ rows.length }} household(s) in {{ selectedScopeName }}</span>
+            <v-text-field
+              v-model="purpose" label="Purpose (applies to all, optional)" placeholder="e.g. School fees"
+              density="compact" hide-details
+            />
+            <v-text-field
+              v-model="expiresAt" label="Expires on (applies to all, optional)" type="date"
+              density="compact" hide-details
+            />
           </div>
-          <v-text-field v-model="purpose" label="Purpose (applies to all, optional)" placeholder="e.g. School fees" density="compact" class="mb-2" />
-          <v-text-field v-model="expiresAt" label="Expires on (applies to all, optional)" type="date" density="compact" class="mb-3" />
+          <div class="voucher-bulk-actions">
+            <span class="text-caption text-medium-emphasis">{{ rows.length }} household(s) in {{ selectedScopeName }}</span>
+            <v-btn color="secondary" variant="flat" :disabled="!rows.length" @click="applyFlatAmountToAll">Apply to all households</v-btn>
+          </div>
           <div class="rows-scroll">
             <v-data-table :headers="rowHeaders" :items="rows" density="compact" :items-per-page="10">
+              <template #item.stateCode="{ item }">{{ stateName(item.stateCode) }}</template>
+              <template #item.countyCode="{ item }">{{ countyName(item.countyCode) }}</template>
+              <template #item.bomaCode="{ item }">{{ villageName(item.bomaCode) }}</template>
               <template #item.amount="{ item }">
                 <v-text-field v-model.number="item.amount" type="number" density="compact" hide-details style="max-width: 140px" />
               </template>
@@ -295,5 +320,30 @@ onMounted(async () => {
 </template>
 
 <style scoped>
+.voucher-scope-grid,
+.voucher-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+.voucher-scope-grid { margin-bottom: 16px; }
+.voucher-detail-grid { margin-bottom: 12px; }
+.voucher-bulk-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
 .rows-scroll { max-height: 360px; overflow-y: auto; }
+@media (max-width: 900px) {
+  .voucher-scope-grid,
+  .voucher-detail-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 600px) {
+  .voucher-scope-grid,
+  .voucher-detail-grid { grid-template-columns: 1fr; }
+  .voucher-bulk-actions { align-items: stretch; flex-direction: column; }
+  .voucher-bulk-actions .v-btn { width: 100%; }
+}
 </style>

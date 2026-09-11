@@ -7,6 +7,14 @@ import { useToast } from '@/composables/useToast'
 const auth = useAuthStore()
 const toast = useToast()
 
+type SettingsSection = 'profile' | 'authentication' | 'password'
+const activeSection = ref<SettingsSection | null>(null)
+const sections: { key: SettingsSection; icon: string; label: string; description: string }[] = [
+  { key: 'profile', icon: 'mdi-account-outline', label: 'Profile', description: 'Name and account details' },
+  { key: 'authentication', icon: 'mdi-shield-key-outline', label: 'Authentication', description: 'Email and authenticator app sign-in' },
+  { key: 'password', icon: 'mdi-lock-outline', label: 'Password', description: 'Change your sign-in password' },
+]
+
 const oldPassword = ref('')
 const newPassword = ref('')
 const confirmPassword = ref('')
@@ -173,122 +181,146 @@ async function confirmEmailDisable() {
 
 <template>
   <div>
-    <h1 class="text-h5 font-weight-bold mb-4">Settings</h1>
+    <h1 class="page-title mb-4">Settings</h1>
 
-    <v-row>
-      <v-col cols="12" md="6">
-        <v-card variant="flat" border class="pa-4">
-          <v-card-title class="pl-0">Profile</v-card-title>
-          <v-card-text class="pl-0">
-            <div class="d-flex align-center mb-4">
-              <v-avatar color="primary" size="48" class="mr-3">
-                <span class="text-h6">{{ auth.initials }}</span>
-              </v-avatar>
-              <div>
-                <div class="text-subtitle-1 font-weight-medium">{{ auth.fullName }}</div>
-                <div class="text-caption text-medium-emphasis">{{ auth.user?.email }}</div>
+    <v-card variant="flat" border class="pa-4 mb-4 identity-card">
+      <div class="d-flex align-center">
+        <v-avatar color="primary" size="48" class="mr-3">
+          <span class="text-h6">{{ auth.initials }}</span>
+        </v-avatar>
+        <div class="min-width-0">
+          <div class="text-subtitle-1 font-weight-medium">{{ auth.fullName }}</div>
+          <div class="text-caption text-medium-emphasis">{{ auth.user?.email }}</div>
+        </div>
+        <v-spacer />
+        <v-chip color="secondary" variant="tonal" class="ml-2">{{ auth.roleLabel }}</v-chip>
+      </div>
+      <div v-if="auth.user?.partnerCode" class="mt-2 text-body-2">
+        Organization: {{ organizationName || auth.user.partnerCode }}
+      </div>
+    </v-card>
+
+    <div class="section-grid mb-4">
+      <button
+        v-for="s in sections" :key="s.key" type="button" class="section-tile"
+        :class="{ active: activeSection === s.key }" @click="activeSection = activeSection === s.key ? null : s.key"
+      >
+        <v-icon :icon="s.icon" size="22" />
+        <div class="section-tile-copy">
+          <div class="section-tile-label">{{ s.label }}</div>
+          <div class="section-tile-description">{{ s.description }}</div>
+        </div>
+        <v-icon icon="mdi-chevron-right" size="18" class="section-tile-chevron" />
+      </button>
+    </div>
+
+    <v-card v-if="activeSection === 'profile'" variant="flat" border class="pa-4 mb-4">
+      <v-card-title class="pl-0 d-flex align-center">
+        Profile
+        <v-spacer />
+        <v-btn icon="mdi-close" variant="text" size="small" aria-label="Close" @click="activeSection = null" />
+      </v-card-title>
+      <v-card-text class="pl-0">
+        <v-text-field v-model="profileFirstName" label="First name" autocomplete="given-name" />
+        <v-text-field v-model="profileLastName" label="Last name" autocomplete="family-name" />
+        <v-text-field
+          :model-value="auth.user?.email" label="Email address" readonly
+          :hint="auth.isSystemAdmin ? 'Sign-in email cannot be changed here.' : 'Contact your anchor or organisation administrator to change the sign-in email.'"
+          persistent-hint
+        />
+        <v-text-field :model-value="auth.roleLabel" label="Role" readonly hint="Contact your administrator to change your role." persistent-hint class="mt-2" />
+        <v-btn color="secondary" class="mt-4" :loading="savingProfile" @click="saveProfile">Save profile</v-btn>
+      </v-card-text>
+    </v-card>
+
+    <v-card v-if="activeSection === 'authentication'" variant="flat" border class="pa-4 mb-4">
+      <v-card-title class="pl-0 d-flex align-center">
+        Authentication
+        <v-spacer />
+        <v-btn icon="mdi-close" variant="text" size="small" aria-label="Close" @click="activeSection = null" />
+      </v-card-title>
+      <v-card-text class="pl-0">
+        <div class="d-flex align-center justify-space-between py-2">
+          <div class="d-flex align-center">
+            <v-icon icon="mdi-email-check-outline" class="mr-3" :color="auth.user?.emailOtpEnabled ? 'success' : 'medium-emphasis'" />
+            <div>
+              <div class="text-body-2 font-weight-medium">Email</div>
+              <div class="text-caption text-medium-emphasis">
+                <template v-if="auth.user?.emailOtpEnabled">Send a 6-digit code to your inbox at sign-in</template>
+                <template v-else>Turned off &mdash; you sign in with the authenticator app only</template>
               </div>
             </div>
-            <v-chip color="secondary" variant="tonal">{{ auth.roleLabel }}</v-chip>
-            <div v-if="auth.user?.partnerCode" class="mt-2 text-body-2">
-              Organization: {{ organizationName || auth.user.partnerCode }}
+          </div>
+          <v-btn
+            v-if="auth.user?.emailOtpEnabled" size="small" variant="outlined" color="error"
+            :disabled="!auth.user?.totpEnabled"
+            @click="openEmailDisable"
+          >
+            Disable
+          </v-btn>
+          <v-btn v-else size="small" color="secondary" :loading="emailEnabling" @click="enableEmailOtp">Enable</v-btn>
+        </div>
+        <p v-if="auth.user?.emailOtpEnabled && !auth.user?.totpEnabled" class="text-caption text-medium-emphasis mb-0">
+          Enable the authenticator app before you can turn this off.
+        </p>
+        <v-divider class="my-2" />
+        <div class="d-flex align-center justify-space-between py-2">
+          <div class="d-flex align-center">
+            <v-icon icon="mdi-cellphone-key" class="mr-3" :color="auth.user?.totpEnabled ? 'success' : 'medium-emphasis'" />
+            <div>
+              <div class="text-body-2 font-weight-medium">Authenticator app</div>
+              <div class="text-caption text-medium-emphasis">Use Google Authenticator, Authy or similar for faster sign-in</div>
             </div>
-            <v-divider class="my-4" />
-            <v-text-field v-model="profileFirstName" label="First name" autocomplete="given-name" />
-            <v-text-field v-model="profileLastName" label="Last name" autocomplete="family-name" />
-            <v-text-field
-              :model-value="auth.user?.email" label="Email address" readonly
-              :hint="auth.isSystemAdmin ? 'Sign-in email cannot be changed here.' : 'Contact your anchor or organisation administrator to change the sign-in email.'"
-              persistent-hint
+          </div>
+          <v-btn v-if="auth.user?.totpEnabled" size="small" variant="outlined" color="error" @click="openDisable">Disable</v-btn>
+          <v-btn v-else size="small" color="secondary" :loading="enrolling" @click="startEnroll">Enable</v-btn>
+        </div>
+      </v-card-text>
+    </v-card>
+
+    <v-card v-if="activeSection === 'password'" variant="flat" border class="pa-4 mb-4">
+      <v-card-title class="pl-0 d-flex align-center">
+        Password
+        <v-spacer />
+        <v-btn icon="mdi-close" variant="text" size="small" aria-label="Close" @click="activeSection = null" />
+      </v-card-title>
+      <v-card-text class="pl-0">
+        <v-text-field v-model="oldPassword" label="Current password" :type="showOldPassword ? 'text' : 'password'" autocomplete="current-password">
+          <template #append-inner>
+            <v-btn
+              :icon="showOldPassword ? 'mdi-eye-off' : 'mdi-eye'" variant="text" density="compact"
+              :aria-label="showOldPassword ? 'Hide password' : 'Show password'"
+              @click="showOldPassword = !showOldPassword"
             />
-            <v-btn color="secondary" class="mt-4" :loading="savingProfile" @click="saveProfile">Save profile</v-btn>
-          </v-card-text>
-        </v-card>
-
-        <v-card variant="flat" border class="pa-4 mt-4">
-          <v-card-title class="pl-0">Two-Factor Authentication</v-card-title>
-          <v-card-text class="pl-0">
-            <div class="d-flex align-center justify-space-between py-2">
-              <div class="d-flex align-center">
-                <v-icon icon="mdi-email-check-outline" class="mr-3" :color="auth.user?.emailOtpEnabled ? 'success' : 'medium-emphasis'" />
-                <div>
-                  <div class="text-body-2 font-weight-medium">Email</div>
-                  <div class="text-caption text-medium-emphasis">
-                    <template v-if="auth.user?.emailOtpEnabled">Send a 6-digit code to your inbox at sign-in</template>
-                    <template v-else>Turned off &mdash; you sign in with the authenticator app only</template>
-                  </div>
-                </div>
-              </div>
-              <v-btn
-                v-if="auth.user?.emailOtpEnabled" size="small" variant="outlined" color="error"
-                :disabled="!auth.user?.totpEnabled"
-                @click="openEmailDisable"
-              >
-                Disable
-              </v-btn>
-              <v-btn v-else size="small" color="secondary" :loading="emailEnabling" @click="enableEmailOtp">Enable</v-btn>
-            </div>
-            <p v-if="auth.user?.emailOtpEnabled && !auth.user?.totpEnabled" class="text-caption text-medium-emphasis mb-0">
-              Enable the authenticator app before you can turn this off.
-            </p>
-            <v-divider class="my-2" />
-            <div class="d-flex align-center justify-space-between py-2">
-              <div class="d-flex align-center">
-                <v-icon icon="mdi-cellphone-key" class="mr-3" :color="auth.user?.totpEnabled ? 'success' : 'medium-emphasis'" />
-                <div>
-                  <div class="text-body-2 font-weight-medium">Authenticator app</div>
-                  <div class="text-caption text-medium-emphasis">Use Google Authenticator, Authy or similar for faster sign-in</div>
-                </div>
-              </div>
-              <v-btn v-if="auth.user?.totpEnabled" size="small" variant="outlined" color="error" @click="openDisable">Disable</v-btn>
-              <v-btn v-else size="small" color="secondary" :loading="enrolling" @click="startEnroll">Enable</v-btn>
-            </div>
-          </v-card-text>
-        </v-card>
-      </v-col>
-
-      <v-col cols="12" md="6">
-        <v-card variant="flat" border class="pa-4">
-          <v-card-title class="pl-0">Change Password</v-card-title>
-          <v-card-text class="pl-0">
-            <v-text-field v-model="oldPassword" label="Current password" :type="showOldPassword ? 'text' : 'password'" autocomplete="current-password">
-              <template #append-inner>
-                <v-btn
-                  :icon="showOldPassword ? 'mdi-eye-off' : 'mdi-eye'" variant="text" density="compact"
-                  :aria-label="showOldPassword ? 'Hide password' : 'Show password'"
-                  @click="showOldPassword = !showOldPassword"
-                />
-              </template>
-            </v-text-field>
-            <v-text-field
-              v-model="newPassword" label="New password" :type="showNewPassword ? 'text' : 'password'"
-              hint="At least 8 characters" persistent-hint autocomplete="new-password"
-            >
-              <template #append-inner>
-                <v-btn
-                  :icon="showNewPassword ? 'mdi-eye-off' : 'mdi-eye'" variant="text" density="compact"
-                  :aria-label="showNewPassword ? 'Hide password' : 'Show password'"
-                  @click="showNewPassword = !showNewPassword"
-                />
-              </template>
-            </v-text-field>
-            <v-text-field
-              v-model="confirmPassword" label="Confirm new password" :type="showConfirmPassword ? 'text' : 'password'"
-              class="mt-2" autocomplete="new-password"
-            >
-              <template #append-inner>
-                <v-btn
-                  :icon="showConfirmPassword ? 'mdi-eye-off' : 'mdi-eye'" variant="text" density="compact"
-                  :aria-label="showConfirmPassword ? 'Hide password' : 'Show password'"
-                  @click="showConfirmPassword = !showConfirmPassword"
-                />
-              </template>
-            </v-text-field>
-            <v-btn color="secondary" class="mt-4" :loading="saving" @click="changePassword">Update Password</v-btn>
-          </v-card-text>
-        </v-card>
-      </v-col>
-    </v-row>
+          </template>
+        </v-text-field>
+        <v-text-field
+          v-model="newPassword" label="New password" :type="showNewPassword ? 'text' : 'password'"
+          hint="At least 8 characters" persistent-hint autocomplete="new-password"
+        >
+          <template #append-inner>
+            <v-btn
+              :icon="showNewPassword ? 'mdi-eye-off' : 'mdi-eye'" variant="text" density="compact"
+              :aria-label="showNewPassword ? 'Hide password' : 'Show password'"
+              @click="showNewPassword = !showNewPassword"
+            />
+          </template>
+        </v-text-field>
+        <v-text-field
+          v-model="confirmPassword" label="Confirm new password" :type="showConfirmPassword ? 'text' : 'password'"
+          class="mt-2" autocomplete="new-password"
+        >
+          <template #append-inner>
+            <v-btn
+              :icon="showConfirmPassword ? 'mdi-eye-off' : 'mdi-eye'" variant="text" density="compact"
+              :aria-label="showConfirmPassword ? 'Hide password' : 'Show password'"
+              @click="showConfirmPassword = !showConfirmPassword"
+            />
+          </template>
+        </v-text-field>
+        <v-btn color="secondary" class="mt-4" :loading="saving" @click="changePassword">Update Password</v-btn>
+      </v-card-text>
+    </v-card>
 
     <v-dialog v-model="enrollDialog" max-width="420">
       <v-card>
@@ -308,8 +340,8 @@ async function confirmEmailDisable() {
         </v-card-text>
         <v-card-actions>
           <v-spacer />
-          <v-btn variant="text" @click="enrollDialog = false">Cancel</v-btn>
-          <v-btn color="secondary" :loading="confirming" @click="confirmEnroll">Confirm</v-btn>
+          <v-btn variant="flat" color="error" @click="enrollDialog = false">Cancel</v-btn>
+          <v-btn variant="flat" color="secondary" :loading="confirming" @click="confirmEnroll">Confirm</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -332,8 +364,8 @@ async function confirmEmailDisable() {
         </v-card-text>
         <v-card-actions>
           <v-spacer />
-          <v-btn variant="text" @click="disableDialog = false">Cancel</v-btn>
-          <v-btn color="error" :loading="disabling" @click="confirmDisable">Disable</v-btn>
+          <v-btn variant="flat" color="error" @click="disableDialog = false">Cancel</v-btn>
+          <v-btn variant="flat" color="error" :loading="disabling" @click="confirmDisable">Disable</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -356,10 +388,26 @@ async function confirmEmailDisable() {
         </v-card-text>
         <v-card-actions>
           <v-spacer />
-          <v-btn variant="text" @click="emailDisableDialog = false">Cancel</v-btn>
-          <v-btn color="error" :loading="emailDisabling" @click="confirmEmailDisable">Disable</v-btn>
+          <v-btn variant="flat" color="error" @click="emailDisableDialog = false">Cancel</v-btn>
+          <v-btn variant="flat" color="error" :loading="emailDisabling" @click="confirmEmailDisable">Disable</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
   </div>
 </template>
+
+<style scoped>
+.identity-card { border-radius: 14px !important; }
+.min-width-0 { min-width: 0; }
+.section-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; }
+.section-tile {
+  display: flex; align-items: center; gap: 12px; padding: 14px; border: 1px solid #0f172a; border-radius: 10px;
+  background: #fff; color: #0f172a; text-align: left; cursor: pointer; transition: background 150ms ease, color 150ms ease;
+}
+.section-tile.active { background: #0d9488; border-color: #0d9488; color: #fff; }
+.section-tile.active .section-tile-description { color: rgba(255, 255, 255, .82); }
+.section-tile-copy { min-width: 0; flex: 1; }
+.section-tile-label { font-size: .88rem; font-weight: 700; }
+.section-tile-description { margin-top: 2px; font-size: .72rem; color: #64748b; overflow-wrap: anywhere; }
+.section-tile-chevron { flex: 0 0 auto; opacity: .6; }
+</style>

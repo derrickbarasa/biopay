@@ -71,7 +71,7 @@ const emailRule = (value: string) => /.+@.+\..+/.test(value ?? '') || 'A valid e
 
 const headers = computed(() => [
   ...(auth.isSystemAdmin ? [{ title: 'Anchor', key: 'anchorName' }] : []),
-  { title: 'Name', key: 'name' },
+  { title: 'Org Name', key: 'name' },
   { title: 'Contact', key: 'authorisedName' },
   { title: 'Email', key: 'authorisedEmail' },
   { title: 'Country', key: 'country' },
@@ -101,7 +101,7 @@ async function load() {
   }
 }
 
-watch([statusFilter, selectedAnchorId], load)
+// Filters apply only when Submit is pressed (see the template) -- no reload on every pick.
 
 onMounted(async () => { await loadAnchors(); await load() })
 
@@ -283,7 +283,7 @@ async function toggleStatus(org: Organization) {
           </section>
 
           <div class="editor-actions">
-            <v-btn variant="text" @click="dialog = false">Cancel</v-btn>
+            <v-btn variant="flat" color="error" @click="dialog = false">Cancel</v-btn>
             <v-btn color="secondary" type="submit" :loading="saving" prepend-icon="mdi-check">
               {{ editing ? 'Save changes' : 'Create organization' }}
             </v-btn>
@@ -304,6 +304,7 @@ async function toggleStatus(org: Organization) {
             label="Status" clearable hide-details density="compact" style="max-width: 220px"
           />
           <v-text-field v-model="tableSearch" prepend-inner-icon="mdi-magnify" label="Search" clearable hide-details density="compact" style="max-width: 260px" />
+          <v-btn class="filter-submit" color="primary" @click="load">Submit</v-btn>
         </div>
       </v-card-text>
       <v-data-table :headers="headers" :items="organizations" :search="tableSearch" :loading="loading">

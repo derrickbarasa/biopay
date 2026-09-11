@@ -81,20 +81,13 @@ const filters = ref({
   villageCode: null as string | null,
   gender: null as string | null,
   status: null as number | null,
-  vulnerabilityStatus: '',
-  legalStatus: '',
+  vulnerabilityStatus: null as string | null,
+  legalStatus: null as string | null,
   reviewStatus: null as string | null,
   dateFrom: null as string | null,
   dateTo: null as string | null,
   search: '',
 })
-let searchDebounce: ReturnType<typeof setTimeout> | null = null
-
-function onSearchInput() {
-  if (searchDebounce) clearTimeout(searchDebounce)
-  searchDebounce = setTimeout(load, 400)
-}
-
 const headers = [
   { title: 'Household #', key: 'householdNumber' },
   { title: 'Head of Household', key: 'householdName' },
@@ -229,26 +222,20 @@ async function load() {
   }
 }
 
-// Select filters re-query immediately; the text filter debounces via onSearchInput instead.
-// Cascading geo filters clear their narrower selections when a broader one changes.
-watch(() => filters.value.stateCode, () => { filters.value.countyCode = null; filters.value.locationCode = null; filters.value.villageCode = null; load() })
-watch(() => filters.value.countyCode, () => { filters.value.locationCode = null; filters.value.villageCode = null; load() })
-watch(() => filters.value.locationCode, () => { filters.value.villageCode = null; load() })
-watch(() => filters.value.villageCode, load)
-watch(() => filters.value.organisationCode, load)
-watch(() => filters.value.gender, load)
-watch(() => filters.value.status, load)
-watch(() => filters.value.reviewStatus, load)
-watch(() => filters.value.vulnerabilityStatus, load)
-watch(() => filters.value.legalStatus, load)
-watch(() => filters.value.dateFrom, load)
-watch(() => filters.value.dateTo, load)
+// Filters only take effect when the user presses Submit (see applyFilters/load in the
+// template) -- picking a value no longer re-queries immediately. Cascading geo filters
+// still clear their narrower selections right away so the dependent dropdowns' option
+// lists stay correct, but that alone never triggers a reload.
+watch(() => filters.value.stateCode, () => { filters.value.countyCode = null; filters.value.locationCode = null; filters.value.villageCode = null })
+watch(() => filters.value.countyCode, () => { filters.value.locationCode = null; filters.value.villageCode = null })
+watch(() => filters.value.locationCode, () => { filters.value.villageCode = null })
 
-// A Super Admin switching anchors resets the organisation filter and reloads both lists.
-watch(selectedAnchorId, () => { filters.value.organisationCode = null; loadGeo(); load() })
+// A Super Admin switching anchors resets the organisation filter and refreshes the geo/org
+// option lists for the newly selected anchor; the household table itself still waits for Submit.
+watch(selectedAnchorId, () => { filters.value.organisationCode = null; loadGeo() })
 
 function clearFilters() {
-  filters.value = { organisationCode: null, stateCode: null, countyCode: null, locationCode: null, villageCode: null, gender: null, status: null, vulnerabilityStatus: '', legalStatus: '', reviewStatus: null, dateFrom: null, dateTo: null, search: '' }
+  filters.value = { organisationCode: null, stateCode: null, countyCode: null, locationCode: null, villageCode: null, gender: null, status: null, vulnerabilityStatus: null, legalStatus: null, reviewStatus: null, dateFrom: null, dateTo: null, search: '' }
   load()
 }
 
@@ -406,7 +393,7 @@ async function submitBulk() {
           <span><strong>By gender</strong><small>Household heads</small></span>
         </v-card-title>
         <v-card-text class="breakdown-body">
-          <PieChart :data="genderBreakdown" variant="pie" show-labels :show-legend-percent="false" />
+          <PieChart :data="genderBreakdown" variant="pie" :size="104" show-labels :show-legend-percent="false" />
         </v-card-text>
       </v-card>
 
@@ -416,7 +403,7 @@ async function submitBulk() {
           <span><strong>By status</strong><small>Household approval status</small></span>
         </v-card-title>
         <v-card-text class="breakdown-body breakdown-body--compact-pie">
-          <PieChart :data="statusBreakdown" :colors="['#F59E0B', '#16A34A', '#DC2626']" />
+          <PieChart :data="statusBreakdown" :colors="['#F59E0B', '#16A34A', '#DC2626']" :size="108" />
         </v-card-text>
       </v-card>
       </div>
@@ -432,6 +419,7 @@ async function submitBulk() {
           <DistributionList :data="vulnerabilityBreakdown" :total-value="households.length" :show-percent="false" color="#0D9F78" aria-label="Households by vulnerability status" />
         </v-card-text>
       </v-card>
+
       </div>
 
       <div class="breakdown-stack breakdown-stack--wide">
@@ -513,10 +501,11 @@ async function submitBulk() {
           <v-col cols="12" sm="6" md="3">
             <v-text-field
               v-model="filters.search" prepend-inner-icon="mdi-magnify" label="Household name, number or ID"
-              clearable hide-details density="compact" @update:model-value="onSearchInput" @click:clear="load"
+              clearable hide-details density="compact" @keyup.enter="load"
             />
           </v-col>
-          <v-col cols="auto">
+          <v-col cols="auto" class="filter-actions">
+            <v-btn class="filter-submit" color="primary" @click="load">Submit</v-btn>
             <v-btn variant="text" size="small" @click="clearFilters">Clear filters</v-btn>
           </v-col>
         </v-row>
@@ -620,7 +609,7 @@ async function submitBulk() {
         <v-card-actions>
           <v-spacer />
           <v-btn variant="text" @click="bulkDialog = false">Close</v-btn>
-          <v-btn color="secondary" :loading="saving" :disabled="!bulkReady" @click="submitBulk">Upload</v-btn>
+          <v-btn variant="flat" color="secondary" :loading="saving" :disabled="!bulkReady" @click="submitBulk">Upload</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -630,6 +619,7 @@ async function submitBulk() {
 
 <style scoped>
 .section-heading { font-size: .95rem; font-weight: 700; color: #0f172a; }
+.filter-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .households-page-header {
   display: flex;
   align-items: center;
@@ -645,7 +635,7 @@ async function submitBulk() {
 }
 .breakdown-grid {
   display: grid;
-  grid-template-columns: minmax(240px, .85fr) minmax(280px, 1fr) minmax(360px, 1.35fr);
+  grid-template-columns: minmax(250px, .85fr) minmax(300px, 1fr) minmax(360px, 1.25fr);
   gap: 12px;
   align-items: start;
 }
@@ -712,15 +702,12 @@ async function submitBulk() {
   width: 108px;
   height: 108px;
 }
+.breakdown-stack--wide { grid-column: auto; }
 @media (max-width: 1180px) {
   .breakdown-grid {
-    grid-template-columns: minmax(240px, .9fr) minmax(360px, 1.35fr);
+    grid-template-columns: minmax(260px, .9fr) minmax(360px, 1.25fr);
   }
   .breakdown-stack--wide { grid-column: 1 / -1; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .breakdown-card--vulnerability .breakdown-body > :deep(.distribution) {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    column-gap: 24px;
-  }
 }
 @media (max-width: 900px) {
   .breakdown-grid {

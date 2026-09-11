@@ -163,3 +163,7 @@
 .mdi-content-copy::before { content: "\F018F"; }
 .mdi-file-excel::before { content: "\F021B"; }
 .mdi-file-upload-outline::before { content: "\F0A4E"; }
+
+/* Added 2026-09-11 -- the sidebar Billing nav item's icon was missing from
+   this subset entirely, so it silently rendered no glyph at all. */
+.mdi-cash-check::before { content: "\F14EE"; }

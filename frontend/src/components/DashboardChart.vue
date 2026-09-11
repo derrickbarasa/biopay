@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { chartScale, dashboardCurrency, type ChartPoint } from '@/utils/dashboard'
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   data: ChartPoint[]; secondaryData: ChartPoint[]
   seriesLabel: string; secondaryLabel: string
   color: string; secondaryColor: string
   money?: boolean; ariaLabel: string
-}>()
+  secondaryAsLine?: boolean
+}>(), { secondaryAsLine: false })
 const selected = ref<number | null>(null)
 watch(() => [props.data, props.secondaryData], () => { selected.value = null })
 const width = 640, height = 240
@@ -24,6 +25,28 @@ function exact(value: number) { return props.money ? dashboardCurrency(value) : 
 function tick(value: number) { return `${props.money ? 'USD ' : ''}${value.toLocaleString(undefined, { notation: 'compact', maximumFractionDigits: 2 })}` }
 function showLabel(index: number) { return rows.value.length <= 12 || index === rows.value.length - 1 || index % Math.ceil(rows.value.length / 8) === 0 }
 function description(row: typeof rows.value[number]) { return `${row.fullLabel ?? row.label}: ${props.seriesLabel} ${exact(row.value)}; ${props.secondaryLabel} ${exact(row.secondary)}` }
+
+// Catmull-Rom-to-Bezier smoothing so the secondary series can render as a smooth line
+// instead of a second bar when secondaryAsLine is set (combo bar + smooth-line chart).
+function smoothPath(points: { x: number; y: number }[]) {
+  if (points.length === 0) return ''
+  if (points.length === 1) return `M ${points[0].x} ${points[0].y} L ${points[0].x} ${points[0].y}`
+  let d = `M ${points[0].x} ${points[0].y}`
+  for (let i = 0; i < points.length - 1; i++) {
+    const p0 = points[i === 0 ? i : i - 1]
+    const p1 = points[i]
+    const p2 = points[i + 1]
+    const p3 = points[i + 2 < points.length ? i + 2 : i + 1]
+    const cp1x = p1.x + (p2.x - p0.x) / 6
+    const cp1y = p1.y + (p2.y - p0.y) / 6
+    const cp2x = p2.x - (p3.x - p1.x) / 6
+    const cp2y = p2.y - (p3.y - p1.y) / 6
+    d += ` C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${p2.x} ${p2.y}`
+  }
+  return d
+}
+const linePoints = computed(() => rows.value.map((row, index) => ({ x: left + slot.value * (index + .5), y: y(row.secondary) })))
+const lineSmoothPath = computed(() => props.secondaryAsLine ? smoothPath(linePoints.value) : '')
 </script>
 
 <template>
@@ -39,10 +62,15 @@ function description(row: typeof rows.value[number]) { return `${row.fullLabel ?
           @mouseenter="selected = index" @mouseleave="selected = null" @focus="selected = index" @blur="selected = null" @click="selected = index">
           <title>{{ description(row) }}</title>
           <rect class="hit-area" :x="left + slot * index" :y="top" :width="slot" :height="plotHeight" :fill="selected === index ? '#f1f5f9' : 'transparent'" />
-          <rect :x="left + slot * (index + .5) - barWidth - 1" :y="y(row.value)" :width="barWidth" :height="plotHeight * row.value / scale.max" :fill="color" />
-          <rect :x="left + slot * (index + .5) + 1" :y="y(row.secondary)" :width="barWidth" :height="plotHeight * row.secondary / scale.max" :fill="secondaryColor" />
+          <rect v-if="secondaryAsLine" :x="left + slot * (index + .5) - barWidth / 2" :y="y(row.value)" :width="barWidth" :height="plotHeight * row.value / scale.max" :fill="color" rx="2" />
+          <template v-else>
+            <rect :x="left + slot * (index + .5) - barWidth - 1" :y="y(row.value)" :width="barWidth" :height="plotHeight * row.value / scale.max" :fill="color" />
+            <rect :x="left + slot * (index + .5) + 1" :y="y(row.secondary)" :width="barWidth" :height="plotHeight * row.secondary / scale.max" :fill="secondaryColor" />
+          </template>
           <text v-if="showLabel(index)" :x="left + slot * (index + .5)" :y="height - 10" text-anchor="middle" class="axis-label">{{ row.label }}</text>
         </g>
+        <path v-if="secondaryAsLine" :d="lineSmoothPath" fill="none" :stroke="secondaryColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="line-path" />
+        <circle v-if="secondaryAsLine" v-for="(pt, index) in linePoints" :key="`pt-${index}`" :cx="pt.x" :cy="pt.y" :r="selected === index ? 4.5 : 3" :fill="secondaryColor" stroke="#fff" stroke-width="1.5" class="line-point" />
       </svg>
     </div>
     <p class="point-detail" aria-live="polite">{{ active ? description(active) : empty ? 'No activity in this period.' : 'Hover, tap or focus a date to see exact values.' }}</p>
@@ -66,6 +94,7 @@ function description(row: typeof rows.value[number]) { return `${row.fullLabel ?
 .chart-svg { display: block; width: 100%; min-width: 460px; }
 .axis-label { font-size: 11px; fill: #526178; font-variant-numeric: tabular-nums; }
 .column-group { outline: none; cursor: pointer; }
+.line-path, .line-point { pointer-events: none; }
 .column-group:focus-visible .hit-area { stroke: #0f766e; stroke-width: 2; }
 .point-detail { min-height: 2.8em; margin: 4px 0; color: #475569; font-size: .72rem; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
 .data-details { border-top: 1px solid #e2e8f0; font-size: .72rem; }

@@ -135,7 +135,7 @@ const heroSlides = [
   },
   {
     icon: 'dedup', tone: 'accent', eyebrow: 'Deduplication',
-    title: 'One household, one record. No fraud.',
+    title: 'Deduplication. One household, one record. No fraud.',
     copy: 'Every new registration is screened against existing records for the same name, phone number and location before it is ever accepted.',
     image: '/hero/deduplication.webp',
   },
@@ -583,44 +583,44 @@ onBeforeUnmount(() => {
               <article class="platform-group feature-card-reveal">
                 <header>
                   <span class="platform-symbol"><i class="mdi mdi-account-check-outline"></i></span>
-                  <div><h3>Identity and presence</h3><p>Prove who was served and where the activity took place.</p></div>
+                  <div><h3 class="platform-title">Identity and presence</h3><p>Prove who was served and where the activity took place.</p></div>
                 </header>
                 <div class="platform-points">
-                  <div><i class="mdi mdi-fingerprint"></i><p><b>Fingerprint or face verification</b><span>Match a person against their enrolment at payment.</span></p></div>
-                  <div><i class="mdi mdi-map-marker-radius-outline"></i><p><b>Location on every capture</b><span>Attach the freshest available device or network location.</span></p></div>
+                  <div><i class="mdi mdi-fingerprint"></i><div class="platform-point-copy"><h3 class="platform-title">Fingerprint or face verification</h3><span>Match a person against their enrolment at payment.</span></div></div>
+                  <div><i class="mdi mdi-map-marker-radius-outline"></i><div class="platform-point-copy"><h3 class="platform-title">Location on every capture</h3><span>Attach the freshest available device or network location.</span></div></div>
                 </div>
               </article>
 
               <article class="platform-group feature-card-reveal">
                 <header>
                   <span class="platform-symbol accent"><i class="mdi mdi-clipboard-check-outline"></i></span>
-                  <div><h3>Field operations</h3><p>Use the same beneficiary record across programme activity.</p></div>
+                  <div><h3 class="platform-title">Field operations</h3><p>Use the same beneficiary record across programme activity.</p></div>
                 </header>
                 <div class="platform-points">
-                  <div><i class="mdi mdi-calendar-check"></i><p><b>Event attendance</b><span>Record workshops, immunisation drives and cash-for-work.</span></p></div>
-                  <div><i class="mdi mdi-ticket-confirmation-outline"></i><p><b>Voucher redemption</b><span>Issue once, redeem once, and keep the event traceable.</span></p></div>
+                  <div><i class="mdi mdi-calendar-check"></i><div class="platform-point-copy"><h3 class="platform-title">Event attendance</h3><span>Record workshops, immunisation drives and cash-for-work.</span></div></div>
+                  <div><i class="mdi mdi-ticket-confirmation-outline"></i><div class="platform-point-copy"><h3 class="platform-title">Voucher redemption</h3><span>Issue once, redeem once, and keep the event traceable.</span></div></div>
                 </div>
               </article>
 
               <article class="platform-group feature-card-reveal">
                 <header>
                   <span class="platform-symbol"><i class="mdi mdi-account-multiple-check-outline"></i></span>
-                  <div><h3>Payment cycle assurance</h3><p>Every disbursement is checked before it's paid.</p></div>
+                  <div><h3 class="platform-title">Payment cycle assurance</h3><p>Every disbursement is checked before it's paid.</p></div>
                 </header>
                 <div class="platform-points">
-                  <div><i class="mdi mdi-robot-outline"></i><p><b>AI-monitored disbursements</b><span>An AI agent reviews every batch as it lands, flagging the patterns a manual review would miss.</span></p></div>
-                  <div><i class="mdi mdi-history"></i><p><b>End-to-end audit trail</b><span>Every batch, approval and disbursement is time-stamped and traceable from anchor to recipient.</span></p></div>
+                  <div><i class="mdi mdi-robot-outline"></i><div class="platform-point-copy"><h3 class="platform-title">AI-monitored disbursements</h3><span>An AI agent reviews every batch as it lands, flagging the patterns a manual review would miss.</span></div></div>
+                  <div><i class="mdi mdi-history"></i><div class="platform-point-copy"><h3 class="platform-title">End-to-end audit trail</h3><span>Every batch, approval and disbursement is time-stamped and traceable from anchor to recipient.</span></div></div>
                 </div>
               </article>
 
               <article class="platform-group feature-card-reveal">
                 <header>
                   <span class="platform-symbol accent"><i class="mdi mdi-chart-line"></i></span>
-                  <div><h3>Programme oversight</h3><p>Give authorised teams one accountable operating record.</p></div>
+                  <div><h3 class="platform-title">Programme oversight</h3><p>Give authorised teams one accountable operating record.</p></div>
                 </header>
                 <div class="platform-points">
-                  <div><i class="mdi mdi-eye-outline"></i><p><b>Continuous review</b><span>Surface duplicate registrations and unusual activity for review.</span></p></div>
-                  <div><i class="mdi mdi-credit-card-outline"></i><p><b>Subscription &amp; billing</b><span>Renewals, invoices and grace periods, priced per the terms agreed for your anchor.</span></p></div>
+                  <div><i class="mdi mdi-eye-outline"></i><div class="platform-point-copy"><h3 class="platform-title">Continuous review</h3><span>Surface duplicate registrations and unusual activity for review.</span></div></div>
+                  <div><i class="mdi mdi-credit-card-outline"></i><div class="platform-point-copy"><h3 class="platform-title">Subscription &amp; billing</h3><span>Renewals, invoices and grace periods, priced per the terms agreed for your anchor.</span></div></div>
                 </div>
               </article>
             </div>
@@ -1506,13 +1506,18 @@ onBeforeUnmount(() => {
 }
 .landing-root .platform-group:last-child { border-bottom: 1px solid var(--color-line); }
 .landing-root .platform-group header { display: flex; align-items: flex-start; gap: .85rem; }
-.landing-root .platform-group h3 { font-size: 1.05rem; }
+.landing-root .platform-title {
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  font-weight: 700;
+  line-height: 1.22;
+  letter-spacing: -.01em;
+}
 .landing-root .platform-group header p { margin-top: .35rem; color: var(--color-text-muted); font-size: .78rem; line-height: 1.45; }
 .landing-root .platform-points { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); }
 .landing-root .platform-points > div { display: flex; align-items: flex-start; gap: .7rem; min-width: 0; }
 .landing-root .platform-points > div > i { flex: 0 0 auto; margin-top: .05rem; color: var(--color-primary); font-size: 1.3rem; }
-.landing-root .platform-points p { display: grid; gap: .28rem; }
-.landing-root .platform-points b { font-size: .83rem; line-height: 1.35; }
+.landing-root .platform-point-copy { display: grid; gap: .28rem; }
 .landing-root .platform-points span { color: var(--color-text-muted); font-size: .76rem; line-height: 1.48; }
 .landing-root .platform-assurance {
   display: flex;

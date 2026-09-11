@@ -12,7 +12,7 @@ const { state, confirm, cancel } = useConfirm()
       <v-card-text class="text-body-2">{{ state.message }}</v-card-text>
       <v-card-actions>
         <v-spacer />
-        <v-btn variant="text" @click="cancel">Cancel</v-btn>
+        <v-btn variant="flat" color="error" @click="cancel">Cancel</v-btn>
         <v-btn :color="state.color" variant="flat" @click="confirm">{{ state.confirmLabel }}</v-btn>
       </v-card-actions>
     </v-card>

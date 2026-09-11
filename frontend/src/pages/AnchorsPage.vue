@@ -22,7 +22,7 @@ const newAnchor = reactive({ name: '', authorisedName: '', authorisedEmail: '', 
 
 const headers = [
   { title: 'Code', key: 'anchorCode' },
-  { title: 'Name', key: 'name' },
+  { title: 'Anchor Name', key: 'name' },
   { title: 'Administrator', key: 'authorisedName' },
   { title: 'Email', key: 'authorisedEmail' },
   { title: 'Country', key: 'country' },
@@ -117,7 +117,7 @@ onMounted(load)
 <template>
   <div class="admin-page">
     <header class="admin-head">
-      <div><h1>Anchors</h1><p>Every anchor operating programmes in BioPay.</p></div>
+      <div><h1 class="page-title">Anchors</h1><p>Every anchor operating programmes in BioPay.</p></div>
       <div class="head-chips"><v-chip size="small" variant="tonal" color="primary">{{ anchors.length }} anchor{{ anchors.length === 1 ? '' : 's' }}</v-chip><v-btn color="secondary" prepend-icon="mdi-bank-plus" @click="openCreate">New anchor</v-btn></div>
     </header>
 
@@ -133,7 +133,7 @@ onMounted(load)
           <v-text-field v-model="newAnchor.city" label="City" placeholder="e.g. Nairobi" variant="outlined" />
           <v-text-field v-model="newAnchor.address" label="Address" placeholder="e.g. Karen Road" variant="outlined" class="wide" />
         </v-card-text>
-        <v-card-actions><v-spacer/><v-btn variant="text" @click="createDialog=false">Cancel</v-btn><v-btn color="secondary" :loading="creating" @click="createAnchor">Create anchor</v-btn></v-card-actions>
+        <v-card-actions><v-spacer/><v-btn variant="flat" color="error" @click="createDialog=false">Cancel</v-btn><v-btn variant="flat" color="secondary" :loading="creating" @click="createAnchor">Create anchor</v-btn></v-card-actions>
       </v-card>
     </v-dialog>
 
@@ -150,7 +150,7 @@ onMounted(load)
           <v-text-field v-model="anchor.city" label="City" placeholder="e.g. Nairobi" variant="outlined" />
           <v-text-field v-model="anchor.address" label="Address" placeholder="e.g. Karen Road" variant="outlined" />
         </v-card-text>
-        <v-card-actions><v-spacer/><v-btn variant="text" @click="editDialog=false">Cancel</v-btn><v-btn color="secondary" :loading="saving" @click="save">Save changes</v-btn></v-card-actions>
+        <v-card-actions><v-spacer/><v-btn variant="flat" color="error" @click="editDialog=false">Cancel</v-btn><v-btn variant="flat" color="secondary" :loading="saving" @click="save">Save changes</v-btn></v-card-actions>
       </v-card>
     </v-dialog>
 
