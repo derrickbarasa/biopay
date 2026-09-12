@@ -211,6 +211,3 @@ export const countryNames = COUNTRIES.map(c => c.name)
 export function capitalFor(countryName: string): string {
   return COUNTRIES.find(c => c.name === countryName)?.capital ?? ''
 }
-export function codeFor(countryName: string): string {
-  return COUNTRIES.find(c => c.name === countryName)?.code ?? ''
-}

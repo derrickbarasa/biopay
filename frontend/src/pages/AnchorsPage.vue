@@ -6,7 +6,7 @@ import { useConfirm } from '@/composables/useConfirm'
 import { COUNTRIES } from '@/types/user'
 import { capitalFor } from '@/utils/countries'
 
-interface Anchor { id:number; anchorCode:string; name:string; authorisedName?:string; authorisedEmail?:string; authorisedContact?:string; address?:string; country?:string; city?:string; status:number }
+interface Anchor { id:number; anchorCode:string; name:string; authorisedName?:string; authorisedFirstName?:string; authorisedSurname?:string; authorisedEmail?:string; authorisedContact?:string; address?:string; country?:string; city?:string; status:number }
 
 const toast = useToast()
 const { confirmAction } = useConfirm()
@@ -18,11 +18,11 @@ const editDialog = ref(false)
 const anchors = ref<Anchor[]>([])
 const tableSearch = ref('')
 const anchor = reactive<Anchor>({ id: 0, anchorCode: '', name: '', status: 1 })
-const newAnchor = reactive({ name: '', authorisedName: '', authorisedEmail: '', authorisedContact: '', country: '', city: '', address: '' })
+const newAnchor = reactive({ name: '', authorisedFirstName: '', authorisedSurname: '', authorisedEmail: '', authorisedContact: '', country: '', city: '', address: '' })
 
 const headers = [
   { title: 'Code', key: 'anchorCode' },
-  { title: 'Anchor Name', key: 'name' },
+  { title: 'Name', key: 'name' },
   { title: 'Administrator', key: 'authorisedName' },
   { title: 'Email', key: 'authorisedEmail' },
   { title: 'Country', key: 'country' },
@@ -63,12 +63,12 @@ async function save() {
 }
 
 function openCreate() {
-  Object.assign(newAnchor, { name: '', authorisedName: '', authorisedEmail: '', authorisedContact: '', country: '', city: '', address: '' })
+  Object.assign(newAnchor, { name: '', authorisedFirstName: '', authorisedSurname: '', authorisedEmail: '', authorisedContact: '', country: '', city: '', address: '' })
   createDialog.value = true
 }
 
 async function createAnchor() {
-  if (!newAnchor.name.trim() || !newAnchor.authorisedName.trim() || !/.+@.+\..+/.test(newAnchor.authorisedEmail)) {
+  if (!newAnchor.name.trim() || !newAnchor.authorisedFirstName.trim() || !/.+@.+\..+/.test(newAnchor.authorisedEmail)) {
     toast.error('Complete the anchor name, administrator name and a valid email')
     return
   }
@@ -118,15 +118,16 @@ onMounted(load)
   <div class="admin-page">
     <header class="admin-head">
       <div><h1 class="page-title">Anchors</h1><p>Every anchor operating programmes in BioPay.</p></div>
-      <div class="head-chips"><v-chip size="small" variant="tonal" color="primary">{{ anchors.length }} anchor{{ anchors.length === 1 ? '' : 's' }}</v-chip><v-btn color="secondary" prepend-icon="mdi-bank-plus" @click="openCreate">New anchor</v-btn></div>
+      <div class="head-chips"><v-btn color="secondary" prepend-icon="mdi-bank-plus" @click="openCreate">New anchor</v-btn></div>
     </header>
 
     <v-dialog v-model="createDialog" max-width="760">
       <v-card title="Create anchor" subtitle="This also creates the anchor administrator, assigns the next anchor code (ANC001, ANC002, ...) automatically, and emails a temporary password.">
         <dialog-close-button @close="createDialog = false" />
         <v-card-text class="form-grid">
-          <v-text-field v-model="newAnchor.name" label="Anchor name" placeholder="e.g. Frontier Trust Bank" variant="outlined" required />
-          <v-text-field v-model="newAnchor.authorisedName" label="Administrator name" placeholder="e.g. Jane Mwangi" variant="outlined" required />
+          <v-text-field v-model="newAnchor.name" label="Name" placeholder="e.g. Frontier Trust Bank" variant="outlined" required />
+          <v-text-field v-model="newAnchor.authorisedFirstName" label="Administrator first name" placeholder="e.g. Jane" variant="outlined" required />
+          <v-text-field v-model="newAnchor.authorisedSurname" label="Administrator surname" placeholder="e.g. Mwangi" variant="outlined" />
           <v-text-field v-model="newAnchor.authorisedEmail" label="Administrator email" placeholder="e.g. jane@frontiertrust.bank" type="email" variant="outlined" required />
           <v-text-field v-model="newAnchor.authorisedContact" label="Phone" placeholder="e.g. +254 700 000000" variant="outlined" />
           <v-autocomplete v-model="newAnchor.country" :items="COUNTRIES" label="Country" variant="outlined" />
@@ -141,9 +142,10 @@ onMounted(load)
       <v-card title="Edit anchor">
         <dialog-close-button @close="editDialog = false" />
         <v-card-text class="form-grid">
-          <v-text-field :model-value="anchor.anchorCode" label="Anchor code" variant="outlined" readonly hint="Assigned automatically when the anchor was created" persistent-hint />
-          <v-text-field v-model="anchor.name" label="Anchor name" placeholder="e.g. Frontier Trust Bank" variant="outlined" required />
-          <v-text-field v-model="anchor.authorisedName" label="Authorised contact" placeholder="e.g. Jane Mwangi" variant="outlined" />
+          <v-text-field :model-value="anchor.anchorCode" label="Code" variant="outlined" readonly hint="Assigned automatically when the anchor was created" persistent-hint />
+          <v-text-field v-model="anchor.name" label="Name" placeholder="e.g. Frontier Trust Bank" variant="outlined" required />
+          <v-text-field v-model="anchor.authorisedFirstName" label="Authorised contact first name" placeholder="e.g. Jane" variant="outlined" />
+          <v-text-field v-model="anchor.authorisedSurname" label="Authorised contact surname" placeholder="e.g. Mwangi" variant="outlined" />
           <v-text-field :model-value="anchor.authorisedEmail" label="Sign-in email" type="email" variant="outlined" readonly hint="Change from Settings while signed in as this anchor" persistent-hint />
           <v-text-field v-model="anchor.authorisedContact" label="Phone" placeholder="e.g. +254 700 000000" variant="outlined" />
           <v-autocomplete v-model="anchor.country" :items="COUNTRIES" label="Country" variant="outlined" />

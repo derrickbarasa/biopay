@@ -89,6 +89,8 @@
 .mdi-home-group::before { content: "\F0DD4"; }
 .mdi-home-plus::before { content: "\F0975"; }
 .mdi-information::before { content: "\F02FC"; }
+.mdi-key-outline::before { content: "\F0DD6"; }
+.mdi-key-plus::before { content: "\F0309"; }
 .mdi-keyboard-return::before { content: "\F0311"; }
 .mdi-keyboard-space::before { content: "\F1050"; }
 .mdi-lock-check-outline::before { content: "\F16A8"; }

@@ -9,21 +9,6 @@ import java.util.UUID;
 
 public class Utilities {
 
-    public static String nowDateTime() {
-        return new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date());
-    }
-
-    public static boolean isValidDate(String format, String value) {
-        try {
-            SimpleDateFormat sdf = new SimpleDateFormat(format);
-            sdf.setLenient(false);
-            Date date = sdf.parse(value);
-            return value.equals(sdf.format(date));
-        } catch (Exception ex) {
-            return false;
-        }
-    }
-
     public static String generateRandomPassword(int len) {
         String capitalCaseLetters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
         String lowerCaseLetters = "abcdefghijklmnopqrstuvwxyz";

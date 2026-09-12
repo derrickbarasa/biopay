@@ -96,7 +96,8 @@ public class Organization extends AbstractVerticle {
         }
 
         String name = payload.getString("name", "").trim();
-        String authorisedName = payload.getString("authorisedName", "").trim();
+        String authorisedFirstName = strOrEmpty(payload.getString("authorisedFirstName")).trim();
+        String authorisedSurname = strOrEmpty(payload.getString("authorisedSurname")).trim();
         String authorisedEmail = payload.getString("authorisedEmail", "").trim().toLowerCase();
         String authorisedContact = payload.getString("authorisedContact", "").trim();
         String address = payload.getString("address", "").trim();
@@ -139,21 +140,25 @@ public class Organization extends AbstractVerticle {
 
         String capitalCity = strOrEmpty(payload.getString("capitalCity")).trim();
         final String selectedVerificationMethod = verificationMethod;
-        final String firstName = authorisedName.isEmpty() ? name : authorisedName;
+        // No authorised first name given -- fall back to the organisation's own name (as
+        // before), with no surname to go with it since there's no person's name to split.
+        final String firstName = authorisedFirstName.isEmpty() ? name : authorisedFirstName;
+        final String surname = authorisedFirstName.isEmpty() ? "" : authorisedSurname;
+        final String authorisedName = (authorisedFirstName + " " + authorisedSurname).trim();
         final String temporaryPassword = Utilities.generateRandomPassword(10);
         final String passwordHash = Passwords.hash(temporaryPassword);
 
         String orgSql = "INSERT INTO organizations (organization_code, name, types, authorised_name, authorised_email, "
                 + "authorised_contact, address, country, capital_city, verification_method, anchor_id, status, created_by, created_at, updated_at) "
                 + "VALUES (@p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10, @p11, @p12, @p13, GETDATE(), GETDATE())";
-        String loginSql = "INSERT INTO users (organization_code, email, username, password, first_name, role_id, active, status, "
+        String loginSql = "INSERT INTO users (organization_code, email, username, password, first_name, surname, role_id, active, status, "
                 + "anchor_id, user_scope, must_change_password, created_by, created_at, updated_at) "
                 // Prefers this anchor's own forked "Organisation Administrator" (see
                 // Administration#saveRole) over the shared anchor_id-NULL template, so a new
                 // org-admin user picks up whatever this anchor has customized the role to.
-                + "VALUES (@p1, @p2, @p2, @p3, @p4, (SELECT TOP 1 id FROM roles WHERE role_name='Organisation Administrator' AND status=1 "
-                + "AND (anchor_id=@p5 OR anchor_id IS NULL) ORDER BY CASE WHEN anchor_id=@p5 THEN 0 ELSE 1 END), "
-                + "1, 1, @p5, 'ORGANISATION', 1, @p6, GETDATE(), GETDATE())";
+                + "VALUES (@p1, @p2, @p2, @p3, @p4, @p5, (SELECT TOP 1 id FROM roles WHERE role_name='Organisation Administrator' AND status=1 "
+                + "AND (anchor_id=@p6 OR anchor_id IS NULL) ORDER BY CASE WHEN anchor_id=@p6 THEN 0 ELSE 1 END), "
+                + "1, 1, @p6, 'ORGANISATION', 1, @p7, GETDATE(), GETDATE())";
         int targetAnchorId = Integer.parseInt(anchorIdVal.toString());
         pool.preparedQuery("SELECT 1 AS found FROM users WHERE id=@p1 AND user_scope='ANCHOR' AND status=1")
                 .execute(Tuple.of(targetAnchorId))
@@ -172,7 +177,7 @@ public class Organization extends AbstractVerticle {
                                     .compose(orgRows -> orgRows.rowCount() == 0
                                             ? Future.failedFuture("Failed to create organisation")
                                             : connection.preparedQuery(loginSql).execute(Tuple.of(newCode, authorisedEmail, passwordHash,
-                                                    firstName, targetAnchorId, payload.getValue("actorId"))))
+                                                    firstName, surname, targetAnchorId, payload.getValue("actorId"))))
                                     .map(v -> newCode))
                                     .onFailure(err -> replyError(message, "An account with this email already exists"))
                                     .onSuccess(partnerId -> {

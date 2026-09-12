@@ -40,7 +40,7 @@ export const useAuthStore = defineStore('auth', () => {
 
   const fullName = computed(() => {
     if (!user.value) return 'User'
-    const name = [user.value.firstName, user.value.lastName ?? user.value.otherNames].filter(Boolean).join(' ')
+    const name = [user.value.firstName, user.value.lastName ?? user.value.surname].filter(Boolean).join(' ')
     return name || user.value.email.split('@')[0]
   })
 
@@ -48,7 +48,7 @@ export const useAuthStore = defineStore('auth', () => {
     const u = user.value
     if (!u) return 'U'
     const a = (u.firstName ?? u.email)[0]
-    const b = (u.lastName ?? u.otherNames ?? '')[0]
+    const b = (u.lastName ?? u.surname ?? '')[0]
     return (a + (b ?? '')).toUpperCase()
   })
 
@@ -115,7 +115,7 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   /** Account creation follows the server's configured OTP mode too. */
-  async function signup(fields: { name: string; authorisedName?: string; email: string; phone?: string; address?: string; password: string }): Promise<boolean> {
+  async function signup(fields: { name: string; authorisedFirstName?: string; authorisedSurname?: string; email: string; phone?: string; address?: string; password: string }): Promise<boolean> {
     const data = await dispatch<LoginResponse>('SIGNUP_ANCHOR', fields)
     if (isSessionResponse(data)) {
       applySession(data)

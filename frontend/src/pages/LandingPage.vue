@@ -6,9 +6,6 @@ const previewCharts = [
   { title: 'Payment volume', context: 'completed payments and redeemed vouchers', labels: ['Cash', 'Vouchers'], colors: ['#0d9488', '#f59e0b'],
     values: [[0, 6000, 2500, 0, 7500, 0, 8000], [0, 0, 500, 0, 500, 0, 1000]], max: 10000,
     ticks: ['USD 10K', 'USD 7.5K', 'USD 5K', 'USD 2.5K', 'USD 0'], totals: ['USD 24,000.00 / 162 cash payments', 'USD 2,000.00 / 16 vouchers'] },
-  { title: 'Registration trend', context: 'all registrations, including inactive records', labels: ['Households', 'Alternates'], colors: ['#15803d', '#0ea5e9'],
-    values: [[0, 86, 0, 40, 60, 0, 100], [0, 12, 0, 6, 10, 0, 14]], max: 100,
-    ticks: ['100', '75', '50', '25', '0'], totals: ['286 households', '42 alternates'] },
 ]
 
 const mobileNavOpen = ref(false)
@@ -598,7 +595,7 @@ onBeforeUnmount(() => {
                 </header>
                 <div class="platform-points">
                   <div><i class="mdi mdi-calendar-check"></i><div class="platform-point-copy"><h3 class="platform-title">Event attendance</h3><span>Record workshops, immunisation drives and cash-for-work.</span></div></div>
-                  <div><i class="mdi mdi-ticket-confirmation-outline"></i><div class="platform-point-copy"><h3 class="platform-title">Voucher redemption</h3><span>Issue once, redeem once, and keep the event traceable.</span></div></div>
+                  <div><i class="mdi mdi-ticket-confirmation-outline"></i><div class="platform-point-copy"><h3 class="platform-title">Voucher redemption</h3><span>Issue once, redeem once — no double-dipping across agents or outlets.</span></div></div>
                 </div>
               </article>
 
@@ -619,7 +616,7 @@ onBeforeUnmount(() => {
                   <div><h3 class="platform-title">Programme oversight</h3><p>Give authorised teams one accountable operating record.</p></div>
                 </header>
                 <div class="platform-points">
-                  <div><i class="mdi mdi-eye-outline"></i><div class="platform-point-copy"><h3 class="platform-title">Continuous review</h3><span>Surface duplicate registrations and unusual activity for review.</span></div></div>
+                  <div><i class="mdi mdi-eye-outline"></i><div class="platform-point-copy"><h3 class="platform-title">Continuous review</h3><span>Cross-programme matching flags duplicate beneficiary records before they draw a second payment.</span></div></div>
                   <div><i class="mdi mdi-credit-card-outline"></i><div class="platform-point-copy"><h3 class="platform-title">Subscription &amp; billing</h3><span>Renewals, invoices and grace periods, priced per the terms agreed for your anchor.</span></div></div>
                 </div>
               </article>
@@ -695,10 +692,9 @@ onBeforeUnmount(() => {
                         <div class="preview-metric green"><span>Households</span><strong>4,286</strong><small>Active beneficiary records; all review statuses</small><i class="mdi mdi-home-group"></i></div>
                         <div class="preview-metric amber"><span>Value disbursed</span><strong>USD 840,000.00</strong><small>USD 810,000.00 cash · USD 30,000.00 vouchers</small><i class="mdi mdi-cash-multiple"></i></div>
                         <div class="preview-metric"><span>Vouchers redeemed</span><strong>240</strong><small>USD 30,000.00 redeemed</small><i class="mdi mdi-ticket-confirmation-outline"></i></div>
-                        <div class="preview-metric"><span>Payments completed</span><strong>3,954</strong><small>USD 810,000.00 successfully processed</small><i class="mdi mdi-check-circle-outline"></i></div>
                         <div class="preview-metric amber"><span>Pending approvals</span><strong>3</strong><small>Payment cycles awaiting a checker</small><i class="mdi mdi-clock-alert-outline"></i></div>
                         <div class="preview-metric slate"><span>Active officers</span><strong>38</strong><small>Currently enabled</small><i class="mdi mdi-account-check-outline"></i></div>
-                        <div class="preview-metric"><span>Registered fingerprints</span><strong>6,914</strong><small>Across accessible organizations</small><i class="mdi mdi-fingerprint"></i></div>
+                        <div class="preview-metric"><span>Registered fingerprints</span><strong>6,914</strong><small>Across accessible organizations · 1,204 faces scanned</small><i class="mdi mdi-fingerprint"></i></div>
                         <div class="preview-metric green"><span>Total generated</span><strong>USD 922,000.00</strong><small>18 non-rejected payment cycles</small><i class="mdi mdi-chart-line"></i></div>
                         <div class="preview-metric green"><span>Alternates registered</span><strong>612</strong><small>Active alternate recipients</small><i class="mdi mdi-account-check-outline"></i></div>
                       </div>
@@ -714,8 +710,13 @@ onBeforeUnmount(() => {
                             <div class="preview-plot">
                               <svg viewBox="0 0 360 112" preserveAspectRatio="none">
                                 <path class="chart-gridline" d="M0 4H360M0 30H360M0 56H360M0 82H360M0 108H360" />
-                                <g v-for="(series, seriesIndex) in chart.values" :key="seriesIndex">
-                                  <rect v-for="(value, day) in series" :key="day" :x="day * (360 / 7) + 11 + seriesIndex * 15" :y="108 - value / chart.max * 104" width="13" :height="value / chart.max * 104" :fill="chart.colors[seriesIndex]" />
+                                <g>
+                                  <rect v-for="(value, day) in chart.values[0]" :key="day" :x="day * (360 / 7) + 18" :y="108 - value / chart.max * 104" width="18" :height="value / chart.max * 104" :fill="chart.colors[0]" rx="2" />
+                                </g>
+                                <path class="preview-voucher-line" d="M18,108 C26.5,108 52,108.9 69,108 C86,107.1 102.8,102.8 120,102.8 C137.2,102.8 154.8,108 172,108 C189.2,108 205.8,102.8 223,102.8 C240.2,102.8 257.8,108.9 275,108 C292.2,107.1 317.5,99.3 326,97.6" />
+                                <g class="preview-voucher-points">
+                                  <circle cx="18" cy="108" r="2.2" /><circle cx="69" cy="108" r="2.2" /><circle cx="120" cy="102.8" r="2.2" />
+                                  <circle cx="172" cy="108" r="2.2" /><circle cx="223" cy="102.8" r="2.2" /><circle cx="275" cy="108" r="2.2" /><circle cx="326" cy="97.6" r="2.2" />
                                 </g>
                               </svg>
                               <div class="preview-x-axis"><span v-for="day in 7" :key="day">{{ day }}</span></div>
@@ -723,6 +724,25 @@ onBeforeUnmount(() => {
                           </div>
                           <p class="preview-chart-hint">Hover, tap or focus a date to see exact values.</p>
                           <div class="preview-chart-data"><i class="mdi mdi-chevron-right"></i> View all chart data</div>
+                        </div>
+
+                        <div class="preview-chart-card preview-registration-card">
+                          <header>
+                            <div><strong>Registration Trend</strong><p class="preview-chart-context">September 2026 · all registrations, including inactive records</p></div>
+                            <div class="preview-chart-controls"><div class="preview-calendar-row"><b class="preview-period">Month <i class="mdi mdi-chevron-down"></i></b><time>07/09/2026 <i class="mdi mdi-calendar-month-outline"></i></time></div></div>
+                          </header>
+                          <div class="preview-registration-chart" aria-hidden="true">
+                            <svg class="preview-registration-pie" viewBox="0 0 200 200">
+                              <path d="M100 100 L100 16 A84 84 0 1 1 38.7 42.5 Z" fill="#15803d" />
+                              <path d="M100 100 L38.7 42.5 A84 84 0 0 1 100 16 Z" fill="#0ea5e9" />
+                              <text x="120.7" y="151.8" text-anchor="middle">87%</text>
+                              <text x="79.3" y="56.2" text-anchor="middle">13%</text>
+                            </svg>
+                            <div class="preview-registration-legend">
+                              <div><i class="household"></i><span>Households</span><strong>286</strong></div>
+                              <div><i class="alternate"></i><span>Alternates</span><strong>42</strong></div>
+                            </div>
+                          </div>
                         </div>
                       </div>
 
@@ -808,10 +828,17 @@ onBeforeUnmount(() => {
                       <p class="preview-assignment-count">3 assignments ready</p>
                       <div class="preview-next-payment">
                         <i class="mdi mdi-account-multiple-outline"></i>
-                        <div><span>Next household</span><strong>Achieng Household</strong><span>HH-1002 ? PAY-2026-018</span></div>
+                        <div><span>Next household</span><strong>Achieng Household</strong><span>HH-1002 - Kijiji Village</span></div>
                         <b>USD 120</b>
                       </div>
                       <div class="preview-start-payment"><i class="mdi mdi-credit-card-outline"></i> Start payment</div>
+                    </section>
+
+                    <section class="preview-phone-card preview-vouchers">
+                      <header><b><i class="mdi mdi-ticket-confirmation-outline"></i> Vouchers</b></header>
+                      <strong>3 vouchers ready</strong>
+                      <p>Next: Otieno Household · Amount 85</p>
+                      <div><i class="mdi mdi-ticket-confirmation-outline"></i> View vouchers</div>
                     </section>
                   </div>
                   <nav class="preview-phone-nav">
@@ -1718,6 +1745,16 @@ onBeforeUnmount(() => {
 .landing-root .preview-chart-card svg { display: block; width: 100%; height: 11.2em; overflow: visible; }
 .landing-root .preview-x-axis { display: flex; justify-content: space-between; padding-top: 0.45em; color: #64748b; font-size: 0.72em; font-variant-numeric: tabular-nums; }
 .landing-root .chart-gridline { fill: none; stroke: #e7eeeb; stroke-width: 1; }
+.landing-root .preview-voucher-line { fill: none; stroke: #f59e0b; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.landing-root .preview-voucher-points { fill: #f59e0b; stroke: #fff; stroke-width: 1.5; }
+.landing-root .preview-registration-chart { min-height: 14.7em; display: grid; grid-template-columns: minmax(12em, 1fr) minmax(12em, .9fr); align-items: center; gap: 2em; padding: .7em 1.4em .2em; }
+.landing-root .preview-registration-pie { width: 12.8em; height: 12.8em; justify-self: center; }
+.landing-root .preview-registration-pie text { fill: #fff; stroke: rgba(15, 23, 42, .18); stroke-width: 1px; paint-order: stroke; font-size: 14px; font-weight: 750; }
+.landing-root .preview-registration-legend { display: grid; gap: 1.2em; }
+.landing-root .preview-registration-legend > div { display: grid; grid-template-columns: .9em minmax(0, 1fr) auto; align-items: center; gap: .65em; color: #334155; }
+.landing-root .preview-registration-legend i { width: .9em; aspect-ratio: 1; border-radius: 3px; background: #15803d; }
+.landing-root .preview-registration-legend i.alternate { background: #0ea5e9; }
+.landing-root .preview-registration-legend strong { color: #64748b; font-size: .88em; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .landing-root .preview-operations { display: grid; align-items: stretch; grid-template-columns: minmax(0, 1.45fr) minmax(0, 0.95fr); gap: 0.75em; margin-top: 0.75em; }
 .landing-root .preview-ranking,
 .landing-root .preview-recent,
@@ -1833,6 +1870,10 @@ onBeforeUnmount(() => {
 .landing-root .preview-field-actions > div > b { background: #006b5b; color: #fff; }
 .landing-root .preview-field-actions > div > span { border: 1px solid #e87918; color: #e87918; font-weight: 700; }
 .landing-root .preview-payment { background: #fff1d6; }
+.landing-root .preview-vouchers { background: #eaf8f5; }
+.landing-root .preview-vouchers > strong { display: block; margin-top: .9em; color: #006b5b; }
+.landing-root .preview-vouchers > p { margin-top: .4em; color: #52615d; }
+.landing-root .preview-vouchers > div { display: flex; align-items: center; justify-content: center; gap: .55em; min-height: 3.8em; margin-top: 1em; border-radius: 7px; background: #e87918; color: #331300; font-weight: 700; }
 .landing-root .preview-phone-nav { position: relative; min-height: 5.8em; display: grid; grid-template-columns: repeat(5, 1fr); align-items: stretch; padding: 0.3em 0.45em 0.55em; background: #fff; box-shadow: 0 -8px 20px -18px rgba(23, 32, 30, 0.8); }
 .landing-root .preview-phone-nav > div { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 0.18em; color: #52615d; }
 .landing-root .preview-phone-nav > div i { font-size: 1.45em; line-height: 1; }

@@ -311,13 +311,13 @@ function openView(cycle: Cycle) {
     <v-card variant="flat" border>
       <v-card-text>
         <v-row dense align="center">
-          <v-col v-if="anchorGateActive" cols="12" sm="4" md="3">
+          <v-col v-if="anchorGateActive" cols="12" sm="4" md="2">
             <v-select v-model="selectedAnchorId" :items="anchors" item-title="name" item-value="id" label="Anchor" clearable hide-details density="compact" prepend-inner-icon="mdi-bank-outline" />
           </v-col>
-          <v-col v-if="auth.isSystemAdmin || auth.isAnchorAdministrator" cols="12" sm="4" md="3">
+          <v-col v-if="auth.isSystemAdmin || auth.isAnchorAdministrator" cols="12" sm="4" md="2">
             <v-select v-model="organisationFilter" :items="organizations" item-title="name" item-value="organisationCode" label="Organisation" clearable hide-details density="compact" />
           </v-col>
-          <v-col cols="6" sm="4" md="3">
+          <v-col cols="6" sm="4" md="2">
             <v-select
               v-model="statusFilter"
               :items="['DRAFT', 'PENDING_APPROVAL', 'APPROVED', 'DISBURSED', 'REJECTED']"
@@ -328,7 +328,7 @@ function openView(cycle: Cycle) {
             <v-text-field v-model="tableSearch" prepend-inner-icon="mdi-magnify" label="Search" clearable hide-details density="compact" />
           </v-col>
           <v-col cols="auto" class="filter-actions">
-            <v-btn class="filter-submit" color="primary" @click="load">Submit</v-btn>
+            <v-btn class="filter-submit" color="secondary" @click="load">Submit</v-btn>
             <v-btn variant="text" size="small" @click="clearFilters">Clear filters</v-btn>
           </v-col>
         </v-row>

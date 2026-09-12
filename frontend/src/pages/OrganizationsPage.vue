@@ -38,7 +38,7 @@ const dialog = ref(false)
 const editing = ref(false)
 const saving = ref(false)
 const form = ref({
-  organisationCode: '', name: '', authorisedName: '', authorisedEmail: '', authorisedContact: '', address: '',
+  organisationCode: '', name: '', authorisedName: '', authorisedFirstName: '', authorisedSurname: '', authorisedEmail: '', authorisedContact: '', address: '',
   country: '', capitalCity: '', verificationMethod: 'BIOMETRIC', anchorId: null as number | null,
   modules: [] as string[],
 })
@@ -108,7 +108,7 @@ onMounted(async () => { await loadAnchors(); await load() })
 function openCreate() {
   editing.value = false
   form.value = {
-    organisationCode: '', name: '', authorisedName: '', authorisedEmail: '', authorisedContact: '', address: '',
+    organisationCode: '', name: '', authorisedName: '', authorisedFirstName: '', authorisedSurname: '', authorisedEmail: '', authorisedContact: '', address: '',
     country: '', capitalCity: '', verificationMethod: 'BIOMETRIC', anchorId: selectedAnchorId.value, modules: [],
   }
   dialog.value = true
@@ -118,7 +118,8 @@ async function openEdit(org: Organization) {
   editing.value = true
   form.value = {
     organisationCode: org.organisationCode, name: org.name,
-    authorisedName: org.authorisedName ?? '', authorisedEmail: org.authorisedEmail ?? '',
+    authorisedName: org.authorisedName ?? '', authorisedFirstName: '', authorisedSurname: '',
+    authorisedEmail: org.authorisedEmail ?? '',
     authorisedContact: org.authorisedContact ?? '', address: org.address ?? '',
     country: org.country ?? '', capitalCity: org.capitalCity ?? '', verificationMethod: org.verificationMethod ?? 'BIOMETRIC',
     anchorId: org.anchorId ?? null, modules: [],
@@ -252,7 +253,11 @@ async function toggleStatus(org: Organization) {
 
             <section class="form-group" aria-labelledby="contact-details-heading">
               <div id="contact-details-heading" class="form-group-title"><v-icon icon="mdi-account-outline" size="19" /> Authorized contact</div>
-              <v-text-field v-model="form.authorisedName" label="Contact name" placeholder="e.g. Amina Yusuf" density="compact" hide-details="auto" />
+              <v-text-field v-if="editing" v-model="form.authorisedName" label="Contact name" placeholder="e.g. Amina Yusuf" density="compact" hide-details="auto" />
+              <template v-else>
+                <v-text-field v-model="form.authorisedFirstName" label="Contact first name" placeholder="e.g. Amina" density="compact" hide-details="auto" />
+                <v-text-field v-model="form.authorisedSurname" label="Contact surname" placeholder="e.g. Yusuf" density="compact" hide-details="auto" />
+              </template>
               <v-text-field
                 v-model="form.authorisedEmail" :label="editing ? 'Email' : 'Email (used to sign in)'"
                 placeholder="e.g. amina@brightfuture.org" type="email" :rules="[emailRule]" density="compact" hide-details="auto"
@@ -304,7 +309,7 @@ async function toggleStatus(org: Organization) {
             label="Status" clearable hide-details density="compact" style="max-width: 220px"
           />
           <v-text-field v-model="tableSearch" prepend-inner-icon="mdi-magnify" label="Search" clearable hide-details density="compact" style="max-width: 260px" />
-          <v-btn class="filter-submit" color="primary" @click="load">Submit</v-btn>
+          <v-btn class="filter-submit" color="secondary" @click="load">Submit</v-btn>
         </div>
       </v-card-text>
       <v-data-table :headers="headers" :items="organizations" :search="tableSearch" :loading="loading">

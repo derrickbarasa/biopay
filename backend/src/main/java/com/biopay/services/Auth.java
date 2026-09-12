@@ -65,6 +65,7 @@ public class Auth extends AbstractVerticle {
         eventBus.consumer("REQUEST_LOGIN_OTP", this::requestLoginOtp);
         eventBus.consumer("VERIFY_LOGIN_OTP", this::verifyLoginOtp);
         eventBus.consumer("SIGNUP_ANCHOR", this::signupAnchor);
+        eventBus.consumer("API_TOKEN", this::apiToken);
         eventBus.consumer("REQUEST_PASSWORD_RESET", this::requestPasswordReset);
         eventBus.consumer("RESET_PASSWORD", this::resetPassword);
         eventBus.consumer("REFRESH_TOKEN", this::refreshToken);
@@ -392,7 +393,8 @@ public class Auth extends AbstractVerticle {
                 .put("anchorId", anchorId)
                 .put("partnerCode", partnerCode)
                 .put("email", email)
-                .put("systemAdmin", systemAdmin);
+                .put("systemAdmin", systemAdmin)
+                .put("channel", "PORTAL");
 
         // issueTokens (mints the JWT + one INSERT for the refresh token) has no data
         // dependency on the permissions/modules lookups -- starting all three at once
@@ -416,7 +418,7 @@ public class Auth extends AbstractVerticle {
                                     .put("id", userId)
                                     .put("email", email)
                                     .put("firstName", Rows.str(r, "first_name"))
-                                    .put("otherNames", Rows.str(r, "other_names"))
+                                    .put("surname", Rows.str(r, "surname"))
                                     .put("role", scope)
                                     .put("anchorId", anchorId)
                                     .put("partnerCode", partnerCode)
@@ -434,7 +436,8 @@ public class Auth extends AbstractVerticle {
     private void signupAnchor(Message<Object> message) {
         JsonObject payload = new JsonObject(message.body().toString());
         String name = payload.getString("name", "").trim();
-        String authorisedName = payload.getString("authorisedName", "").trim();
+        String authorisedFirstName = payload.getString("authorisedFirstName", "").trim();
+        String authorisedSurname = payload.getString("authorisedSurname", "").trim();
         String email = payload.getString("email", "").trim().toLowerCase();
         String phone = payload.getString("phone", "").trim();
         String address = payload.getString("address", "").trim();
@@ -453,26 +456,29 @@ public class Auth extends AbstractVerticle {
                         replyError(message, "An account with this email already exists");
                         return;
                     }
-                    createAnchorAccount(message, name, authorisedName, email, phone, address, password,
+                    createAnchorAccount(message, name, authorisedFirstName, authorisedSurname, email, phone, address, password,
                             payload.getString("ipAddress", ""));
                 });
     }
 
-    private void createAnchorAccount(Message<Object> message, String name, String authorisedName, String email,
-            String phone, String address, String password, String ip) {
+    private void createAnchorAccount(Message<Object> message, String name, String authorisedFirstName, String authorisedSurname,
+            String email, String phone, String address, String password, String ip) {
         String passwordHash = Passwords.hash(password);
-        String displayName = authorisedName.isEmpty() ? name : authorisedName;
+        // No authorised first name given -- fall back to the anchor's own business name (as
+        // before), with no surname to go with it since there's no person's name to split.
+        String displayFirstName = authorisedFirstName.isEmpty() ? name : authorisedFirstName;
+        String surname = authorisedFirstName.isEmpty() ? "" : authorisedSurname;
 
         // An anchor is its Anchor Administrator's own row in `users` -- signup creates one
         // row, self-referencing anchor_id to its own id, instead of a separate anchors row.
         Utilities.nextAnchorCode(pool).compose(anchorCode -> pool.withTransaction(connection -> connection.preparedQuery(
-                        "INSERT INTO users (email, username, password, first_name, other_names, "
+                        "INSERT INTO users (email, username, password, first_name, surname, "
                                 + "role_id, active, status, user_scope, anchor_code, anchor_name, phone, address, created_at, updated_at) "
                                 + "OUTPUT INSERTED.id "
-                                + "VALUES (@p1, @p1, @p2, @p3, '', "
+                                + "VALUES (@p1, @p1, @p2, @p3, @p4, "
                                 + "(SELECT TOP 1 id FROM roles WHERE role_name='Anchor Administrator' AND status=1), "
-                                + "1, 1, 'ANCHOR', @p4, @p5, @p6, @p7, GETDATE(), GETDATE())")
-                .execute(Tuple.of(email, passwordHash, displayName, anchorCode, name, phone, address))
+                                + "1, 1, 'ANCHOR', @p5, @p6, @p7, @p8, GETDATE(), GETDATE())")
+                .execute(Tuple.of(email, passwordHash, displayFirstName, surname, anchorCode, name, phone, address))
                 .map(rows -> intOr(rows.iterator().next(), "id", 0))
                 .compose(userId -> connection.preparedQuery("UPDATE users SET anchor_id=id WHERE id=@p1")
                         .execute(Tuple.of(userId))
@@ -487,6 +493,68 @@ public class Auth extends AbstractVerticle {
                     } else {
                         finishLogin(message, userId, ip);
                     }
+                });
+    }
+
+    // ---- API_TOKEN (public: exchanges an API client's key + secret for a session) --------
+    //
+    // A machine credential, not a person -- no OTP step, and no refresh-token rotation
+    // dance in the frontend sense, though it reuses the same refresh_tokens mechanism so a
+    // long-running integration can keep a session alive via the existing REFRESH_TOKEN code
+    // instead of resending its secret on every call.
+
+    private void apiToken(Message<Object> message) {
+        JsonObject payload = new JsonObject(message.body().toString());
+        String keyId = payload.getString("keyId", "").trim();
+        String secret = payload.getString("secret", "");
+        String ip = payload.getString("ipAddress", "");
+        if (keyId.isEmpty() || secret.isEmpty()) {
+            replyError(message, "keyId and secret are required");
+            return;
+        }
+        pool.preparedQuery("SELECT * FROM users WHERE username=@p1 AND account_type='API'")
+                .execute(Tuple.of(keyId))
+                .onFailure(err -> onDbError(message, err))
+                .onSuccess(rows -> {
+                    if (rows.size() == 0) {
+                        replyError(message, "Invalid API credentials");
+                        return;
+                    }
+                    Row r = rows.iterator().next();
+                    int clientId = intOr(r, "id", 0);
+                    Integer anchorId = intOr(r, "anchor_id", null);
+                    String partnerCode = Rows.str(r, "organization_code");
+                    if (r.getInteger("status") == null || r.getInteger("status") != 1 || !Boolean.TRUE.equals(r.getBoolean("active"))) {
+                        audit(clientId, anchorId, "API", partnerCode, "API_TOKEN_DENIED", ip, new JsonObject().put("reason", "inactive"), "API");
+                        replyError(message, "This API client has been revoked");
+                        return;
+                    }
+                    if (!Passwords.verify(secret, Rows.str(r, "password"))) {
+                        audit(clientId, anchorId, "API", partnerCode, "API_TOKEN_DENIED", ip, new JsonObject().put("reason", "bad_secret"), "API");
+                        replyError(message, "Invalid API credentials");
+                        return;
+                    }
+                    String scope = Rows.str(r, "user_scope");
+                    JsonObject claims = new JsonObject()
+                            .put("sub", clientId)
+                            .put("role", scope)
+                            .put("anchorId", anchorId)
+                            .put("partnerCode", "ORGANISATION".equalsIgnoreCase(scope) ? partnerCode : null)
+                            .put("systemAdmin", false)
+                            .put("channel", "API");
+                    issueTokens("API", clientId, claims)
+                            .onFailure(err -> onDbError(message, err))
+                            .onSuccess(tokens -> {
+                                pool.preparedQuery("UPDATE users SET last_login_at=GETDATE() WHERE id=@p1")
+                                        .execute(Tuple.of(clientId));
+                                audit(clientId, anchorId, "API", partnerCode, "API_TOKEN_ISSUED", ip, new JsonObject(), "API");
+                                reply(message, new JsonObject()
+                                        .put("responseCode", "000")
+                                        .put("responseMessage", "Token issued")
+                                        .put("accessToken", tokens.getString("accessToken"))
+                                        .put("refreshToken", tokens.getString("refreshToken"))
+                                        .put("expiresIn", tokens.getInteger("expiresIn")));
+                            });
                 });
     }
 
@@ -512,7 +580,7 @@ public class Auth extends AbstractVerticle {
         boolean supervisor = "SUPERVISOR".equalsIgnoreCase(actorRole);
         String sql = supervisor
                 ? "UPDATE field_officers SET firstname=@p1, lastname=@p2 WHERE id=@p3"
-                : "UPDATE users SET first_name=@p1, other_names=@p2, updated_at=GETDATE() WHERE id=@p3";
+                : "UPDATE users SET first_name=@p1, surname=@p2, updated_at=GETDATE() WHERE id=@p3";
 
         pool.preparedQuery(sql)
                 .execute(Tuple.of(firstName, lastName, actorId))
@@ -662,7 +730,8 @@ public class Auth extends AbstractVerticle {
                             .put("role", "SUPERVISOR")
                             .put("anchorId", anchorId)
                             .put("partnerCode", partnerCode)
-                            .put("email", email);
+                            .put("email", email)
+                            .put("channel", "PORTAL");
 
                     // Same fix as the web login path: issueTokens has no data dependency on
                     // the modules/verification-method lookups, so start all three at once
@@ -772,7 +841,8 @@ public class Auth extends AbstractVerticle {
                                 .put("role", "SUPERVISOR")
                                 .put("anchorId", intOr(r, "anchor_id", null))
                                 .put("partnerCode", Rows.str(r, "organization_code"))
-                                .put("email", Rows.str(r, "email"));
+                                .put("email", Rows.str(r, "email"))
+                                .put("channel", "PORTAL");
                     });
         }
         return pool.preparedQuery("SELECT * FROM users WHERE id = @p1")
@@ -783,13 +853,17 @@ public class Auth extends AbstractVerticle {
                     }
                     Row r = rows.iterator().next();
                     String scope = Rows.str(r, "user_scope");
+                    // Re-derived from the row (not carried over from the old token) so a client
+                    // whose account_type changes still gets an accurate channel on refresh.
+                    String channel = "API".equalsIgnoreCase(Rows.str(r, "account_type")) ? "API" : "PORTAL";
                     return new JsonObject()
                             .put("sub", subjectId)
                             .put("role", scope)
                             .put("anchorId", intOr(r, "anchor_id", null))
                             .put("partnerCode", "ORGANISATION".equalsIgnoreCase(scope) ? Rows.str(r, "organization_code") : null)
                             .put("email", Rows.str(r, "email"))
-                            .put("systemAdmin", Boolean.TRUE.equals(r.getBoolean("is_system_admin")));
+                            .put("systemAdmin", Boolean.TRUE.equals(r.getBoolean("is_system_admin")))
+                            .put("channel", channel);
                 });
     }
 
@@ -907,7 +981,7 @@ public class Auth extends AbstractVerticle {
                                     .put("id", actorId)
                                     .put("email", Rows.str(r, "email"))
                                     .put("firstName", Rows.str(r, "first_name"))
-                                    .put("otherNames", Rows.str(r, "other_names"))
+                                    .put("surname", Rows.str(r, "surname"))
                                     .put("role", scope)
                                     .put("anchorId", intOr(r, "anchor_id", null))
                                     .put("partnerCode", partnerCode)
@@ -1128,13 +1202,20 @@ public class Auth extends AbstractVerticle {
                 .recover(err -> Future.succeededFuture(perms));
     }
 
-    /** Best-effort audit write -- never blocks or fails the caller's flow. */
+    /** Best-effort audit write -- never blocks or fails the caller's flow. Every existing call
+     *  site is an interactive human login/signup attempt (web dashboard or field-officer app),
+     *  so it defaults to the PORTAL channel; only API_TOKEN issuance passes API explicitly. */
     private void audit(Integer actorId, Integer anchorId, String actorType, String partnerCode,
             String action, String ip, JsonObject details) {
-        String sql = "INSERT INTO audit_logs (actor_type, actor_id, anchor_id, organization_code, action, details, ip_address, created_at) "
-                + "VALUES (@p1, @p2, @p3, @p4, @p5, @p6, @p7, GETDATE())";
+        audit(actorId, anchorId, actorType, partnerCode, action, ip, details, "PORTAL");
+    }
+
+    private void audit(Integer actorId, Integer anchorId, String actorType, String partnerCode,
+            String action, String ip, JsonObject details, String channel) {
+        String sql = "INSERT INTO audit_logs (actor_type, actor_id, anchor_id, organization_code, action, details, ip_address, channel, created_at) "
+                + "VALUES (@p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, GETDATE())";
         pool.preparedQuery(sql)
-                .execute(Tuple.of(actorType, actorId, anchorId, partnerCode, action, details.encode(), ip))
+                .execute(Tuple.of(actorType, actorId, anchorId, partnerCode, action, details.encode(), ip, channel))
                 .onFailure(err -> Logging.applicationLog(Logging.logPreString() + "Audit write failed: " + err.getMessage() + "\n\n", "", 3));
     }
 }

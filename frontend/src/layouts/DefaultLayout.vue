@@ -129,6 +129,7 @@ const navSections: NavSection[] = [
     title: 'User Management',
     items: [
       { title: 'Users', icon: 'mdi-account-multiple-outline', to: '/app/users', roles: ['ANCHOR', 'ORGANISATION'], permission: 'ACCESS_USERS' },
+      { title: 'API Access', icon: 'mdi-key-outline', to: '/app/api-access', roles: ['ANCHOR', 'ORGANISATION'], permission: 'ACCESS_USERS' },
       { title: 'Field Officers', icon: 'mdi-account-tie', to: '/app/officers', roles: ['ANCHOR', 'ORGANISATION'], permission: 'ACCESS_SUPERVISORS' },
       { title: 'Roles & Permissions', icon: 'mdi-shield-account-outline', to: '/app/roles', roles: ['ANCHOR'], permission: 'ACCESS_ROLES' },
       { title: 'Subscription', icon: 'mdi-credit-card-outline', to: '/app/subscription', roles: ['ANCHOR'], anchorSubscription: true, permission: 'ACCESS_SUBSCRIPTION' },

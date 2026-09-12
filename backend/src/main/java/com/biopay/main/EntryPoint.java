@@ -160,6 +160,7 @@ public class EntryPoint extends AbstractVerticle {
                             "REQUEST_LOGIN_OTP", "VERIFY_LOGIN_OTP", "SIGNUP_ANCHOR",
                             "REQUEST_PASSWORD_RESET", "RESET_PASSWORD",
                             "GET_EMAIL_APPROVAL", "CONFIRM_EMAIL_APPROVAL",
+                            "API_TOKEN",
                     };
                     if (!Arrays.asList(publicCodes).contains(processingCode)) {
                         response.setStatusCode(401).end(new JsonObject()
@@ -255,6 +256,7 @@ public class EntryPoint extends AbstractVerticle {
                     data.put("anchorId", systemOwner && requestedAnchorId != null ? requestedAnchorId : sessionAnchorId);
                     data.put("partnerCode", principal.getValue("partnerCode"));
                     data.put("systemAdmin", systemOwner);
+                    data.put("channel", principal.getString("channel", "PORTAL"));
 
                     String processingCode = data.getString("processingCode", "").trim();
                     if (processingCode.isEmpty()) {

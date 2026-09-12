@@ -17,6 +17,8 @@ public final class PermissionPolicy {
             Map.entry("GET_USERS", "ACCESS_USERS"), Map.entry("GET_USER", "ACCESS_USERS"),
             Map.entry("CREATE_USER", "ACCESS_USERS"), Map.entry("UPDATE_USER", "ACCESS_USERS"),
             Map.entry("TOGGLE_USER_STATUS", "ACCESS_USERS"),
+            Map.entry("GET_API_CLIENTS", "ACCESS_USERS"), Map.entry("CREATE_API_CLIENT", "ACCESS_USERS"),
+            Map.entry("TOGGLE_API_CLIENT_STATUS", "ACCESS_USERS"),
             Map.entry("GET_ROLES", "ACCESS_ROLES"), Map.entry("SAVE_ROLE", "ACCESS_ROLES"), Map.entry("DELETE_ROLE", "ACCESS_ROLES"),
             Map.entry("GET_PERMISSIONS", "ACCESS_PERMISSIONS"), Map.entry("CREATE_PERMISSION", "ACCESS_PERMISSIONS"),
             Map.entry("DELETE_PERMISSION", "ACCESS_PERMISSIONS"),

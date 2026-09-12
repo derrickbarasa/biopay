@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { dispatch } from '@/api/client'
 import { useToast } from '@/composables/useToast'
 import { useConfirm } from '@/composables/useConfirm'
@@ -25,7 +25,6 @@ const creatingPermission = ref(false)
 const roles = ref<Role[]>([])
 const permissions = ref<Permission[]>([])
 const anchors = ref<Anchor[]>([])
-const selectedAnchorId = ref<number | null>(null)
 const tableSearch = ref('')
 const permissionSearch = ref('')
 const dialog = ref(false)
@@ -99,7 +98,7 @@ const headers = computed(() => [
   { title: 'Description', key: 'description' },
   { title: 'Scope', key: 'scope' },
   { title: 'Permissions', key: 'permissionCount' },
-  ...(auth.isSystemAdmin && !selectedAnchorId.value ? [{ title: 'Anchor', key: 'anchorName' }] : []),
+  ...(auth.isSystemAdmin ? [{ title: 'Anchor', key: 'anchorName' }] : []),
   { title: 'Actions', key: 'actions', sortable: false, align: 'end' as const },
 ])
 const tableRows = computed(() => sortedRoles.value.map((role) => ({
@@ -113,7 +112,7 @@ async function load(preferredRoleId?: number | null) {
   loading.value = true
   try {
     const [roleResponse, permissionResponse] = await Promise.all([
-      dispatch<{ results: Role[] }>('GET_ROLES', auth.isSystemAdmin ? { targetAnchorId: selectedAnchorId.value } : {}),
+      dispatch<{ results: Role[] }>('GET_ROLES', {}),
       dispatch<{ results: Permission[] }>('GET_PERMISSIONS'),
     ])
     roles.value = roleResponse.results ?? []
@@ -148,7 +147,7 @@ function openEdit(role: Role) {
 }
 
 function createRole() {
-  Object.assign(form, { roleId: null, name: '', description: '', scope: 'ORGANISATION', permissionIds: [], anchorId: selectedAnchorId.value })
+  Object.assign(form, { roleId: null, name: '', description: '', scope: 'ORGANISATION', permissionIds: [], anchorId: null })
   permissionSearch.value = ''
   openModules.value = permissionGroups.value.map((g) => g.key)
   dialog.value = true
@@ -189,7 +188,7 @@ async function removeRole(role: Role) {
     color: 'error',
   })) return
   try {
-    await dispatch('DELETE_ROLE', { roleId: role.id, targetAnchorId: auth.isSystemAdmin ? selectedAnchorId.value : undefined })
+    await dispatch('DELETE_ROLE', { roleId: role.id })
     toast.success('Role deleted')
     dialog.value = false
     await load()
@@ -244,7 +243,6 @@ onMounted(async () => {
   }
   await load()
 })
-watch(selectedAnchorId, () => void load())
 </script>
 
 <template>
@@ -255,18 +253,12 @@ watch(selectedAnchorId, () => void load())
         <p>{{ auth.isSystemAdmin ? "Every anchor's roles, in one place." : 'Create a role, then choose what it can access.' }}</p>
       </div>
       <div class="d-flex ga-2">
-        <v-btn v-if="auth.isSystemAdmin" variant="outlined" prepend-icon="mdi-shield-plus-outline" @click="openCreatePermission">Create permission</v-btn>
+        <v-btn v-if="auth.isSystemAdmin" color="success" prepend-icon="mdi-shield-plus-outline" class="justify-center" @click="openCreatePermission">Create permission</v-btn>
         <v-btn v-if="auth.can('ACCESS_ROLES')" color="secondary" prepend-icon="mdi-plus" @click="createRole">New role</v-btn>
       </div>
     </div>
 
     <v-card variant="flat" border>
-      <v-card-text v-if="auth.isSystemAdmin">
-        <v-select
-          v-model="selectedAnchorId" :items="anchors" item-title="name" item-value="id" clearable
-          label="Anchor" density="compact" hide-details style="max-width: 260px" prepend-inner-icon="mdi-bank-outline"
-        />
-      </v-card-text>
       <v-data-table :headers="headers" :items="tableRows" :search="tableSearch" :loading="loading">
         <template #item.scope="{ item }"><v-chip size="small" variant="tonal">{{ scopeLabel(item.scope) }}</v-chip></template>
         <template #item.permissionCount="{ item }">{{ item.systemRole ? 'Unlimited' : item.permissionCount }}</template>

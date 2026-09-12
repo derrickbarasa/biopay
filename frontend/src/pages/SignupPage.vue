@@ -9,7 +9,7 @@ const router = useRouter()
 const toast = useToast()
 
 const form = ref({
-  name: '', authorisedName: '', email: '', phone: '', address: '',
+  name: '', authorisedFirstName: '', authorisedSurname: '', email: '', phone: '', address: '',
   password: '', confirmPassword: '',
 })
 const showPassword = ref(false)
@@ -93,7 +93,8 @@ async function handleSubmit() {
               </v-alert>
 
               <v-text-field v-model="form.name" label="Anchor name" :rules="[rules.required]" />
-              <v-text-field v-model="form.authorisedName" label="Your name (authorised contact)" />
+              <v-text-field v-model="form.authorisedFirstName" label="Your first name (authorised contact)" />
+              <v-text-field v-model="form.authorisedSurname" label="Your surname" />
               <v-text-field v-model="form.email" label="Email" :rules="[rules.required, rules.email]" autocomplete="username" />
               <v-text-field v-model="form.phone" label="Phone (optional)" />
               <v-text-field v-model="form.address" label="Address (optional)" />

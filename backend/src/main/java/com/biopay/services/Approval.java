@@ -123,7 +123,7 @@ public class Approval extends AbstractVerticle {
         String organizationJoin = "PAYROLL".equals(type)
                 ? ""
                 : "JOIN organizations o ON o.organization_code=@p2 AND o.status=1 ";
-        String sql = "SELECT DISTINCT u.id, u.email, u.first_name, u.other_names FROM users u "
+        String sql = "SELECT DISTINCT u.id, u.email, u.first_name, u.surname FROM users u "
                 + organizationJoin
                 + "JOIN role_permissions rp ON rp.role_id=u.role_id AND rp.status=1 "
                 + "JOIN permissions p ON p.id=rp.permission_id AND p.permission_name=@p1 "
@@ -182,8 +182,8 @@ public class Approval extends AbstractVerticle {
 
     private static String displayName(Row approver) {
         String firstName = Rows.str(approver, "first_name");
-        String otherNames = Rows.str(approver, "other_names");
-        return ((firstName == null ? "" : firstName) + " " + (otherNames == null ? "" : otherNames)).trim();
+        String surname = Rows.str(approver, "surname");
+        return ((firstName == null ? "" : firstName) + " " + (surname == null ? "" : surname)).trim();
     }
 
     private void getRequest(Message<Object> message) {

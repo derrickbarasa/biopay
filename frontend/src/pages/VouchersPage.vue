@@ -352,7 +352,7 @@ function statusColor(status: string) {
       <h1 class="page-title">Vouchers</h1>
       <div v-if="scopeReady" class="d-flex ga-2">
         <v-btn v-if="auth.can('ACCESS_VOUCHERS')" variant="outlined" prepend-icon="mdi-file-upload" @click="openBulk">Bulk Issue</v-btn>
-        <v-btn v-if="auth.can('ACCESS_VOUCHERS')" color="secondary" prepend-icon="mdi-map-marker-radius-outline" @click="router.push({ name: 'voucher-generate' })">Generate by Area</v-btn>
+        <v-btn v-if="auth.can('ACCESS_VOUCHERS')" color="primary" prepend-icon="mdi-map-marker-radius-outline" @click="router.push({ name: 'voucher-generate' })">Generate by Area</v-btn>
         <v-btn v-if="auth.can('ACCESS_VOUCHERS')" color="secondary" prepend-icon="mdi-ticket-confirmation-outline" @click="openIssue">Issue Voucher</v-btn>
       </div>
     </div>
@@ -401,7 +401,7 @@ function statusColor(status: string) {
         />
         <v-select v-model="statusFilter" :items="['ISSUED', 'REDEEMED', 'VOID']" label="Status" clearable hide-details density="compact" style="max-width: 200px" />
         <v-text-field v-model="tableSearch" prepend-inner-icon="mdi-magnify" label="Search" clearable hide-details density="compact" style="max-width: 220px" />
-        <v-btn class="filter-submit" color="primary" @click="load">Submit</v-btn>
+        <v-btn class="filter-submit" color="secondary" @click="load">Submit</v-btn>
       </v-card-text>
       <v-data-table :headers="headers" :items="vouchers" :search="tableSearch" :loading="loading">
         <template #item.householdName="{ item }">{{ item.householdName || '—' }}</template>

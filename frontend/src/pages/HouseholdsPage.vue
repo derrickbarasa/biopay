@@ -505,7 +505,7 @@ async function submitBulk() {
             />
           </v-col>
           <v-col cols="auto" class="filter-actions">
-            <v-btn class="filter-submit" color="primary" @click="load">Submit</v-btn>
+            <v-btn class="filter-submit" color="secondary" @click="load">Submit</v-btn>
             <v-btn variant="text" size="small" @click="clearFilters">Clear filters</v-btn>
           </v-col>
         </v-row>

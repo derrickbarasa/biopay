@@ -24,7 +24,7 @@ const showConfirmPassword = ref(false)
 const saving = ref(false)
 const savingProfile = ref(false)
 const profileFirstName = ref(auth.user?.firstName ?? '')
-const profileLastName = ref(auth.user?.lastName ?? auth.user?.otherNames ?? '')
+const profileLastName = ref(auth.user?.lastName ?? auth.user?.surname ?? '')
 const organizationName = ref('')
 
 onMounted(async () => {
@@ -221,14 +221,16 @@ async function confirmEmailDisable() {
         <v-btn icon="mdi-close" variant="text" size="small" aria-label="Close" @click="activeSection = null" />
       </v-card-title>
       <v-card-text class="pl-0">
-        <v-text-field v-model="profileFirstName" label="First name" autocomplete="given-name" />
-        <v-text-field v-model="profileLastName" label="Last name" autocomplete="family-name" />
-        <v-text-field
-          :model-value="auth.user?.email" label="Email address" readonly
-          :hint="auth.isSystemAdmin ? 'Sign-in email cannot be changed here.' : 'Contact your anchor or organisation administrator to change the sign-in email.'"
-          persistent-hint
-        />
-        <v-text-field :model-value="auth.roleLabel" label="Role" readonly hint="Contact your administrator to change your role." persistent-hint class="mt-2" />
+        <div class="profile-grid">
+          <v-text-field v-model="profileFirstName" label="First name" autocomplete="given-name" />
+          <v-text-field v-model="profileLastName" label="Last name" autocomplete="family-name" />
+          <v-text-field
+            :model-value="auth.user?.email" label="Email address" readonly
+            :hint="auth.isSystemAdmin ? 'Sign-in email cannot be changed here.' : 'Contact your anchor or organisation administrator to change the sign-in email.'"
+            persistent-hint
+          />
+          <v-text-field :model-value="auth.roleLabel" label="Role" readonly hint="Contact your administrator to change your role." persistent-hint />
+        </div>
         <v-btn color="secondary" class="mt-4" :loading="savingProfile" @click="saveProfile">Save profile</v-btn>
       </v-card-text>
     </v-card>
@@ -400,6 +402,8 @@ async function confirmEmailDisable() {
 .identity-card { border-radius: 14px !important; }
 .min-width-0 { min-width: 0; }
 .section-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; }
+.profile-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 16px; }
+@media (max-width: 560px) { .profile-grid { grid-template-columns: 1fr; } }
 .section-tile {
   display: flex; align-items: center; gap: 12px; padding: 14px; border: 1px solid #0f172a; border-radius: 10px;
   background: #fff; color: #0f172a; text-align: left; cursor: pointer; transition: background 150ms ease, color 150ms ease;

@@ -212,14 +212,13 @@ const alternatePeriodTotal = computed(() => alternatesSeries.value.reduce((total
   <div class="dashboard-page">
     <header class="dashboard-heading">
       <div class="heading-copy">
-        <img src="/biopay_logo_horizontal.svg" alt="BioPay" class="dashboard-logo" />
         <h1 class="page-title">Welcome back, {{ auth.fullName }}</h1>
       </div>
       <div class="dashboard-actions">
         <v-btn size="small" variant="text" prepend-icon="mdi-refresh" :loading="loading" @click="load">Refresh</v-btn>
-        <v-btn v-if="auth.isAnchor && auth.can('ACCESS_ORGANISATIONS')" size="small" color="secondary" prepend-icon="mdi-domain-plus" @click="router.push('/app/organizations')">New Organization</v-btn>
-        <v-btn v-if="auth.hasModule('CASH_TRANSFERS') && auth.can('ACCESS_PAYMENT_CYCLES')" size="small" color="secondary" prepend-icon="mdi-calendar-month-outline" @click="router.push('/app/payroll/generate')">Generate Payment Cycle</v-btn>
-        <v-btn v-if="auth.hasModule('VOUCHERS') && auth.can('ACCESS_VOUCHERS')" size="small" color="secondary" variant="tonal" prepend-icon="mdi-ticket-confirmation-outline" @click="router.push('/app/vouchers')">Issue Voucher</v-btn>
+        <v-btn v-if="auth.isAnchor && auth.can('ACCESS_ORGANISATIONS')" size="small" color="primary" variant="tonal" prepend-icon="mdi-domain-plus" @click="router.push('/app/organizations')">New Organization</v-btn>
+        <v-btn v-if="auth.hasModule('CASH_TRANSFERS') && auth.can('ACCESS_PAYMENT_CYCLES')" size="small" color="secondary" variant="tonal" prepend-icon="mdi-calendar-month-outline" @click="router.push('/app/payroll/generate')">Generate Payment Cycle</v-btn>
+        <v-btn v-if="auth.hasModule('VOUCHERS') && auth.can('ACCESS_VOUCHERS')" size="small" color="success" variant="tonal" prepend-icon="mdi-ticket-confirmation-outline" @click="router.push('/app/vouchers')">Issue Voucher</v-btn>
       </div>
     </header>
 
@@ -281,7 +280,7 @@ const alternatePeriodTotal = computed(() => alternatesSeries.value.reduce((total
           <PieChart
             v-if="!registrationChartLoading && !registrationChartError"
             :data="[{ label: 'Households', value: householdPeriodTotal }, { label: 'Alternates', value: alternatePeriodTotal }]"
-            :colors="['#15803D', '#0EA5E9']" variant="pie" :size="200" centered class="pie-panel-chart"
+            :colors="['#15803D', '#0EA5E9']" variant="pie" :size="200" centered show-labels :show-legend-percent="false" class="pie-panel-chart"
           />
         </v-card>
       </section>
@@ -355,7 +354,6 @@ const alternatePeriodTotal = computed(() => alternatesSeries.value.reduce((total
 .dashboard-page { color: #0f172a; font-size: .9375rem; }
 .dashboard-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; margin-bottom: 14px; }
 .heading-copy { min-width: 0; }
-.dashboard-logo { display: block; width: 92px; height: auto; margin-bottom: 5px; }
 .dashboard-heading h1 { margin: 0; font-size: clamp(1.05rem, .98rem + .3vw, 1.25rem); font-weight: 750; letter-spacing: -.02em; line-height: 1.2; }
 .dashboard-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; max-width: 38rem; }
 .dashboard-progress { margin: -10px 0 18px; }

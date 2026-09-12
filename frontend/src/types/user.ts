@@ -23,7 +23,7 @@ export interface SessionUser {
   email: string
   firstName?: string
   lastName?: string
-  otherNames?: string
+  surname?: string
   role: UserRole
   anchorId?: number | null
   partnerCode?: string | null

@@ -37,6 +37,22 @@ Content-Type: application/json
   "refreshToken": "5b1c1e2a-..."
 }`
 
+const apiTokenExample = `POST ${baseUrl}/authentication
+Content-Type: application/json
+
+{
+  "processingCode": "API_TOKEN",
+  "keyId": "api_3f9a2c1b8e0d4a5c9f21",
+  "secret": "your-api-client-secret"
+}`
+
+const apiTokenResponseExample = `{
+  "responseCode": "000",
+  "accessToken": "eyJhbGciOi...",
+  "refreshToken": "5b1c1e2a-...",
+  "expiresIn": 900
+}`
+
 const envelopeExample = `POST ${baseUrl}/api/v1/req
 Content-Type: application/json
 Authorization: Bearer <accessToken>
@@ -205,6 +221,26 @@ const payrollFields = [
         <div class="code-block">
           <pre>{{ refreshExample }}</pre>
           <v-btn size="x-small" variant="text" icon="mdi-content-copy" class="copy-btn" @click="copy(refreshExample)" />
+        </div>
+      </v-card-text>
+    </v-card>
+
+    <v-card variant="flat" border class="mb-4">
+      <v-card-text>
+        <h2 class="text-subtitle-1 font-weight-bold mb-2">1b. Or authenticate as an API client</h2>
+        <p class="text-body-2 mb-2">
+          For a server-to-server integration, use an API client instead of a person's login — create one from
+          <strong>API Access</strong> in the dashboard (Anchor/Organisation Administrator). It has its own key ID,
+          secret and role, so it can be revoked independently of anyone's account and needs no OTP step.
+        </p>
+        <div class="code-block mb-2">
+          <pre>{{ apiTokenExample }}</pre>
+          <v-btn size="x-small" variant="text" icon="mdi-content-copy" class="copy-btn" @click="copy(apiTokenExample)" />
+        </div>
+        <p class="text-caption text-medium-emphasis mb-1">Response:</p>
+        <div class="code-block">
+          <pre>{{ apiTokenResponseExample }}</pre>
+          <v-btn size="x-small" variant="text" icon="mdi-content-copy" class="copy-btn" @click="copy(apiTokenResponseExample)" />
         </div>
       </v-card-text>
     </v-card>

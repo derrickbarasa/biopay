@@ -25,7 +25,7 @@ DECLARE @passwordHash VARCHAR(100) = '$2b$12$U1MOouhIlHsECTYuuqLBPOvc0q4uWY96qrW
 -- 1. Anchor -- its own row in `users`, not a separate table ----------------
 IF NOT EXISTS (SELECT 1 FROM users WHERE email = 'anchor.admin@frontiertrust.bank')
 BEGIN
-    INSERT INTO users (email, username, password, first_name, other_names, role_id, active, status,
+    INSERT INTO users (email, username, password, first_name, surname, role_id, active, status,
                         user_scope, anchor_code, anchor_name, phone, address, country, city, created_at, updated_at)
     VALUES ('anchor.admin@frontiertrust.bank', 'anchor.admin', @passwordHash, 'Anchor', 'Administrator',
             (SELECT TOP 1 id FROM roles WHERE role_name='Anchor Administrator' AND anchor_id IS NULL AND status=1),
@@ -68,7 +68,7 @@ DECLARE @anchorId3 INT = (SELECT id FROM users WHERE email = 'anchor.admin@front
 DECLARE @passwordHash VARCHAR(100) = '$2b$12$U1MOouhIlHsECTYuuqLBPOvc0q4uWY96qrW3ktoZ7.SX5Qbw4qsg.';
 IF NOT EXISTS (SELECT 1 FROM users WHERE email = 'admin@alphabank.example')
 BEGIN
-    INSERT INTO users (organization_code, email, username, password, first_name, other_names, role_id, active, status, anchor_id, user_scope, created_at, updated_at)
+    INSERT INTO users (organization_code, email, username, password, first_name, surname, role_id, active, status, anchor_id, user_scope, created_at, updated_at)
     VALUES ('1001', 'admin@alphabank.example', 'alphabank.admin', @passwordHash, 'Programme', 'Administrator',
             (SELECT TOP 1 id FROM roles WHERE role_name='Organisation Administrator' AND anchor_id IS NULL AND status=1),
             1, 1, @anchorId3, 'ORGANISATION', GETDATE(), GETDATE());
@@ -79,7 +79,7 @@ DECLARE @anchorId4 INT = (SELECT id FROM users WHERE email = 'anchor.admin@front
 DECLARE @passwordHash VARCHAR(100) = '$2b$12$U1MOouhIlHsECTYuuqLBPOvc0q4uWY96qrW3ktoZ7.SX5Qbw4qsg.';
 IF NOT EXISTS (SELECT 1 FROM users WHERE email = 'admin@brightfuture.org')
 BEGIN
-    INSERT INTO users (organization_code, email, username, password, first_name, other_names, role_id, active, status, anchor_id, user_scope, created_at, updated_at)
+    INSERT INTO users (organization_code, email, username, password, first_name, surname, role_id, active, status, anchor_id, user_scope, created_at, updated_at)
     VALUES ('1002', 'admin@brightfuture.org', 'brightfuture.admin', @passwordHash, 'Grace', 'Ochan',
             (SELECT TOP 1 id FROM roles WHERE role_name='Organisation Administrator' AND anchor_id IS NULL AND status=1),
             1, 1, @anchorId4, 'ORGANISATION', GETDATE(), GETDATE());

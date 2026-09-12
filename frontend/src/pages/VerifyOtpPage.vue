@@ -209,7 +209,7 @@ async function submitCode() {
                   class="method-item" :disabled="sending"
                   @click="selectMethod(m)"
                 >
-                  <span class="method-icon"><v-icon :icon="methodInfo[m].icon" size="22" /></span>
+                  <span class="method-icon"><v-icon :icon="methodInfo[m].icon" size="18" /></span>
                   <span class="method-copy">
                     <span class="method-title">{{ methodInfo[m].title }}</span>
                     <span class="method-subtitle">{{ methodInfo[m].subtitle }}</span>
@@ -346,13 +346,13 @@ async function submitCode() {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 10px;
+  gap: 8px;
   width: 100%;
   height: 100%;
-  padding: 18px 16px;
+  padding: 13px 14px;
   background: #fff;
-  border: 1.5px solid #e6ebf0;
-  border-radius: 16px;
+  border: 1px solid #0f172a;
+  border-radius: 14px;
   text-align: left;
   cursor: pointer;
   transition: border-color .15s ease, box-shadow .15s ease, transform .15s ease;
@@ -366,29 +366,29 @@ async function submitCode() {
 .method-item:disabled { opacity: .55; cursor: default; }
 .method-icon {
   flex-shrink: 0;
-  width: 44px;
-  height: 44px;
-  border-radius: 12px;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
   display: grid;
   place-items: center;
   background: #f0fdfa;
   color: #0d9488;
 }
 .method-copy { display: flex; flex-direction: column; min-width: 0; }
-.method-title { font-size: .95rem; font-weight: 600; color: #0f172a; }
-.method-subtitle { font-size: .8rem; color: #64748b; }
+.method-title { font-size: .88rem; font-weight: 600; color: #0f172a; }
+.method-subtitle { font-size: .75rem; color: #64748b; }
 .method-chevron { flex-shrink: 0; color: #cbd5e1; }
 .method-item:hover:not(:disabled) .method-chevron { color: #0d9488; }
 
 /* ---- OTP boxes ---- */
-.otp-boxes { display: flex; justify-content: center; gap: .65rem; }
+.otp-boxes { display: flex; justify-content: center; gap: .55rem; }
 .otp-box {
-  width: 3.1rem;
-  height: 3.5rem;
-  border: 1.5px solid rgba(15, 23, 42, .16);
-  border-radius: 12px;
+  width: 2.6rem;
+  height: 2.9rem;
+  border: 1px solid #0f172a;
+  border-radius: 10px;
   text-align: center;
-  font-size: 1.5rem;
+  font-size: 1.25rem;
   font-weight: 700;
   color: #0f172a;
   background: #f8fafc;
@@ -409,8 +409,8 @@ async function submitCode() {
   .form-head { margin-bottom: 1.1rem; }
   .back-link { margin-bottom: 1.25rem; }
   .form-title { font-size: 1.45rem; }
-  .otp-boxes { gap: .4rem; }
-  .otp-box { width: 2.6rem; height: 3.1rem; font-size: 1.3rem; }
+  .otp-boxes { gap: .35rem; }
+  .otp-box { width: 2.25rem; height: 2.6rem; font-size: 1.1rem; }
 }
 
 @media (max-width: 430px) {

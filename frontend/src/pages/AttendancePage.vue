@@ -162,33 +162,26 @@ function exportCsv() {
 
     <v-card variant="flat" border>
       <v-card-text>
-        <v-row dense align="center">
-          <v-col v-if="anchorGateActive" cols="12" sm="4" md="3">
-            <v-select v-model="selectedAnchorId" :items="anchors" item-title="name" item-value="id" label="Anchor" clearable hide-details density="compact" prepend-inner-icon="mdi-bank-outline" />
-          </v-col>
-          <v-col v-if="auth.isSystemAdmin || auth.isAnchorAdministrator" cols="12" sm="4" md="3">
-            <v-select
-              v-model="organisationFilter" :items="organizations" item-title="name" item-value="organisationCode"
-              label="Organisation" clearable hide-details density="compact" :disabled="auth.isSystemAdmin && !selectedAnchorId"
-            />
-          </v-col>
-          <v-col cols="6" sm="4" md="2">
-            <v-text-field v-model="dateFilter" type="date" label="Date" hide-details density="compact" clearable />
-          </v-col>
-          <v-col cols="6" sm="4" md="2">
-            <v-select
-              v-model="clockFilter" :items="[{ title: 'Clocked In', value: 'I' }, { title: 'Clocked Out', value: 'O' }]"
-              label="Clock" clearable hide-details density="compact"
-            />
-          </v-col>
-          <v-col cols="6" sm="4" md="3">
-            <v-text-field v-model="tableSearch" prepend-inner-icon="mdi-magnify" label="Search" clearable hide-details density="compact" />
-          </v-col>
-          <v-col cols="auto" class="d-flex align-center ga-2 flex-wrap">
-            <v-btn class="filter-submit" color="primary" @click="load">Submit</v-btn>
+        <div class="d-flex ga-3 flex-wrap align-center">
+          <v-select
+            v-if="anchorGateActive" v-model="selectedAnchorId" :items="anchors" item-title="name" item-value="id"
+            label="Anchor" clearable hide-details density="compact" style="max-width: 200px" prepend-inner-icon="mdi-bank-outline"
+          />
+          <v-select
+            v-if="auth.isSystemAdmin || auth.isAnchorAdministrator" v-model="organisationFilter" :items="organizations" item-title="name" item-value="organisationCode"
+            label="Organisation" clearable hide-details density="compact" style="max-width: 200px" :disabled="auth.isSystemAdmin && !selectedAnchorId"
+          />
+          <v-text-field v-model="dateFilter" type="date" label="Date" hide-details density="compact" clearable style="max-width: 170px" />
+          <v-select
+            v-model="clockFilter" :items="[{ title: 'Clocked In', value: 'I' }, { title: 'Clocked Out', value: 'O' }]"
+            label="Clock" clearable hide-details density="compact" style="max-width: 170px"
+          />
+          <v-text-field v-model="tableSearch" prepend-inner-icon="mdi-magnify" label="Search" clearable hide-details density="compact" style="max-width: 200px" />
+          <div class="d-flex align-center ga-2">
+            <v-btn class="filter-submit" color="secondary" @click="load">Submit</v-btn>
             <v-btn variant="text" size="small" @click="clearFilters">Clear filters</v-btn>
-          </v-col>
-        </v-row>
+          </div>
+        </div>
       </v-card-text>
       <v-data-table :headers="headers" :items="records" :search="tableSearch" :loading="loading">
         <template #item.organisationCode="{ item }">{{ orgName(item.organisationCode) }}</template>

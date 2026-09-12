@@ -15,6 +15,7 @@ export const PUBLIC_PROCESSING_CODES = new Set([
   'RESET_PASSWORD',
   'GET_EMAIL_APPROVAL',
   'CONFIRM_EMAIL_APPROVAL',
+  'API_TOKEN',
 ] as const)
 
 export type ProcessingCode =
@@ -29,6 +30,7 @@ export type ProcessingCode =
   | 'RESET_PASSWORD'
   | 'GET_EMAIL_APPROVAL'
   | 'CONFIRM_EMAIL_APPROVAL'
+  | 'API_TOKEN'
   // auth (authenticated)
   | 'LOGOUT'
   | 'CHANGE_PASSWORD'
@@ -49,6 +51,9 @@ export type ProcessingCode =
   | 'CREATE_USER'
   | 'UPDATE_USER'
   | 'TOGGLE_USER_STATUS'
+  | 'GET_API_CLIENTS'
+  | 'CREATE_API_CLIENT'
+  | 'TOGGLE_API_CLIENT_STATUS'
   | 'GET_ROLES'
   | 'SAVE_ROLE'
   | 'DELETE_ROLE'

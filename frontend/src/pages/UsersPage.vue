@@ -4,7 +4,7 @@ import { dispatch } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
 import { useConfirm } from '@/composables/useConfirm'
-interface UserRow{id:number;email:string;username:string;firstName?:string;otherNames?:string;partnerCode?:string;anchorId?:number;userScope:string;roleId?:number;roleName?:string;status:number;createdAt:string;systemAdmin?:boolean}
+interface UserRow{id:number;email:string;username:string;firstName?:string;surname?:string;partnerCode?:string;anchorId?:number;userScope:string;roleId?:number;roleName?:string;status:number;createdAt:string;systemAdmin?:boolean}
 interface Role{id:number;name:string;scope:string;anchorId?:number|null;builtIn?:boolean;systemRole?:boolean}
 interface Org{organisationCode:string;name:string;anchorId?:number}
 interface Anchor{id:number;name:string}
@@ -12,8 +12,8 @@ const auth=useAuthStore(),toast=useToast(),loading=ref(false),saving=ref(false),
 const roleFilterOptions=computed(()=>[...new Set(users.value.map(u=>u.roleName).filter((n):n is string=>!!n))].sort())
 const filteredUsers=computed(()=>roleFilter.value?users.value.filter(u=>u.roleName===roleFilter.value):users.value)
 const { confirmAction } = useConfirm()
-const form=reactive({email:'',username:'',firstName:'',otherNames:'',userScope:'ORGANISATION',organisationCode:'',roleId:null as number|null,targetAnchorId:null as number|null})
-const editForm=reactive({id:0,email:'',firstName:'',otherNames:'',roleId:null as number|null,userScope:'ORGANISATION'})
+const form=reactive({email:'',username:'',firstName:'',surname:'',userScope:'ORGANISATION',organisationCode:'',roleId:null as number|null,targetAnchorId:null as number|null})
+const editForm=reactive({id:0,email:'',firstName:'',surname:'',roleId:null as number|null,userScope:'ORGANISATION'})
 const headers=[{title:'User',key:'email'},{title:'Scope',key:'userScope'},{title:'Role',key:'roleName'},{title:'Status',key:'status'},{title:'Actions',key:'actions',sortable:false,align:'start' as const}]
 const availableRoles=computed(()=>roles.value.filter(r=>r.scope===form.userScope&&(r.builtIn||!auth.isSystemAdmin||r.anchorId===form.targetAnchorId)));
 // Only an existing Super Admin can mint another SYSTEM-scope (tenantless) user.
@@ -24,14 +24,14 @@ const orgNameByCode=computed(()=>new Map(orgs.value.map(o=>[o.organisationCode,o
 function orgName(code?:string){return (code&&orgNameByCode.value.get(code))||code||'—'}
 async function load(){loading.value=true;try{const [u,r,o]=await Promise.all([dispatch<{results:UserRow[]}>('GET_USERS'),dispatch<{results:Role[]}>('GET_ROLES'),dispatch<{results:Org[]}>('GET_ORGANIZATIONS')]);users.value=u.results??[];roles.value=r.results??[];orgs.value=o.results??[];if(auth.isSystemAdmin){const a=await dispatch<{results:Anchor[]}>('GET_ANCHORS');anchors.value=a.results??[]}}catch(e){toast.error(e instanceof Error?e.message:'Unable to load users')}finally{loading.value=false}}
 async function selectTargetAnchor(){form.organisationCode='';form.roleId=null;if(!form.targetAnchorId){roles.value=[];return}try{const r=await dispatch<{results:Role[]}>('GET_ROLES',{targetAnchorId:form.targetAnchorId});roles.value=r.results??[]}catch(e){toast.error(e instanceof Error?e.message:'Unable to load roles for this anchor')}}
-function openCreate(){Object.assign(form,{email:'',username:'',firstName:'',otherNames:'',userScope:'ORGANISATION',organisationCode:auth.user?.partnerCode??'',roleId:null,targetAnchorId:auth.isSystemAdmin?null:auth.user?.anchorId??null});dialog.value=true}
+function openCreate(){Object.assign(form,{email:'',username:'',firstName:'',surname:'',userScope:'ORGANISATION',organisationCode:auth.user?.partnerCode??'',roleId:null,targetAnchorId:auth.isSystemAdmin?null:auth.user?.anchorId??null});dialog.value=true}
 async function create(){
  if(!form.firstName.trim()||!/.+@.+\..+/.test(form.email)||!form.username.trim()||!form.roleId||(form.userScope==='ORGANISATION'&&!form.organisationCode)||(form.userScope!=='SYSTEM'&&auth.isSystemAdmin&&!form.targetAnchorId)){toast.error('Complete the anchor, first name, valid email, username, access scope, organisation and role');return}
  saving.value=true;try{await dispatch('CREATE_USER',{...form});toast.success('User created. A temporary password was emailed to them.');dialog.value=false;await load()}catch(e){toast.error(e instanceof Error?e.message:'Create failed')}finally{saving.value=false}
 }
 async function toggle(u:UserRow){const deactivating=u.status===1;if(!await confirmAction({title:`${deactivating?'Deactivate':'Activate'} user?`,message:deactivating?`${u.email} will no longer be able to sign in.`:`${u.email} will be able to sign in again.`,confirmLabel:deactivating?'Deactivate':'Activate',color:deactivating?'warning':'secondary'}))return;try{await dispatch('TOGGLE_USER_STATUS',{userId:u.id,status:deactivating?0:1});toast.success(deactivating?'User deactivated':'User activated');await load()}catch(e){toast.error(e instanceof Error?e.message:'Status update failed')}}
-async function openEdit(u:UserRow){editDialog.value=true;editLoading.value=true;try{const roleRequest=auth.isSystemAdmin&&u.anchorId?dispatch<{results:Role[]}>('GET_ROLES',{targetAnchorId:u.anchorId}):Promise.resolve({results:roles.value});const [{results:r},roleResult]=await Promise.all([dispatch<{results:UserRow}>('GET_USER',{userId:u.id}),roleRequest]);roles.value=roleResult.results??[];Object.assign(editForm,{id:r.id,email:r.email,firstName:r.firstName??'',otherNames:r.otherNames??'',roleId:r.roleId??null,userScope:r.userScope})}catch(e){toast.error(e instanceof Error?e.message:'Unable to load user');editDialog.value=false}finally{editLoading.value=false}}
-async function saveEdit(){editSaving.value=true;try{await dispatch('UPDATE_USER',{userId:editForm.id,firstName:editForm.firstName,otherNames:editForm.otherNames,roleId:editForm.roleId});toast.success('User updated');editDialog.value=false;await load()}catch(e){toast.error(e instanceof Error?e.message:'Update failed')}finally{editSaving.value=false}}
+async function openEdit(u:UserRow){editDialog.value=true;editLoading.value=true;try{const roleRequest=auth.isSystemAdmin&&u.anchorId?dispatch<{results:Role[]}>('GET_ROLES',{targetAnchorId:u.anchorId}):Promise.resolve({results:roles.value});const [{results:r},roleResult]=await Promise.all([dispatch<{results:UserRow}>('GET_USER',{userId:u.id}),roleRequest]);roles.value=roleResult.results??[];Object.assign(editForm,{id:r.id,email:r.email,firstName:r.firstName??'',surname:r.surname??'',roleId:r.roleId??null,userScope:r.userScope})}catch(e){toast.error(e instanceof Error?e.message:'Unable to load user');editDialog.value=false}finally{editLoading.value=false}}
+async function saveEdit(){editSaving.value=true;try{await dispatch('UPDATE_USER',{userId:editForm.id,firstName:editForm.firstName,surname:editForm.surname,roleId:editForm.roleId});toast.success('User updated');editDialog.value=false;await load()}catch(e){toast.error(e instanceof Error?e.message:'Update failed')}finally{editSaving.value=false}}
 onMounted(load)
 </script>
 <template>
@@ -39,7 +39,7 @@ onMounted(load)
   <header class="admin-head"><div><div class="title-row"><h1 class="page-title">Users</h1><v-chip size="small" variant="tonal" color="primary">{{ auth.isSystemAdmin?'System oversight':auth.isAnchor?'Anchor-wide access':'Organisation access' }}</v-chip></div></div><v-btn v-if="auth.can('ACCESS_USERS')" color="secondary" prepend-icon="mdi-account-plus-outline" @click="openCreate">Add user</v-btn></header>
   <v-card border flat class="admin-card"><div class="table-tools"><v-text-field v-model="search" prepend-inner-icon="mdi-magnify" label="Search users" hide-details density="compact" variant="outlined"/><v-select v-model="roleFilter" :items="roleFilterOptions" label="Filter by role" clearable hide-details density="compact" variant="outlined" class="role-filter"/><span>{{ filteredUsers.length }} accounts</span></div>
    <v-data-table :headers="headers" :items="filteredUsers" :search="search" :loading="loading">
-    <template #item.email="{item}"><div class="py-2"><strong>{{ item.firstName }} {{ item.otherNames }}</strong><div class="text-caption text-medium-emphasis">{{ item.email }}</div></div></template>
+    <template #item.email="{item}"><div class="py-2"><strong>{{ item.firstName }} {{ item.surname }}</strong><div class="text-caption text-medium-emphasis">{{ item.email }}</div></div></template>
     <template #item.userScope="{item}"><v-chip size="small" variant="tonal" :color="item.systemAdmin?'warning':item.userScope==='ANCHOR'?'primary':'secondary'">{{ item.systemAdmin?'System-wide':item.userScope==='ANCHOR'?'Anchor-wide':orgName(item.partnerCode) }}</v-chip></template>
     <template #item.status="{item}"><v-chip size="small" :color="item.status===1?'success':'error'" variant="tonal">{{ item.status===1?'Active':'Inactive' }}</v-chip></template>
     <template #item.actions="{item}"><v-btn v-if="auth.can('ACCESS_USERS')" size="small" variant="text" icon="mdi-pencil-outline" aria-label="Edit user" class="mr-1" @click="openEdit(item)"/><v-btn v-if="auth.can('ACCESS_USERS')" size="small" variant="text" :color="item.status===1?'error':'success'" @click="toggle(item)">{{ item.status===1?'Deactivate':'Activate' }}</v-btn></template>
@@ -51,13 +51,13 @@ onMounted(load)
    <v-select v-if="auth.isSystemAdmin&&form.userScope!=='SYSTEM'" v-model="form.targetAnchorId" :items="anchors" item-title="name" item-value="id" label="Anchor" variant="outlined" placeholder="Choose an anchor" @update:model-value="selectTargetAnchor"/>
    <v-select v-if="form.userScope==='ORGANISATION'&&auth.isAnchor" v-model="form.organisationCode" :items="availableOrganisations" item-title="name" item-value="organisationCode" label="Organisation" variant="outlined" placeholder="Choose an organisation" :disabled="auth.isSystemAdmin&&!form.targetAnchorId"/>
    <p v-if="form.userScope==='SYSTEM'" class="text-caption text-medium-emphasis" style="grid-column:1/-1">A Platform Owner has permanent, tenantless access to every anchor and organisation.</p>
-   <v-text-field v-model="form.firstName" label="First name" placeholder="e.g. Jane" variant="outlined" required/><v-text-field v-model="form.otherNames" label="Other names" placeholder="e.g. Mwangi" variant="outlined"/>
+   <v-text-field v-model="form.firstName" label="First name" placeholder="e.g. Jane" variant="outlined" required/><v-text-field v-model="form.surname" label="Surname" placeholder="e.g. Mwangi" variant="outlined"/>
    <v-text-field v-model="form.email" label="Email" type="email" placeholder="e.g. jane.mwangi@example.org" variant="outlined" required/><v-text-field v-model="form.username" label="Username" placeholder="e.g. jane.mwangi" variant="outlined" required/>
    <v-select v-model="form.roleId" :items="availableRoles" item-title="name" item-value="id" label="Role" variant="outlined" required/>
   </v-card-text><v-card-actions><v-spacer/><v-btn variant="flat" color="error" @click="dialog=false">Cancel</v-btn><v-btn variant="flat" color="secondary" :loading="saving" @click="create">Create user</v-btn></v-card-actions></v-card></v-dialog>
   <v-dialog v-model="editDialog" max-width="660"><v-card class="pa-2"><dialog-close-button @close="editDialog=false"/><v-card-title>View / edit user</v-card-title><v-card-text class="form-grid">
    <v-text-field :model-value="editForm.email" label="Email" variant="outlined" readonly/><v-select v-model="editForm.roleId" :items="availableEditRoles" item-title="name" item-value="id" label="Role" variant="outlined" :loading="editLoading"/>
-   <v-text-field v-model="editForm.firstName" label="First name" variant="outlined"/><v-text-field v-model="editForm.otherNames" label="Other names" variant="outlined"/>
+   <v-text-field v-model="editForm.firstName" label="First name" variant="outlined"/><v-text-field v-model="editForm.surname" label="Surname" variant="outlined"/>
   </v-card-text><v-card-actions><v-spacer/><v-btn variant="flat" color="error" @click="editDialog=false">Cancel</v-btn><v-btn v-if="auth.can('ACCESS_USERS')" variant="flat" color="secondary" :loading="editSaving" @click="saveEdit">Save changes</v-btn></v-card-actions></v-card></v-dialog>
  </div>
 </template>

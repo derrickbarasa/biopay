@@ -62,6 +62,7 @@ const router = createRouter({
         { path: 'dashboard', name: 'dashboard', component: () => import('@/pages/DashboardPage.vue'), meta: { permission: 'VIEW_REPORTS', title: 'Dashboard' } },
         { path: 'anchors', name: 'anchors', component: () => import('@/pages/AnchorsPage.vue'), meta: { roles: ['ANCHOR'], systemOnly: true, title: 'Anchors' } },
         { path: 'users', name: 'users', component: () => import('@/pages/UsersPage.vue'), meta: { roles: ['ANCHOR', 'ORGANISATION'], permission: 'ACCESS_USERS', title: 'Users' } },
+        { path: 'api-access', name: 'api-access', component: () => import('@/pages/ApiAccessPage.vue'), meta: { roles: ['ANCHOR', 'ORGANISATION'], permission: 'ACCESS_USERS', title: 'API Access' } },
         { path: 'roles', name: 'roles', component: () => import('@/pages/RolesPage.vue'), meta: { roles: ['ANCHOR'], permission: 'ACCESS_ROLES', title: 'Roles & permissions' } },
         {
           path: 'organizations',
