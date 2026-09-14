@@ -160,7 +160,7 @@ public class Organization extends AbstractVerticle {
                 + "AND (anchor_id=@p6 OR anchor_id IS NULL) ORDER BY CASE WHEN anchor_id=@p6 THEN 0 ELSE 1 END), "
                 + "1, 1, @p6, 'ORGANISATION', 1, @p7, GETDATE(), GETDATE())";
         int targetAnchorId = Integer.parseInt(anchorIdVal.toString());
-        pool.preparedQuery("SELECT 1 AS found FROM users WHERE id=@p1 AND user_scope='ANCHOR' AND status=1")
+        pool.preparedQuery("SELECT 1 AS found FROM users WHERE id=@p1 AND user_scope='ANCHOR' AND id=anchor_id AND status=1")
                 .execute(Tuple.of(targetAnchorId))
                 .onFailure(err -> onDbError(message, err))
                 .onSuccess(anchorRows -> {
@@ -364,7 +364,13 @@ public class Organization extends AbstractVerticle {
         JsonObject payload = new JsonObject(message.body().toString());
         String partnerId = payload.getString("organisationCode", "").trim();
 
-        pool.preparedQuery("SELECT * FROM organizations WHERE organization_code=@p1 AND (@p2=1 OR anchor_id=@p3 OR organization_code=@p4)")
+        // Keep this projection aligned with retrieveAll(): summary() also reads
+        // anchor_name.  Selecting only organizations.* caused summary() to throw
+        // inside this asynchronous success callback, which left the event-bus
+        // request unanswered and made the browser wait until its HTTP timeout.
+        pool.preparedQuery("SELECT p.*, a.anchor_name FROM organizations p "
+                        + "LEFT JOIN users a ON a.id=p.anchor_id AND a.user_scope='ANCHOR' AND a.id=a.anchor_id "
+                        + "WHERE p.organization_code=@p1 AND (@p2=1 OR p.anchor_id=@p3 OR p.organization_code=@p4)")
                 .execute(Tuple.of(partnerId, isSystemAdmin(payload), TenantScope.anchorId(payload), payload.getString("partnerCode", "")))
                 .onFailure(err -> onDbError(message, err))
                 .onSuccess(rows -> {
@@ -389,17 +395,17 @@ public class Organization extends AbstractVerticle {
         if (isSystemAdmin(payload)) {
             Integer status = payload.getInteger("status");
             Integer targetAnchorId = TenantScope.anchorId(payload);
-            sql = "SELECT p.*, a.anchor_name FROM organizations p JOIN users a ON a.id=p.anchor_id AND a.user_scope='ANCHOR' "
+            sql = "SELECT p.*, a.anchor_name FROM organizations p JOIN users a ON a.id=p.anchor_id AND a.user_scope='ANCHOR' AND a.id=a.anchor_id "
                     + "WHERE (@p1 IS NULL OR p.status=@p1) AND (@p2 IS NULL OR p.anchor_id=@p2) ORDER BY a.anchor_name,p.name";
             params = Tuple.of(status, targetAnchorId);
         } else if (isAnchor(payload)) {
             Object anchorId = payload.getValue("anchorId");
             Integer status = payload.getInteger("status");
-            sql = "SELECT p.*, a.anchor_name FROM organizations p JOIN users a ON a.id=p.anchor_id AND a.user_scope='ANCHOR' WHERE p.anchor_id=@p1 AND (@p2 IS NULL OR p.status=@p2) ORDER BY p.name";
+            sql = "SELECT p.*, a.anchor_name FROM organizations p JOIN users a ON a.id=p.anchor_id AND a.user_scope='ANCHOR' AND a.id=a.anchor_id WHERE p.anchor_id=@p1 AND (@p2 IS NULL OR p.status=@p2) ORDER BY p.name";
             params = Tuple.of(anchorId, status);
         } else {
             String partnerCode = payload.getString("partnerCode", "");
-            sql = "SELECT p.*, a.anchor_name FROM organizations p JOIN users a ON a.id=p.anchor_id AND a.user_scope='ANCHOR' WHERE p.organization_code=@p1";
+            sql = "SELECT p.*, a.anchor_name FROM organizations p JOIN users a ON a.id=p.anchor_id AND a.user_scope='ANCHOR' AND a.id=a.anchor_id WHERE p.organization_code=@p1";
             params = Tuple.of(partnerCode);
         }
 

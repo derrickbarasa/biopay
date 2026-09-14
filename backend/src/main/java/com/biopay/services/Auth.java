@@ -198,23 +198,23 @@ public class Auth extends AbstractVerticle {
                     Row r = rows.iterator().next();
                     int id = intOr(r, "id", 0);
                     String scope = Rows.str(r, "user_scope");
+                    Integer anchorId = intOr(r, "anchor_id", null);
+                    String partnerCode = "ORGANISATION".equalsIgnoreCase(scope) ? Rows.str(r, "organization_code") : null;
                     Integer active = intOr(r, "active", 0);
                     Integer status = intOr(r, "status", 0);
                     String storedHash = Rows.str(r, "password");
 
                     if (active == null || active != 1 || status == null || status != 1) {
-                        audit(id, null, "USER", null, "LOGIN_FAILED", ip, new JsonObject().put("reason", "inactive"));
+                        audit(id, anchorId, "USER", partnerCode, "LOGIN_FAILED", ip, new JsonObject().put("reason", "inactive"));
                         replyError(message, "Account is inactive. Contact your administrator");
                         return;
                     }
                     if (!Passwords.verify(password, storedHash)) {
-                        audit(id, null, "USER", null, "LOGIN_FAILED", ip, new JsonObject().put("reason", "bad_password"));
+                        audit(id, anchorId, "USER", partnerCode, "LOGIN_FAILED", ip, new JsonObject().put("reason", "bad_password"));
                         replyError(message, "Invalid email or password");
                         return;
                     }
 
-                    Integer anchorId = intOr(r, "anchor_id", null);
-                    String partnerCode = "ORGANISATION".equalsIgnoreCase(scope) ? Rows.str(r, "organization_code") : null;
                     boolean totpEnabled = Boolean.TRUE.equals(r.getBoolean("totp_enabled"));
                     boolean emailOtpEnabled = !Boolean.FALSE.equals(r.getBoolean("email_otp_enabled"));
                     boolean mustChangePassword = Boolean.TRUE.equals(r.getBoolean("must_change_password"));
@@ -708,22 +708,21 @@ public class Auth extends AbstractVerticle {
                     }
                     Row r = rows.iterator().next();
                     int id = intOr(r, "id", 0);
+                    Integer anchorId = intOr(r, "anchor_id", null);
+                    String partnerCode = Rows.str(r, "organization_code");
                     String active = Rows.str(r, "active");
                     String storedHash = Rows.str(r, "password");
 
                     if (active == null || !active.trim().equals("1")) {
-                        audit(id, null, "SUPERVISOR", null, "LOGIN_FAILED", ip, new JsonObject().put("reason", "inactive"));
+                        audit(id, anchorId, "SUPERVISOR", partnerCode, "LOGIN_FAILED", ip, new JsonObject().put("reason", "inactive"));
                         replyError(message, "Account is inactive. Contact your organisation administrator");
                         return;
                     }
                     if (!Passwords.verify(password, storedHash)) {
-                        audit(id, null, "SUPERVISOR", null, "LOGIN_FAILED", ip, new JsonObject().put("reason", "bad_password"));
+                        audit(id, anchorId, "SUPERVISOR", partnerCode, "LOGIN_FAILED", ip, new JsonObject().put("reason", "bad_password"));
                         replyError(message, "Invalid email or password");
                         return;
                     }
-
-                    Integer anchorId = intOr(r, "anchor_id", null);
-                    String partnerCode = Rows.str(r, "organization_code");
 
                     JsonObject claims = new JsonObject()
                             .put("sub", id)

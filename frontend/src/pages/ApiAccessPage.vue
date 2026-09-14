@@ -29,7 +29,9 @@ const headers = [
 ]
 
 const availableRoles = computed(() => roles.value.filter(r => r.scope === form.userScope && (r.builtIn || !auth.isSystemAdmin || r.anchorId === form.targetAnchorId)))
-const scopeOptions = computed(() => auth.isSystemAdmin || auth.isAnchor ? ['ANCHOR', 'ORGANISATION'] : ['ORGANISATION'])
+const scopeOptions = computed(() => auth.isSystemAdmin || auth.isAnchor
+  ? [{ title: 'Anchor-wide API client', value: 'ANCHOR' }, { title: 'Organisation API client', value: 'ORGANISATION' }]
+  : [{ title: 'Organisation API client', value: 'ORGANISATION' }])
 const availableOrganisations = computed(() => auth.isSystemAdmin ? orgs.value.filter(o => o.anchorId === form.targetAnchorId) : orgs.value)
 const orgNameByCode = computed(() => new Map(orgs.value.map(o => [o.organisationCode, o.name])))
 function orgName(code?: string) { return (code && orgNameByCode.value.get(code)) || code || '—' }
@@ -172,7 +174,7 @@ onMounted(load)
           <v-card-subtitle>Generates a key ID and secret; no password or OTP is required to use it.</v-card-subtitle>
           <v-card-text class="form-grid">
             <v-select v-if="auth.isSystemAdmin" v-model="form.userScope" :items="scopeOptions" label="Access scope" variant="outlined" />
-            <v-select v-else-if="auth.isAnchor" v-model="form.userScope" :items="['ANCHOR', 'ORGANISATION']" label="Access scope" variant="outlined" />
+            <v-select v-else-if="auth.isAnchor" v-model="form.userScope" :items="scopeOptions" label="Access scope" variant="outlined" />
             <v-select v-if="auth.isSystemAdmin" v-model="form.targetAnchorId" :items="anchors" item-title="name" item-value="id" label="Anchor" variant="outlined" placeholder="Choose an anchor" @update:model-value="selectTargetAnchor" />
             <v-select v-if="form.userScope === 'ORGANISATION' && auth.isAnchor" v-model="form.organisationCode" :items="availableOrganisations" item-title="name" item-value="organisationCode" label="Organisation" variant="outlined" placeholder="Choose an organisation" :disabled="auth.isSystemAdmin && !form.targetAnchorId" />
             <v-text-field v-model="form.name" label="Name" placeholder="e.g. Reporting integration" variant="outlined" required class="wide" />

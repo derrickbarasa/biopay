@@ -126,7 +126,7 @@ function methodLabel(request: PaymentRequest) {
 async function confirmRequest(request: PaymentRequest) {
   if (!await confirmAction({
     title: 'Confirm this payment?',
-    message: `Marks ${formatCurrency(request.amount, request.currency)} from ${request.anchorName} as received and renews their subscription by one month. Only confirm once the money has actually been seen (bank statement, mobile money till, etc.).`,
+    message: `Marks ${formatCurrency(request.amount, request.currency)} from ${request.anchorName} as received and renews their subscription for the configured term. Only confirm once the money has actually been seen (bank statement, mobile money till, etc.).`,
     confirmLabel: 'Confirm payment',
   })) return
   actingOnRequest.value = request.id

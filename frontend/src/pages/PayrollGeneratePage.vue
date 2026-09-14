@@ -6,6 +6,12 @@ import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
 import { useAnchorScope } from '@/composables/useAnchorScope'
 import { useOrgCascade } from '@/composables/useOrgCascade'
+import {
+  expectedLcy,
+  isCompleteAmountRow,
+  paymentCycleTotals,
+  type PaymentCycleAmountRow,
+} from '@/utils/paymentCycleAmounts'
 
 interface HouseholdOption {
   householdNumber: string
@@ -33,8 +39,7 @@ const step = ref(1)
 const genForm = ref({
   organisationCode: null as string | null,
   periodStart: '', periodEnd: '',
-  amountPerHousehold: null as number | null,
-  currency: 'USD', exchangeRate: 1,
+  currency: 'USD',
   householdNumbers: [] as string[],
   otpCode: '',
 })
@@ -123,9 +128,21 @@ const householdItems = computed(() =>
   householdOptions.value.map((h) => ({ ...h, title: `${h.householdName} (${h.householdNumber})` })),
 )
 
-const selectedHouseholds = computed(() =>
-  genForm.value.householdNumbers.map((n) => ({ householdNumber: n, householdName: knownHouseholds.value.get(n) ?? n })),
-)
+const paymentRows = ref<PaymentCycleAmountRow[]>([])
+
+const selectedHouseholds = computed(() => paymentRows.value)
+const totals = computed(() => paymentCycleTotals(paymentRows.value))
+
+watch(() => genForm.value.householdNumbers, (numbers) => {
+  const existing = new Map(paymentRows.value.map((row) => [row.householdNumber, row]))
+  paymentRows.value = numbers.map((householdNumber) => existing.get(householdNumber) ?? {
+    householdNumber,
+    householdName: knownHouseholds.value.get(householdNumber) ?? householdNumber,
+    amountFcy: null,
+    exchangeRate: null,
+    amountLcy: null,
+  })
+}, { deep: true })
 
 async function loadHouseholdOptions() {
   householdsLoading.value = true
@@ -176,7 +193,8 @@ watch(dialogAnchorId, () => { genForm.value.organisationCode = null })
 const exportingHouseholds = ref(false)
 const importDialog = ref(false)
 const importFileName = ref('')
-const importRows = ref<HouseholdOption[]>([])
+const importRows = ref<PaymentCycleAmountRow[]>([])
+const importErrors = ref<string[]>([])
 
 async function exportHouseholdsToExcel() {
   exportingHouseholds.value = true
@@ -199,11 +217,25 @@ async function exportHouseholdsToExcel() {
       return
     }
     for (const h of rows) knownHouseholds.value.set(h.householdNumber, h.householdName)
-    const sheet = XLSX.utils.json_to_sheet(
-      rows.map((h) => ({ 'Household Number': h.householdNumber, 'Household Name': h.householdName })),
-    )
+    const sheet = XLSX.utils.json_to_sheet(rows.map((h) => ({
+      'Household Number': h.householdNumber,
+      'Household Name': h.householdName,
+      'Amount FCY': '',
+      'Exchange Rate': '',
+      'Amount LCY': '',
+    })))
+    sheet['!cols'] = [{ wch: 22 }, { wch: 30 }, { wch: 16 }, { wch: 16 }, { wch: 16 }]
     const workbook = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(workbook, sheet, 'Households')
+    const instructions = XLSX.utils.aoa_to_sheet([
+      ['Payment cycle upload instructions'],
+      ['Keep one beneficiary per row and do not change the column headings.'],
+      ['Amount FCY', 'The beneficiary amount in the selected foreign/payout currency.'],
+      ['Exchange Rate', 'How many units of local currency equal one unit of FCY.'],
+      ['Amount LCY', 'Amount FCY multiplied by Exchange Rate.'],
+    ])
+    instructions['!cols'] = [{ wch: 22 }, { wch: 76 }]
+    XLSX.utils.book_append_sheet(workbook, instructions, 'Instructions')
     XLSX.writeFile(workbook, `payment-cycle-households-${genForm.value.organisationCode || 'all'}.xlsx`)
     toast.success(`Exported ${rows.length} households — remove the ones you don't want, then import the file back`)
   } catch (err) {
@@ -216,6 +248,7 @@ async function exportHouseholdsToExcel() {
 function openImportDialog() {
   importFileName.value = ''
   importRows.value = []
+  importErrors.value = []
   importDialog.value = true
 }
 
@@ -229,56 +262,64 @@ function onImportFile(event: Event) {
     const workbook = XLSX.read(new Uint8Array(reader.result as ArrayBuffer), { type: 'array' })
     const sheet = workbook.Sheets[workbook.SheetNames[0]]
     const parsed = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: '' })
-    importRows.value = parsed
-      .map((r) => ({
+    const errors: string[] = []
+    const rows = parsed
+      .map((r, index) => {
+        const amountFcy = Number(r['Amount FCY'] ?? r.amountFcy ?? r['amount fcy'])
+        const exchangeRate = Number(r['Exchange Rate'] ?? r.exchangeRate ?? r['exchange rate'])
+        const amountLcy = Number(r['Amount LCY'] ?? r.amountLcy ?? r['amount lcy'])
+        const row: PaymentCycleAmountRow = {
         householdNumber: String(r['Household Number'] ?? r.householdNumber ?? r['household number'] ?? '').trim(),
         householdName: String(r['Household Name'] ?? r.householdName ?? r['household name'] ?? '').trim(),
-      }))
+          amountFcy: Number.isFinite(amountFcy) && amountFcy > 0 ? amountFcy : null,
+          exchangeRate: Number.isFinite(exchangeRate) && exchangeRate > 0 ? exchangeRate : null,
+          amountLcy: Number.isFinite(amountLcy) && amountLcy > 0 ? amountLcy : null,
+        }
+        if (!row.householdNumber) errors.push(`Row ${index + 2}: Household Number is required.`)
+        else if (!isCompleteAmountRow(row)) errors.push(`Row ${index + 2}: enter positive FCY, rate and LCY values; LCY must equal FCY × rate.`)
+        return row
+      })
       .filter((h) => h.householdNumber)
+    const duplicates = rows.filter((row, index) => rows.findIndex((candidate) => candidate.householdNumber === row.householdNumber) !== index)
+    if (duplicates.length) errors.push(`Duplicate household number(s): ${[...new Set(duplicates.map((row) => row.householdNumber))].join(', ')}`)
+    importRows.value = rows
+    importErrors.value = errors
   }
   reader.readAsArrayBuffer(file)
 }
 
 function confirmImport() {
-  if (!importRows.value.length) return
+  if (!importRows.value.length || importErrors.value.length) return
   for (const h of importRows.value) if (h.householdName) knownHouseholds.value.set(h.householdNumber, h.householdName)
+  paymentRows.value = importRows.value.map((row) => ({ ...row }))
   genForm.value.householdNumbers = [...new Set(importRows.value.map((h) => h.householdNumber))]
   toast.success(`Imported ${genForm.value.householdNumbers.length} household(s) from ${importFileName.value}`)
   importDialog.value = false
 }
 
-// ---- Amount & currency ----
-const rateLoading = ref(false)
-const rateAsOf = ref('')
-const rateError = ref('')
+// ---- Per-beneficiary amounts & currency ----
+const applyAllFcy = ref<number | null>(null)
+const applyAllRate = ref<number | null>(null)
 
-async function fetchExchangeRate(currency: string) {
-  const quote = currency.trim().toUpperCase()
-  genForm.value.currency = quote
-  rateError.value = ''
-  rateAsOf.value = ''
-  if (!quote || quote === 'USD') {
-    genForm.value.exchangeRate = 1
-    rateAsOf.value = new Date().toISOString().slice(0, 10)
-    return
-  }
-  rateLoading.value = true
-  try {
-    const response = await fetch(`https://api.frankfurter.dev/v2/rate/USD/${encodeURIComponent(quote)}`)
-    if (!response.ok) throw new Error('Rate is unavailable for this currency')
-    const result = await response.json() as { rate?: number; date?: string }
-    if (!result.rate || result.rate <= 0) throw new Error('The exchange-rate service returned an invalid rate')
-    genForm.value.exchangeRate = result.rate
-    rateAsOf.value = result.date ?? ''
-  } catch (err) {
-    genForm.value.exchangeRate = 0
-    rateError.value = err instanceof Error ? err.message : 'Unable to retrieve the exchange rate'
-  } finally {
-    rateLoading.value = false
-  }
+function calculateRowLcy(row: PaymentCycleAmountRow) {
+  row.amountLcy = expectedLcy(row.amountFcy, row.exchangeRate)
 }
 
-watch(() => genForm.value.currency, (currency) => fetchExchangeRate(currency))
+function applyAmountsToAll() {
+  const amountFcy = Number(applyAllFcy.value)
+  const exchangeRate = Number(applyAllRate.value)
+  if (!Number.isFinite(amountFcy) || amountFcy <= 0 || !Number.isFinite(exchangeRate) || exchangeRate <= 0) {
+    toast.error('Enter a positive FCY amount and exchange rate')
+    return
+  }
+  paymentRows.value = paymentRows.value.map((row) => ({
+    ...row,
+    amountFcy,
+    exchangeRate,
+    amountLcy: expectedLcy(amountFcy, exchangeRate),
+  }))
+  toast.success(`Amounts applied to ${paymentRows.value.length} beneficiaries; individual rows can still be changed`)
+}
 
 // ---- Verify & confirm ----
 const otpSent = ref(false)
@@ -313,6 +354,7 @@ async function confirmGenerate() {
     // approving authority, so the backend auto-approves (see Payroll.java's `generate()`).
     const result = await dispatch<{ autoApproved?: boolean }>('GENERATE_PAYROLL', {
       ...genForm.value,
+      beneficiaries: paymentRows.value,
       otpCode: genForm.value.otpCode.trim(),
       organisationCode: genForm.value.organisationCode || undefined,
       targetAnchorId: auth.isSystemAdmin ? dialogAnchorId.value ?? undefined : undefined,
@@ -332,7 +374,7 @@ const canNextStep1 = computed(() =>
   && (!auth.isSystemAdmin || !!dialogAnchorId.value),
 )
 const canNextStep2 = computed(() => genForm.value.householdNumbers.length > 0)
-const canNextStep3 = computed(() => !rateLoading.value && !rateError.value && !!genForm.value.amountPerHousehold && !!genForm.value.currency && !!genForm.value.exchangeRate)
+const canNextStep3 = computed(() => !!genForm.value.currency && paymentRows.value.length > 0 && paymentRows.value.every(isCompleteAmountRow))
 
 onMounted(() => {
   resetDialogScope(null)
@@ -476,24 +518,38 @@ onMounted(() => {
 
         <!-- Step 3: Amount & currency -->
         <div v-else-if="step === 3">
-          <v-text-field v-model.number="genForm.amountPerHousehold" label="Amount per household (amount out)" type="number" placeholder="e.g. 5000" />
-          <v-row dense>
-            <v-col cols="6">
-              <v-autocomplete v-model="genForm.currency" :items="CURRENCIES" label="Payout currency" />
-            </v-col>
-            <v-col cols="6">
-              <v-text-field
-                v-model.number="genForm.exchangeRate" label="USD exchange rate" type="number"
-                readonly :loading="rateLoading" hint="Picked automatically from the latest reference rate" persistent-hint
-              />
-            </v-col>
-          </v-row>
-          <v-alert v-if="rateError" type="error" variant="tonal" density="compact" class="mb-3">
-            {{ rateError }}. Choose another currency or try again.
+          <div class="amount-heading">
+            <div>
+              <h2 class="text-subtitle-1 font-weight-bold">Beneficiary amounts</h2>
+              <p class="text-body-2 text-medium-emphasis mb-0">Apply a common amount first if useful, then adjust any beneficiary row individually.</p>
+            </div>
+            <v-autocomplete v-model="genForm.currency" :items="CURRENCIES" label="FCY / payout currency" density="compact" hide-details />
+          </div>
+          <div class="apply-all-row">
+            <v-text-field v-model.number="applyAllFcy" label="Amount FCY" type="number" min="0" density="compact" hide-details />
+            <v-text-field v-model.number="applyAllRate" label="Exchange rate" type="number" min="0" step="0.000001" density="compact" hide-details />
+            <v-btn color="secondary" variant="tonal" @click="applyAmountsToAll">Apply to all</v-btn>
+          </div>
+          <div class="amount-table-scroll">
+            <v-table density="compact" class="amount-table">
+              <thead><tr><th>Beneficiary</th><th>Amount FCY</th><th>Exchange rate</th><th>Amount LCY</th></tr></thead>
+              <tbody>
+                <tr v-for="row in paymentRows" :key="row.householdNumber">
+                  <td><strong>{{ row.householdName }}</strong><div class="text-caption text-medium-emphasis">{{ row.householdNumber }}</div></td>
+                  <td><v-text-field v-model.number="row.amountFcy" type="number" min="0" density="compact" hide-details aria-label="Amount FCY" @blur="calculateRowLcy(row)" /></td>
+                  <td><v-text-field v-model.number="row.exchangeRate" type="number" min="0" step="0.000001" density="compact" hide-details aria-label="Exchange rate" @blur="calculateRowLcy(row)" /></td>
+                  <td><v-text-field v-model.number="row.amountLcy" type="number" min="0" density="compact" hide-details aria-label="Amount LCY" :error="row.amountLcy != null && !isCompleteAmountRow(row)" /></td>
+                </tr>
+              </tbody>
+            </v-table>
+          </div>
+          <v-alert v-if="!canNextStep3" type="info" variant="tonal" density="compact" class="mt-3 mb-3">
+            Every row needs positive FCY, exchange-rate and LCY values. LCY must equal FCY multiplied by the exchange rate.
           </v-alert>
-          <v-alert v-else type="info" variant="tonal" density="compact" class="mb-3">
-            USD 1 = {{ genForm.currency }} {{ genForm.exchangeRate }}{{ rateAsOf ? `, reference date ${rateAsOf}` : '' }}. The rate is locked into this cycle when generated.
-          </v-alert>
+          <div class="amount-totals">
+            <span>Total FCY <strong>{{ genForm.currency }} {{ totals.amountFcy.toLocaleString() }}</strong></span>
+            <span>Total LCY <strong>{{ totals.amountLcy.toLocaleString() }}</strong></span>
+          </div>
           <div class="d-flex justify-space-between mt-4">
             <v-btn variant="outlined" prepend-icon="mdi-arrow-left" @click="prevStep">Back</v-btn>
             <v-btn color="secondary" :disabled="!canNextStep3" @click="step = 4">Next</v-btn>
@@ -503,8 +559,8 @@ onMounted(() => {
         <!-- Step 4: Verify & confirm -->
         <div v-else>
           <v-alert type="info" variant="tonal" density="compact" class="mb-3">
-            {{ genForm.householdNumbers.length }} households · {{ genForm.currency }} {{ genForm.amountPerHousehold }} out per household
-            (rate {{ genForm.exchangeRate }}). A verification code will be emailed to {{ auth.user?.email }} before this cycle is generated.
+            {{ genForm.householdNumbers.length }} beneficiaries · {{ genForm.currency }} {{ totals.amountFcy.toLocaleString() }} total FCY
+            · {{ totals.amountLcy.toLocaleString() }} total LCY. A verification code will be emailed to {{ auth.user?.email }} before this cycle is generated.
           </v-alert>
           <v-btn v-if="!otpSent" color="secondary" block :loading="sendingOtp" @click="sendGenerateOtp">Send Verification Code</v-btn>
           <template v-else>
@@ -531,22 +587,31 @@ onMounted(() => {
         <v-card-title>Import households from Excel</v-card-title>
         <v-card-text>
           <v-alert type="info" variant="tonal" density="compact" class="mb-3">
-            Upload the file you exported (or any .xlsx with "Household Number" / "Household Name" columns).
-            The households in this file replace your current selection.
+            Upload the exported workbook with Household Number, Amount FCY, Exchange Rate and Amount LCY completed.
+            The beneficiaries in this file replace your current selection.
           </v-alert>
           <v-file-input label="Upload .xlsx" accept=".xlsx,.xls" prepend-icon="mdi-file-upload" @change="onImportFile" />
-          <div v-if="importRows.length" class="text-caption mb-2">{{ importRows.length }} household(s) ready from {{ importFileName }}</div>
+          <v-alert v-if="importErrors.length" type="error" variant="tonal" density="compact" class="mb-3">
+            <div v-for="error in importErrors.slice(0, 8)" :key="error">{{ error }}</div>
+          </v-alert>
+          <div v-if="importRows.length" class="text-caption mb-2">{{ importRows.length }} beneficiary row(s) read from {{ importFileName }}</div>
           <v-table v-if="importRows.length" density="compact" style="max-height: 260px; overflow-y: auto">
             <thead>
               <tr>
                 <th>Household</th>
                 <th>Number</th>
+                <th class="text-right">FCY</th>
+                <th class="text-right">Rate</th>
+                <th class="text-right">LCY</th>
               </tr>
             </thead>
             <tbody>
               <tr v-for="h in importRows" :key="h.householdNumber">
                 <td>{{ h.householdName || '—' }}</td>
                 <td>{{ h.householdNumber }}</td>
+                <td class="text-right">{{ h.amountFcy?.toLocaleString() || '—' }}</td>
+                <td class="text-right">{{ h.exchangeRate?.toLocaleString() || '—' }}</td>
+                <td class="text-right">{{ h.amountLcy?.toLocaleString() || '—' }}</td>
               </tr>
             </tbody>
           </v-table>
@@ -554,8 +619,8 @@ onMounted(() => {
         <v-card-actions>
           <v-spacer />
           <v-btn variant="flat" color="error" @click="importDialog = false">Cancel</v-btn>
-          <v-btn variant="flat" color="secondary" :disabled="!importRows.length" @click="confirmImport">
-            Use these households
+          <v-btn variant="flat" color="secondary" :disabled="!importRows.length || !!importErrors.length" @click="confirmImport">
+            Use these beneficiaries
           </v-btn>
         </v-card-actions>
       </v-card>
@@ -566,4 +631,17 @@ onMounted(() => {
 <style scoped>
 .step-node { min-width: 88px; }
 .step-divider { margin-bottom: 22px; }
+.amount-heading { display: grid; grid-template-columns: minmax(0, 1fr) minmax(210px, 280px); gap: 20px; align-items: end; margin-bottom: 16px; }
+.apply-all-row { display: grid; grid-template-columns: minmax(140px, 220px) minmax(140px, 220px) auto; gap: 12px; align-items: center; padding: 12px; margin-bottom: 14px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; }
+.amount-table-scroll { max-height: 360px; overflow: auto; border: 1px solid #e2e8f0; border-radius: 10px; }
+.amount-table { min-width: 720px; }
+.amount-table :deep(th) { white-space: nowrap; }
+.amount-table :deep(.v-field) { min-width: 130px; }
+.amount-totals { display: flex; justify-content: flex-end; gap: 24px; color: #475569; font-size: .82rem; font-variant-numeric: tabular-nums; }
+.amount-totals strong { margin-left: 5px; color: #0f172a; }
+@media (max-width: 680px) {
+  .amount-heading, .apply-all-row { grid-template-columns: 1fr; }
+  .apply-all-row :deep(.v-btn) { width: 100%; }
+  .amount-totals { align-items: flex-end; flex-direction: column; gap: 4px; }
+}
 </style>

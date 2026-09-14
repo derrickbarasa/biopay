@@ -131,7 +131,7 @@ public final class OfflineAccessManager {
     public void recordSubscriptionCheck(String status) {
         SharedPreferences.Editor editor = prefs.edit()
                 .putString(KEY_SUBSCRIPTION_STATUS, status == null ? "NONE" : status);
-        if (!"ARCHIVED".equals(status)) {
+        if (!isLockedStatus(status)) {
             editor.putLong(KEY_VALIDATED_AT, System.currentTimeMillis());
         }
         editor.commit();
@@ -173,7 +173,11 @@ public final class OfflineAccessManager {
     }
 
     private boolean isKnownLocked() {
-        return "ARCHIVED".equals(prefs.getString(KEY_SUBSCRIPTION_STATUS, null));
+        return isLockedStatus(prefs.getString(KEY_SUBSCRIPTION_STATUS, null));
+    }
+
+    private static boolean isLockedStatus(String status) {
+        return "ARCHIVED".equals(status) || "SUSPENDED".equals(status) || "CANCELLED".equals(status);
     }
 
     private boolean credentialsMatch(String email, String password) {

@@ -124,10 +124,11 @@ const generatePayrollExample = `{
   "organisationCode": "ORG001",
   "periodStart": "2026-09-01",
   "periodEnd": "2026-09-30",
-  "amountPerHousehold": 5000,
   "currency": "USD",
-  "exchangeRate": 1,
-  "householdNumbers": ["HH00019", "HH00020", "HH00021"],
+  "beneficiaries": [
+    { "householdNumber": "HH00019", "amountFcy": 5000, "exchangeRate": 1, "amountLcy": 5000 },
+    { "householdNumber": "HH00020", "amountFcy": 7250, "exchangeRate": 1, "amountLcy": 7250 }
+  ],
   "otpCode": "482913"
 }`
 
@@ -147,10 +148,8 @@ const householdFields = [
 const payrollFields = [
   { field: 'organisationCode', required: true, notes: 'Required for Organisation accounts; Anchor/System accounts pass it explicitly.' },
   { field: 'periodStart / periodEnd', required: true, notes: 'ISO dates, e.g. "2026-09-01".' },
-  { field: 'amountPerHousehold', required: true, notes: 'Payout amount per household, in the payout currency.' },
   { field: 'currency', required: true, notes: 'e.g. USD, SSP, KES, UGX, ETB, EUR, GBP.' },
-  { field: 'exchangeRate', required: true, notes: 'USD exchange rate for the chosen currency; use 1 for USD.' },
-  { field: 'householdNumbers', required: true, notes: 'Array of household numbers to include in this cycle.' },
+  { field: 'beneficiaries', required: true, notes: 'One row per household with householdNumber, amountFcy, exchangeRate and amountLcy. Amount LCY must equal Amount FCY × Exchange Rate.' },
   { field: 'otpCode', required: true, notes: 'From REQUEST_PAYROLL_OTP — emailed to the account generating the cycle.' },
 ]
 </script>

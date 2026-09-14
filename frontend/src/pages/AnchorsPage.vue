@@ -165,6 +165,7 @@ onMounted(load)
           <v-chip size="small" :color="item.status === 1 ? 'success' : 'error'" variant="tonal">{{ item.status === 1 ? 'Active' : 'Deleted' }}</v-chip>
         </template>
         <template #item.actions="{ item }">
+          <v-btn :to="{ name: 'anchor-detail', params: { anchorId: item.id } }" icon="mdi-eye-outline" variant="text" size="small" :aria-label="`View ${item.name}`" />
           <v-btn icon="mdi-pencil" variant="text" size="small" :aria-label="`Edit ${item.name}`" @click="openEdit(item)" />
           <v-btn :icon="item.status === 1 ? 'mdi-delete' : 'mdi-restore'" variant="text" size="small" :color="item.status === 1 ? 'error' : 'secondary'" :aria-label="`${item.status === 1 ? 'Delete' : 'Restore'} ${item.name}`" @click="toggleStatus(item)" />
         </template>

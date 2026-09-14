@@ -61,6 +61,7 @@ const router = createRouter({
         { path: 'access-denied', name: 'access-denied', component: () => import('@/pages/AccessDeniedPage.vue'), meta: { title: 'Access denied' } },
         { path: 'dashboard', name: 'dashboard', component: () => import('@/pages/DashboardPage.vue'), meta: { permission: 'VIEW_REPORTS', title: 'Dashboard' } },
         { path: 'anchors', name: 'anchors', component: () => import('@/pages/AnchorsPage.vue'), meta: { roles: ['ANCHOR'], systemOnly: true, title: 'Anchors' } },
+        { path: 'anchors/:anchorId', name: 'anchor-detail', component: () => import('@/pages/AnchorDetailPage.vue'), meta: { roles: ['ANCHOR'], systemOnly: true, title: 'Anchor detail' } },
         { path: 'users', name: 'users', component: () => import('@/pages/UsersPage.vue'), meta: { roles: ['ANCHOR', 'ORGANISATION'], permission: 'ACCESS_USERS', title: 'Users' } },
         { path: 'api-access', name: 'api-access', component: () => import('@/pages/ApiAccessPage.vue'), meta: { roles: ['ANCHOR', 'ORGANISATION'], permission: 'ACCESS_USERS', title: 'API Access' } },
         { path: 'roles', name: 'roles', component: () => import('@/pages/RolesPage.vue'), meta: { roles: ['ANCHOR'], permission: 'ACCESS_ROLES', title: 'Roles & permissions' } },
@@ -69,6 +70,12 @@ const router = createRouter({
           name: 'organizations',
           component: () => import('@/pages/OrganizationsPage.vue'),
           meta: { roles: ['ANCHOR'], permission: 'ACCESS_ORGANISATIONS', title: 'Organizations' },
+        },
+        {
+          path: 'organizations/:organisationCode',
+          name: 'organization-detail',
+          component: () => import('@/pages/OrganizationDetailPage.vue'),
+          meta: { roles: ['ANCHOR', 'ORGANISATION'], permission: 'ACCESS_ORGANISATIONS', allowOwnOrganization: true, title: 'Organization detail' },
         },
         {
           path: 'households',
@@ -147,6 +154,7 @@ const router = createRouter({
         { path: 'settings', name: 'settings', component: () => import('@/pages/SettingsPage.vue'), meta: { title: 'Settings' } },
         { path: 'subscription', name: 'subscription', component: () => import('@/pages/SubscriptionPage.vue'), meta: { roles: ['ANCHOR'], anchorSubscription: true, permission: 'ACCESS_SUBSCRIPTION', title: 'Subscription' } },
         { path: 'subscription/pay', name: 'subscription-pay', component: () => import('@/pages/SubscriptionPaymentPage.vue'), meta: { roles: ['ANCHOR'], anchorSubscription: true, title: 'Make Payment' } },
+        { path: 'subscription/:anchorId', name: 'subscription-detail', component: () => import('@/pages/SubscriptionPage.vue'), meta: { roles: ['ANCHOR'], systemOnly: true, anchorSubscription: true, permission: 'ACCESS_SUBSCRIPTION', title: 'Subscription detail' } },
         { path: 'billing', name: 'billing', component: () => import('@/pages/BillingPage.vue'), meta: { roles: ['ANCHOR'], systemOnly: true, title: 'Billing' } },
       ],
     },
@@ -190,7 +198,10 @@ router.beforeEach((to) => {
     return { name: 'access-denied' }
   }
   const requiredPermission = to.meta.permission as string | undefined
-  if (requiredPermission && !auth.can(requiredPermission)) return { name: 'access-denied' }
+  const isOwnOrganizationRoute = to.meta.allowOwnOrganization
+    && auth.isOrganisation
+    && String(to.params.organisationCode ?? '') === auth.user?.partnerCode
+  if (requiredPermission && !auth.can(requiredPermission) && !isOwnOrganizationRoute) return { name: 'access-denied' }
   if (to.meta.systemOnly && !auth.isSystemAdmin) return { name: 'access-denied' }
   if (to.meta.anchorSubscription && !auth.isAnchorAdministrator && !auth.isSystemAdmin) return { name: 'access-denied' }
   return true

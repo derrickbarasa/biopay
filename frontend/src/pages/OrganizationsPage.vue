@@ -324,6 +324,7 @@ async function toggleStatus(org: Organization) {
           </v-chip>
         </template>
         <template #item.actions="{ item }">
+          <v-btn :to="{ name: 'organization-detail', params: { organisationCode: item.organisationCode } }" icon="mdi-eye-outline" variant="text" size="small" :aria-label="`View ${item.name}`" />
           <v-btn v-if="auth.can('ACCESS_ORGANISATIONS')" icon="mdi-pencil" variant="text" size="small" :aria-label="`Edit ${item.name}`" @click="openEdit(item)" />
           <v-btn v-if="auth.can('ACCESS_ORGANISATIONS')" :icon="item.status === 1 ? 'mdi-toggle-switch-off-outline' : 'mdi-toggle-switch'" variant="text" size="small" :aria-label="`${item.status === 1 ? 'Deactivate' : 'Activate'} ${item.name}`" @click="toggleStatus(item)" />
           <v-btn v-if="auth.can('ACCESS_ORGANISATIONS')" icon="mdi-delete" variant="text" size="small" color="error" :aria-label="`Delete ${item.name}`" @click="remove(item)" />

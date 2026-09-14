@@ -32,4 +32,23 @@ class PermissionPolicyTest {
     void leavesAuthenticatedAccountOperationsOutsideRolePolicy() {
         assertTrue(PermissionPolicy.requiredPermissions("CHANGE_PASSWORD", new JsonObject()).isEmpty());
     }
+
+    @Test
+    void organisationCanReadOnlyItsOwnProfileWithoutOrganizationManagementPermission() {
+        JsonObject ownScope = new JsonObject()
+                .put("actorRole", "ORGANISATION")
+                .put("partnerCode", "ORG001")
+                .put("organisationCode", "ORG001");
+        JsonObject otherScope = ownScope.copy().put("organisationCode", "ORG002");
+
+        assertTrue(PermissionPolicy.requiredPermissions("GET_ORGANIZATION", ownScope).isEmpty());
+        assertTrue(PermissionPolicy.requiredPermissions("GET_ORGANIZATION", otherScope).contains("ACCESS_ORGANISATIONS"));
+    }
+
+    @Test
+    void auditHistoryIsAvailableToUserOrOfficerAdministrators() {
+        var alternatives = PermissionPolicy.requiredPermissions("GET_AUDIT_LOGS", new JsonObject());
+        assertTrue(alternatives.contains("ACCESS_USERS"));
+        assertTrue(alternatives.contains("ACCESS_SUPERVISORS"));
+    }
 }

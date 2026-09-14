@@ -160,18 +160,21 @@ public class Approval extends AbstractVerticle {
             String tokenHash = Hashing.sha256Hex(rawToken);
             String actionUrl = frontendBaseUrl() + "/approval?token=" + rawToken;
 
+            JsonObject emailMessage = new JsonObject()
+                    .put("mailTo", email)
+                    .put("subject", "Approval needed: " + reference)
+                    .put("msg", EmailTemplates.approvalRequestEmail(name, requestData.getString("title"),
+                            reference, requestData.getString("summary"), actionUrl, expiryHours))
+                    .put("inlineImages", EmailTemplates.logoInlineImages());
             Future<?> write = pool.preparedQuery("INSERT INTO email_approval_requests "
                             + "(request_type, reference_code, approver_id, anchor_id, organization_code, token_hash, request_data, expires_at, created_at) "
                             + "VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,DATEADD(HOUR,@p8,GETDATE()),GETDATE())")
                     .execute(Tuple.of(type, reference, approverId, anchorId,
                             organizationCode.isEmpty() ? null : organizationCode, tokenHash, requestData.encode(), expiryHours))
-                    .compose(v -> eventBus.<JsonObject>request("EMAIL", new JsonObject()
-                                    .put("mailTo", email)
-                                    .put("subject", "Approval needed: " + reference)
-                                    .put("msg", EmailTemplates.approvalRequestEmail(name, requestData.getString("title"),
-                                            reference, requestData.getString("summary"), actionUrl, expiryHours))
-                                    .put("inlineImages", EmailTemplates.logoInlineImages()))
-                            .mapEmpty());
+                    // The approval request is durable once its token row is stored. Email delivery is
+                    // intentionally fire-and-forget so a slow provider cannot hold the original save
+                    // request open until the HTTP/event-bus timeout after the business row committed.
+                    .onSuccess(v -> eventBus.send("EMAIL", emailMessage));
             writes.add(write);
         }
         if (writes.isEmpty()) {

@@ -21,6 +21,7 @@ import java.util.Set;
 import java.util.HashSet;
 import com.biopay.databases.Datasource;
 import com.biopay.services.Auth;
+import com.biopay.services.Audit;
 import com.biopay.services.Approval;
 import com.biopay.services.Administration;
 import com.biopay.services.Biometric;
@@ -87,6 +88,7 @@ public class EntryPoint extends AbstractVerticle {
 
         deploy(vertx, EntryPoint.class.getName(), options);
         deploy(vertx, Auth.class.getName(), options);
+        deploy(vertx, Audit.class.getName(), options);
         deploy(vertx, Organization.class.getName(), options);
         deploy(vertx, Officer.class.getName(), options);
         deploy(vertx, Household.class.getName(), options);
@@ -264,7 +266,11 @@ public class EntryPoint extends AbstractVerticle {
                         return;
                     }
 
-                    authorizeAndDispatch(eventBus, processingCode, data, response);
+                    if (systemOwner && requestedAnchorId != null) {
+                        validateTargetAnchorAndDispatch(eventBus, processingCode, data, response, requestedAnchorId);
+                    } else {
+                        authorizeAndDispatch(eventBus, processingCode, data, response);
+                    }
                 } catch (Exception ex) {
                     response.end(badRequest("Error occurred: " + ex.getMessage()).toString());
                 }
@@ -322,6 +328,34 @@ public class EntryPoint extends AbstractVerticle {
                 startPromise.fail(resp.cause());
             }
         });
+    }
+
+    /** A system owner may select a tenant for almost every operational request. Validate that
+     * selection once at the HTTP boundary: ANCHOR is also a user access scope, so scope alone
+     * does not identify the self-referencing users row that represents the tenant itself. */
+    private static void validateTargetAnchorAndDispatch(EventBus eventBus, String processingCode, JsonObject data,
+            HttpServerResponse response, Object requestedAnchorId) {
+        final int targetAnchorId;
+        try {
+            targetAnchorId = Integer.parseInt(requestedAnchorId.toString());
+        } catch (NumberFormatException ex) {
+            response.setStatusCode(400).end(badRequest("targetAnchorId must identify an anchor").toString());
+            return;
+        }
+        Datasource.pool().preparedQuery(
+                        "SELECT 1 AS allowed FROM users WHERE id=@p1 AND user_scope='ANCHOR' AND id=anchor_id")
+                .execute(Tuple.of(targetAnchorId))
+                .onFailure(error -> response.setStatusCode(503).end(new JsonObject()
+                        .put("responseCode", "503").put("responseMessage", "Unable to verify the selected anchor").toString()))
+                .onSuccess(rows -> {
+                    if (rows.size() == 0) {
+                        response.setStatusCode(403).end(new JsonObject()
+                                .put("responseCode", "403")
+                                .put("responseMessage", "The selected account is not an anchor").toString());
+                    } else {
+                        authorizeAndDispatch(eventBus, processingCode, data, response);
+                    }
+                });
     }
 
     private static void authorizeAndDispatch(EventBus eventBus, String processingCode, JsonObject data,
@@ -405,7 +439,7 @@ public class EntryPoint extends AbstractVerticle {
 
     /**
      * Subscription gate in front of {@link #dispatch}: when the caller's anchor is
-     * ARCHIVED (grace period exhausted), every data operation is refused with a 402
+     * ARCHIVED, SUSPENDED or CANCELLED, every data operation is refused with a 402
      * until they renew. Exempt codes ({@link #SUBSCRIPTION_EXEMPT_CODES}) and callers
      * with no anchor pass straight through, and any status other than ARCHIVED --
      * including a failed lookup, which resolves to NONE -- fails open so a transient
@@ -440,10 +474,16 @@ public class EntryPoint extends AbstractVerticle {
                 return;
             }
             Subscription.statusFor(Datasource.pool(), gatedAnchorId).onComplete(ar -> {
-                if (ar.succeeded() && "ARCHIVED".equals(ar.result())) {
+                if (ar.succeeded() && Set.of("ARCHIVED", "SUSPENDED", "CANCELLED").contains(ar.result())) {
+                    String state = ar.result();
+                    String message = "SUSPENDED".equals(state)
+                            ? "Subscription suspended. Contact BioPay to restore access."
+                            : "CANCELLED".equals(state)
+                                    ? "Subscription cancelled. Renew to restore access."
+                                    : "Subscription expired. Renew to restore access.";
                     response.setStatusCode(402).end(new JsonObject()
                             .put("responseCode", "402")
-                            .put("responseMessage", "Subscription expired. Renew to restore access.")
+                            .put("responseMessage", message)
                             .toString());
                 } else {
                     dispatch(eventBus, processingCode, data, response);
@@ -457,7 +497,9 @@ public class EntryPoint extends AbstractVerticle {
         DeliveryOptions deliveryOptions = new DeliveryOptions().setSendTimeout(20000);
         eventBus.request(processingCode, data.toString(), deliveryOptions, sendToBus -> {
             if (sendToBus.succeeded()) {
-                response.end(sendToBus.result().body().toString().trim());
+                String responseBody = sendToBus.result().body().toString().trim();
+                auditAuthenticatedActivity(processingCode, data, responseBody);
+                response.end(responseBody);
             } else {
                 Logging.applicationLog(Logging.logPreString() + "555-->" + processingCode
                         + " Fail. " + sendToBus.cause().getLocalizedMessage() + "\n\n", "", 3);
@@ -467,6 +509,71 @@ public class EntryPoint extends AbstractVerticle {
                         .toString());
             }
         });
+    }
+
+    /** Records meaningful dashboard changes centrally, so every service gets the same audit
+     * coverage. Login and field-app business events are already recorded by Auth/Biometric. */
+    private static void auditAuthenticatedActivity(String processingCode, JsonObject data, String responseBody) {
+        String role = data.getString("actorRole", "");
+        if ("SUPERVISOR".equalsIgnoreCase(role) || !isAuditableActivity(processingCode)) return;
+        Object actorId = data.getValue("actorId");
+        if (actorId == null) return;
+
+        JsonObject result;
+        try { result = new JsonObject(responseBody); }
+        catch (Exception ignored) { result = new JsonObject(); }
+
+        String requestedOrganization = data.getString("organisationCode");
+        String organizationCode = requestedOrganization == null || requestedOrganization.isBlank()
+                ? data.getString("partnerCode") : requestedOrganization;
+        String actorType = data.getBoolean("systemAdmin", false) ? "SYSTEM"
+                : "ORGANISATION".equalsIgnoreCase(role) ? "ORGANISATION_USER" : "ANCHOR_USER";
+        JsonObject details = new JsonObject()
+                .put("outcome", "000".equals(result.getString("responseCode")) ? "SUCCESS" : "FAILED")
+                .put("responseMessage", result.getString("responseMessage"));
+        for (String key : new String[] { "userId", "email", "organisationCode", "householdNumber",
+                "cycleCode", "invoiceNumber", "type", "code", "status" }) {
+            if (data.getValue(key) != null) details.put(key, data.getValue(key));
+        }
+        String entityId = firstNonBlank(data, "userId", "organisationCode", "householdNumber",
+                "cycleCode", "invoiceNumber", "email", "code");
+        String entityType = data.getValue("userId") != null ? "USER"
+                : data.getValue("organisationCode") != null ? "ORGANIZATION"
+                : data.getValue("householdNumber") != null ? "HOUSEHOLD"
+                : data.getValue("cycleCode") != null ? "PAYMENT_CYCLE" : null;
+
+        String sql = "INSERT INTO audit_logs (actor_type,actor_id,anchor_id,organization_code,action,"
+                + "entity_type,entity_id,details,ip_address,channel,created_at) "
+                + "VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,GETDATE())";
+        Datasource.pool().preparedQuery(sql).execute(Tuple.of(actorType,
+                        Integer.parseInt(actorId.toString()), integerOrNull(data.getValue("anchorId")),
+                        organizationCode, processingCode, entityType, entityId, details.encode(),
+                        data.getString("ipAddress"), data.getString("channel", "PORTAL")))
+                .onFailure(error -> Logging.applicationLog(Logging.logPreString()
+                        + "Audit write failed: " + error.getMessage() + "\n\n", "", 3));
+    }
+
+    private static boolean isAuditableActivity(String code) {
+        return code.startsWith("CREATE_") || code.startsWith("UPDATE_") || code.startsWith("DELETE_")
+                || code.startsWith("TOGGLE_") || code.startsWith("SET_") || code.startsWith("ASSIGN_")
+                || code.startsWith("APPROVE_") || code.startsWith("REJECT_") || code.startsWith("DISBURSE_")
+                || code.startsWith("VOID_") || code.startsWith("REDEEM_") || code.startsWith("BULK_")
+                || Set.of("CHANGE_PASSWORD", "UPDATE_PROFILE", "TOTP_SETUP_CONFIRM", "TOTP_DISABLE",
+                        "EMAIL_OTP_ENABLE", "EMAIL_OTP_DISABLE", "PAY_PAYMENT_ONLINE", "LOGOUT").contains(code);
+    }
+
+    private static String firstNonBlank(JsonObject data, String... keys) {
+        for (String key : keys) {
+            Object value = data.getValue(key);
+            if (value != null && !value.toString().isBlank()) return value.toString();
+        }
+        return null;
+    }
+
+    private static Integer integerOrNull(Object value) {
+        if (value == null) return null;
+        try { return Integer.parseInt(value.toString()); }
+        catch (NumberFormatException ignored) { return null; }
     }
 
     private static JsonObject badRequest(String message) {

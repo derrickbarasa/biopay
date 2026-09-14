@@ -12,7 +12,7 @@ interface Cycle {
   organisationCode: string
   periodStart: string
   periodEnd: string
-  amountPerHousehold: number
+  amountPerHousehold?: number | null
   householdCount: number
   totalAmount: number
   currency?: string
@@ -74,8 +74,8 @@ const headers = [
   { title: 'Households', key: 'householdCount', width: 90 },
   { title: 'Currency', key: 'currency', width: 90 },
   { title: 'Rate', key: 'exchangeRate', width: 90 },
-  { title: 'Amount Out', key: 'amountOut', width: 110 },
-  { title: 'Amount In', key: 'amountIn', width: 110 },
+  { title: 'Total FCY', key: 'amountOut', width: 110 },
+  { title: 'Total LCY', key: 'amountIn', width: 110 },
   { title: 'Status', key: 'status', width: 150, nowrap: true },
   { title: 'Actions', key: 'actions', width: 170, sortable: false, align: 'start' as const, nowrap: true },
 ]
@@ -338,7 +338,7 @@ function openView(cycle: Cycle) {
         <template #item.period="{ item }">{{ item.periodStart }} – {{ item.periodEnd }}</template>
         <template #item.householdCount="{ item }"><span class="num-cell">{{ item.householdCount }}</span></template>
         <template #item.currency="{ item }">{{ item.currency ?? 'USD' }}</template>
-        <template #item.exchangeRate="{ item }"><span class="num-cell">{{ item.exchangeRate ?? 1 }}</span></template>
+        <template #item.exchangeRate="{ item }"><span class="num-cell">{{ item.exchangeRate ?? 'Varies' }}</span></template>
         <template #item.amountOut="{ item }"><span class="num-cell">{{ fmtAmount(item.amountOut ?? item.totalAmount) }}</span></template>
         <template #item.amountIn="{ item }"><span class="num-cell">{{ fmtAmount(item.amountIn ?? item.totalAmount) }}</span></template>
         <template #item.status="{ item }">
@@ -400,7 +400,7 @@ function openView(cycle: Cycle) {
             Uncheck any households you no longer want in this cycle before it goes to your anchor for approval.
           </div>
           <div class="mb-3">
-            {{ approveTarget.householdCount }} households · Total {{ approveTarget.currency ?? 'USD' }} {{ fmtAmount(approveTarget.totalAmount) }} out
+            {{ approveTarget.householdCount }} beneficiaries · Total FCY {{ approveTarget.currency ?? 'USD' }} {{ fmtAmount(approveTarget.totalAmount) }}
           </div>
 
           <div v-if="approveItemsLoading" class="d-flex justify-center my-4"><v-progress-circular indeterminate color="secondary" /></div>
@@ -409,8 +409,9 @@ function openView(cycle: Cycle) {
               <tr>
                 <th>Reject</th>
                 <th>Household</th>
-                <th class="text-right">Amount out</th>
-                <th class="text-right">Amount in</th>
+                <th class="text-right">Amount FCY</th>
+                <th class="text-right">Rate</th>
+                <th class="text-right">Amount LCY</th>
               </tr>
             </thead>
             <tbody>
@@ -418,6 +419,7 @@ function openView(cycle: Cycle) {
                 <td><v-checkbox-btn :model-value="approveRejectedIds.has(line.id)" @update:model-value="toggleItemReject(line.id)" /></td>
                 <td>{{ line.householdName }} ({{ line.householdNumber }})</td>
                 <td class="text-right">{{ fmtAmount(line.amountOut ?? line.amount) }}</td>
+                <td class="text-right">{{ line.exchangeRate ?? 1 }}</td>
                 <td class="text-right">{{ fmtAmount(line.amountIn ?? line.amount) }}</td>
               </tr>
             </tbody>

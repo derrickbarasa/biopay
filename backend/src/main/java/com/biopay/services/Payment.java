@@ -248,6 +248,7 @@ public class Payment extends AbstractVerticle {
                 .put("amount", Rows.dbl(r, "amount"))
                 .put("currency", Rows.str(r, "currency"))
                 .put("exchangeRate", Rows.dbl(r, "exchange_rate"))
+                .put("amountLcy", r.getColumnIndex("amount_lcy") < 0 ? null : Rows.dbl(r, "amount_lcy"))
                 .put("status", Rows.intVal(r, "status"))
                 .put("approved", Rows.intVal(r, "approved"))
                 .put("cycle", Rows.str(r, "cycle"))

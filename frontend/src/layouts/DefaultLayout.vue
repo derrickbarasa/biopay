@@ -25,7 +25,7 @@ watch(mdAndUp, (isDesktop) => {
 
 // ---- Subscription lifecycle (per anchor) --------------------------------------
 interface SubscriptionStatus {
-  status: 'NONE' | 'ACTIVE' | 'GRACE' | 'ARCHIVED'
+  status: 'NONE' | 'ACTIVE' | 'GRACE' | 'ARCHIVED' | 'SUSPENDED' | 'CANCELLED'
   expiresAt?: string
   daysToExpiry?: number
   daysToArchive?: number
@@ -51,8 +51,9 @@ function goToMakePayment() {
 // The Subscription and Make Payment pages must stay reachable even when archived --
 // otherwise there's no way to see invoices or reach the payment flow that unlocks
 // everything else.
-const isArchived = computed(() => !auth.isSystemAdmin && !!auth.user?.anchorId && subscription.value.status === 'ARCHIVED'
+const isArchived = computed(() => !auth.isSystemAdmin && !!auth.user?.anchorId && ['ARCHIVED', 'SUSPENDED', 'CANCELLED'].includes(subscription.value.status)
   && route.name !== 'subscription' && route.name !== 'subscription-pay')
+const blockedByManagement = computed(() => ['SUSPENDED', 'CANCELLED'].includes(subscription.value.status))
 const inGrace = computed(() => !auth.isSystemAdmin && !!auth.user?.anchorId && subscription.value.status === 'GRACE')
 
 // A deactivated anchor's own admin account can't even log in (see Auth#loginUser), so this
@@ -303,13 +304,19 @@ function onNavClick(event: MouseEvent | KeyboardEvent, to: string) {
       <div v-else-if="isArchived" class="archived-gate">
         <v-card variant="flat" border class="pa-8 text-center" max-width="520">
           <v-icon icon="mdi-lock-clock" size="48" color="error" class="mb-3" />
-          <h2 class="text-h6 font-weight-bold mb-2">Subscription expired</h2>
+          <h2 class="text-h6 font-weight-bold mb-2">
+            {{ subscription.status === 'SUSPENDED' ? 'Subscription suspended' : subscription.status === 'CANCELLED' ? 'Subscription cancelled' : 'Subscription expired' }}
+          </h2>
 
           <template v-if="auth.isAnchorAdministrator">
             <p class="text-body-2 text-medium-emphasis mb-4">
-              The 4-day grace period has ended and your data is archived. Make a payment to restore access.
+              {{ subscription.status === 'SUSPENDED'
+                ? 'Your subscription has been suspended by the platform owner. Contact BioPay to restore access.'
+                : subscription.status === 'CANCELLED'
+                  ? 'Your subscription has been cancelled. Make a payment to start a new subscription period.'
+                  : 'The grace period has ended and your data is archived. Make a payment to restore access.' }}
             </p>
-            <v-btn color="secondary" @click="goToMakePayment">Make payment</v-btn>
+            <v-btn v-if="!blockedByManagement || subscription.status === 'CANCELLED'" color="secondary" @click="goToMakePayment">Make payment</v-btn>
             <div class="mt-4 d-flex ga-2 justify-center">
               <v-btn variant="text" size="small" prepend-icon="mdi-credit-card-outline" @click="onNavClick($event, '/app/subscription')">View subscription</v-btn>
               <v-btn variant="text" size="small" prepend-icon="mdi-logout" @click="handleLogout">Log out</v-btn>

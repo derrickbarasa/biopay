@@ -57,12 +57,22 @@ public final class PermissionPolicy {
             Map.entry("REDEEM_VOUCHER", "ACCESS_VOUCHERS"), Map.entry("VOID_VOUCHER", "ACCESS_VOUCHERS"),
             Map.entry("GET_ATTENDANCE", "ACCESS_ATTENDANCE"), Map.entry("RECORD_ATTENDANCE", "ACCESS_ATTENDANCE"),
             Map.entry("GET_SUBSCRIPTION", "ACCESS_SUBSCRIPTION"), Map.entry("GET_SUBSCRIPTION_INVOICES", "ACCESS_SUBSCRIPTION"),
-            Map.entry("GET_SUBSCRIPTION_INVOICE_RECEIPT", "ACCESS_SUBSCRIPTION"), Map.entry("RENEW_SUBSCRIPTION", "ACCESS_SUBSCRIPTION")
+            Map.entry("GET_SUBSCRIPTION_INVOICE_RECEIPT", "ACCESS_SUBSCRIPTION"), Map.entry("RENEW_SUBSCRIPTION", "ACCESS_SUBSCRIPTION"),
+            Map.entry("SET_SUBSCRIPTION_STATE", "ACCESS_SUBSCRIPTION")
     );
 
     private PermissionPolicy() {}
 
     public static Set<String> requiredPermissions(String processingCode, JsonObject data) {
+        if ("GET_AUDIT_LOGS".equals(processingCode)) return Set.of("ACCESS_USERS", "ACCESS_SUPERVISORS");
+        // An organisation account may always read its own organisation profile. The HTTP
+        // tenant gate first verifies that organisationCode matches the signed-in account,
+        // while anchor and platform callers still require ACCESS_ORGANISATIONS.
+        if ("GET_ORGANIZATION".equals(processingCode)
+                && "ORGANISATION".equalsIgnoreCase(data.getString("actorRole", ""))
+                && data.getString("organisationCode", "").equals(data.getString("partnerCode", ""))) {
+            return Set.of();
+        }
         if ("GET_ROLES".equals(processingCode)) return Set.of("ACCESS_ROLES", "ACCESS_USERS");
         if ("GET_PERMISSIONS".equals(processingCode)) return Set.of("ACCESS_PERMISSIONS", "ACCESS_ROLES");
         if ("GET_ORGANIZATIONS".equals(processingCode)) {

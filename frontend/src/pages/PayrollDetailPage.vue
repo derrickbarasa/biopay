@@ -9,7 +9,7 @@ interface Cycle {
   organisationCode: string
   periodStart: string
   periodEnd: string
-  amountPerHousehold: number
+  amountPerHousehold?: number | null
   householdCount: number
   totalAmount: number
   currency?: string
@@ -34,6 +34,7 @@ interface PaymentLine {
   amount: number
   amountOut?: number
   amountIn?: number
+  exchangeRate?: number
   status: number
   approved: number
   rejected?: number | null
@@ -152,14 +153,14 @@ function goToList() {
           </div>
           <div class="view-summary-item">
             <dt>Currency</dt>
-            <dd>{{ cycle.currency ?? 'USD' }} <span class="view-summary-muted">rate {{ cycle.exchangeRate ?? 1 }}</span></dd>
+            <dd>{{ cycle.currency ?? 'USD' }} <span class="view-summary-muted">{{ cycle.exchangeRate ? `rate ${cycle.exchangeRate}` : 'rates vary by beneficiary' }}</span></dd>
           </div>
           <div class="view-summary-item">
-            <dt>Amount out</dt>
+            <dt>Total FCY</dt>
             <dd class="num-cell">{{ fmtAmount(cycle.amountOut ?? cycle.totalAmount) }}</dd>
           </div>
           <div class="view-summary-item">
-            <dt>Amount in</dt>
+            <dt>Total LCY</dt>
             <dd class="num-cell">{{ fmtAmount(cycle.amountIn ?? cycle.totalAmount) }}</dd>
           </div>
           <div class="view-summary-item">
@@ -184,8 +185,9 @@ function goToList() {
                 <th>Household</th>
                 <th>Village</th>
                 <th>Gender</th>
-                <th class="text-right">Amount out</th>
-                <th class="text-right">Amount in</th>
+                <th class="text-right">Amount FCY</th>
+                <th class="text-right">Rate</th>
+                <th class="text-right">Amount LCY</th>
                 <th>Status</th>
               </tr>
             </thead>
@@ -198,6 +200,7 @@ function goToList() {
                 <td>{{ line.bomaCode || '—' }}</td>
                 <td>{{ genderLabel(line.gender) }}</td>
                 <td class="text-right num-cell">{{ fmtAmount(line.amountOut ?? line.amount) }}</td>
+                <td class="text-right num-cell">{{ line.exchangeRate ?? 1 }}</td>
                 <td class="text-right num-cell">{{ fmtAmount(line.amountIn ?? line.amount) }}</td>
                 <td>
                   <v-tooltip v-if="line.rejected && line.rejectionReason" :text="line.rejectionReason" location="top">

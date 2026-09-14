@@ -35,6 +35,8 @@ import com.biopay.utilities.Utilities;
  */
 public class Payroll extends AbstractVerticle {
 
+    private record BeneficiaryAmount(String householdNumber, double amountFcy, double exchangeRate, double amountLcy) {}
+
     EventBus eventBus;
     MSSQLPool pool;
     OtpService otpService;
@@ -116,28 +118,55 @@ public class Payroll extends AbstractVerticle {
         String partnerCode = isAnchor(payload) ? payload.getString("organisationCode", "") : payload.getString("partnerCode", "");
         String periodStart = payload.getString("periodStart", "");
         String periodEnd = payload.getString("periodEnd", "");
-        Double amountPerHousehold = payload.getDouble("amountPerHousehold");
         String otpCode = payload.getString("otpCode", "").trim();
         String currency = payload.getString("currency", "USD").trim().toUpperCase();
-        Double exchangeRateVal = payload.getDouble("exchangeRate", 1.0);
-        double exchangeRate = exchangeRateVal == null ? 1.0 : exchangeRateVal;
-        List<String> householdNumbers = new ArrayList<>();
-        for (Object o : payload.getJsonArray("householdNumbers", new JsonArray())) {
-            if (o != null && !o.toString().trim().isEmpty()) {
-                householdNumbers.add(o.toString().trim());
+        List<BeneficiaryAmount> beneficiaries = new ArrayList<>();
+        JsonArray beneficiaryRows = payload.getJsonArray("beneficiaries", new JsonArray());
+        for (Object value : beneficiaryRows) {
+            if (!(value instanceof JsonObject row)) continue;
+            String householdNumber = row.getString("householdNumber", "").trim();
+            Double amountFcy = row.getDouble("amountFcy");
+            Double exchangeRate = row.getDouble("exchangeRate");
+            Double amountLcy = row.getDouble("amountLcy");
+            if (householdNumber.isEmpty() || amountFcy == null || amountFcy <= 0
+                    || exchangeRate == null || exchangeRate <= 0 || amountLcy == null || amountLcy <= 0
+                    || Math.abs(amountLcy - amountFcy * exchangeRate) > 0.011) {
+                replyError(message, "Every beneficiary needs positive FCY, exchange-rate and LCY values; LCY must equal FCY multiplied by the rate");
+                return;
             }
+            if (beneficiaries.stream().anyMatch(existing -> existing.householdNumber().equals(householdNumber))) {
+                replyError(message, "Each household may appear only once in a payment cycle");
+                return;
+            }
+            beneficiaries.add(new BeneficiaryAmount(householdNumber, amountFcy, exchangeRate, amountLcy));
         }
 
-        if (partnerCode.isEmpty() || periodStart.isEmpty() || periodEnd.isEmpty() || amountPerHousehold == null || amountPerHousehold <= 0) {
-            replyError(message, "organisationCode, periodStart, periodEnd and amountPerHousehold are required");
+        // Backward compatibility for existing API integrations: the dashboard now sends
+        // beneficiary rows, while the documented legacy payload may still send one amount/rate.
+        if (beneficiaries.isEmpty()) {
+            Double amountPerHousehold = payload.getDouble("amountPerHousehold");
+            Double exchangeRateVal = payload.getDouble("exchangeRate", 1.0);
+            double exchangeRate = exchangeRateVal == null ? 1.0 : exchangeRateVal;
+            if (amountPerHousehold == null || amountPerHousehold <= 0 || exchangeRate <= 0) {
+                replyError(message, "At least one beneficiary amount is required");
+                return;
+            }
+            for (Object value : payload.getJsonArray("householdNumbers", new JsonArray())) {
+                if (value == null || value.toString().trim().isEmpty()) continue;
+                String householdNumber = value.toString().trim();
+                beneficiaries.add(new BeneficiaryAmount(householdNumber, amountPerHousehold, exchangeRate,
+                        Math.round(amountPerHousehold * exchangeRate * 100.0) / 100.0));
+            }
+        }
+        List<String> householdNumbers = new ArrayList<>();
+        for (BeneficiaryAmount beneficiary : beneficiaries) householdNumbers.add(beneficiary.householdNumber());
+
+        if (partnerCode.isEmpty() || periodStart.isEmpty() || periodEnd.isEmpty()) {
+            replyError(message, "organisationCode, periodStart and periodEnd are required");
             return;
         }
         if (householdNumbers.isEmpty()) {
             replyError(message, "At least one householdNumbers entry is required -- select which households this cycle is for");
-            return;
-        }
-        if (exchangeRate <= 0) {
-            replyError(message, "exchangeRate must be greater than zero");
             return;
         }
         if (otpCode.isEmpty()) {
@@ -157,11 +186,18 @@ public class Payroll extends AbstractVerticle {
                             .onSuccess(resolvedAnchorId -> countActiveHouseholds(partnerCode, householdNumbers)
                             .onFailure(err -> onDbError(message, err))
                             .onSuccess(householdCount -> {
-                                if (householdCount == 0) {
-                                    replyError(message, "None of the selected households are active in this organisation");
+                                if (householdCount != beneficiaries.size()) {
+                                    replyError(message, "One or more selected households are not active in this organisation");
                                     return;
                                 }
-                                double total = householdCount * amountPerHousehold;
+                                double total = beneficiaries.stream().mapToDouble(BeneficiaryAmount::amountFcy).sum();
+                                double totalLcy = beneficiaries.stream().mapToDouble(BeneficiaryAmount::amountLcy).sum();
+                                double firstAmount = beneficiaries.get(0).amountFcy();
+                                double firstRate = beneficiaries.get(0).exchangeRate();
+                                Double amountPerHousehold = beneficiaries.stream().allMatch(row -> Math.abs(row.amountFcy() - firstAmount) < 0.001)
+                                        ? firstAmount : null;
+                                Double cycleExchangeRate = beneficiaries.stream().allMatch(row -> Math.abs(row.exchangeRate() - firstRate) < 0.000001)
+                                        ? firstRate : null;
                                 String cycleCode = Utilities.generateCode("PAYROLL");
 
                                 // An Anchor Administrator generating for one of their own organisations
@@ -173,7 +209,7 @@ public class Payroll extends AbstractVerticle {
                                 // leaves it PENDING_APPROVAL for that organisation's own anchor.
                                 boolean autoApprove = TenantScope.isAnchorAdministrator(payload);
                                 String checkerColumns = autoApprove ? "checker_id, checker_at, " : "";
-                                String checkerValues = autoApprove ? "@p11, GETDATE(), " : "";
+                                String checkerValues = autoApprove ? "@p12, GETDATE(), " : "";
                                 String cycleStatus = autoApprove ? "APPROVED" : "PENDING_APPROVAL";
 
                                 // Cycle header + its payment line items must land together --
@@ -181,20 +217,19 @@ public class Payroll extends AbstractVerticle {
                                 // partial) line items sitting in PENDING_APPROVAL.
                                 pool.withTransaction(client -> {
                                     String sql = "INSERT INTO payment_cycles (cycle_code, organization_code, anchor_id, period_start, period_end, "
-                                            + "amount_per_household, household_count, total_amount, currency, exchange_rate, status, maker_id, maker_at, "
+                                            + "amount_per_household, household_count, total_amount, total_amount_lcy, currency, exchange_rate, status, maker_id, maker_at, "
                                             + checkerColumns + "otp_verified, created_by, created_at) "
                                             + "OUTPUT INSERTED.id "
-                                            + "VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,'" + cycleStatus + "',@p11,GETDATE(),"
-                                            + checkerValues + "1,@p12,GETDATE())";
+                                            + "VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,'" + cycleStatus + "',@p12,GETDATE(),"
+                                            + checkerValues + "1,@p13,GETDATE())";
                                     return client.preparedQuery(sql)
                                             .execute(Tuple.of(cycleCode, partnerCode, resolvedAnchorId,
-                                                    periodStart, periodEnd, amountPerHousehold, householdCount, total, currency, exchangeRate,
+                                                    periodStart, periodEnd, amountPerHousehold, householdCount, total, totalLcy, currency, cycleExchangeRate,
                                                     actorId(payload), String.valueOf(actorId(payload))))
                                             .compose(insertRows -> {
                                                 int cycleId = Rows.intVal(insertRows.iterator().next(), "id");
                                                 return createLineItems(client, cycleId, cycleCode, partnerCode, resolvedAnchorId,
-                                                        periodStart, periodEnd, amountPerHousehold, currency, exchangeRate,
-                                                        actorId(payload), householdNumbers)
+                                                        periodStart, periodEnd, currency, actorId(payload), beneficiaries)
                                                         .compose(lineCount -> autoApprove
                                                                 ? client.preparedQuery("UPDATE payments SET approved=1, approved_by=@p1, approved_at=GETDATE() "
                                                                                 + "WHERE payment_cycle_id=@p2 AND rejected=0")
@@ -209,8 +244,10 @@ public class Payroll extends AbstractVerticle {
                                               .put("cycleCode", cycleCode)
                                               .put("householdCount", householdCount)
                                               .put("totalAmount", total)
+                                              .put("totalAmountLcy", totalLcy)
                                               .put("currency", currency)
-                                              .put("exchangeRate", exchangeRate)
+                                              .put("exchangeRate", cycleExchangeRate)
+                                              .put("variableAmounts", amountPerHousehold == null)
                                               .put("autoApproved", autoApprove);
                                       if (autoApprove) {
                                           reply(message, response.put("responseMessage", "Payroll cycle generated and approved"));
@@ -300,27 +337,28 @@ public class Payroll extends AbstractVerticle {
     }
 
     private Future<Integer> createLineItems(io.vertx.sqlclient.SqlClient client, int cycleId, String cycleCode,
-            String partnerCode, Object anchorIdVal, String periodStart, String periodEnd, double amount,
-            String currency, double exchangeRate, int makerId, List<String> householdNumbers) {
+            String partnerCode, Object anchorIdVal, String periodStart, String periodEnd,
+            String currency, int makerId, List<BeneficiaryAmount> beneficiaries) {
         // uuid has a UNIQUE index (UQ_payments_UUID) -- SQL Server allows at most one NULL in a
         // unique index, so every row here needs its own value; NEWID() supplies a fresh one per
         // row within the single INSERT...SELECT (a bound Tuple parameter would repeat the same
         // value for all rows and collide after the first).
         String sql = "INSERT INTO payments (household_number, household_name, gender, boma_code, organization_code, anchor_id, "
-                + "payment_cycle_id, cycle, date_from, date_to, amount, status, approved, uuid, currency, exchange_rate, "
+                + "payment_cycle_id, cycle, date_from, date_to, amount, amount_lcy, status, approved, uuid, currency, exchange_rate, "
                 + "created_by, created_at) "
                 + "SELECT household_number, household_name, gender, boma_code, @p1, @p2, "
-                + "@p3, @p4, @p5, @p6, @p7, 0, 0, CONVERT(VARCHAR(50), NEWID()), @p9, @p10, @p8, GETDATE() "
-                + "FROM households WHERE organization_code=@p1 AND status=1 AND household_number IN ("
-                + inClause(11, householdNumbers.size()) + ")";
+                + "@p3, @p4, @p5, @p6, @p7, @p10, 0, 0, CONVERT(VARCHAR(50), NEWID()), @p8, @p9, @p11, GETDATE() "
+                + "FROM households WHERE organization_code=@p1 AND status=1 AND household_number=@p12";
         Object anchorId = anchorIdVal == null ? null : Integer.parseInt(anchorIdVal.toString());
-        Tuple params = Tuple.of(partnerCode, anchorId, cycleId, cycleCode, periodStart, periodEnd, amount, makerId, currency, exchangeRate);
-        for (String hn : householdNumbers) {
-            params = params.addString(hn);
+        List<Tuple> batch = new ArrayList<>();
+        for (BeneficiaryAmount beneficiary : beneficiaries) {
+            batch.add(Tuple.of(partnerCode, anchorId, cycleId, cycleCode, periodStart, periodEnd,
+                    beneficiary.amountFcy(), currency, beneficiary.exchangeRate(), beneficiary.amountLcy(),
+                    makerId, beneficiary.householdNumber()));
         }
         return client.preparedQuery(sql)
-                .execute(params)
-                .map(rows -> rows.rowCount());
+                .executeBatch(batch)
+                .map(rows -> beneficiaries.size());
     }
 
     // ---- APPROVE_PAYROLL (checker, anchor only) ------------------------------------
@@ -603,8 +641,8 @@ public class Payroll extends AbstractVerticle {
 
     private static JsonObject summary(Row r) {
         Double rate = dblSafe(r, "exchange_rate");
-        double exchangeRate = rate == null ? 1.0 : rate;
         Double totalAmount = Rows.dbl(r, "total_amount");
+        Double storedTotalLcy = dblSafe(r, "total_amount_lcy");
         return new JsonObject()
                 .put("cycleCode", Rows.str(r, "cycle_code"))
                 .put("organisationCode", Rows.str(r, "organization_code"))
@@ -617,9 +655,10 @@ public class Payroll extends AbstractVerticle {
                 // currency/exchange_rate arrive with migration 021; guard the read so cycles
                 // still list/load if that migration hasn't been applied to this environment yet.
                 .put("currency", strSafe(r, "currency"))
-                .put("exchangeRate", exchangeRate)
+                .put("exchangeRate", rate)
+                .put("variableAmounts", Rows.dbl(r, "amount_per_household") == null)
                 .put("amountOut", totalAmount)
-                .put("amountIn", totalAmount == null ? null : totalAmount * exchangeRate)
+                .put("amountIn", storedTotalLcy != null ? storedTotalLcy : totalAmount == null || rate == null ? null : totalAmount * rate)
                 .put("status", Rows.str(r, "status"))
                 .put("makerId", Rows.intVal(r, "maker_id"))
                 .put("makerAt", Rows.str(r, "maker_at"))
@@ -634,6 +673,7 @@ public class Payroll extends AbstractVerticle {
         Double rate = dblSafe(r, "exchange_rate");
         double exchangeRate = rate == null ? 1.0 : rate;
         Double amount = Rows.dbl(r, "amount");
+        Double storedAmountLcy = dblSafe(r, "amount_lcy");
         return new JsonObject()
                 .put("id", Rows.intVal(r, "id"))
                 .put("uuid", Rows.str(r, "uuid"))
@@ -645,7 +685,7 @@ public class Payroll extends AbstractVerticle {
                 .put("currency", strSafe(r, "currency"))
                 .put("exchangeRate", exchangeRate)
                 .put("amountOut", amount)
-                .put("amountIn", amount == null ? null : amount * exchangeRate)
+                .put("amountIn", storedAmountLcy != null ? storedAmountLcy : amount == null ? null : amount * exchangeRate)
                 .put("status", Rows.intVal(r, "status"))
                 .put("approved", Rows.intVal(r, "approved"))
                 // rejected/rejected* arrive with migration 021; same defensive read as above.

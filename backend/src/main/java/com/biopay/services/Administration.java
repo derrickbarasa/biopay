@@ -69,8 +69,8 @@ public class Administration extends AbstractVerticle {
         // browse every anchor (for the anchor-picker on admin@biopay.com's sessions); a plain
         // anchor admin only ever sees their own row.
         String sql = systemAdmin(p)
-                ? "SELECT * FROM users WHERE user_scope='ANCHOR' ORDER BY anchor_name"
-                : "SELECT * FROM users WHERE user_scope='ANCHOR' AND id=@p1";
+                ? "SELECT * FROM users WHERE user_scope='ANCHOR' AND id=anchor_id ORDER BY anchor_name"
+                : "SELECT * FROM users WHERE user_scope='ANCHOR' AND id=anchor_id AND id=@p1";
         Tuple params = systemAdmin(p) ? Tuple.tuple() : Tuple.of(Integer.parseInt(p.getValue("anchorId").toString()));
         pool.preparedQuery(sql)
                 .execute(params)
@@ -133,7 +133,7 @@ public class Administration extends AbstractVerticle {
         int targetAnchorId = systemAdmin(p)
                 ? p.getInteger("targetAnchorId", Integer.parseInt(p.getValue("anchorId").toString()))
                 : Integer.parseInt(p.getValue("anchorId").toString());
-        pool.preparedQuery("UPDATE users SET anchor_name=@p1, first_name=@p2, surname=@p3, phone=@p4, address=@p5, country=@p6, city=@p7, updated_at=GETDATE() WHERE id=@p8 AND user_scope='ANCHOR'")
+        pool.preparedQuery("UPDATE users SET anchor_name=@p1, first_name=@p2, surname=@p3, phone=@p4, address=@p5, country=@p6, city=@p7, updated_at=GETDATE() WHERE id=@p8 AND user_scope='ANCHOR' AND id=anchor_id")
                 .execute(Tuple.of(p.getString("name","").trim(),strOrEmpty(p.getString("authorisedFirstName")).trim(),strOrEmpty(p.getString("authorisedSurname")).trim(),
                         p.getString("authorisedContact"),p.getString("address"),strOrEmpty(p.getString("country")).trim(),
                         strOrEmpty(p.getString("city")).trim(),targetAnchorId))
@@ -151,7 +151,7 @@ public class Administration extends AbstractVerticle {
         Integer targetAnchorId = p.getInteger("targetAnchorId");
         Integer status = p.getInteger("status");
         if (targetAnchorId == null || status == null) { fail(message, "targetAnchorId and status are required"); return; }
-        pool.preparedQuery("UPDATE users SET status=@p1, updated_at=GETDATE() WHERE id=@p2 AND user_scope='ANCHOR'")
+        pool.preparedQuery("UPDATE users SET status=@p1, updated_at=GETDATE() WHERE id=@p2 AND user_scope='ANCHOR' AND id=anchor_id")
                 .execute(Tuple.of(status, targetAnchorId))
                 .onFailure(e -> dbFail(message, e))
                 .onSuccess(rows -> {
@@ -233,7 +233,8 @@ public class Administration extends AbstractVerticle {
         String keyId = "api_" + Utilities.newUuid().replace("-", "").substring(0, 20);
         String secret = Utilities.generateRandomPassword(40);
         String syntheticEmail = keyId + "@api-clients.biopay.internal";
-        pool.preparedQuery("SELECT 1 AS allowed FROM roles WHERE id=@p1 AND role_scope=@p2 AND status=1 AND (anchor_id IS NULL OR anchor_id=@p3)")
+        pool.preparedQuery("SELECT 1 AS allowed FROM roles WHERE id=@p1 AND role_scope=@p2 AND status=1 AND (anchor_id IS NULL OR anchor_id=@p3) "
+                        + "AND EXISTS (SELECT 1 FROM users a WHERE a.id=@p3 AND a.user_scope='ANCHOR' AND a.id=a.anchor_id)")
                 .execute(Tuple.of(roleId, requestedScope, anchorId))
                 .compose(roleRows -> roleRows.size()==0 ? Future.failedFuture("Role is outside the selected anchor or has the wrong scope")
                         : pool.preparedQuery("INSERT INTO users (organization_code,email,username,password,first_name,role_id,active,status,"
@@ -279,7 +280,8 @@ public class Administration extends AbstractVerticle {
         // matches the existing Officer.create() pattern (same helper, same email shape).
         String tempPassword = Utilities.generateRandomPassword(10);
         Integer roleId = p.getInteger("roleId");
-        pool.preparedQuery("SELECT 1 AS allowed FROM roles WHERE id=@p1 AND role_scope=@p2 AND status=1 AND (anchor_id IS NULL OR anchor_id=@p3)")
+        pool.preparedQuery("SELECT 1 AS allowed FROM roles WHERE id=@p1 AND role_scope=@p2 AND status=1 AND (anchor_id IS NULL OR anchor_id=@p3) "
+                        + "AND EXISTS (SELECT 1 FROM users a WHERE a.id=@p3 AND a.user_scope='ANCHOR' AND a.id=a.anchor_id)")
                 .execute(Tuple.of(roleId, requestedScope, anchorId))
                 .compose(roleRows -> roleRows.size()==0 ? Future.failedFuture("Role is outside the selected anchor or has the wrong scope")
                         : pool.preparedQuery("INSERT INTO users (organization_code,email,username,password,first_name,surname,role_id,active,status,anchor_id,user_scope,must_change_password,created_by,created_at,updated_at) VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,1,1,@p8,@p9,1,@p10,GETDATE(),GETDATE())")

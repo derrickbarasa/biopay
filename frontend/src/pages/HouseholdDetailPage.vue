@@ -2,6 +2,7 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { apiClient, dispatch } from '@/api/client'
+import { apiRelativeFilePath } from '@/api/paths'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
 import { downloadCsv, toCsv } from '@/utils/csv'
@@ -63,6 +64,8 @@ const vouchers = ref<VoucherEvent[]>([])
 // Object URLs for photos fetched (with the auth header) through apiClient as blobs --
 // a plain image URL can't reach the JWT-protected /files route.
 const photoUrls = ref<string[]>([])
+const photoLoading = ref(false)
+const photoLoadError = ref('')
 // Same blob-fetch pattern, keyed by alternateNumber, for each alternate's own gallery.
 const alternatePhotoUrls = ref<Record<string, string[]>>({})
 // Currently expanded photo, shown large in the lightbox dialog below -- every small photo
@@ -166,7 +169,8 @@ async function fetchPhotoBlobs(paths: string[]): Promise<string[]> {
   const urls: string[] = []
   for (const p of paths) {
     try {
-      const rel = String(p).replace(/^\/biopay/, '')
+      const rel = apiRelativeFilePath(p)
+      if (!rel) continue
       const res = await apiClient.get(rel, { responseType: 'blob' })
       urls.push(URL.createObjectURL(res.data as Blob))
     } catch {
@@ -178,7 +182,21 @@ async function fetchPhotoBlobs(paths: string[]): Promise<string[]> {
 
 async function loadPhotos(paths: string[]) {
   revokePhotos()
-  photoUrls.value = await fetchPhotoBlobs(paths)
+  photoLoading.value = true
+  photoLoadError.value = ''
+  try {
+    photoUrls.value = await fetchPhotoBlobs(paths)
+    if (paths.length && !photoUrls.value.length) {
+      photoLoadError.value = 'The captured photo could not be loaded.'
+    }
+  } finally {
+    photoLoading.value = false
+  }
+}
+
+function retryPhotos() {
+  const images: string[] = detail.value?.images ?? []
+  if (images.length) loadPhotos(images)
 }
 
 async function loadAlternatePhotos() {
@@ -489,7 +507,7 @@ onMounted(() => { load(); loadNameLookups() })
           @click="lightboxSrc = photoUrls[0]"
           @keyup.enter="lightboxSrc = photoUrls[0]"
         >
-          <v-img :src="photoUrls[0]" cover />
+          <v-img :src="photoUrls[0]" :alt="`${detail?.householdName ?? 'Household head'} photo`" cover />
         </v-avatar>
         <v-avatar v-else size="56" color="surface-variant">
           <v-icon icon="mdi-account-outline" size="28" />
@@ -718,13 +736,18 @@ onMounted(() => { load(); loadNameLookups() })
 
       <v-col cols="12" md="4">
         <v-card variant="flat" border class="mb-4">
-          <v-card-title class="text-subtitle-1 font-weight-bold">Photos</v-card-title>
+          <v-card-title class="text-subtitle-1 font-weight-bold">Household head photo</v-card-title>
           <v-divider />
           <v-card-text>
-            <v-row v-if="photoUrls.length" dense>
+            <div v-if="photoLoading" class="photo-loading" role="status">
+              <v-progress-circular indeterminate color="primary" size="24" width="2" />
+              <span>Loading captured photo...</span>
+            </div>
+            <v-row v-else-if="photoUrls.length" dense>
               <v-col v-for="(src, i) in photoUrls" :key="i" cols="6">
                 <v-img
                   :src="src"
+                  :alt="`${detail?.householdName ?? 'Household head'} photo ${i + 1}`"
                   aspect-ratio="1"
                   cover
                   class="rounded-lg clickable-photo"
@@ -736,6 +759,12 @@ onMounted(() => { load(); loadNameLookups() })
                 />
               </v-col>
             </v-row>
+            <v-alert v-else-if="photoLoadError" type="error" variant="tonal" density="compact">
+              <div class="d-flex align-center flex-wrap ga-2">
+                <span>{{ photoLoadError }}</span>
+                <v-btn size="small" variant="text" color="error" @click="retryPhotos">Try again</v-btn>
+              </div>
+            </v-alert>
             <div v-else class="text-medium-emphasis">No photos uploaded for this household.</div>
           </v-card-text>
         </v-card>
@@ -767,7 +796,7 @@ onMounted(() => { load(); loadNameLookups() })
     <v-dialog :model-value="!!lightboxSrc" max-width="720" @update:model-value="lightboxSrc = null">
       <v-card v-if="lightboxSrc">
         <dialog-close-button @close="lightboxSrc = null" />
-        <v-img :src="lightboxSrc" max-height="80vh" contain />
+        <v-img :src="lightboxSrc" :alt="`${detail?.householdName ?? 'Household head'} photo`" max-height="80vh" contain />
       </v-card>
     </v-dialog>
 
@@ -911,5 +940,14 @@ onMounted(() => { load(); loadNameLookups() })
 .household-detail-avatar,
 .clickable-photo {
   cursor: pointer;
+}
+
+.photo-loading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  color: #64748b;
+  font-size: .875rem;
 }
 </style>

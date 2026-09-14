@@ -48,7 +48,7 @@ public final class SubscriptionGate {
                 String status = results != null ? results.optString("status", "NONE") : "NONE";
                 OfflineAccessManager offlineAccess = new OfflineAccessManager(context);
                 offlineAccess.recordSubscriptionCheck(status);
-                if ("ARCHIVED".equals(status)) {
+                if ("ARCHIVED".equals(status) || "SUSPENDED".equals(status) || "CANCELLED".equals(status)) {
                     callback.onLocked();
                 } else {
                     callback.onAllowed();

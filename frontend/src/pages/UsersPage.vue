@@ -4,11 +4,13 @@ import { dispatch } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
 import { useConfirm } from '@/composables/useConfirm'
+import AuditHistoryDialog from '@/components/AuditHistoryDialog.vue'
 interface UserRow{id:number;email:string;username:string;firstName?:string;surname?:string;partnerCode?:string;anchorId?:number;userScope:string;roleId?:number;roleName?:string;status:number;createdAt:string;systemAdmin?:boolean}
 interface Role{id:number;name:string;scope:string;anchorId?:number|null;builtIn?:boolean;systemRole?:boolean}
 interface Org{organisationCode:string;name:string;anchorId?:number}
 interface Anchor{id:number;name:string}
 const auth=useAuthStore(),toast=useToast(),loading=ref(false),saving=ref(false),dialog=ref(false),editDialog=ref(false),editSaving=ref(false),editLoading=ref(false),search=ref(''),roleFilter=ref<string|null>(null),users=ref<UserRow[]>([]),roles=ref<Role[]>([]),orgs=ref<Org[]>([]),anchors=ref<Anchor[]>([])
+const historyDialog=ref(false),historyUser=ref<UserRow|null>(null)
 const roleFilterOptions=computed(()=>[...new Set(users.value.map(u=>u.roleName).filter((n):n is string=>!!n))].sort())
 const filteredUsers=computed(()=>roleFilter.value?users.value.filter(u=>u.roleName===roleFilter.value):users.value)
 const { confirmAction } = useConfirm()
@@ -17,7 +19,8 @@ const editForm=reactive({id:0,email:'',firstName:'',surname:'',roleId:null as nu
 const headers=[{title:'User',key:'email'},{title:'Scope',key:'userScope'},{title:'Role',key:'roleName'},{title:'Status',key:'status'},{title:'Actions',key:'actions',sortable:false,align:'start' as const}]
 const availableRoles=computed(()=>roles.value.filter(r=>r.scope===form.userScope&&(r.builtIn||!auth.isSystemAdmin||r.anchorId===form.targetAnchorId)));
 // Only an existing Super Admin can mint another SYSTEM-scope (tenantless) user.
-const scopeOptions=computed(()=>auth.isSystemAdmin?['SYSTEM','ANCHOR','ORGANISATION']:['ANCHOR','ORGANISATION']);
+const tenantScopeOptions=[{title:'Anchor-wide user',value:'ANCHOR'},{title:'Organisation user',value:'ORGANISATION'}]
+const scopeOptions=computed(()=>auth.isSystemAdmin?[{title:'System-wide platform owner',value:'SYSTEM'},...tenantScopeOptions]:tenantScopeOptions);
 const availableEditRoles=computed(()=>roles.value.filter(r=>r.scope===editForm.userScope));
 const availableOrganisations=computed(()=>auth.isSystemAdmin?orgs.value.filter(o=>o.anchorId===form.targetAnchorId):orgs.value)
 const orgNameByCode=computed(()=>new Map(orgs.value.map(o=>[o.organisationCode,o.name])));
@@ -32,6 +35,7 @@ async function create(){
 async function toggle(u:UserRow){const deactivating=u.status===1;if(!await confirmAction({title:`${deactivating?'Deactivate':'Activate'} user?`,message:deactivating?`${u.email} will no longer be able to sign in.`:`${u.email} will be able to sign in again.`,confirmLabel:deactivating?'Deactivate':'Activate',color:deactivating?'warning':'secondary'}))return;try{await dispatch('TOGGLE_USER_STATUS',{userId:u.id,status:deactivating?0:1});toast.success(deactivating?'User deactivated':'User activated');await load()}catch(e){toast.error(e instanceof Error?e.message:'Status update failed')}}
 async function openEdit(u:UserRow){editDialog.value=true;editLoading.value=true;try{const roleRequest=auth.isSystemAdmin&&u.anchorId?dispatch<{results:Role[]}>('GET_ROLES',{targetAnchorId:u.anchorId}):Promise.resolve({results:roles.value});const [{results:r},roleResult]=await Promise.all([dispatch<{results:UserRow}>('GET_USER',{userId:u.id}),roleRequest]);roles.value=roleResult.results??[];Object.assign(editForm,{id:r.id,email:r.email,firstName:r.firstName??'',surname:r.surname??'',roleId:r.roleId??null,userScope:r.userScope})}catch(e){toast.error(e instanceof Error?e.message:'Unable to load user');editDialog.value=false}finally{editLoading.value=false}}
 async function saveEdit(){editSaving.value=true;try{await dispatch('UPDATE_USER',{userId:editForm.id,firstName:editForm.firstName,surname:editForm.surname,roleId:editForm.roleId});toast.success('User updated');editDialog.value=false;await load()}catch(e){toast.error(e instanceof Error?e.message:'Update failed')}finally{editSaving.value=false}}
+function openHistory(user:UserRow){historyUser.value=user;historyDialog.value=true}
 onMounted(load)
 </script>
 <template>
@@ -42,15 +46,16 @@ onMounted(load)
     <template #item.email="{item}"><div class="py-2"><strong>{{ item.firstName }} {{ item.surname }}</strong><div class="text-caption text-medium-emphasis">{{ item.email }}</div></div></template>
     <template #item.userScope="{item}"><v-chip size="small" variant="tonal" :color="item.systemAdmin?'warning':item.userScope==='ANCHOR'?'primary':'secondary'">{{ item.systemAdmin?'System-wide':item.userScope==='ANCHOR'?'Anchor-wide':orgName(item.partnerCode) }}</v-chip></template>
     <template #item.status="{item}"><v-chip size="small" :color="item.status===1?'success':'error'" variant="tonal">{{ item.status===1?'Active':'Inactive' }}</v-chip></template>
-    <template #item.actions="{item}"><v-btn v-if="auth.can('ACCESS_USERS')" size="small" variant="text" icon="mdi-pencil-outline" aria-label="Edit user" class="mr-1" @click="openEdit(item)"/><v-btn v-if="auth.can('ACCESS_USERS')" size="small" variant="text" :color="item.status===1?'error':'success'" @click="toggle(item)">{{ item.status===1?'Deactivate':'Activate' }}</v-btn></template>
+    <template #item.actions="{item}"><v-btn v-if="auth.can('ACCESS_USERS')" size="small" variant="text" icon="mdi-history" :aria-label="`View ${item.email} activity history`" @click="openHistory(item)"/><v-btn v-if="auth.can('ACCESS_USERS')" size="small" variant="text" icon="mdi-pencil-outline" aria-label="Edit user" class="mr-1" @click="openEdit(item)"/><v-btn v-if="auth.can('ACCESS_USERS')" size="small" variant="text" :color="item.status===1?'error':'success'" @click="toggle(item)">{{ item.status===1?'Deactivate':'Activate' }}</v-btn></template>
    </v-data-table>
   </v-card>
   <v-dialog v-model="dialog" max-width="660"><v-card class="pa-2"><dialog-close-button @close="dialog=false"/><v-card-title>Create dashboard user</v-card-title><v-card-subtitle>A temporary password is generated automatically and emailed to the user.</v-card-subtitle><v-card-text class="form-grid">
    <v-select v-if="auth.isSystemAdmin" v-model="form.userScope" :items="scopeOptions" label="Access scope" variant="outlined"/>
-   <v-select v-else-if="auth.isAnchor" v-model="form.userScope" :items="['ANCHOR','ORGANISATION']" label="Access scope" variant="outlined"/>
+   <v-select v-else-if="auth.isAnchor" v-model="form.userScope" :items="tenantScopeOptions" label="Access scope" variant="outlined"/>
    <v-select v-if="auth.isSystemAdmin&&form.userScope!=='SYSTEM'" v-model="form.targetAnchorId" :items="anchors" item-title="name" item-value="id" label="Anchor" variant="outlined" placeholder="Choose an anchor" @update:model-value="selectTargetAnchor"/>
    <v-select v-if="form.userScope==='ORGANISATION'&&auth.isAnchor" v-model="form.organisationCode" :items="availableOrganisations" item-title="name" item-value="organisationCode" label="Organisation" variant="outlined" placeholder="Choose an organisation" :disabled="auth.isSystemAdmin&&!form.targetAnchorId"/>
    <p v-if="form.userScope==='SYSTEM'" class="text-caption text-medium-emphasis" style="grid-column:1/-1">A Platform Owner has permanent, tenantless access to every anchor and organisation.</p>
+   <p v-else-if="form.userScope==='ANCHOR'" class="text-caption text-medium-emphasis" style="grid-column:1/-1">This creates a user with access across the selected anchor. To create a new anchor, use the Anchors page.</p>
    <v-text-field v-model="form.firstName" label="First name" placeholder="e.g. Jane" variant="outlined" required/><v-text-field v-model="form.surname" label="Surname" placeholder="e.g. Mwangi" variant="outlined"/>
    <v-text-field v-model="form.email" label="Email" type="email" placeholder="e.g. jane.mwangi@example.org" variant="outlined" required/><v-text-field v-model="form.username" label="Username" placeholder="e.g. jane.mwangi" variant="outlined" required/>
    <v-select v-model="form.roleId" :items="availableRoles" item-title="name" item-value="id" label="Role" variant="outlined" required/>
@@ -59,6 +64,7 @@ onMounted(load)
    <v-text-field :model-value="editForm.email" label="Email" variant="outlined" readonly/><v-select v-model="editForm.roleId" :items="availableEditRoles" item-title="name" item-value="id" label="Role" variant="outlined" :loading="editLoading"/>
    <v-text-field v-model="editForm.firstName" label="First name" variant="outlined"/><v-text-field v-model="editForm.surname" label="Surname" variant="outlined"/>
   </v-card-text><v-card-actions><v-spacer/><v-btn variant="flat" color="error" @click="editDialog=false">Cancel</v-btn><v-btn v-if="auth.can('ACCESS_USERS')" variant="flat" color="secondary" :loading="editSaving" @click="saveEdit">Save changes</v-btn></v-card-actions></v-card></v-dialog>
+  <AuditHistoryDialog v-model="historyDialog" :actor-id="historyUser?.id" actor-kind="USER" :title="`${historyUser?.firstName || historyUser?.email || 'User'} activity`" />
  </div>
 </template>
 <style scoped>

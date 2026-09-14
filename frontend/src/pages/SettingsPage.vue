@@ -1,19 +1,22 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { dispatch } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
+import AuditLogPanel from '@/components/AuditLogPanel.vue'
 
 const auth = useAuthStore()
 const toast = useToast()
 
-type SettingsSection = 'profile' | 'authentication' | 'password'
+type SettingsSection = 'profile' | 'authentication' | 'password' | 'audit'
 const activeSection = ref<SettingsSection | null>(null)
 const sections: { key: SettingsSection; icon: string; label: string; description: string }[] = [
   { key: 'profile', icon: 'mdi-account-outline', label: 'Profile', description: 'Name and account details' },
   { key: 'authentication', icon: 'mdi-shield-key-outline', label: 'Authentication', description: 'Email and authenticator app sign-in' },
   { key: 'password', icon: 'mdi-lock-outline', label: 'Password', description: 'Change your sign-in password' },
+  { key: 'audit', icon: 'mdi-history', label: 'Audit logs', description: 'Sign-ins and user activity in your scope' },
 ]
+const visibleSections = computed(() => sections.filter((section) => section.key !== 'audit' || auth.can('ACCESS_USERS') || auth.can('ACCESS_SUPERVISORS')))
 
 const oldPassword = ref('')
 const newPassword = ref('')
@@ -202,7 +205,7 @@ async function confirmEmailDisable() {
 
     <div class="section-grid mb-4">
       <button
-        v-for="s in sections" :key="s.key" type="button" class="section-tile"
+        v-for="s in visibleSections" :key="s.key" type="button" class="section-tile"
         :class="{ active: activeSection === s.key }" @click="activeSection = activeSection === s.key ? null : s.key"
       >
         <v-icon :icon="s.icon" size="22" />
@@ -324,6 +327,18 @@ async function confirmEmailDisable() {
       </v-card-text>
     </v-card>
 
+    <v-card v-if="activeSection === 'audit'" variant="flat" border class="mb-4 audit-card">
+      <v-card-title class="d-flex align-center px-4 pt-4">
+        Audit logs
+        <v-spacer />
+        <v-btn icon="mdi-close" variant="text" size="small" aria-label="Close" @click="activeSection = null" />
+      </v-card-title>
+      <v-card-subtitle class="px-4 pb-3">
+        {{ auth.isSystemAdmin ? 'Activity across the whole platform.' : auth.isAnchor ? 'Activity by users and field officers under your anchor.' : 'Activity by users and field officers in your organization.' }}
+      </v-card-subtitle>
+      <AuditLogPanel />
+    </v-card>
+
     <v-dialog v-model="enrollDialog" max-width="420">
       <v-card>
         <dialog-close-button @close="enrollDialog = false" />
@@ -400,6 +415,7 @@ async function confirmEmailDisable() {
 
 <style scoped>
 .identity-card { border-radius: 14px !important; }
+.audit-card { overflow: hidden; border-radius: 14px !important; }
 .min-width-0 { min-width: 0; }
 .section-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; }
 .profile-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 16px; }

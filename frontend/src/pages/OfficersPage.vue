@@ -6,6 +6,7 @@ import { useToast } from '@/composables/useToast'
 import { useConfirm } from '@/composables/useConfirm'
 import { useAnchorScope } from '@/composables/useAnchorScope'
 import { useOrgCascade } from '@/composables/useOrgCascade'
+import AuditHistoryDialog from '@/components/AuditHistoryDialog.vue'
 
 interface Officer {
   id: number
@@ -37,6 +38,8 @@ const officers = ref<Officer[]>([])
 const tableSearch = ref('')
 const organizations = ref<{ organisationCode: string; name: string }[]>([])
 const dialog = ref(false)
+const historyDialog = ref(false)
+const historyOfficer = ref<Officer | null>(null)
 const editing = ref(false)
 const saving = ref(false)
 const form = ref({ firstName: '', lastName: '', email: '', organisationCode: '' })
@@ -154,6 +157,11 @@ function openEdit(officer: Officer) {
   editing.value = true
   form.value = { firstName: officer.firstName, lastName: officer.lastName, email: officer.email, organisationCode: officer.organisationCode }
   dialog.value = true
+}
+
+function openHistory(officer: Officer) {
+  historyOfficer.value = officer
+  historyDialog.value = true
 }
 
 async function save() {
@@ -296,6 +304,7 @@ async function assignLocation() {
           </v-btn>
         </template>
         <template #item.actions="{ item }">
+          <v-btn v-if="auth.can('ACCESS_USERS') || auth.can('ACCESS_SUPERVISORS')" icon="mdi-history" variant="text" size="small" :aria-label="`View ${item.firstName} ${item.lastName} activity history`" @click="openHistory(item)" />
           <v-btn v-if="auth.can('ACCESS_SUPERVISORS')" icon="mdi-pencil" variant="text" size="small" :aria-label="`Edit ${item.firstName} ${item.lastName}`" @click="openEdit(item)" />
           <v-btn
             v-if="auth.can('ACCESS_SUPERVISORS')"
@@ -382,6 +391,11 @@ async function assignLocation() {
         </v-card-actions>
       </v-card>
     </v-dialog>
+
+    <AuditHistoryDialog
+      v-model="historyDialog" :actor-id="historyOfficer?.id" actor-kind="OFFICER"
+      :title="`${historyOfficer?.firstName || 'Field officer'} ${historyOfficer?.lastName || ''} activity`"
+    />
   </div>
 </template>
 

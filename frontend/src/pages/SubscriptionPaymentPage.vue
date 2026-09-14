@@ -29,7 +29,7 @@ const targetAnchorId = computed(() => (adminMode.value ? queryAnchorId.value : n
 const ready = computed(() => !adminMode.value || targetAnchorId.value != null)
 
 const loadingPrice = ref(true)
-const price = ref<{ amount: number; currency: string; isDefault: boolean } | null>(null)
+const price = ref<{ amount: number; currency: string; isDefault: boolean; periodDays?: number } | null>(null)
 
 async function loadPrice() {
   if (!ready.value) {
@@ -38,7 +38,7 @@ async function loadPrice() {
   }
   loadingPrice.value = true
   try {
-    const res = await dispatch<{ results: { amount: number; currency: string; isDefault: boolean } }>(
+    const res = await dispatch<{ results: { amount: number; currency: string; isDefault: boolean; periodDays?: number } }>(
       'GET_SUBSCRIPTION_PRICE', adminMode.value ? { targetAnchorId: targetAnchorId.value } : {},
     )
     price.value = res.results
@@ -187,6 +187,7 @@ const anchorLabel = computed(() => adminMode.value ? queryAnchorName.value || `A
           <div class="amount-summary mb-4">
             <div class="amount-label">Amount Due</div>
             <div class="amount-value">{{ formatCurrency(price?.amount, price?.currency ?? 'USD') }}</div>
+            <div class="amount-term">{{ price?.periodDays ?? 60 }}-day subscription period</div>
           </div>
           <h2 class="text-subtitle-1 font-weight-bold mb-3">Payment Method</h2>
           <div class="method-list">
@@ -303,6 +304,7 @@ const anchorLabel = computed(() => adminMode.value ? queryAnchorName.value || `A
 .amount-summary { padding: 14px; border: 1px solid #e2e8f0; border-radius: 10px; background: #f8fafc; }
 .amount-label { color: #64748b; font-size: .68rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
 .amount-value { margin-top: 4px; color: #0f766e; font-size: 1.3rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+.amount-term { margin-top: 3px; color: #64748b; font-size: .74rem; }
 @media (max-width: 760px) {
   .payment-layout { grid-template-columns: 1fr; }
 }
