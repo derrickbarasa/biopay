@@ -299,7 +299,7 @@ onMounted(async () => {
               :items="anchors" item-title="name" item-value="id" label="Anchor" density="compact" hide-details="auto"
             />
             <v-textarea
-              v-model="form.description" label="Description" placeholder="What this role is for" rows="2" density="compact" hide-details="auto" :disabled="isBuiltInRole"
+              v-model="form.description" label="Description" placeholder="What this role is for" rows="1" auto-grow density="compact" hide-details="auto" :disabled="isBuiltInRole"
               :class="{ 'span-2': !(auth.isSystemAdmin && form.roleId === null && form.scope !== 'SYSTEM') }"
             />
           </div>
@@ -372,8 +372,8 @@ onMounted(async () => {
         <div class="identity-grid permission-form">
           <v-select v-model="newPermission.groupKey" :items="PERMISSION_GROUPS" item-title="label" item-value="key" label="Permission group" density="compact" hide-details="auto" />
           <v-text-field v-model="newPermission.displayName" label="Checkbox label" placeholder="Example: View audit log" density="compact" hide-details="auto" />
-          <v-text-field v-model="newPermission.name" label="Permission code" placeholder="VIEW_AUDIT_LOG" hint="Use a stable code the related feature can check." persistent-hint density="compact" />
-          <v-textarea v-model="newPermission.description" label="Description" rows="2" density="compact" hide-details="auto" />
+          <v-text-field v-model="newPermission.name" label="Permission code" placeholder="VIEW_AUDIT_LOG" density="compact" hide-details="auto" />
+          <v-textarea v-model="newPermission.description" label="Description" rows="1" auto-grow density="compact" hide-details="auto" />
         </div>
         <v-card-actions class="editor-actions">
           <v-spacer />

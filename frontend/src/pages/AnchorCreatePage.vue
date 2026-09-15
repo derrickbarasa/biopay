@@ -49,8 +49,7 @@ async function createAnchor() {
     </div>
 
     <v-card variant="flat" border>
-      <v-card-title>Create anchor</v-card-title>
-      <v-card-subtitle>This also creates the anchor administrator, assigns the next anchor code (ANC001, ANC002, ...) automatically, and emails a temporary password.</v-card-subtitle>
+      <v-card-title>Create Anchor</v-card-title>
       <v-card-text class="form-grid">
         <v-text-field v-model="newAnchor.name" label="Name" placeholder="e.g. Frontier Trust Bank" variant="outlined" required />
         <v-text-field v-model="newAnchor.authorisedFirstName" label="Administrator first name" placeholder="e.g. Jane" variant="outlined" required />
