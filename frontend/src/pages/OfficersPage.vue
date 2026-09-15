@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { dispatch } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
 import { useConfirm } from '@/composables/useConfirm'
 import { useAnchorScope } from '@/composables/useAnchorScope'
 import { useOrgCascade } from '@/composables/useOrgCascade'
-import AuditHistoryDialog from '@/components/AuditHistoryDialog.vue'
 
 interface Officer {
   id: number
@@ -30,6 +30,7 @@ interface OfficerLocation { stateCode?: string; countyCode?: string; payamCode?:
 
 const auth = useAuthStore()
 const toast = useToast()
+const router = useRouter()
 const { confirmAction } = useConfirm()
 const { anchors, selectedAnchorId, anchorGateActive } = useAnchorScope()
 const { dialogAnchorId, dialogOrganizations, resetDialogScope } = useOrgCascade()
@@ -38,8 +39,6 @@ const officers = ref<Officer[]>([])
 const tableSearch = ref('')
 const organizations = ref<{ organisationCode: string; name: string }[]>([])
 const dialog = ref(false)
-const historyDialog = ref(false)
-const historyOfficer = ref<Officer | null>(null)
 const editing = ref(false)
 const saving = ref(false)
 const form = ref({ firstName: '', lastName: '', email: '', organisationCode: '' })
@@ -160,8 +159,11 @@ function openEdit(officer: Officer) {
 }
 
 function openHistory(officer: Officer) {
-  historyOfficer.value = officer
-  historyDialog.value = true
+  router.push({
+    name: 'activity-history',
+    params: { actorKind: 'OFFICER', actorId: officer.id },
+    query: { name: `${officer.firstName} ${officer.lastName}`.trim() || 'Field officer' },
+  })
 }
 
 async function save() {
@@ -392,10 +394,6 @@ async function assignLocation() {
       </v-card>
     </v-dialog>
 
-    <AuditHistoryDialog
-      v-model="historyDialog" :actor-id="historyOfficer?.id" actor-kind="OFFICER"
-      :title="`${historyOfficer?.firstName || 'Field officer'} ${historyOfficer?.lastName || ''} activity`"
-    />
   </div>
 </template>
 

@@ -1261,6 +1261,12 @@ onBeforeUnmount(() => {
 }
 .landing-root .hero-visual .wrap { position: relative; z-index: 1; width: 100%; }
 .landing-root .hero-copy { max-width: 34rem; }
+@media (min-width: 781px) {
+  /* Keep the wrapped headline/lede text clear of the absolutely-positioned
+     prev/next arrows (left/right: 20px, 44px wide) -- a long lede otherwise
+     wraps to a line whose vertical position coincides with the arrow. */
+  .landing-root .hero-copy { padding-left: 4.5rem; }
+}
 
 .landing-root .hero-slide { min-height: clamp(9rem, 30vh, 13rem); }
 .landing-root .hero-fade-enter-active { transition: opacity 420ms ease, transform 420ms cubic-bezier(0.16, 1, 0.3, 1); }

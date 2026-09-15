@@ -128,7 +128,7 @@ onMounted(load)
   <div class="admin-page">
     <header class="admin-head">
       <div>
-        <h1 class="page-title">API access</h1>
+        <h1 class="page-title">API Access</h1>
         <p>Machine credentials for programmatic access — separate from any person's dashboard login, and revocable on their own.</p>
       </div>
       <v-btn v-if="auth.can('ACCESS_USERS')" color="secondary" prepend-icon="mdi-key-plus" @click="openCreate">New API client</v-btn>

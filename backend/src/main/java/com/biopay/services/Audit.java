@@ -42,13 +42,15 @@ public class Audit extends AbstractVerticle {
         // The tenant clauses are mandatory and derive only from JWT-enriched values.
         // Client filters can narrow this result but can never widen it.
         String sql = "SELECT TOP 500 l.id,l.actor_type,l.actor_id,l.anchor_id,l.organization_code,l.action,"
-                + "l.entity_type,l.entity_id,l.details,l.ip_address,l.channel,l.created_at,"
+                + "l.entity_type,l.entity_id,l.details,l.channel,l.created_at,"
                 + "COALESCE(NULLIF(LTRIM(RTRIM(CONCAT(u.first_name,' ',u.surname))),''),"
                 + "NULLIF(LTRIM(RTRIM(CONCAT(f.firstname,' ',f.lastname))),''),'Unknown user') AS actor_name,"
-                + "COALESCE(u.email,f.email) AS actor_email,a.anchor_name,o.name AS organization_name "
+                + "COALESCE(u.email,f.email) AS actor_email,a.anchor_name,o.name AS organization_name,"
+                + "ru.role_name,ru.role_scope "
                 + "FROM audit_logs l "
                 + "LEFT JOIN users u ON u.id=l.actor_id AND l.actor_type IN ('USER','SYSTEM','ANCHOR_USER','ORGANISATION_USER','API') "
                 + "LEFT JOIN field_officers f ON f.id=l.actor_id AND l.actor_type='SUPERVISOR' "
+                + "LEFT JOIN roles ru ON ru.id=u.role_id "
                 + "LEFT JOIN users a ON a.id=l.anchor_id AND a.user_scope='ANCHOR' AND a.id=a.anchor_id "
                 + "LEFT JOIN organizations o ON o.organization_code=l.organization_code AND o.anchor_id=l.anchor_id "
                 + "WHERE (@p1=1 OR l.anchor_id=@p2) "
@@ -73,6 +75,7 @@ public class Audit extends AbstractVerticle {
                                 .put("actorId", Rows.intVal(row, "actor_id"))
                                 .put("actorName", Rows.str(row, "actor_name"))
                                 .put("actorEmail", Rows.str(row, "actor_email"))
+                                .put("actorRole", actorRole(row))
                                 .put("anchorId", Rows.intVal(row, "anchor_id"))
                                 .put("anchorName", Rows.str(row, "anchor_name"))
                                 .put("organisationCode", Rows.str(row, "organization_code"))
@@ -81,13 +84,32 @@ public class Audit extends AbstractVerticle {
                                 .put("entityType", Rows.str(row, "entity_type"))
                                 .put("entityId", Rows.str(row, "entity_id"))
                                 .put("details", Rows.str(row, "details"))
-                                .put("ipAddress", Rows.str(row, "ip_address"))
                                 .put("channel", Rows.str(row, "channel"))
                                 .put("createdAt", Rows.str(row, "created_at")));
                     }
                     message.reply(new JsonObject().put("responseCode", "000")
                             .put("responseMessage", "Audit logs found").put("results", results).toString());
                 });
+    }
+
+    // Same built-in-role-name convention Administration.java uses to tell a
+    // ships-with-the-platform admin/anchor/org account apart from a custom
+    // role assigned to a secondary user in that same scope.
+    private static String actorRole(Row row) {
+        String actorType = Rows.str(row, "actor_type");
+        if ("SUPERVISOR".equals(actorType)) return "Field Officer";
+        if ("API".equals(actorType)) return "API Client";
+        String roleName = Rows.str(row, "role_name");
+        String roleScope = Rows.str(row, "role_scope");
+        if (roleScope == null) return "Unassigned";
+        boolean builtIn = "Platform Owner".equals(roleName) || "Anchor Administrator".equals(roleName)
+                || "Organisation Administrator".equals(roleName);
+        switch (roleScope.toUpperCase()) {
+            case "SYSTEM": return builtIn ? "Platform Owner" : "Admin User";
+            case "ANCHOR": return builtIn ? "Anchor" : "Anchor User";
+            case "ORGANISATION": return builtIn ? "Org" : "Org User";
+            default: return "Unassigned";
+        }
     }
 
     private static String clean(String value) {

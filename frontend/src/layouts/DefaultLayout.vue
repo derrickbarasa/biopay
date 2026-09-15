@@ -13,6 +13,11 @@ const { mdAndUp } = useDisplay()
 const drawer = ref(mdAndUp.value)
 const { showPrompt: showIdlePrompt, confirmStillHere, logoutNow } = useIdleLogout()
 
+// Prefer the route's own human-readable title (used for the browser tab too);
+// falling back to the raw route name left hyphenated names like "organization-detail"
+// rendering as "Organization-Detail" instead of "Organization detail".
+const pageTitle = computed(() => (route.meta.title as string | undefined) ?? route.name?.toString().replace(/-/g, ' ') ?? '')
+
 // Shrinks the whole authenticated shell (see .app-shell-scale in style.css) so
 // the dashboard, sidebar, and tables fit an ordinary laptop viewport at 100%
 // zoom without scrolling. Scoped to this layout's lifetime only.
@@ -225,7 +230,7 @@ function onNavClick(event: MouseEvent | KeyboardEvent, to: string) {
 
   <v-app-bar color="surface" elevation="0" border density="compact" class="app-bar">
     <v-app-bar-nav-icon density="compact" aria-label="Toggle navigation" @click="drawer = !drawer" />
-    <v-breadcrumbs :items="[{ title: $route.name?.toString() ?? '' }]" class="text-capitalize" density="compact" />
+    <v-breadcrumbs :items="[{ title: pageTitle }]" class="text-capitalize" density="compact" />
     <v-spacer />
     <v-chip class="role-chip mr-3 font-weight-bold" color="secondary" variant="tonal" size="small">{{ auth.roleLabel }}</v-chip>
     <v-menu>

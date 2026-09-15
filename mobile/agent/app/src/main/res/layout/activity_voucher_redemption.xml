@@ -10,7 +10,8 @@
     <com.google.android.material.appbar.MaterialToolbar
         android:id="@+id/toolbar"
         style="@style/BioPay.Toolbar"
-        android:title="@string/voucher_title" />
+        android:title="@string/voucher_title"
+        app:menu="@menu/voucher_redemption" />
 
     <LinearLayout
         android:layout_width="match_parent"

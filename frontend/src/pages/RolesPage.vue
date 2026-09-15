@@ -249,11 +249,11 @@ onMounted(async () => {
   <div class="roles-page">
     <div class="page-heading d-flex align-center justify-space-between mb-5 ga-4">
       <div>
-        <h1 class="page-title">Roles &amp; permissions</h1>
+        <h1 class="page-title">Roles &amp; Permissions</h1>
         <p>{{ auth.isSystemAdmin ? "Every anchor's roles, in one place." : 'Create a role, then choose what it can access.' }}</p>
       </div>
       <div class="d-flex ga-2">
-        <v-btn v-if="auth.isSystemAdmin" color="success" prepend-icon="mdi-shield-plus-outline" class="justify-center" @click="openCreatePermission">Create permission</v-btn>
+        <v-btn v-if="auth.isSystemAdmin" color="success" prepend-icon="mdi-plus" class="justify-center" @click="openCreatePermission">Create permission</v-btn>
         <v-btn v-if="auth.can('ACCESS_ROLES')" color="secondary" prepend-icon="mdi-plus" @click="createRole">New role</v-btn>
       </div>
     </div>
@@ -294,12 +294,15 @@ onMounted(async () => {
                 : [{ title: 'Organisation', value: 'ORGANISATION' }, { title: 'Anchor', value: 'ANCHOR' }]"
               label="Access scope" :disabled="isBuiltInRole || isFixedScopeRole" density="compact" hide-details="auto"
             />
+            <v-select
+              v-if="auth.isSystemAdmin && form.roleId === null && form.scope !== 'SYSTEM'" v-model="form.anchorId"
+              :items="anchors" item-title="name" item-value="id" label="Anchor" density="compact" hide-details="auto"
+            />
+            <v-textarea
+              v-model="form.description" label="Description" placeholder="What this role is for" rows="2" density="compact" hide-details="auto" :disabled="isBuiltInRole"
+              :class="{ 'span-2': !(auth.isSystemAdmin && form.roleId === null && form.scope !== 'SYSTEM') }"
+            />
           </div>
-          <v-select
-            v-if="auth.isSystemAdmin && form.roleId === null && form.scope !== 'SYSTEM'" v-model="form.anchorId"
-            :items="anchors" item-title="name" item-value="id" label="Anchor" density="compact" hide-details="auto" class="mt-3"
-          />
-          <v-textarea v-model="form.description" label="Description" placeholder="What this role is for" rows="2" density="compact" hide-details="auto" class="mt-3" :disabled="isBuiltInRole" />
 
           <section class="permissions-section">
             <div class="permissions-heading-row">
@@ -366,12 +369,12 @@ onMounted(async () => {
           </div>
           <dialog-close-button @close="permissionDialog = false" />
         </div>
-        <v-row dense>
-          <v-col cols="12" sm="6"><v-select v-model="newPermission.groupKey" :items="PERMISSION_GROUPS" item-title="label" item-value="key" label="Permission group" density="compact" hide-details="auto" /></v-col>
-          <v-col cols="12" sm="6"><v-text-field v-model="newPermission.displayName" label="Checkbox label" placeholder="Example: View audit log" density="compact" hide-details="auto" /></v-col>
-          <v-col cols="12" sm="6"><v-text-field v-model="newPermission.name" label="Permission code" placeholder="VIEW_AUDIT_LOG" hint="Use a stable code the related feature can check." persistent-hint density="compact" /></v-col>
-          <v-col cols="12" sm="6"><v-textarea v-model="newPermission.description" label="Description" rows="2" density="compact" hide-details="auto" /></v-col>
-        </v-row>
+        <div class="identity-grid permission-form">
+          <v-select v-model="newPermission.groupKey" :items="PERMISSION_GROUPS" item-title="label" item-value="key" label="Permission group" density="compact" hide-details="auto" />
+          <v-text-field v-model="newPermission.displayName" label="Checkbox label" placeholder="Example: View audit log" density="compact" hide-details="auto" />
+          <v-text-field v-model="newPermission.name" label="Permission code" placeholder="VIEW_AUDIT_LOG" hint="Use a stable code the related feature can check." persistent-hint density="compact" />
+          <v-textarea v-model="newPermission.description" label="Description" rows="2" density="compact" hide-details="auto" />
+        </div>
         <v-card-actions class="editor-actions">
           <v-spacer />
           <v-btn variant="flat" color="error" @click="permissionDialog = false">Cancel</v-btn>
@@ -390,7 +393,10 @@ onMounted(async () => {
 .editor-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; margin-bottom: 16px; }
 .editor-title { color: #0f172a; font-size: 1.15rem; font-weight: 750; letter-spacing: -.02em; }
 .editor-heading p { color: #64748b; font-size: .82rem; margin: 3px 0 0; }
-.identity-grid { display: grid; grid-template-columns: 1fr 220px; column-gap: 16px; }
+.identity-grid { display: grid; grid-template-columns: 1fr 1fr; column-gap: 16px; row-gap: 16px; margin-top: 18px; align-items: start; }
+.identity-grid .span-2 { grid-column: 1 / -1; }
+.permission-form { margin-top: 20px; }
+@media (max-width: 600px) { .identity-grid { grid-template-columns: 1fr; } }
 .permissions-section { border-top: 1px solid #e2e8f0; margin-top: 18px; padding-top: 16px; }
 .permissions-heading-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 12px; }
 .permissions-heading-row h3 { font-size: 1rem; color: #1e293b; }

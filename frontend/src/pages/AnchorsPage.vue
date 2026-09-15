@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { dispatch } from '@/api/client'
 import { useToast } from '@/composables/useToast'
 import { useConfirm } from '@/composables/useConfirm'
@@ -9,16 +10,14 @@ import { capitalFor } from '@/utils/countries'
 interface Anchor { id:number; anchorCode:string; name:string; authorisedName?:string; authorisedFirstName?:string; authorisedSurname?:string; authorisedEmail?:string; authorisedContact?:string; address?:string; country?:string; city?:string; status:number }
 
 const toast = useToast()
+const router = useRouter()
 const { confirmAction } = useConfirm()
 const loading = ref(false)
 const saving = ref(false)
-const creating = ref(false)
-const createDialog = ref(false)
 const editDialog = ref(false)
 const anchors = ref<Anchor[]>([])
 const tableSearch = ref('')
 const anchor = reactive<Anchor>({ id: 0, anchorCode: '', name: '', status: 1 })
-const newAnchor = reactive({ name: '', authorisedFirstName: '', authorisedSurname: '', authorisedEmail: '', authorisedContact: '', country: '', city: '', address: '' })
 
 const headers = [
   { title: 'Code', key: 'anchorCode' },
@@ -63,26 +62,7 @@ async function save() {
 }
 
 function openCreate() {
-  Object.assign(newAnchor, { name: '', authorisedFirstName: '', authorisedSurname: '', authorisedEmail: '', authorisedContact: '', country: '', city: '', address: '' })
-  createDialog.value = true
-}
-
-async function createAnchor() {
-  if (!newAnchor.name.trim() || !newAnchor.authorisedFirstName.trim() || !/.+@.+\..+/.test(newAnchor.authorisedEmail)) {
-    toast.error('Complete the anchor name, administrator name and a valid email')
-    return
-  }
-  creating.value = true
-  try {
-    await dispatch('CREATE_ANCHOR', newAnchor)
-    toast.success('Anchor and administrator created')
-    createDialog.value = false
-    await load()
-  } catch (e) {
-    toast.error(e instanceof Error ? e.message : 'Unable to create anchor')
-  } finally {
-    creating.value = false
-  }
+  router.push({ name: 'anchor-create' })
 }
 
 async function toggleStatus(item: Anchor) {
@@ -108,9 +88,6 @@ async function toggleStatus(item: Anchor) {
 watch(() => anchor.country, (country, previous) => {
   if (country && country !== previous) anchor.city = capitalFor(country) || anchor.city
 })
-watch(() => newAnchor.country, (country, previous) => {
-  if (country && country !== previous) newAnchor.city = capitalFor(country) || newAnchor.city
-})
 onMounted(load)
 </script>
 
@@ -120,23 +97,6 @@ onMounted(load)
       <div><h1 class="page-title">Anchors</h1><p>Every anchor operating programmes in BioPay.</p></div>
       <div class="head-chips"><v-btn color="secondary" prepend-icon="mdi-bank-plus" @click="openCreate">New anchor</v-btn></div>
     </header>
-
-    <v-dialog v-model="createDialog" max-width="760">
-      <v-card title="Create anchor" subtitle="This also creates the anchor administrator, assigns the next anchor code (ANC001, ANC002, ...) automatically, and emails a temporary password.">
-        <dialog-close-button @close="createDialog = false" />
-        <v-card-text class="form-grid">
-          <v-text-field v-model="newAnchor.name" label="Name" placeholder="e.g. Frontier Trust Bank" variant="outlined" required />
-          <v-text-field v-model="newAnchor.authorisedFirstName" label="Administrator first name" placeholder="e.g. Jane" variant="outlined" required />
-          <v-text-field v-model="newAnchor.authorisedSurname" label="Administrator surname" placeholder="e.g. Mwangi" variant="outlined" />
-          <v-text-field v-model="newAnchor.authorisedEmail" label="Administrator email" placeholder="e.g. jane@frontiertrust.bank" type="email" variant="outlined" required />
-          <v-text-field v-model="newAnchor.authorisedContact" label="Phone" placeholder="e.g. +254 700 000000" variant="outlined" />
-          <v-autocomplete v-model="newAnchor.country" :items="COUNTRIES" label="Country" variant="outlined" />
-          <v-text-field v-model="newAnchor.city" label="City" placeholder="e.g. Nairobi" variant="outlined" />
-          <v-text-field v-model="newAnchor.address" label="Address" placeholder="e.g. Karen Road" variant="outlined" class="wide" />
-        </v-card-text>
-        <v-card-actions><v-spacer/><v-btn variant="flat" color="error" @click="createDialog=false">Cancel</v-btn><v-btn variant="flat" color="secondary" :loading="creating" @click="createAnchor">Create anchor</v-btn></v-card-actions>
-      </v-card>
-    </v-dialog>
 
     <v-dialog v-model="editDialog" max-width="760">
       <v-card title="Edit anchor">

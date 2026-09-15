@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { dispatch } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
@@ -26,6 +27,7 @@ interface Anchor { id: number; name: string; anchorCode: string }
 
 const auth = useAuthStore()
 const toast = useToast()
+const router = useRouter()
 const { confirmAction } = useConfirm()
 
 const loading = ref(true)
@@ -35,7 +37,6 @@ const anchors = ref<Anchor[]>([])
 const selectedAnchorId = ref<number | null>(null)
 const tableSearch = ref('')
 const dialog = ref(false)
-const editing = ref(false)
 const saving = ref(false)
 const form = ref({
   organisationCode: '', name: '', authorisedName: '', authorisedFirstName: '', authorisedSurname: '', authorisedEmail: '', authorisedContact: '', address: '',
@@ -106,16 +107,10 @@ async function load() {
 onMounted(async () => { await loadAnchors(); await load() })
 
 function openCreate() {
-  editing.value = false
-  form.value = {
-    organisationCode: '', name: '', authorisedName: '', authorisedFirstName: '', authorisedSurname: '', authorisedEmail: '', authorisedContact: '', address: '',
-    country: '', capitalCity: '', verificationMethod: 'BIOMETRIC', anchorId: selectedAnchorId.value, modules: [],
-  }
-  dialog.value = true
+  router.push({ name: 'organization-create' })
 }
 
 async function openEdit(org: Organization) {
-  editing.value = true
   form.value = {
     organisationCode: org.organisationCode, name: org.name,
     authorisedName: org.authorisedName ?? '', authorisedFirstName: '', authorisedSurname: '',
@@ -157,12 +152,8 @@ async function save() {
     toast.error('Complete the organization name, country and verification method')
     return
   }
-  if (auth.isSystemAdmin && !editing.value && !form.value.anchorId) {
-    toast.error('Choose an anchor for this organization')
-    return
-  }
   if (!/.+@.+\..+/.test(form.value.authorisedEmail)) {
-    toast.error(editing.value ? 'Enter a valid authorized contact email' : 'A valid email is required to create the organization\'s sign-in account')
+    toast.error('Enter a valid authorized contact email')
     return
   }
   if (!form.value.modules.length) {
@@ -171,19 +162,11 @@ async function save() {
   }
   saving.value = true
   try {
-    if (editing.value) {
-      await Promise.all([
-        dispatch('UPDATE_ORGANIZATION', { ...form.value, targetAnchorId: auth.isSystemAdmin ? form.value.anchorId : undefined }),
-        dispatch('UPDATE_ORGANIZATION_MODULES', { organisationCode: form.value.organisationCode, modules: form.value.modules, targetAnchorId: auth.isSystemAdmin ? form.value.anchorId : undefined }),
-      ])
-      toast.success('Organization updated')
-    } else {
-      await dispatch('CREATE_ORGANIZATION', {
-        ...form.value,
-        targetAnchorId: auth.isSystemAdmin ? form.value.anchorId : undefined,
-      })
-      toast.success('Organization created. A temporary password was emailed to sign in.')
-    }
+    await Promise.all([
+      dispatch('UPDATE_ORGANIZATION', { ...form.value, targetAnchorId: auth.isSystemAdmin ? form.value.anchorId : undefined }),
+      dispatch('UPDATE_ORGANIZATION_MODULES', { organisationCode: form.value.organisationCode, modules: form.value.modules, targetAnchorId: auth.isSystemAdmin ? form.value.anchorId : undefined }),
+    ])
+    toast.success('Organization updated')
     dialog.value = false
     await load()
   } catch (err) {
@@ -231,8 +214,8 @@ async function toggleStatus(org: Organization) {
       <v-card class="org-editor" variant="flat" border>
         <div class="editor-heading">
           <div>
-            <div class="editor-title">{{ editing ? 'Edit Organization' : 'New Organization' }}</div>
-            <p>{{ editing ? 'Update the organization profile and programme access.' : 'A sign-in account is created automatically for the email below, with a temporary password emailed to it.' }}</p>
+            <div class="editor-title">Edit Organization</div>
+            <p>Update the organization profile and programme access.</p>
           </div>
           <dialog-close-button @close="dialog = false" />
         </div>
@@ -241,10 +224,6 @@ async function toggleStatus(org: Organization) {
           <div class="identity-grid">
             <section class="form-group" aria-labelledby="org-details-heading">
               <div id="org-details-heading" class="form-group-title"><v-icon icon="mdi-domain" size="19" /> Organization details</div>
-              <v-select
-                v-if="auth.isSystemAdmin && !editing" v-model="form.anchorId" :items="anchors" item-title="name" item-value="id"
-                label="Anchor" :rules="[v => !!v || 'Required']" density="compact" hide-details="auto" prepend-inner-icon="mdi-bank-outline"
-              />
               <v-text-field v-model="form.name" label="Organization name" placeholder="e.g. Bright Future Trust" :rules="[required]" density="compact" hide-details="auto" />
               <v-autocomplete v-model="form.country" :items="COUNTRIES" label="Country" :rules="[required]" density="compact" hide-details="auto" />
               <v-text-field v-model="form.capitalCity" label="Capital city" placeholder="e.g. Nairobi" prepend-inner-icon="mdi-city-variant-outline" density="compact" hide-details="auto" />
@@ -253,13 +232,9 @@ async function toggleStatus(org: Organization) {
 
             <section class="form-group" aria-labelledby="contact-details-heading">
               <div id="contact-details-heading" class="form-group-title"><v-icon icon="mdi-account-outline" size="19" /> Authorized contact</div>
-              <v-text-field v-if="editing" v-model="form.authorisedName" label="Contact name" placeholder="e.g. Amina Yusuf" density="compact" hide-details="auto" />
-              <template v-else>
-                <v-text-field v-model="form.authorisedFirstName" label="Contact first name" placeholder="e.g. Amina" density="compact" hide-details="auto" />
-                <v-text-field v-model="form.authorisedSurname" label="Contact surname" placeholder="e.g. Yusuf" density="compact" hide-details="auto" />
-              </template>
+              <v-text-field v-model="form.authorisedName" label="Contact name" placeholder="e.g. Amina Yusuf" density="compact" hide-details="auto" />
               <v-text-field
-                v-model="form.authorisedEmail" :label="editing ? 'Email' : 'Email (used to sign in)'"
+                v-model="form.authorisedEmail" label="Email"
                 placeholder="e.g. amina@brightfuture.org" type="email" :rules="[emailRule]" density="compact" hide-details="auto"
               />
               <v-text-field v-model="form.authorisedContact" label="Phone" placeholder="e.g. +254 700 000000" density="compact" hide-details="auto" />
@@ -289,9 +264,7 @@ async function toggleStatus(org: Organization) {
 
           <div class="editor-actions">
             <v-btn variant="flat" color="error" @click="dialog = false">Cancel</v-btn>
-            <v-btn color="secondary" type="submit" :loading="saving" prepend-icon="mdi-check">
-              {{ editing ? 'Save changes' : 'Create organization' }}
-            </v-btn>
+            <v-btn color="secondary" type="submit" :loading="saving" prepend-icon="mdi-check">Save changes</v-btn>
           </div>
         </v-form>
       </v-card>

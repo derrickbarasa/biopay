@@ -144,7 +144,7 @@ const usageNotes = [
           install the 6.42 build at all on those devices.
         </v-alert>
         <v-alert type="info" variant="tonal" density="compact" class="mt-3">
-          These APKs are large downloads (roughly 80MB for Morpho 6.15, 100MB for Morpho 6.42) — the on-device
+          These APKs are large downloads (roughly 85MB for Morpho 6.15, 110MB for Morpho 6.42) — the on-device
           face and fingerprint recognition models, bundled so verification works fully offline in the field,
           account for a good part of that. Make sure the device has a good connection and enough free storage
           before installing.

@@ -131,6 +131,7 @@ dependencies {
     implementation(libs.workmanager)
     implementation(libs.lifecycle.process)
     implementation(libs.mlkit.face.detection)
+    implementation(libs.mlkit.barcode.scanning)
     implementation(libs.androidx.camera.core)
     implementation(libs.androidx.camera.camera2)
     implementation(libs.androidx.camera.lifecycle)

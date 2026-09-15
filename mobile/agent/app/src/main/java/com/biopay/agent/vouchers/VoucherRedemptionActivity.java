@@ -1,5 +1,6 @@
 package com.biopay.agent.vouchers;
 
+import android.content.Intent;
 import android.content.res.Configuration;
 import android.location.Location;
 import android.os.Bundle;
@@ -7,6 +8,8 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.TextView;
 
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.widget.SearchView;
 import androidx.core.content.ContextCompat;
@@ -51,6 +54,8 @@ public class VoucherRedemptionActivity extends BaseActivity {
     private int checkedFilterId = R.id.chipVoucherAll;
     private String currentQuery = "";
     private final ExecutorService scannerOpenExecutor = Executors.newSingleThreadExecutor();
+    private final ActivityResultLauncher<Intent> qrScanLauncher = registerForActivityResult(
+            new ActivityResultContracts.StartActivityForResult(), this::onQrScanResult);
 
     @Override protected void onDestroy() {
         super.onDestroy();
@@ -102,6 +107,31 @@ public class VoucherRedemptionActivity extends BaseActivity {
             checkedFilterId = checkedIds.isEmpty() ? R.id.chipVoucherAll : checkedIds.get(0);
             renderVoucherList();
         });
+
+        ((com.google.android.material.appbar.MaterialToolbar) findViewById(R.id.toolbar))
+                .setOnMenuItemClickListener(item -> {
+                    if (item.getItemId() == R.id.actionScanVoucher) {
+                        qrScanLauncher.launch(QrScanActivity.intent(this));
+                        return true;
+                    }
+                    return false;
+                });
+    }
+
+    private void onQrScanResult(androidx.activity.result.ActivityResult result) {
+        if (result.getResultCode() != RESULT_OK || result.getData() == null) return;
+        String code = result.getData().getStringExtra(QrScanActivity.EXTRA_RESULT_VOUCHER_CODE);
+        if (code == null || code.isEmpty()) return;
+        VoucherDao.Voucher voucher = voucherDao.findByCode(code);
+        if (voucher == null) {
+            OutcomeFeedback.error(this, R.string.voucher_scan_not_found);
+        } else if ("REDEEMED".equalsIgnoreCase(voucher.status)) {
+            OutcomeFeedback.error(this, R.string.voucher_scan_already_redeemed);
+        } else if ("VOID".equalsIgnoreCase(voucher.status)) {
+            OutcomeFeedback.error(this, R.string.voucher_scan_voided);
+        } else {
+            chooseBeneficiary(voucher);
+        }
     }
 
     @Override protected void onResume() {

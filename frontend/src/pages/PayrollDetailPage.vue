@@ -99,14 +99,18 @@ function genderLabel(gender?: string | null) {
   if (gender === 'F') return 'Female'
   return '—'
 }
+// A whole-cycle rejection (cycle.status === 'REJECTED') never became a payable
+// instruction, so its households go back to Pending for a future cycle rather
+// than reading as individually Rejected -- that label stays reserved for items
+// a maker/checker excluded from a still-active cycle via REJECT_PAYROLL_ITEMS.
 function itemStatusText(item: PaymentLine) {
-  if (item.rejected) return 'Rejected'
+  if (item.rejected) return cycle.value?.status === 'REJECTED' ? 'Pending' : 'Rejected'
   if (item.status === 1) return 'Disbursed'
   if (item.approved) return 'Approved'
   return 'Pending'
 }
 function itemStatusColor(item: PaymentLine) {
-  if (item.rejected) return 'error'
+  if (item.rejected) return cycle.value?.status === 'REJECTED' ? 'grey' : 'error'
   if (item.status === 1) return 'success'
   if (item.approved) return 'warning'
   return 'grey'

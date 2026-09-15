@@ -28,6 +28,9 @@ public class VoucherDao {
         }
     }
     public List<Voucher> listAll(){return query("EXISTS (SELECT 1 FROM households ph WHERE ph.household_number=v.household_number AND ph.partner_code=?)",new String[]{partnerCode});}
+    /** Scoped the same way as {@link #listAll()} so a scanned QR code from another organisation's
+     *  printed voucher can never resolve here. */
+    public Voucher findByCode(String code){List<Voucher> matches=query("v.voucher_code=? AND EXISTS (SELECT 1 FROM households ph WHERE ph.household_number=v.household_number AND ph.partner_code=?)",new String[]{code,partnerCode});return matches.isEmpty()?null:matches.get(0);}
     public List<Voucher> listIssued(){return query("v.status='ISSUED' AND EXISTS (SELECT 1 FROM households ph WHERE ph.household_number=v.household_number AND ph.partner_code=?)",new String[]{partnerCode});}
     public List<Voucher> listPendingRedemptions(){return query("v.status='REDEEMED' AND v.redemption_sync_status=?",new String[]{String.valueOf(DatabaseHelper.SYNC_PENDING)});}
     // LEFT JOINed so the picker can show the household's name instead of its bare code -- see

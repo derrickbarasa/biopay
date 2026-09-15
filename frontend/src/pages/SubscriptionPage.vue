@@ -102,11 +102,17 @@ function currency(amount: number | undefined, code: string | undefined) {
 function displayDate(value: unknown) {
   if (!value) return '—'
   const date = new Date(String(value))
-  return Number.isNaN(date.getTime()) ? '—' : date.toLocaleDateString()
+  // Spelled-out month avoids the DD/MM vs MM/DD ambiguity of a numeric locale date.
+  return Number.isNaN(date.getTime()) ? '—' : new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(date)
 }
 
+// periodDays is the actual day count applied when expiresAt was computed
+// (Subscription.java always advances by the single configured period, never
+// by whatever planCode happens to say) -- it's the source of truth, so it
+// wins over a stale/mismatched planCode label rather than being ignored.
 function displayPlan(value?: string, periodDays?: number | null) {
-  if (!value) return `${periodDays || 60}-day`
+  if (periodDays) return `${periodDays}-day`
+  if (!value) return '—'
   return value
     .toLowerCase()
     .replace(/[_-]+/g, ' ')
@@ -304,7 +310,7 @@ const statusHeadline = computed(() => {
     </v-btn>
 
     <div class="mb-4">
-      <h1 class="page-title">{{ isDetailRoute ? 'Subscription details' : 'Subscription' }}</h1>
+      <h1 class="page-title">{{ isDetailRoute ? 'Subscription Details' : 'Subscription' }}</h1>
       <p class="text-body-2 text-medium-emphasis mt-1">
         {{ isDetailRoute ? `View ${selectedAnchor?.anchorName || 'this anchor'}'s subscription and payment history.` : "Manage your anchor's subscription, and view payment history and receipts." }}
       </p>

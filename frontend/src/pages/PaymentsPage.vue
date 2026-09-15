@@ -242,7 +242,7 @@ function printReceipt(row: PaymentRow) {
       .total { color: #0f766e; font-size: 20px; font-weight: 800; }
       @media print { body { padding: 0; } }
     </style></head><body onload="window.print()"><div class="receipt">
-      <h1>BioPay Payment Receipt</h1><div class="sub">Confirmed payment record</div>
+      <h1>${escapeHtml(orgName(row.organisationCode))}</h1><div class="sub">Payment Receipt · Confirmed payment record</div>
       <div class="row"><span>Household</span><span>${escapeHtml(row.householdName)}</span></div>
       <div class="row"><span>Household number</span><span>${escapeHtml(row.householdNumber)}</span></div>
       <div class="row"><span>Organization</span><span>${escapeHtml(orgName(row.organisationCode))}</span></div>

@@ -432,6 +432,18 @@
     <string name="voucher_verify_person">Verify</string>
     <string name="voucher_no_fingerprint">This household has no enrolled fingerprint for voucher verification.</string>
     <string name="voucher_redeemed_queued">Voucher redeemed and queued for secure sync.</string>
+    <string name="voucher_scan_action">Scan voucher QR</string>
+    <string name="voucher_scan_not_found">This voucher code was not found for your organisation. Sync and try again.</string>
+    <string name="voucher_scan_already_redeemed">This voucher has already been redeemed.</string>
+    <string name="voucher_scan_voided">This voucher has been voided and cannot be redeemed.</string>
+
+    <string name="qr_scan_title">Scan voucher QR</string>
+    <string name="qr_scan_guidance">Point the camera at the printed voucher\'s QR code.</string>
+    <string name="qr_scan_status_searching">Looking for a QR code…</string>
+    <string name="qr_scan_status_found">Voucher code found</string>
+    <string name="qr_scan_permission_denied">Camera permission is required to scan a voucher QR code</string>
+    <string name="qr_scan_camera_unavailable">Camera is unavailable on this device</string>
+    <string name="qr_scan_not_biopay_voucher">That QR code is not a BioPay voucher code</string>
 
     <string name="reports_title">Field reports</string>
     <string name="reports_description">A device-level summary of records available offline.</string>

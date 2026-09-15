@@ -144,18 +144,25 @@ onMounted(() => {
 
     <v-card variant="flat" border>
       <v-card-text>
-        <v-select
-          v-if="auth.isSystemAdmin"
-          v-model="dialogAnchorId" :items="anchors" item-title="name" item-value="id"
-          label="Anchor" class="mb-2" placeholder="Choose an anchor" required
-        />
-        <v-select
-          v-if="auth.isAnchor"
-          v-model="form.organisationCode" :items="dialogOrganizations" item-title="name" item-value="organisationCode"
-          label="Organisation" class="mb-2" placeholder="Choose an organisation"
-          :disabled="auth.isSystemAdmin && !dialogAnchorId" required
-        />
-        <v-text-field v-model="form.householdName" label="Head of household name" placeholder="e.g. Jane Doe" />
+        <v-row v-if="auth.isSystemAdmin || auth.isAnchor">
+          <v-col cols="12" sm="6">
+            <v-select
+              v-if="auth.isSystemAdmin"
+              v-model="dialogAnchorId" :items="anchors" item-title="name" item-value="id"
+              label="Anchor" placeholder="Choose an anchor" required
+            />
+            <v-select
+              v-else-if="auth.isAnchor"
+              v-model="form.organisationCode" :items="dialogOrganizations" item-title="name" item-value="organisationCode"
+              label="Organisation" placeholder="Choose an organisation"
+              :disabled="auth.isSystemAdmin && !dialogAnchorId" required
+            />
+          </v-col>
+          <v-col cols="12" sm="6">
+            <v-text-field v-model="form.householdName" label="Head of household name" placeholder="e.g. Jane Doe" />
+          </v-col>
+        </v-row>
+        <v-text-field v-else v-model="form.householdName" label="Head of household name" placeholder="e.g. Jane Doe" />
         <v-row>
           <v-col cols="6" sm="4"><v-text-field v-model.number="form.age" label="Age" type="number" placeholder="e.g. 34" /></v-col>
           <v-col cols="6" sm="4">
@@ -163,9 +170,19 @@ onMounted(() => {
           </v-col>
           <v-col cols="12" sm="4"><v-text-field v-model.number="form.householdSize" label="Household size" type="number" /></v-col>
         </v-row>
-        <v-text-field v-model="form.phoneNumber" label="Phone number" />
         <v-row>
-          <v-col cols="12" md="7">
+          <v-col cols="12" sm="4"><v-text-field v-model="form.phoneNumber" label="Phone number" /></v-col>
+          <v-col cols="12" sm="4">
+            <v-select
+              v-model="form.legalStatus"
+              :items="LEGAL_STATUS_OPTIONS"
+              item-title="title"
+              item-value="value"
+              label="Legal status"
+              clearable
+            />
+          </v-col>
+          <v-col cols="12" sm="4">
             <v-select
               v-model="form.vulnerabilityStatuses"
               :items="VULNERABILITY_OPTIONS"
@@ -177,16 +194,6 @@ onMounted(() => {
               multiple
               chips
               closable-chips
-            />
-          </v-col>
-          <v-col cols="12" md="5">
-            <v-select
-              v-model="form.legalStatus"
-              :items="LEGAL_STATUS_OPTIONS"
-              item-title="title"
-              item-value="value"
-              label="Legal status"
-              clearable
             />
           </v-col>
         </v-row>

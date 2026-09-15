@@ -9,6 +9,7 @@ interface AuditRow {
   actorId?: number
   actorName?: string
   actorEmail?: string
+  actorRole?: string
   anchorName?: string
   organisationCode?: string
   organisationName?: string
@@ -16,7 +17,6 @@ interface AuditRow {
   entityType?: string
   entityId?: string
   details?: string
-  ipAddress?: string
   channel?: string
   createdAt: string
 }
@@ -32,9 +32,9 @@ const channelFilter = ref<string | null>(null)
 const headers = computed(() => [
   ...(!props.actorId ? [{ title: 'Person', key: 'actorName' }] : []),
   { title: 'Activity', key: 'action' },
+  { title: 'Role', key: 'actorRole' },
   { title: 'Scope', key: 'scope' },
   { title: 'Channel', key: 'channel' },
-  { title: 'IP address', key: 'ipAddress' },
   { title: 'When', key: 'createdAt' },
 ])
 const actions = computed(() => [...new Set(rows.value.map((row) => row.action))].sort())
@@ -44,7 +44,10 @@ function actionLabel(action: string) {
 }
 
 function scopeLabel(row: AuditRow) {
-  return row.organisationName || row.anchorName || (row.actorType === 'SYSTEM' ? 'System-wide' : 'Unassigned')
+  if (row.organisationName) return row.organisationName
+  if (row.anchorName) return row.anchorName
+  if (row.actorRole === 'Platform Owner' || row.actorRole === 'Admin User') return 'Platform-wide'
+  return 'Unassigned'
 }
 
 function displayDate(value: string) {
@@ -98,9 +101,9 @@ onMounted(load)
       <template #item.action="{ item }">
         <div class="activity-cell"><strong>{{ actionLabel(item.action) }}</strong><span v-if="item.entityId">{{ item.entityType || 'Record' }}: {{ item.entityId }}</span></div>
       </template>
+      <template #item.actorRole="{ item }">{{ item.actorRole || '—' }}</template>
       <template #item.scope="{ item }">{{ scopeLabel(item) }}</template>
       <template #item.channel="{ item }"><v-chip size="x-small" variant="tonal" color="primary">{{ item.channel || 'PORTAL' }}</v-chip></template>
-      <template #item.ipAddress="{ item }">{{ item.ipAddress || '—' }}</template>
       <template #item.createdAt="{ item }">
         <div class="date-cell"><span>{{ displayDate(item.createdAt) }}</span><v-chip size="x-small" variant="tonal" :color="outcome(item) === 'FAILED' ? 'error' : 'success'">{{ outcome(item) }}</v-chip></div>
       </template>
