@@ -49,11 +49,11 @@ const anchorUsers = computed(() => users.value.filter((user) => user.anchorId ==
 
 const organizationHeaders = [
   { title: 'Organization', key: 'name' },
-  { title: 'Code', key: 'organisationCode' },
+  { title: 'Organization Code', key: 'organisationCode', minWidth: 172, nowrap: true },
   { title: 'Authorized contact', key: 'authorisedName' },
   { title: 'Country', key: 'country' },
   { title: 'Status', key: 'status' },
-  { title: 'Action', key: 'actions', sortable: false, align: 'start' as const },
+  { title: 'Action', key: 'actions', sortable: false, align: 'start' as const, width: 80, minWidth: 80, fixed: true, nowrap: true },
 ]
 
 const userHeaders = [

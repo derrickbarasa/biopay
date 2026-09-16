@@ -31,6 +31,8 @@
     <string name="home_local_ready">Local data ready</string>
     <string name="home_sync_clear">All local records are synced</string>
     <string name="home_subscription_grace">Subscription expired -- %1$d day(s) left before lockout. Ask your anchor administrator to renew.</string>
+    <string name="home_update_available">Update available: v%1$s</string>
+    <string name="home_update_action">Update</string>
     <string name="home_sync_pending">%1$d record(s) waiting to sync</string>
     <string name="home_overview">Operational summary</string>
     <string name="home_field_actions">Field actions</string>
@@ -106,12 +108,12 @@
 
     <string name="household_title">Households</string>
     <string name="household_description">Search, review, and register households stored on this device.</string>
-    <string name="household_search_hint">Search name, number, or ID</string>
+    <string name="household_search_hint">Search name, household code, or ID</string>
     <string name="household_add">Register household</string>
     <string name="household_list_summary">%1$d household(s) on this device</string>
     <string name="household_empty_title">No households yet</string>
     <string name="household_empty_body">Register the first household or connect and sync assigned records.</string>
-    <string name="household_subtitle">%1$s - %2$s</string>
+    <string name="household_subtitle">Code %1$s - %2$s</string>
     <string name="household_synced">Synced</string>
     <string name="household_pending_sync">Waiting to sync</string>
     <string name="household_status_paid">Paid</string>
@@ -325,12 +327,12 @@
 
     <string name="alternate_title">Alternates</string>
     <string name="alternate_description">Choose a household to view, add, or edit its alternates.</string>
-    <string name="alternate_search_hint">Search households by name, number, or ID</string>
+    <string name="alternate_search_hint">Search households by name, code, or ID</string>
     <string name="alternate_summary">%1$d household(s) on this device</string>
     <string name="alternate_empty_title">No households found</string>
     <string name="alternate_empty_body">Try a different search, or register a household first.</string>
-    <string name="alternate_household">Household %1$s</string>
-    <string name="alternate_detail_with_gender">%1$s - %2$s - %3$s</string>
+    <string name="alternate_household">Household code %1$s</string>
+    <string name="alternate_detail_with_gender">Code %1$s - %2$s - Age %3$s - %4$s</string>
 
     <string name="household_alternates_summary">%1$d alternate(s) in this household</string>
     <string name="household_alternates_empty_title">No alternates yet</string>
@@ -366,12 +368,14 @@
     <string name="payment_verify_not_enrolled">Not enrolled with any verification method yet.</string>
     <string name="payment_verify_fingerprint">Fingerprint</string>
     <string name="payment_verify_face">Face</string>
+    <string name="payment_verify_capture_now">Capture fingerprint or face</string>
+    <string name="payment_verify_capture_incomplete">No verification method was captured. Try again before paying.</string>
 
     <string name="generated_payment_title">Generated payment</string>
     <string name="generated_payment_description">Select an unpaid household from the latest generated payment cycle.</string>
     <string name="generated_payment_search_label">Choose household</string>
     <string name="household_picker_title">Choose household</string>
-    <string name="household_picker_search_hint">Search by name, registration number or village</string>
+    <string name="household_picker_search_hint">Search by name, household code, or village</string>
     <string name="household_picker_empty_none_pending">No unpaid household is ready yet. Tap Sync payments and try again.</string>
     <string name="household_picker_empty_no_match">No household matches your search.</string>
     <string name="generated_payment_sync">Sync payments</string>
@@ -379,7 +383,7 @@
     <string name="generated_payment_placeholder">—</string>
     <string name="generated_payment_details">Payment details</string>
     <string name="generated_payment_household_name">Household name</string>
-    <string name="generated_payment_registration_number">Registration number</string>
+    <string name="generated_payment_registration_number">Household code</string>
     <string name="generated_payment_village">Village</string>
     <string name="generated_payment_village_unknown">Not available</string>
     <string name="generated_payment_amount">Amount</string>
@@ -426,7 +430,7 @@
         <item quantity="other">%1$d vouchers</item>
     </plurals>
     <string name="voucher_filter_empty">No vouchers have this status.</string>
-    <string name="voucher_search_hint">Search household name or number</string>
+    <string name="voucher_search_hint">Search household name or code</string>
     <string name="voucher_search_empty">No vouchers match this household.</string>
     <string name="voucher_amount">Amount %1$s</string>
     <string name="voucher_household_named">%1$s · %2$s</string>
@@ -588,4 +592,14 @@
     <string name="settings_send_feedback">Send feedback</string>
     <string name="settings_feedback_subject">BioPay feedback (v%1$s)</string>
     <string name="settings_feedback_no_app">No email app is set up on this device.</string>
+
+    <string name="settings_check_for_updates">Check for updates</string>
+    <string name="settings_update_download">Download update</string>
+    <string name="settings_update_downloading">Downloading update…</string>
+    <string name="settings_update_install">Install update</string>
+    <string name="settings_update_available">Update available: v%1$s</string>
+    <string name="settings_update_up_to_date">You\'re on the latest version (v%1$s).</string>
+    <string name="settings_update_download_failed">The update download failed. Check your connection and try again.</string>
+    <string name="settings_update_permission_needed">Allow BioPay to install updates, then tap Install update again.</string>
+    <string name="settings_update_open_settings">Open settings</string>
 </resources>

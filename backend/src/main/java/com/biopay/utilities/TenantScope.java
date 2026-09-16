@@ -20,6 +20,18 @@ public final class TenantScope {
         return isSystemOwner(payload) || isAnchorAdministrator(payload);
     }
 
+    public static boolean isOrganisationAdministrator(JsonObject payload) {
+        return !isSystemOwner(payload) && !isAnchorAdministrator(payload)
+                && "ORGANISATION".equalsIgnoreCase(payload.getString("actorRole", ""));
+    }
+
+    /** An Anchor Administrator manages roles for their whole anchor; an Organisation
+     *  Administrator may now do the same for just their own organisation (see
+     *  Administration#getRoles/saveRole/deleteRole). */
+    public static boolean managesRoles(JsonObject payload) {
+        return managesOrganisations(payload) || isOrganisationAdministrator(payload);
+    }
+
     public static Integer anchorId(JsonObject payload) {
         Object value = payload.getValue("anchorId");
         if (value == null) return null;

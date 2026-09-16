@@ -25,6 +25,7 @@ import com.biopay.agent.face.FaceMatcher;
 import com.biopay.agent.face.FaceRecognitionEngine;
 import com.biopay.agent.face.FaceRecognitionException;
 import com.biopay.agent.face.MlKitFaceRecognitionEngine;
+import com.biopay.agent.households.PersonCaptureActivity;
 import com.biopay.agent.location.LocationHelper;
 import com.biopay.agent.session.SessionManager;
 import com.biopay.agent.sync.SyncScheduler;
@@ -68,7 +69,10 @@ public class PaymentVerificationActivity extends BaseActivity {
     private boolean selectedFingerprint;
     private Beneficiary pendingFaceBeneficiary;
     private Beneficiary pendingFingerprintBeneficiary;
+    private Beneficiary pendingCaptureBeneficiary;
     private MaterialButton scanButton;
+    private PaymentBeneficiaryAdapter adapter;
+    private HouseholdDao.Household household;
 
     private final ActivityResultLauncher<Intent> fingerprintVerifyLauncher =
             registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {
@@ -97,6 +101,27 @@ public class PaymentVerificationActivity extends BaseActivity {
                 if (path != null) matchFace(beneficiary, path);
             });
 
+    // Launched when a beneficiary has neither fingerprint nor face enrolled yet -- captures
+    // whichever the officer completes there, then re-checks and, if now enrolled, goes straight
+    // into verification instead of dropping the officer back at the beneficiary list.
+    private final ActivityResultLauncher<Intent> captureLauncher =
+            registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {
+                Beneficiary beneficiary = pendingCaptureBeneficiary;
+                pendingCaptureBeneficiary = null;
+                if (beneficiary == null || result.getResultCode() != RESULT_OK) return;
+                boolean hasFingerprint = fingerprintDao.countForBeneficiary(beneficiary.beneficiaryId) > 0;
+                boolean hasFace = faceDao.existsForBeneficiary(beneficiary.beneficiaryId);
+                adapter.submitList(buildBeneficiaries(household));
+                if (!hasFingerprint && !hasFace) {
+                    android.widget.Toast.makeText(this, R.string.payment_verify_capture_incomplete,
+                            android.widget.Toast.LENGTH_LONG).show();
+                    return;
+                }
+                selectedBeneficiary = beneficiary;
+                selectedFingerprint = hasFingerprint;
+                startSelectedVerification();
+            });
+
     @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_payment_verification);
@@ -109,7 +134,7 @@ public class PaymentVerificationActivity extends BaseActivity {
         householdNumber = getIntent().getStringExtra(EXTRA_HOUSEHOLD_NUMBER);
         amount = getIntent().getDoubleExtra(EXTRA_AMOUNT, 0);
 
-        HouseholdDao.Household household = householdDao.findByNumber(householdNumber);
+        household = householdDao.findByNumber(householdNumber);
         householdName = household != null && household.householdName != null && !household.householdName.isEmpty()
                 ? household.householdName : householdNumber;
         ((TextView) findViewById(R.id.tvHouseholdName)).setText(householdName);
@@ -117,12 +142,21 @@ public class PaymentVerificationActivity extends BaseActivity {
                 getString(R.string.payment_amount, NumberFormat.getNumberInstance().format(amount)));
 
         scanButton = findViewById(R.id.btnScanPayment);
-        PaymentBeneficiaryAdapter adapter = new PaymentBeneficiaryAdapter((beneficiary, fingerprint) -> {
-            selectedBeneficiary = beneficiary;
-            selectedFingerprint = fingerprint;
-            scanButton.setEnabled(true);
-            scanButton.setText(fingerprint ? R.string.payment_scan_fingerprint : R.string.payment_scan_face);
-            scanButton.setIconResource(fingerprint ? R.drawable.ic_fingerprint : R.drawable.ic_face);
+        adapter = new PaymentBeneficiaryAdapter(new PaymentBeneficiaryAdapter.OnVerifyListener() {
+            @Override public void onMethodSelected(Beneficiary beneficiary, boolean fingerprint) {
+                selectedBeneficiary = beneficiary;
+                selectedFingerprint = fingerprint;
+                scanButton.setEnabled(true);
+                scanButton.setText(fingerprint ? R.string.payment_scan_fingerprint : R.string.payment_scan_face);
+                scanButton.setIconResource(fingerprint ? R.drawable.ic_fingerprint : R.drawable.ic_face);
+            }
+
+            @Override public void onCaptureRequested(Beneficiary beneficiary) {
+                pendingCaptureBeneficiary = beneficiary;
+                captureLauncher.launch(PersonCaptureActivity.captureIntent(PaymentVerificationActivity.this,
+                        householdNumber, beneficiary.beneficiaryId, beneficiary.beneficiaryType, beneficiary.name,
+                        "FINGERPRINT_AND_FACE"));
+            }
         });
         RecyclerView recycler = findViewById(R.id.recyclerBeneficiaries);
         recycler.setLayoutManager(new LinearLayoutManager(this));

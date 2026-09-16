@@ -6,7 +6,6 @@ import { apiRelativeFilePath } from '@/api/paths'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
 import { useConfirm } from '@/composables/useConfirm'
-import { downloadCsv, toCsv } from '@/utils/csv'
 import { householdReviewStatus } from '@/utils/householdReview'
 import HouseholdReviewActions from '@/components/HouseholdReviewActions.vue'
 import {
@@ -18,6 +17,9 @@ import {
 } from '@/constants/householdClassifications'
 import { ALTERNATE_RELATIONSHIP_OPTIONS, inferGenderFromRelationship } from '@/constants/alternateRelationship'
 
+const maritalStatusItems: readonly string[] = MARITAL_STATUS_OPTIONS
+const alternateRelationshipItems: readonly string[] = ALTERNATE_RELATIONSHIP_OPTIONS
+
 interface Alternate {
   alternateNumber?: string
   alternateName?: string
@@ -27,6 +29,10 @@ interface Alternate {
   gender?: string
   images?: string[]
   createdAt?: string
+  status?: number
+  fingerprintStatus?: string
+  fingerprintNumbers?: number[]
+  faceStatus?: string
 }
 
 const route = useRoute()
@@ -71,11 +77,43 @@ const vouchers = ref<VoucherEvent[]>([])
 const photoUrls = ref<string[]>([])
 const photoLoading = ref(false)
 const photoLoadError = ref('')
+const exportingAlternates = ref(false)
 // Same blob-fetch pattern, keyed by alternateNumber, for each alternate's own gallery.
 const alternatePhotoUrls = ref<Record<string, string[]>>({})
 // Currently expanded photo, shown large in the lightbox dialog below -- every small photo
 // thumbnail on this page (header avatar, household gallery, alternate avatar/gallery) opens it.
 const lightboxSrc = ref<string | null>(null)
+// Which person the open lightbox photo belongs to -- so the downloaded filename can
+// tell photos apart across households and alternates that happen to share a name.
+const lightboxContext = ref<{ name: string; alternateNumber?: string } | null>(null)
+const photoDownloading = ref(false)
+
+function openLightbox(src: string, name: string, alternateNumber?: string) {
+  lightboxSrc.value = src
+  lightboxContext.value = { name, alternateNumber }
+}
+const fingerprintDialog = ref(false)
+
+const fingerPositions = [
+  { number: 1, hand: 'Right hand', label: 'Thumb' },
+  { number: 2, hand: 'Right hand', label: 'Index' },
+  { number: 3, hand: 'Right hand', label: 'Middle' },
+  { number: 4, hand: 'Right hand', label: 'Ring' },
+  { number: 5, hand: 'Right hand', label: 'Little' },
+  { number: 6, hand: 'Left hand', label: 'Thumb' },
+  { number: 7, hand: 'Left hand', label: 'Index' },
+  { number: 8, hand: 'Left hand', label: 'Middle' },
+  { number: 9, hand: 'Left hand', label: 'Ring' },
+  { number: 10, hand: 'Left hand', label: 'Little' },
+]
+const capturedFingerNumbers = computed(() => new Set<number>(detail.value?.fingerprintNumbers ?? []))
+const capturedFingerprintCount = computed(() => capturedFingerNumbers.value.size)
+
+// Same fingerprint-coverage display as the household head above, reused for whichever
+// alternate is currently open in the view dialog.
+const altFingerprintDialog = ref(false)
+const altCapturedFingerNumbers = computed(() => new Set<number>(viewAltTarget.value?.fingerprintNumbers ?? []))
+const altCapturedFingerprintCount = computed(() => altCapturedFingerNumbers.value.size)
 
 // Name-not-code lookups, matching the pattern used on the Households list page.
 const organizations = ref<{ organisationCode: string; name: string }[]>([])
@@ -103,7 +141,7 @@ const infoFields = computed(() => {
   const d = detail.value
   if (!d) return []
   const fields = [
-    { label: 'Household number', value: d.householdNumber },
+    { label: 'Household code', value: d.householdNumber },
     { label: 'Head of household', value: d.householdName },
     { label: 'Organization', value: orgName(d.organisationCode) },
     { label: 'Age', value: d.age ?? '—' },
@@ -157,6 +195,50 @@ function revokePhotos() {
   for (const u of photoUrls.value) URL.revokeObjectURL(u)
   photoUrls.value = []
   lightboxSrc.value = null
+  lightboxContext.value = null
+}
+
+async function downloadLightboxPhoto() {
+  if (!lightboxSrc.value || photoDownloading.value) return
+  photoDownloading.value = true
+  try {
+    const response = await fetch(lightboxSrc.value)
+    if (!response.ok) throw new Error('Photo download failed')
+    const blob = await response.blob()
+    const extensionByType: Record<string, string> = {
+      'image/jpeg': 'jpg',
+      'image/png': 'png',
+      'image/webp': 'webp',
+      'image/gif': 'gif',
+    }
+    const extension = extensionByType[blob.type] ?? 'jpg'
+    const context = lightboxContext.value
+    // Include the household code and, for an alternate, their own alternate code -- a
+    // person's name alone collides across households (and across alternates within one
+    // household), overwriting or shuffling earlier downloads when several are saved.
+    const nameParts = [
+      context?.name || detail.value?.householdName,
+      householdNumber.value,
+      context?.alternateNumber,
+    ].filter(Boolean) as string[]
+    const baseName = nameParts.join('-')
+      .trim()
+      .replace(/[^a-z0-9]+/gi, '-')
+      .replace(/^-|-$/g, '')
+      .toLowerCase() || 'household-photo'
+    const downloadUrl = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = downloadUrl
+    link.download = `${baseName}-photo.${extension}`
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    URL.revokeObjectURL(downloadUrl)
+  } catch {
+    toast.error('The photo could not be downloaded. Please try again.')
+  } finally {
+    photoDownloading.value = false
+  }
 }
 
 function revokeAlternatePhotos() {
@@ -170,19 +252,38 @@ function revokeAlternatePhotos() {
 // Fetches each JWT-protected photo through apiClient (which attaches the bearer
 // token) and turns the blob into a displayable object URL. Shared by the household
 // head's own gallery and every alternate's gallery below.
-async function fetchPhotoBlobs(paths: string[]): Promise<string[]> {
+// Returns the last error too (not just the successful urls) so a total failure can show
+// *why* -- e.g. 404 (the file isn't on the server the dashboard is talking to, or the
+// image row's stored filename doesn't match a real file) vs 403 (viewer's org/anchor
+// doesn't match who the photo was uploaded under) vs a network failure -- instead of one
+// generic "could not be loaded" that looks identical for every different root cause.
+async function fetchPhotoBlobs(paths: string[]): Promise<{ urls: string[]; lastError: unknown }> {
   const urls: string[] = []
+  let lastError: unknown = null
   for (const p of paths) {
     try {
       const rel = apiRelativeFilePath(p)
       if (!rel) continue
       const res = await apiClient.get(rel, { responseType: 'blob' })
       urls.push(URL.createObjectURL(res.data as Blob))
-    } catch {
+    } catch (err) {
+      lastError = err
       // Skip an image that fails to load rather than failing the whole page.
     }
   }
-  return urls
+  return { urls, lastError }
+}
+
+function photoErrorReason(err: unknown): string {
+  // apiClient's response interceptor already unwraps AxiosError into a plain Error
+  // carrying `.status` (see api/client.ts) -- by the time it reaches here there is no
+  // `.response` left to read, so checking `.response?.status` always missed and this
+  // reported "a network error" for every failure, 404/403 included.
+  const status = (err as { status?: number } | undefined)?.status
+  if (status === 404) return 'the file is missing on the server'
+  if (status === 401 || status === 403) return "you don't have access to this photo"
+  if (status != null) return `server returned ${status}`
+  return 'a network error'
 }
 
 async function loadPhotos(paths: string[]) {
@@ -190,9 +291,10 @@ async function loadPhotos(paths: string[]) {
   photoLoading.value = true
   photoLoadError.value = ''
   try {
-    photoUrls.value = await fetchPhotoBlobs(paths)
+    const { urls, lastError } = await fetchPhotoBlobs(paths)
+    photoUrls.value = urls
     if (paths.length && !photoUrls.value.length) {
-      photoLoadError.value = 'The captured photo could not be loaded.'
+      photoLoadError.value = `The captured photo could not be loaded (${photoErrorReason(lastError)}).`
     }
   } finally {
     photoLoading.value = false
@@ -208,7 +310,7 @@ async function loadAlternatePhotos() {
   revokeAlternatePhotos()
   const withPhotos = alternates.value.filter((a) => a.alternateNumber && a.images?.length)
   const entries = await Promise.all(
-    withPhotos.map(async (a) => [a.alternateNumber as string, await fetchPhotoBlobs(a.images ?? [])] as const),
+    withPhotos.map(async (a) => [a.alternateNumber as string, (await fetchPhotoBlobs(a.images ?? [])).urls] as const),
   )
   alternatePhotoUrls.value = Object.fromEntries(entries)
 }
@@ -219,7 +321,7 @@ async function load() {
     const [h, alts, hist] = await Promise.all([
       dispatch<{ results: any[] }>('GET_HOUSEHOLD', { householdNumber: householdNumber.value }),
       auth.can('ACCESS_ALTERNATES')
-        ? dispatch<{ results: Alternate[] }>('GET_ALTERNATES', { householdNumber: householdNumber.value })
+        ? dispatch<{ results: Alternate[] }>('GET_ALTERNATES', { householdNumber: householdNumber.value, includeInactive: true })
         : Promise.resolve({ results: [] as Alternate[] }),
       dispatch<{ results: { payments: PaymentEvent[]; events: AuditEvent[]; vouchers: VoucherEvent[] } }>(
         'GET_HOUSEHOLD_HISTORY', { householdNumber: householdNumber.value },
@@ -231,7 +333,7 @@ async function load() {
     events.value = hist.results?.events ?? []
     vouchers.value = hist.results?.vouchers ?? []
     const images: string[] = detail.value?.images ?? []
-    if (images.length) loadPhotos(images)
+    await loadPhotos(images)
     loadAlternatePhotos()
   } catch (err) {
     toast.error(err instanceof Error ? err.message : 'Failed to load household')
@@ -297,7 +399,8 @@ async function printVoucher() {
     const qr = v.qr ? `<img class="qr" src="${v.qr}" alt="Household QR code" />` : ''
     w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Payment Voucher - ${escapeHtml(v.householdNumber)}</title>
       <style>
-        * { box-sizing: border-box; font-family: "Segoe UI", sans-serif; }
+        @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800&display=swap');
+        * { box-sizing: border-box; font-family: "Outfit", sans-serif; }
         body { margin: 0; padding: 32px; color: #0f172a; }
         .voucher { max-width: 620px; margin: 0 auto; border: 2px solid #0d9488; border-radius: 14px; padding: 28px; }
         .head { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 1px solid #e2e8f0; padding-bottom: 14px; margin-bottom: 20px; }
@@ -326,7 +429,7 @@ async function printVoucher() {
             ${photo}
             <div class="info">
               <p class="name">${escapeHtml(v.householdName ?? '')}</p>
-              <div class="row"><span class="label">Household #:</span> ${escapeHtml(v.householdNumber)}</div>
+              <div class="row"><span class="label">Household code:</span> ${escapeHtml(v.householdNumber)}</div>
               <div class="row"><span class="label">Organization:</span> ${escapeHtml(orgName(v.organisationCode))}</div>
               <div class="row"><span class="label">Issued:</span> ${escapeHtml(new Date().toLocaleDateString())}</div>
             </div>
@@ -347,10 +450,16 @@ async function printVoucher() {
 const editDialog = ref(false)
 const editing = ref(false)
 const editForm = ref({
-  householdName: '', age: null as number | null, gender: '', maritalStatus: '', spouseName: '', phoneNumber: '',
+  householdName: '', age: null as number | null, gender: '', maritalStatus: null as string | null, spouseName: '', phoneNumber: '',
   householdSize: null as number | null, stateCode: '', countyCode: '', locationCode: '', villageCode: '',
-  vulnerabilityStatuses: [] as string[], legalStatus: '',
+  vulnerabilityStatuses: [] as string[], legalStatus: null as string | null,
+  photo: null as File | null,
 })
+const uploadingEditPhoto = ref(false)
+
+function onEditPhotoFile(event: Event) {
+  editForm.value.photo = (event.target as HTMLInputElement).files?.[0] ?? null
+}
 
 // Bound to each select's own change event, not a form-wide watcher, so dependent
 // fields reset only on an active pick -- never when openEdit() populates the form.
@@ -365,7 +474,7 @@ function openEdit() {
     householdName: d.householdName ?? '',
     age: d.age ?? null,
     gender: d.gender ?? '',
-    maritalStatus: d.maritalStatus ?? '',
+    maritalStatus: d.maritalStatus ?? null,
     spouseName: d.spouseName ?? '',
     phoneNumber: d.phoneNumber ?? '',
     householdSize: d.householdSize ?? null,
@@ -374,7 +483,8 @@ function openEdit() {
     locationCode: d.payamCode ?? '',
     villageCode: d.bomaCode ?? '',
     vulnerabilityStatuses: d.vulnerabilityStatuses ?? [],
-    legalStatus: d.legalStatus ?? '',
+    legalStatus: d.legalStatus ?? null,
+    photo: null,
   }
   editDialog.value = true
 }
@@ -399,6 +509,25 @@ async function saveEdit() {
       vulnerabilityStatuses: editForm.value.vulnerabilityStatuses,
       legalStatus: editForm.value.legalStatus || undefined,
     })
+    if (editForm.value.photo) {
+      uploadingEditPhoto.value = true
+      try {
+        const dataUrl = await fileToDataUrl(editForm.value.photo)
+        const extension = (editForm.value.photo.name.split('.').pop() || 'jpg').toLowerCase()
+        await dispatch('UPLOAD_IMAGE', {
+          beneficiaryId: householdNumber.value,
+          beneficiaryType: 1,
+          imageBase64: dataUrl,
+          extension,
+        })
+      } catch (err) {
+        toast.error(err instanceof Error
+          ? `Household updated, but the photo failed to upload: ${err.message}`
+          : 'Household updated, but the photo failed to upload')
+      } finally {
+        uploadingEditPhoto.value = false
+      }
+    }
     toast.success('Household updated')
     editDialog.value = false
     await load()
@@ -409,18 +538,48 @@ async function saveEdit() {
   }
 }
 
-function exportAlternates() {
+async function exportAlternates() {
   if (!alternates.value.length) {
     toast.error('No alternates to export')
     return
   }
-  const csv = toCsv(
-    ['Alternate #', 'Name', 'Relationship', 'Phone'],
-    alternates.value.map((a) => [
-      a.alternateNumber ?? '', a.alternateName ?? '', a.relationship ?? '', a.phoneNumber ?? '',
-    ]),
-  )
-  downloadCsv(`alternates-${householdNumber.value}.csv`, csv)
+  exportingAlternates.value = true
+  try {
+    const XLSX = await import('xlsx')
+    const rows = alternates.value.map((alternate) => {
+      const parsedTimestamp = alternate.createdAt ? new Date(alternate.createdAt) : null
+      return [
+        String(detail.value?.householdNumber ?? householdNumber.value),
+        String(detail.value?.householdName ?? ''),
+        alternate.alternateNumber ?? '',
+        alternate.alternateName ?? '',
+        alternate.relationship ?? '',
+        genderLabel(alternate.gender),
+        alternate.phoneNumber ?? '',
+        parsedTimestamp && !Number.isNaN(parsedTimestamp.getTime()) ? parsedTimestamp : '',
+      ]
+    })
+    const worksheet = XLSX.utils.aoa_to_sheet([
+      ['Household Code', 'Household Name', 'Alternate Code', 'Alternate Name', 'Relationship to Household', 'Gender', 'Phone', 'Created At'],
+      ...rows,
+    ], { cellDates: true })
+    worksheet['!cols'] = [
+      { wch: 24 }, { wch: 32 }, { wch: 22 }, { wch: 28 }, { wch: 28 }, { wch: 16 }, { wch: 20 }, { wch: 23 },
+    ]
+    for (let row = 2; row <= rows.length + 1; row += 1) {
+      const timestampCell = worksheet[`H${row}`]
+      if (timestampCell?.t === 'd') timestampCell.z = 'yyyy-mm-dd hh:mm:ss'
+    }
+    worksheet['!autofilter'] = { ref: `A1:H${rows.length + 1}` }
+
+    const workbook = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Alternates')
+    XLSX.writeFile(workbook, `alternates-${householdNumber.value}.xlsx`, { cellDates: true })
+  } catch (err) {
+    toast.error(err instanceof Error ? err.message : 'Failed to export alternates')
+  } finally {
+    exportingAlternates.value = false
+  }
 }
 
 // A picked photo uploads via UPLOAD_IMAGE with beneficiaryType 2, matching the
@@ -434,12 +593,14 @@ const altPhotoFile = ref<File | null>(null)
 const editingAlternateNumber = ref<string | null>(null)
 
 const altTableHeaders = [
-  { title: 'Photo', key: 'photo', sortable: false, width: 64 },
-  { title: 'Name', key: 'alternateName' },
-  { title: 'Relationship', key: 'relationship' },
-  { title: 'Gender', key: 'gender' },
-  { title: 'Added', key: 'createdAt' },
-  { title: 'Actions', key: 'actions', sortable: false, align: 'start' as const },
+  { title: 'Photo', key: 'photo', sortable: false, width: 72, minWidth: 72 },
+  { title: 'Alternate Code', key: 'alternateNumber', width: 164, minWidth: 164, nowrap: true },
+  { title: 'Name', key: 'alternateName', minWidth: 116 },
+  { title: 'Relationship', key: 'relationship', minWidth: 132 },
+  { title: 'Gender', key: 'gender', width: 92, minWidth: 92 },
+  { title: 'Added', key: 'createdAt', minWidth: 128 },
+  { title: 'Status', key: 'status', width: 100, minWidth: 100 },
+  { title: 'Actions', key: 'actions', sortable: false, align: 'start' as const, width: 132, minWidth: 132, fixed: true, nowrap: true },
 ]
 
 function formatTimestamp(value?: string) {
@@ -488,6 +649,16 @@ async function deactivateAlternate(a: Alternate) {
     await load()
   } catch (err) {
     toast.error(err instanceof Error ? err.message : 'Failed to deactivate alternate')
+  }
+}
+
+async function activateAlternate(a: Alternate) {
+  try {
+    await dispatch('ACTIVATE_ALTERNATE', { alternateNumber: a.alternateNumber })
+    toast.success('Alternate activated')
+    await load()
+  } catch (err) {
+    toast.error(err instanceof Error ? err.message : 'Failed to activate alternate')
   }
 }
 
@@ -584,8 +755,8 @@ onMounted(() => { load(); loadNameLookups() })
           role="button"
           tabindex="0"
           :aria-label="`View ${detail?.householdName ?? 'household head'}'s photo full size`"
-          @click="lightboxSrc = photoUrls[0]"
-          @keyup.enter="lightboxSrc = photoUrls[0]"
+          @click="openLightbox(photoUrls[0], detail?.householdName ?? 'household-head')"
+          @keyup.enter="openLightbox(photoUrls[0], detail?.householdName ?? 'household-head')"
         >
           <v-img :src="photoUrls[0]" :alt="`${detail?.householdName ?? 'Household head'} photo`" cover />
         </v-avatar>
@@ -596,7 +767,7 @@ onMounted(() => { load(); loadNameLookups() })
           <h1 class="page-title">
             {{ detail?.householdName ?? 'Household' }}
           </h1>
-          <div class="text-body-2 text-medium-emphasis">{{ householdNumber }}</div>
+          <div class="text-body-2 text-medium-emphasis">Household code: {{ householdNumber }}</div>
         </div>
       </div>
       <div v-if="detail" class="household-detail-actions">
@@ -659,27 +830,29 @@ onMounted(() => { load(); loadNameLookups() })
         </v-card>
 
         <v-card v-if="auth.can('ACCESS_ALTERNATES')" variant="flat" border>
-          <v-card-title class="text-subtitle-1 font-weight-bold d-flex align-center">
-            Alternates ({{ alternates.length }})
+          <v-card-title class="alternates-card-title text-subtitle-1 font-weight-bold d-flex align-center">
+            <span>Alternates ({{ alternates.length }})</span>
             <v-spacer />
-            <v-btn
-              v-if="alternates.length && auth.can('DOWNLOAD_REPORTS')"
-              size="small"
-              variant="text"
-              prepend-icon="mdi-download"
-              class="mr-2"
-              @click="exportAlternates"
-            >
-              Export
-            </v-btn>
-            <v-btn v-if="auth.can('ACCESS_ALTERNATES')"
-              size="small"
-              color="secondary"
-              prepend-icon="mdi-account-plus-outline"
-              @click="openAddAlternate"
-            >
-              Add alternate
-            </v-btn>
+            <div class="alternates-toolbar">
+              <v-btn
+                v-if="alternates.length && auth.can('DOWNLOAD_REPORTS')"
+                size="small"
+                variant="text"
+                prepend-icon="mdi-download"
+                :loading="exportingAlternates"
+                @click="exportAlternates"
+              >
+                Export Excel
+              </v-btn>
+              <v-btn v-if="auth.can('ACCESS_ALTERNATES')"
+                size="small"
+                color="secondary"
+                prepend-icon="mdi-account-plus-outline"
+                @click="openAddAlternate"
+              >
+                Add alternate
+              </v-btn>
+            </div>
           </v-card-title>
           <v-divider />
           <v-data-table
@@ -697,8 +870,8 @@ onMounted(() => { load(); loadNameLookups() })
                 role="button"
                 tabindex="0"
                 :aria-label="`View ${item.alternateName ?? 'alternate'}'s photo full size`"
-                @click="lightboxSrc = alternatePhotoUrls[item.alternateNumber ?? '']![0]"
-                @keyup.enter="lightboxSrc = alternatePhotoUrls[item.alternateNumber ?? '']![0]"
+                @click="openLightbox(alternatePhotoUrls[item.alternateNumber ?? '']![0], item.alternateName ?? 'alternate', item.alternateNumber)"
+                @keyup.enter="openLightbox(alternatePhotoUrls[item.alternateNumber ?? '']![0], item.alternateName ?? 'alternate', item.alternateNumber)"
               >
                 <v-img :src="alternatePhotoUrls[item.alternateNumber ?? '']![0]" cover />
               </v-avatar>
@@ -709,10 +882,16 @@ onMounted(() => { load(); loadNameLookups() })
             <template #item.relationship="{ item }">{{ item.relationship || '—' }}</template>
             <template #item.gender="{ item }">{{ genderLabel(item.gender) }}</template>
             <template #item.createdAt="{ item }">{{ formatTimestamp(item.createdAt) }}</template>
+            <template #item.status="{ item }">
+              <v-chip size="small" :color="item.status === 1 ? 'success' : 'default'" variant="tonal">
+                {{ item.status === 1 ? 'Active' : 'Inactive' }}
+              </v-chip>
+            </template>
             <template #item.actions="{ item }">
               <v-btn icon="mdi-eye-outline" variant="text" size="small" density="comfortable" aria-label="View alternate" @click="openViewAlternate(item)" />
-              <v-btn icon="mdi-pencil-outline" variant="text" size="small" density="comfortable" aria-label="Edit alternate" @click="openEditAlternate(item)" />
-              <v-btn icon="mdi-account-cancel-outline" variant="text" size="small" density="comfortable" color="error" aria-label="Deactivate alternate" @click="deactivateAlternate(item)" />
+              <v-btn v-if="item.status === 1" icon="mdi-pencil-outline" variant="text" size="small" density="comfortable" aria-label="Edit alternate" @click="openEditAlternate(item)" />
+              <v-btn v-if="item.status === 1" icon="mdi-account-cancel-outline" variant="text" size="small" density="comfortable" color="error" aria-label="Deactivate alternate" @click="deactivateAlternate(item)" />
+              <v-btn v-else icon="mdi-account-check-outline" variant="text" size="small" density="comfortable" color="success" aria-label="Activate alternate" @click="activateAlternate(item)" />
             </template>
           </v-data-table>
           <v-card-text v-else class="text-medium-emphasis">
@@ -784,29 +963,6 @@ onMounted(() => { load(); loadNameLookups() })
 
       <v-col cols="12" md="4">
         <v-card variant="flat" border class="mb-4">
-          <v-card-title class="text-subtitle-1 font-weight-bold d-flex align-center">
-            Location
-            <v-spacer />
-            <v-btn v-if="coordinates" variant="text" size="small" prepend-icon="mdi-open-in-new" :href="mapLinkUrl" target="_blank" rel="noopener">
-              Open larger map
-            </v-btn>
-          </v-card-title>
-          <v-divider />
-          <v-card-text>
-            <template v-if="coordinates">
-              <iframe
-                class="household-map" :src="mapEmbedUrl" title="Household registration location" loading="lazy"
-                referrerpolicy="no-referrer-when-downgrade"
-              />
-              <div class="text-caption text-medium-emphasis mt-2">{{ coordinates.lat.toFixed(6) }}, {{ coordinates.lon.toFixed(6) }} &middot; from the registering field officer's device location</div>
-            </template>
-            <div v-else class="text-medium-emphasis">
-              No location on file for this household. Coordinates are captured automatically by the BioPay Android field app at registration.
-            </div>
-          </v-card-text>
-        </v-card>
-
-        <v-card variant="flat" border class="mb-4">
           <v-card-title class="text-subtitle-1 font-weight-bold">Household head photo</v-card-title>
           <v-divider />
           <v-card-text>
@@ -815,18 +971,18 @@ onMounted(() => { load(); loadNameLookups() })
               <span>Loading captured photo...</span>
             </div>
             <v-row v-else-if="photoUrls.length" dense>
-              <v-col v-for="(src, i) in photoUrls" :key="i" cols="6">
+              <v-col v-for="(src, i) in photoUrls" :key="i" :cols="photoUrls.length === 1 ? 12 : 6">
                 <v-img
                   :src="src"
                   :alt="`${detail?.householdName ?? 'Household head'} photo ${i + 1}`"
-                  aspect-ratio="1"
+                  :aspect-ratio="photoUrls.length === 1 ? 4 / 3 : 1"
                   cover
                   class="rounded-lg clickable-photo"
                   role="button"
                   tabindex="0"
                   aria-label="View photo full size"
-                  @click="lightboxSrc = src"
-                  @keyup.enter="lightboxSrc = src"
+                  @click="openLightbox(src, detail?.householdName ?? 'household-head')"
+                  @keyup.enter="openLightbox(src, detail?.householdName ?? 'household-head')"
                 />
               </v-col>
             </v-row>
@@ -836,7 +992,7 @@ onMounted(() => { load(); loadNameLookups() })
                 <v-btn size="small" variant="text" color="error" @click="retryPhotos">Try again</v-btn>
               </div>
             </v-alert>
-            <div v-else class="text-medium-emphasis">No photos uploaded for this household.</div>
+            <div v-else class="text-medium-emphasis">No captured household head photo has synced yet.</div>
           </v-card-text>
         </v-card>
 
@@ -844,34 +1000,129 @@ onMounted(() => { load(); loadNameLookups() })
           <v-card-title class="text-subtitle-1 font-weight-bold">Biometrics</v-card-title>
           <v-divider />
           <v-card-text class="d-flex flex-column ga-3">
-            <div class="d-flex align-center justify-space-between">
-              <span>Fingerprints</span>
-              <v-chip size="small" :color="detail.fingerprintStatus === 'ENROLLED' ? 'success' : 'warning'" variant="tonal">
-                {{ detail.fingerprintStatus ?? 'PENDING' }}
-              </v-chip>
+            <div class="biometric-row">
+              <div>
+                <div>Fingerprints</div>
+                <div class="text-caption text-medium-emphasis">
+                  {{ capturedFingerprintCount }} of 10 captured
+                </div>
+              </div>
+              <div class="d-flex align-center ga-1">
+                <v-chip size="small" :color="detail.fingerprintStatus === 'ENROLLED' ? 'success' : 'warning'" variant="tonal">
+                  {{ detail.fingerprintStatus ?? 'PENDING' }}
+                </v-chip>
+                <v-btn size="small" variant="text" prepend-icon="mdi-eye-outline" @click="fingerprintDialog = true">
+                  View
+                </v-btn>
+              </div>
             </div>
-            <div class="d-flex align-center justify-space-between">
-              <span>Photo</span>
-              <v-chip size="small" :color="detail.imageStatus === 'UPLOADED' ? 'success' : 'warning'" variant="tonal">
-                {{ detail.imageStatus ?? 'PENDING' }}
+            <div class="biometric-row">
+              <div>
+                <div>Face</div>
+                <div class="text-caption text-medium-emphasis">Secure face template</div>
+              </div>
+              <v-chip size="small" :color="detail.faceStatus === 'ENROLLED' ? 'success' : 'warning'" variant="tonal">
+                {{ detail.faceStatus ?? 'PENDING' }}
               </v-chip>
             </div>
             <v-alert type="info" variant="tonal" density="compact" class="mt-1">
-              Fingerprints and photos are captured through the BioPay Android field app.
+              Fingerprints and face templates are captured through the BioPay Android field app. The household head photo is displayed above when it has synced.
             </v-alert>
+          </v-card-text>
+        </v-card>
+
+        <v-card variant="flat" border class="mb-4">
+          <v-card-title class="text-subtitle-1 font-weight-bold d-flex align-center">
+            Registration location
+            <v-spacer />
+            <v-btn v-if="coordinates" variant="text" size="small" prepend-icon="mdi-open-in-new" :href="mapLinkUrl" target="_blank" rel="noopener">
+              Open map
+            </v-btn>
+          </v-card-title>
+          <v-divider />
+          <v-card-text>
+            <template v-if="coordinates">
+              <iframe
+                class="household-map" :src="mapEmbedUrl" title="Household registration location with a marker at the captured device coordinates" loading="lazy"
+                referrerpolicy="no-referrer-when-downgrade"
+              />
+              <div class="location-coordinates mt-3">
+                <v-icon icon="mdi-map-marker-outline" color="primary" size="22" aria-hidden="true" />
+                <div>
+                  <div class="location-coordinate-values">
+                    <span><strong>Latitude</strong> {{ coordinates.lat.toFixed(6) }}</span>
+                    <span><strong>Longitude</strong> {{ coordinates.lon.toFixed(6) }}</span>
+                  </div>
+                  <div class="text-caption text-medium-emphasis">Captured from the field officer's device when this household was recorded.</div>
+                </div>
+              </div>
+            </template>
+            <div v-else class="location-empty">
+              <v-icon icon="mdi-map-marker-outline" size="26" aria-hidden="true" />
+              <span>No device coordinates were captured when this household was recorded.</span>
+            </div>
           </v-card-text>
         </v-card>
       </v-col>
     </v-row>
 
-    <v-dialog :model-value="!!lightboxSrc" max-width="720" @update:model-value="lightboxSrc = null">
+    <v-dialog :model-value="!!lightboxSrc" max-width="720" @update:model-value="lightboxSrc = null; lightboxContext = null">
       <v-card v-if="lightboxSrc">
-        <dialog-close-button @close="lightboxSrc = null" />
+        <dialog-close-button @close="lightboxSrc = null; lightboxContext = null" />
+        <v-card-title class="photo-lightbox-header d-flex align-center">
+          Photo
+          <v-spacer />
+          <v-btn
+            class="photo-lightbox-download"
+            color="secondary"
+            variant="flat"
+            size="small"
+            prepend-icon="mdi-download"
+            :loading="photoDownloading"
+            @click="downloadLightboxPhoto"
+          >
+            Download
+          </v-btn>
+        </v-card-title>
         <v-img :src="lightboxSrc" :alt="`${detail?.householdName ?? 'Household head'} photo`" max-height="80vh" contain />
       </v-card>
     </v-dialog>
 
-    <v-dialog v-model="editDialog" max-width="560">
+    <v-dialog v-model="fingerprintDialog" max-width="680">
+      <v-card>
+        <v-card-title class="d-flex align-center">
+          Captured fingerprints
+          <v-spacer />
+        </v-card-title>
+        <dialog-close-button @close="fingerprintDialog = false" />
+        <v-divider />
+        <v-card-text class="pt-4">
+          <p class="text-body-2 text-medium-emphasis mb-4">
+            {{ capturedFingerprintCount }} of 10 finger positions have been captured for {{ detail?.householdName }}.
+          </p>
+          <section v-for="hand in ['Right hand', 'Left hand']" :key="hand" class="fingerprint-hand mb-4" :aria-label="hand">
+            <h3 class="text-subtitle-2 mb-2">{{ hand }}</h3>
+            <div class="fingerprint-grid">
+              <div
+                v-for="finger in fingerPositions.filter((item) => item.hand === hand)"
+                :key="finger.number"
+                class="fingerprint-slot"
+                :class="{ 'fingerprint-slot--captured': capturedFingerNumbers.has(finger.number) }"
+              >
+                <v-icon icon="mdi-fingerprint" size="30" aria-hidden="true" />
+                <span>{{ finger.label }}</span>
+                <small>{{ capturedFingerNumbers.has(finger.number) ? 'Captured' : 'Not captured' }}</small>
+              </div>
+            </div>
+          </section>
+          <v-alert type="info" variant="tonal" density="compact">
+            Biometric templates stay protected. This view shows capture coverage only, not the stored fingerprint data.
+          </v-alert>
+        </v-card-text>
+      </v-card>
+    </v-dialog>
+
+    <v-dialog v-model="editDialog" max-width="760">
       <v-card>
         <v-card-title class="d-flex align-center">
           Edit household
@@ -882,47 +1133,65 @@ onMounted(() => { load(); loadNameLookups() })
         <v-card-text class="pt-4">
           <v-text-field v-model="editForm.householdName" label="Head of household name" />
           <v-row>
-            <v-col cols="6"><v-text-field v-model.number="editForm.age" label="Age" type="number" /></v-col>
-            <v-col cols="6">
+            <v-col cols="6" sm="4"><v-text-field v-model.number="editForm.age" label="Age" type="number" /></v-col>
+            <v-col cols="6" sm="4">
               <v-select v-model="editForm.gender" label="Gender" :items="['M', 'F']" />
             </v-col>
+            <v-col cols="12" sm="4"><v-text-field v-model.number="editForm.householdSize" label="Household size" type="number" /></v-col>
           </v-row>
           <v-row>
-            <v-col cols="6">
-              <v-select v-model="editForm.maritalStatus" label="Marital status" :items="[...MARITAL_STATUS_OPTIONS]" clearable />
+            <v-col cols="6" sm="4">
+              <v-select v-model="editForm.maritalStatus" label="Marital status" :items="maritalStatusItems" clearable />
             </v-col>
-            <v-col cols="6"><v-text-field v-model="editForm.spouseName" label="Spouse name" /></v-col>
+            <v-col cols="6" sm="4"><v-text-field v-model="editForm.spouseName" label="Spouse name" /></v-col>
+            <v-col cols="12" sm="4"><v-text-field v-model="editForm.phoneNumber" label="Phone number" /></v-col>
           </v-row>
           <v-row>
-            <v-col cols="6"><v-text-field v-model="editForm.phoneNumber" label="Phone number" /></v-col>
-            <v-col cols="6"><v-text-field v-model.number="editForm.householdSize" label="Household size" type="number" /></v-col>
+            <v-col cols="12" sm="4">
+              <v-select
+                v-model="editForm.legalStatus"
+                :items="LEGAL_STATUS_OPTIONS"
+                item-title="title"
+                item-value="value"
+                label="Legal status"
+                clearable
+              />
+            </v-col>
+            <v-col cols="12" sm="4">
+              <v-select
+                v-model="editForm.vulnerabilityStatuses"
+                :items="VULNERABILITY_OPTIONS"
+                item-title="title"
+                item-value="value"
+                label="Vulnerability categories"
+                hint="Select every support need that applies"
+                persistent-hint
+                multiple
+                chips
+                closable-chips
+              />
+            </v-col>
+            <v-col cols="12" sm="4">
+              <v-file-input
+                label="Household head photo"
+                :hint="detail?.images?.length ? 'Choose a new photo to replace the current one' : 'Attach a photo of the household head'"
+                persistent-hint
+                accept="image/*"
+                prepend-icon="mdi-camera-outline"
+                show-size
+                density="compact"
+                clearable
+                :loading="uploadingEditPhoto"
+                @change="onEditPhotoFile"
+              />
+            </v-col>
           </v-row>
-          <v-select
-            v-model="editForm.vulnerabilityStatuses"
-            :items="VULNERABILITY_OPTIONS"
-            item-title="title"
-            item-value="value"
-            label="Vulnerability categories"
-            hint="Select every support need that applies"
-            persistent-hint
-            multiple
-            chips
-            closable-chips
-          />
-          <v-select
-            v-model="editForm.legalStatus"
-            :items="LEGAL_STATUS_OPTIONS"
-            item-title="title"
-            item-value="value"
-            label="Legal status"
-            clearable
-          />
           <div class="text-caption text-medium-emphasis mt-2 mb-1">Location</div>
           <v-row dense>
-            <v-col cols="6"><v-select v-model="editForm.stateCode" :items="states" item-title="name" item-value="code" label="State" density="compact" @update:model-value="onEditStateChange" /></v-col>
-            <v-col cols="6"><v-select v-model="editForm.countyCode" :items="countiesForState(editForm.stateCode)" item-title="name" item-value="code" label="County" density="compact" @update:model-value="onEditCountyChange" /></v-col>
-            <v-col cols="6"><v-select v-model="editForm.locationCode" :items="locationsForCounty(editForm.countyCode)" item-title="name" item-value="code" label="Location" density="compact" @update:model-value="onEditLocationChange" /></v-col>
-            <v-col cols="6"><v-select v-model="editForm.villageCode" :items="villagesForLocation(editForm.locationCode)" item-title="name" item-value="code" label="Village" density="compact" /></v-col>
+            <v-col cols="6" sm="3"><v-select v-model="editForm.stateCode" :items="states" item-title="name" item-value="code" label="State" density="compact" @update:model-value="onEditStateChange" /></v-col>
+            <v-col cols="6" sm="3"><v-select v-model="editForm.countyCode" :items="countiesForState(editForm.stateCode)" item-title="name" item-value="code" label="County" density="compact" @update:model-value="onEditCountyChange" /></v-col>
+            <v-col cols="6" sm="3"><v-select v-model="editForm.locationCode" :items="locationsForCounty(editForm.countyCode)" item-title="name" item-value="code" label="Location" density="compact" @update:model-value="onEditLocationChange" /></v-col>
+            <v-col cols="6" sm="3"><v-select v-model="editForm.villageCode" :items="villagesForLocation(editForm.locationCode)" item-title="name" item-value="code" label="Village" density="compact" /></v-col>
           </v-row>
         </v-card-text>
         <v-card-actions class="pa-4 pt-0">
@@ -945,7 +1214,7 @@ onMounted(() => { load(); loadNameLookups() })
           <v-text-field v-model="altForm.alternateName" label="Full name" hide-details density="compact" />
           <v-select
             v-model="altForm.relationship"
-            :items="[...ALTERNATE_RELATIONSHIP_OPTIONS]"
+            :items="alternateRelationshipItems"
             label="Relationship to household head"
             hide-details
             density="compact"
@@ -980,6 +1249,40 @@ onMounted(() => { load(); loadNameLookups() })
       </v-card>
     </v-dialog>
 
+    <v-dialog v-model="altFingerprintDialog" max-width="680">
+      <v-card>
+        <v-card-title class="d-flex align-center">
+          Captured fingerprints
+          <v-spacer />
+        </v-card-title>
+        <dialog-close-button @close="altFingerprintDialog = false" />
+        <v-divider />
+        <v-card-text class="pt-4">
+          <p class="text-body-2 text-medium-emphasis mb-4">
+            {{ altCapturedFingerprintCount }} of 10 finger positions have been captured for {{ viewAltTarget?.alternateName }}.
+          </p>
+          <section v-for="hand in ['Right hand', 'Left hand']" :key="hand" class="fingerprint-hand mb-4" :aria-label="hand">
+            <h3 class="text-subtitle-2 mb-2">{{ hand }}</h3>
+            <div class="fingerprint-grid">
+              <div
+                v-for="finger in fingerPositions.filter((item) => item.hand === hand)"
+                :key="finger.number"
+                class="fingerprint-slot"
+                :class="{ 'fingerprint-slot--captured': altCapturedFingerNumbers.has(finger.number) }"
+              >
+                <v-icon icon="mdi-fingerprint" size="30" aria-hidden="true" />
+                <span>{{ finger.label }}</span>
+                <small>{{ altCapturedFingerNumbers.has(finger.number) ? 'Captured' : 'Not captured' }}</small>
+              </div>
+            </div>
+          </section>
+          <v-alert type="info" variant="tonal" density="compact">
+            Biometric templates stay protected. This view shows capture coverage only, not the stored fingerprint data.
+          </v-alert>
+        </v-card-text>
+      </v-card>
+    </v-dialog>
+
     <v-dialog v-model="viewAltDialog" max-width="480">
       <v-card v-if="viewAltTarget">
         <v-card-title class="d-flex align-center">
@@ -989,21 +1292,25 @@ onMounted(() => { load(); loadNameLookups() })
         <dialog-close-button @close="viewAltDialog = false" />
         <v-divider />
         <v-card-text class="d-flex flex-column ga-3 pt-4">
-          <div v-if="(alternatePhotoUrls[viewAltTarget.alternateNumber ?? ''] ?? []).length" class="d-flex ga-2 flex-wrap">
+          <div v-if="(alternatePhotoUrls[viewAltTarget.alternateNumber ?? ''] ?? []).length" class="alternate-photo-grid">
             <v-img
               v-for="(src, i) in alternatePhotoUrls[viewAltTarget.alternateNumber ?? '']"
               :key="i"
               :src="src"
-              width="72"
-              height="72"
+              width="112"
+              height="112"
               cover
-              class="rounded-lg clickable-photo"
+              class="alternate-view-photo rounded-lg clickable-photo"
               role="button"
               tabindex="0"
               aria-label="View photo full size"
-              @click="lightboxSrc = src"
-              @keyup.enter="lightboxSrc = src"
+              @click="openLightbox(src, viewAltTarget?.alternateName ?? 'alternate', viewAltTarget?.alternateNumber)"
+              @keyup.enter="openLightbox(src, viewAltTarget?.alternateName ?? 'alternate', viewAltTarget?.alternateNumber)"
             />
+          </div>
+          <div v-else class="alternate-photo-empty">
+            <v-icon icon="mdi-account-child-outline" size="28" />
+            <span>No photo captured for this alternate.</span>
           </div>
           <v-row dense>
             <v-col cols="6">
@@ -1026,11 +1333,45 @@ onMounted(() => { load(); loadNameLookups() })
               <div class="text-caption text-medium-emphasis">Added</div>
               <div class="text-body-1">{{ formatTimestamp(viewAltTarget.createdAt) }}</div>
             </v-col>
+            <v-col cols="12">
+              <div class="text-caption text-medium-emphasis">Status</div>
+              <v-chip size="small" :color="viewAltTarget.status === 1 ? 'success' : 'default'" variant="tonal">
+                {{ viewAltTarget.status === 1 ? 'Active' : 'Inactive' }}
+              </v-chip>
+            </v-col>
           </v-row>
+          <v-divider />
+          <div class="text-subtitle-2 font-weight-bold">Biometrics</div>
+          <div class="biometric-row">
+            <div>
+              <div>Fingerprints</div>
+              <div class="text-caption text-medium-emphasis">
+                {{ altCapturedFingerprintCount }} of 10 captured
+              </div>
+            </div>
+            <div class="d-flex align-center ga-1">
+              <v-chip size="small" :color="viewAltTarget.fingerprintStatus === 'ENROLLED' ? 'success' : 'warning'" variant="tonal">
+                {{ viewAltTarget.fingerprintStatus ?? 'PENDING' }}
+              </v-chip>
+              <v-btn size="small" variant="text" prepend-icon="mdi-eye-outline" @click="altFingerprintDialog = true">
+                View
+              </v-btn>
+            </div>
+          </div>
+          <div class="biometric-row">
+            <div>
+              <div>Face</div>
+              <div class="text-caption text-medium-emphasis">Secure face template</div>
+            </div>
+            <v-chip size="small" :color="viewAltTarget.faceStatus === 'ENROLLED' ? 'success' : 'warning'" variant="tonal">
+              {{ viewAltTarget.faceStatus ?? 'PENDING' }}
+            </v-chip>
+          </div>
         </v-card-text>
         <v-card-actions class="pa-4 pt-0">
           <v-spacer />
-          <v-btn variant="flat" color="secondary" @click="viewAltDialog = false; openEditAlternate(viewAltTarget!)">Edit</v-btn>
+          <v-btn v-if="viewAltTarget.status === 1" variant="flat" color="secondary" @click="viewAltDialog = false; openEditAlternate(viewAltTarget!)">Edit</v-btn>
+          <v-btn v-else variant="flat" color="secondary" prepend-icon="mdi-account-check-outline" @click="viewAltDialog = false; activateAlternate(viewAltTarget!)">Activate</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -1089,6 +1430,45 @@ onMounted(() => { load(); loadNameLookups() })
   cursor: pointer;
 }
 
+.alt-table :deep(table) {
+  min-width: 936px;
+}
+
+.alternates-card-title,
+.alternates-toolbar {
+  gap: 8px;
+}
+
+.alternates-card-title {
+  flex-wrap: wrap;
+}
+
+.alternates-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+@media (max-width: 600px) {
+  .alternates-card-title > .v-spacer {
+    display: none;
+  }
+
+  .alternates-toolbar {
+    width: 100%;
+    justify-content: flex-start;
+  }
+}
+
+.photo-lightbox-header {
+  min-height: 58px;
+}
+
+.photo-lightbox-download {
+  margin-right: 40px;
+}
+
 .photo-loading {
   display: flex;
   align-items: center;
@@ -1096,5 +1476,118 @@ onMounted(() => { load(); loadNameLookups() })
   min-height: 48px;
   color: #64748b;
   font-size: .875rem;
+}
+
+.location-coordinates,
+.location-empty {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.location-coordinate-values {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 18px;
+  color: #334155;
+  font-size: .875rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.location-coordinate-values strong {
+  margin-right: 4px;
+  color: #64748b;
+  font-size: .75rem;
+  font-weight: 600;
+}
+
+.location-empty {
+  align-items: center;
+  min-height: 52px;
+  color: #64748b;
+}
+
+.biometric-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.alternate-photo-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(112px, 112px));
+  gap: 10px;
+}
+
+.alternate-view-photo {
+  flex: 0 0 112px;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+}
+
+.alternate-photo-empty {
+  display: flex;
+  min-height: 96px;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 10px;
+  color: #64748b;
+  background: #f8fafc;
+}
+
+.fingerprint-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.fingerprint-slot {
+  display: flex;
+  min-width: 0;
+  min-height: 112px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 10px 6px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #f8fafc;
+  color: #64748b;
+  text-align: center;
+}
+
+.fingerprint-slot span {
+  color: #334155;
+  font-size: .8rem;
+  font-weight: 600;
+}
+
+.fingerprint-slot small {
+  font-size: .68rem;
+}
+
+.fingerprint-slot--captured {
+  border-color: #99f6e4;
+  background: #f0fdfa;
+  color: #0f766e;
+}
+
+.fingerprint-slot--captured span,
+.fingerprint-slot--captured small {
+  color: #0f766e;
+}
+
+@media (max-width: 520px) {
+  .fingerprint-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .biometric-row {
+    align-items: flex-start;
+  }
 }
 </style>

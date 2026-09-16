@@ -17,8 +17,8 @@ import com.biopay.agent.sync.SyncScheduler;
 
 public class BioPayAgentApplication extends Application {
 
-    // Foreground use never expires. Leaving BioPay starts this one-minute grace period instead.
-    private static final long EXIT_LOGOUT_GRACE_MS = 60 * 1000;
+    // Foreground use never expires. Leaving BioPay starts this one-hour grace period instead.
+    private static final long EXIT_LOGOUT_GRACE_MS = 60 * 60 * 1000;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Runnable logoutOnExit = this::logoutOnExit;

@@ -45,11 +45,12 @@ function scoped(payload: Record<string, unknown> = {}) {
 const tableSearch = ref('')
 watch(tab, () => { tableSearch.value = '' })
 
-const actionsHeader = { title: 'Actions', key: 'actions', sortable: false, align: 'start' as const }
-const stateHeaders = [{ title: 'Code', key: 'code' }, { title: 'State', key: 'name' }, actionsHeader]
-const countyHeaders = [{ title: 'Code', key: 'code' }, { title: 'Name', key: 'name' }, { title: 'State', key: 'stateCode' }, actionsHeader]
-const locationHeaders = [{ title: 'Code', key: 'code' }, { title: 'Name', key: 'name' }, { title: 'County', key: 'countyCode' }, actionsHeader]
-const villageHeaders = [{ title: 'Code', key: 'code' }, { title: 'Name', key: 'name' }, { title: 'Location', key: 'locationCode' }, actionsHeader]
+const actionsHeader = { title: 'Actions', key: 'actions', sortable: false, align: 'start' as const, width: 96, minWidth: 96, fixed: true, nowrap: true }
+const codeHeader = (title: string) => ({ title, key: 'code', minWidth: 132, nowrap: true })
+const stateHeaders = [codeHeader('State Code'), { title: 'State', key: 'name' }, actionsHeader]
+const countyHeaders = [codeHeader('County Code'), { title: 'Name', key: 'name' }, { title: 'State', key: 'stateCode' }, actionsHeader]
+const locationHeaders = [codeHeader('Location Code'), { title: 'Name', key: 'name' }, { title: 'County', key: 'countyCode' }, actionsHeader]
+const villageHeaders = [codeHeader('Village Code'), { title: 'Name', key: 'name' }, { title: 'Location', key: 'locationCode' }, actionsHeader]
 
 const dialog = ref(false)
 const dialogLevel = ref<'STATE' | 'COUNTY' | 'LOCATION' | 'VILLAGE'>('STATE')

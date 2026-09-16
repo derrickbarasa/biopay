@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Matches the destination AppUpdateManager.enqueueDownload passes to DownloadManager
+         (getExternalFilesDir(DIRECTORY_DOWNLOADS), which is this app's .../files/Download/). -->
+    <external-files-path name="update_downloads" path="Download/" />
+</paths>

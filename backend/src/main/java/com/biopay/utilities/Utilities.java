@@ -46,11 +46,9 @@ public class Utilities {
         return prefix + "-" + datePart + "-" + randPart;
     }
 
-    /** Next sequential anchor code, e.g. "ANC001", "ANC002" -- an anchor's own
-     *  identity now lives on its Anchor Administrator's row in `users`
-     *  (anchor_code), not in a separate anchors table. */
+    /** Next sequential anchor code, e.g. "ANC001", "ANC002". */
     public static Future<String> nextAnchorCode(MSSQLPool pool) {
-        return pool.query("SELECT MAX(TRY_CAST(SUBSTRING(anchor_code, 4, 10) AS INT)) AS mx FROM users WHERE anchor_code LIKE 'ANC%'")
+        return pool.query("SELECT MAX(TRY_CAST(SUBSTRING(anchor_code, 4, 10) AS INT)) AS mx FROM anchors WHERE anchor_code LIKE 'ANC%'")
                 .execute()
                 .map(rows -> {
                     Integer max = rows.size() == 0 ? null : rows.iterator().next().getInteger("mx");

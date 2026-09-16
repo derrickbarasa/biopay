@@ -965,9 +965,9 @@ onBeforeUnmount(() => {
   --color-line: rgba(20, 35, 31, 0.14);
   --shadow-color: rgba(10, 40, 33, 0.16);
 
-  --font-display: 'Ubuntu', sans-serif;
-  --font-body: 'Ubuntu', sans-serif;
-  --font-mono: "SF Mono", "Cascadia Code", Consolas, "Liberation Mono", monospace;
+  --font-display: 'Outfit', sans-serif;
+  --font-body: 'Outfit', sans-serif;
+  --font-mono: 'Outfit', sans-serif;
 
   --step-caption: 0.72rem;
   --step-body: 0.95rem;

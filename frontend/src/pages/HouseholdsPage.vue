@@ -89,7 +89,7 @@ const filters = ref({
   search: '',
 })
 const headers = [
-  { title: 'Household #', key: 'householdNumber' },
+  { title: 'Household Code', key: 'householdNumber', minWidth: 156, nowrap: true },
   { title: 'Head of Household', key: 'householdName' },
   { title: 'Organization', key: 'organisationCode' },
   { title: 'Village', key: 'bomaCode' },
@@ -98,7 +98,7 @@ const headers = [
   { title: 'Cycles', key: 'paymentCycleCount' },
   { title: 'Status', key: 'status' },
   { title: 'Review', key: 'reviewStatus' },
-  { title: 'Actions', key: 'actions', sortable: false, align: 'start' as const },
+  { title: 'Actions', key: 'actions', sortable: false, align: 'start' as const, width: 176, minWidth: 176, fixed: true, nowrap: true },
 ]
 
 // The table shows organisation/village names, not their internal codes.
@@ -245,7 +245,7 @@ function exportCsv() {
     return
   }
   const csv = toCsv(
-    ['Household #', 'Head of Household', 'Organization', 'Age', 'Gender', 'Phone', 'Size', 'Village', 'Vulnerability categories', 'Legal status', 'Vouchers', 'Payment Cycles', 'Status', 'Review Status'],
+    ['Household Code', 'Head of Household', 'Organization', 'Age', 'Gender', 'Phone', 'Size', 'Village', 'Vulnerability categories', 'Legal status', 'Vouchers', 'Payment Cycles', 'Status', 'Review Status'],
     households.value.map((h) => [
       h.householdNumber, h.householdName, orgName(h.organisationCode), h.age ?? '', h.gender ?? '',
       h.phoneNumber ?? '', h.householdSize ?? '', villageName(h.bomaCode),

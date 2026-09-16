@@ -22,9 +22,11 @@ import com.biopay.agent.payments.PaymentsActivity;
 import com.biopay.agent.payments.PaymentVerificationActivity;
 import com.biopay.agent.reports.ReportsActivity;
 import com.biopay.agent.session.SessionManager;
+import com.biopay.agent.settings.SettingsActivity;
 import com.biopay.agent.sync.SyncScheduler;
 import com.biopay.agent.sync.SyncFeedback;
 import com.biopay.agent.ui.BaseActivity;
+import com.biopay.agent.update.AppUpdateManager;
 import com.biopay.agent.vouchers.VoucherRedemptionActivity;
 import com.google.android.material.snackbar.Snackbar;
 
@@ -53,7 +55,9 @@ public class HomeActivity extends BaseActivity {
     // this way the permission dialog never interrupts the fingerprint live-verify flow later.
     // Every screen that reads a location already tolerates a null result if this is denied.
     private final ActivityResultLauncher<String[]> locationPermissionLauncher =
-            registerForActivityResult(new ActivityResultContracts.RequestMultiplePermissions(), result -> { });
+            registerForActivityResult(new ActivityResultContracts.RequestMultiplePermissions(), result -> {
+                if (result.containsValue(Boolean.TRUE)) LocationHelper.requestFreshLocation(this);
+            });
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -71,6 +75,8 @@ public class HomeActivity extends BaseActivity {
             locationPermissionLauncher.launch(new String[]{
                     android.Manifest.permission.ACCESS_FINE_LOCATION,
                     android.Manifest.permission.ACCESS_COARSE_LOCATION});
+        } else {
+            LocationHelper.requestFreshLocation(this);
         }
 
         refreshIdentity();
@@ -120,7 +126,35 @@ public class HomeActivity extends BaseActivity {
         refreshIdentity();
         refreshDashboard();
         checkSubscriptionGrace();
+        checkForAppUpdate();
         SyncScheduler.triggerAutomaticNow(this);
+    }
+
+    /** Passive, at-most-once-a-day nudge -- there's no Play Store for this sideloaded app to push
+     *  updates on its own, so AppUpdateManager is the whole mechanism (see its javadoc). Actually
+     *  downloading and installing happens from Settings, not here: Home just points the officer
+     *  there so this stays a quiet notice, not another place that can fail mid-download. */
+    private void checkForAppUpdate() {
+        AppUpdateManager.checkForUpdate(this, false, new AppUpdateManager.Callback() {
+            @Override
+            public void onUpdateAvailable(AppUpdateManager.UpdateInfo info) {
+                Snackbar.make(findViewById(R.id.tvWelcome),
+                                getString(R.string.home_update_available, info.versionName), Snackbar.LENGTH_LONG)
+                        .setAction(R.string.home_update_action, v ->
+                                startActivity(new Intent(HomeActivity.this, SettingsActivity.class)))
+                        .show();
+            }
+
+            @Override
+            public void onUpToDate() {
+                // Nothing to say.
+            }
+
+            @Override
+            public void onError(String message) {
+                // Offline or the check failed -- purely advisory, same as checkSubscriptionGrace.
+            }
+        });
     }
 
     /** Mirrors the web dashboard's grace banner (DefaultLayout.vue) for officers who may never

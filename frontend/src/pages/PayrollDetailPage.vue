@@ -199,7 +199,7 @@ function goToList() {
               <tr v-for="line in items" :key="line.id">
                 <td>
                   <button type="button" class="household-link" @click="viewHousehold(line)">{{ line.householdName }}</button>
-                  <div class="view-summary-muted">{{ line.householdNumber }}</div>
+                  <div class="view-summary-muted">Household code: {{ line.householdNumber }}</div>
                 </td>
                 <td>{{ line.bomaCode || '—' }}</td>
                 <td>{{ genderLabel(line.gender) }}</td>

@@ -5,6 +5,7 @@ import android.content.Context;
 import android.content.pm.PackageManager;
 import android.location.Location;
 import android.location.LocationManager;
+import android.os.Looper;
 
 import androidx.core.content.ContextCompat;
 
@@ -49,5 +50,25 @@ public final class LocationHelper {
             }
         }
         return best;
+    }
+
+    /** Starts a one-shot provider refresh while the officer fills the registration form. By the
+     *  time Save is pressed, {@link #getLastKnownLocation(Context)} can normally read this fresh
+     *  fix without making an offline registration depend on a long blocking GPS request. */
+    @SuppressWarnings("deprecation")
+    public static void requestFreshLocation(Context context) {
+        if (!hasPermission(context)) return;
+        LocationManager locationManager = (LocationManager) context.getSystemService(Context.LOCATION_SERVICE);
+        if (locationManager == null) return;
+        for (String provider : new String[]{LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER}) {
+            try {
+                if (locationManager.isProviderEnabled(provider)) {
+                    locationManager.requestSingleUpdate(provider, location -> { }, Looper.getMainLooper());
+                }
+            } catch (SecurityException | IllegalArgumentException ignored) {
+                // Permission/provider state may change while registration is open. Save remains
+                // available and simply records no coordinates when the device cannot supply them.
+            }
+        }
     }
 }

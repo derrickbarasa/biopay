@@ -44,7 +44,7 @@
 }
 
 /* Button labels should read as regular weight, not bold -- Vuetify's default
- * button font-weight (500) reads noticeably heavy set in Ubuntu. */
+ * button font-weight (500) reads noticeably heavy set in Outfit. */
 .v-btn {
   font-weight: 400 !important;
   letter-spacing: normal;
@@ -115,7 +115,7 @@
   white-space: nowrap;
 }
 
-/* Vuetify sizes and clips floating labels for Roboto. BioPay uses Ubuntu, whose
+/* Vuetify sizes and clips floating labels for Roboto. BioPay uses Outfit, whose
  * ascenders can render slightly outside that box at fractional browser/OS
  * scaling. Removing paint containment alone was insufficient because VLabel's
  * base rule also keeps `overflow: hidden`. Give every outlined field label a

@@ -39,7 +39,7 @@ const purpose = ref('')
 const expiresAt = ref('')
 const rows = ref<VoucherAmountRow[]>([])
 const rowHeaders = [
-  { title: 'Household Number', key: 'householdNumber' },
+  { title: 'Household Code', key: 'householdNumber', minWidth: 156, nowrap: true },
   { title: 'Household Name', key: 'householdName' },
   { title: 'State', key: 'stateCode' },
   { title: 'County', key: 'countyCode' },

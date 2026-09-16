@@ -24,6 +24,7 @@ public class PaymentBeneficiaryAdapter extends RecyclerView.Adapter<PaymentBenef
 
     public interface OnVerifyListener {
         void onMethodSelected(Beneficiary beneficiary, boolean fingerprint);
+        void onCaptureRequested(Beneficiary beneficiary);
     }
 
     public static class Row {
@@ -95,6 +96,8 @@ public class PaymentBeneficiaryAdapter extends RecyclerView.Adapter<PaymentBenef
         boolean anyEnrolled = row.hasFingerprint || row.hasFace;
         holder.tvNotEnrolled.setVisibility(anyEnrolled ? View.GONE : View.VISIBLE);
         holder.verifyButtonRow.setVisibility(anyEnrolled ? View.VISIBLE : View.GONE);
+        holder.btnCaptureBeneficiary.setVisibility(anyEnrolled ? View.GONE : View.VISIBLE);
+        holder.btnCaptureBeneficiary.setOnClickListener(v -> listener.onCaptureRequested(row.beneficiary));
 
         holder.btnVerifyFingerprint.setVisibility(row.hasFingerprint ? View.VISIBLE : View.GONE);
         holder.btnVerifyFingerprint.setCheckable(true);
@@ -131,6 +134,7 @@ public class PaymentBeneficiaryAdapter extends RecyclerView.Adapter<PaymentBenef
         final com.google.android.material.button.MaterialButton btnVerifyFace;
         final TextView tvFaceAccuracyNotice;
         final MaterialCardView card;
+        final com.google.android.material.button.MaterialButton btnCaptureBeneficiary;
 
         ViewHolder(@NonNull View itemView) {
             super(itemView);
@@ -142,6 +146,7 @@ public class PaymentBeneficiaryAdapter extends RecyclerView.Adapter<PaymentBenef
             btnVerifyFingerprint = itemView.findViewById(R.id.btnVerifyFingerprint);
             btnVerifyFace = itemView.findViewById(R.id.btnVerifyFace);
             tvFaceAccuracyNotice = itemView.findViewById(R.id.tvFaceAccuracyNotice);
+            btnCaptureBeneficiary = itemView.findViewById(R.id.btnCaptureBeneficiary);
         }
     }
 }

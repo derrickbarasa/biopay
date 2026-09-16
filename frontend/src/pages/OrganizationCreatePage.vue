@@ -42,7 +42,8 @@ const emailRule = (value: string) => /.+@.+\..+/.test(value ?? '') || 'A valid e
 
 async function loadAnchors() {
   if (!auth.isSystemAdmin) return
-  const res = await dispatch<{ results: Anchor[] }>('GET_ANCHORS')
+  // A deactivated anchor can't be picked for a brand-new organisation.
+  const res = await dispatch<{ results: Anchor[] }>('GET_ANCHORS', { status: 1 })
   anchors.value = res.results ?? []
 }
 onMounted(loadAnchors)

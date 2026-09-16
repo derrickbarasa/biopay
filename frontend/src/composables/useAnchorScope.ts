@@ -20,7 +20,15 @@ export interface AnchorOption {
  * page's own `organisationCode` filter, now required rather than optional
  * for that role).
  */
-export function useAnchorScope() {
+export interface UseAnchorScopeOptions {
+  /** True for a "create a new record under this anchor" picker (Add Household and similar):
+   *  a deactivated anchor can't be picked for new work, so it's left out entirely. False (the
+   *  default) for a page-level view/filter scope, where a deactivated anchor must stay pickable
+   *  so its already-existing records (payments, vouchers, households, ...) stay reviewable. */
+  activeOnly?: boolean
+}
+
+export function useAnchorScope(options: UseAnchorScopeOptions = {}) {
   const auth = useAuthStore()
   const toast = useToast()
 
@@ -35,7 +43,9 @@ export function useAnchorScope() {
   async function loadAnchors() {
     if (!auth.isSystemAdmin) return
     try {
-      const res = await dispatch<{ results: AnchorOption[] }>('GET_ANCHORS')
+      const res = await dispatch<{ results: AnchorOption[] }>('GET_ANCHORS', {
+        status: options.activeOnly ? 1 : undefined,
+      })
       anchors.value = res.results ?? []
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Unable to load anchors')

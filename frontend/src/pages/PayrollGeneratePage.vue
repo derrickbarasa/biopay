@@ -218,7 +218,7 @@ async function exportHouseholdsToExcel() {
     }
     for (const h of rows) knownHouseholds.value.set(h.householdNumber, h.householdName)
     const sheet = XLSX.utils.json_to_sheet(rows.map((h) => ({
-      'Household Number': h.householdNumber,
+      'Household Code': h.householdNumber,
       'Household Name': h.householdName,
       'Amount FCY': '',
       'Exchange Rate': '',
@@ -269,19 +269,24 @@ function onImportFile(event: Event) {
         const exchangeRate = Number(r['Exchange Rate'] ?? r.exchangeRate ?? r['exchange rate'])
         const amountLcy = Number(r['Amount LCY'] ?? r.amountLcy ?? r['amount lcy'])
         const row: PaymentCycleAmountRow = {
-        householdNumber: String(r['Household Number'] ?? r.householdNumber ?? r['household number'] ?? '').trim(),
+        // "Household Number" remains accepted so workbooks exported before the terminology
+        // change continue to import without requiring users to edit their saved files.
+        householdNumber: String(
+          r['Household Code'] ?? r['household code']
+          ?? r['Household Number'] ?? r.householdNumber ?? r['household number'] ?? '',
+        ).trim(),
         householdName: String(r['Household Name'] ?? r.householdName ?? r['household name'] ?? '').trim(),
           amountFcy: Number.isFinite(amountFcy) && amountFcy > 0 ? amountFcy : null,
           exchangeRate: Number.isFinite(exchangeRate) && exchangeRate > 0 ? exchangeRate : null,
           amountLcy: Number.isFinite(amountLcy) && amountLcy > 0 ? amountLcy : null,
         }
-        if (!row.householdNumber) errors.push(`Row ${index + 2}: Household Number is required.`)
+        if (!row.householdNumber) errors.push(`Row ${index + 2}: Household Code is required.`)
         else if (!isCompleteAmountRow(row)) errors.push(`Row ${index + 2}: enter positive FCY, rate and LCY values; LCY must equal FCY × rate.`)
         return row
       })
       .filter((h) => h.householdNumber)
     const duplicates = rows.filter((row, index) => rows.findIndex((candidate) => candidate.householdNumber === row.householdNumber) !== index)
-    if (duplicates.length) errors.push(`Duplicate household number(s): ${[...new Set(duplicates.map((row) => row.householdNumber))].join(', ')}`)
+    if (duplicates.length) errors.push(`Duplicate household code(s): ${[...new Set(duplicates.map((row) => row.householdNumber))].join(', ')}`)
     importRows.value = rows
     importErrors.value = errors
   }
@@ -494,7 +499,7 @@ onMounted(() => {
             <thead>
               <tr>
                 <th>Household</th>
-                <th>Number</th>
+                <th>Household Code</th>
                 <th class="text-right">Remove</th>
               </tr>
             </thead>
@@ -587,7 +592,7 @@ onMounted(() => {
         <v-card-title>Import households from Excel</v-card-title>
         <v-card-text>
           <v-alert type="info" variant="tonal" density="compact" class="mb-3">
-            Upload the exported workbook with Household Number, Amount FCY, Exchange Rate and Amount LCY completed.
+            Upload the exported workbook with Household Code, Amount FCY, Exchange Rate and Amount LCY completed.
             The beneficiaries in this file replace your current selection.
           </v-alert>
           <v-file-input label="Upload .xlsx" accept=".xlsx,.xls" prepend-icon="mdi-file-upload" @change="onImportFile" />
@@ -599,7 +604,7 @@ onMounted(() => {
             <thead>
               <tr>
                 <th>Household</th>
-                <th>Number</th>
+                <th>Household Code</th>
                 <th class="text-right">FCY</th>
                 <th class="text-right">Rate</th>
                 <th class="text-right">LCY</th>

@@ -13,7 +13,7 @@ const auth=useAuthStore(),toast=useToast(),router=useRouter(),loading=ref(false)
 const roleFilterOptions=computed(()=>[...new Set(users.value.map(u=>u.roleName).filter((n):n is string=>!!n))].sort())
 const filteredUsers=computed(()=>roleFilter.value?users.value.filter(u=>u.roleName===roleFilter.value):users.value)
 const { confirmAction } = useConfirm()
-const form=reactive({email:'',username:'',firstName:'',surname:'',userScope:'ORGANISATION',organisationCode:'',roleId:null as number|null,targetAnchorId:null as number|null})
+const form=reactive({email:'',username:'',firstName:'',surname:'',userScope:null as string|null,organisationCode:'',roleId:null as number|null,targetAnchorId:null as number|null})
 const editForm=reactive({id:0,email:'',firstName:'',surname:'',roleId:null as number|null,userScope:'ORGANISATION'})
 const headers=[{title:'User',key:'email'},{title:'Scope',key:'userScope'},{title:'Role',key:'roleName'},{title:'Status',key:'status'},{title:'Actions',key:'actions',sortable:false,align:'start' as const}]
 const availableRoles=computed(()=>roles.value.filter(r=>r.scope===form.userScope&&(r.builtIn||!auth.isSystemAdmin||r.anchorId===form.targetAnchorId)));
@@ -24,11 +24,18 @@ const availableEditRoles=computed(()=>roles.value.filter(r=>r.scope===editForm.u
 const availableOrganisations=computed(()=>auth.isSystemAdmin?orgs.value.filter(o=>o.anchorId===form.targetAnchorId):orgs.value)
 const orgNameByCode=computed(()=>new Map(orgs.value.map(o=>[o.organisationCode,o.name])));
 function orgName(code?:string){return (code&&orgNameByCode.value.get(code))||code||'—'}
-async function load(){loading.value=true;try{const [u,r,o]=await Promise.all([dispatch<{results:UserRow[]}>('GET_USERS'),dispatch<{results:Role[]}>('GET_ROLES'),dispatch<{results:Org[]}>('GET_ORGANIZATIONS')]);users.value=u.results??[];roles.value=r.results??[];orgs.value=o.results??[];if(auth.isSystemAdmin){const a=await dispatch<{results:Anchor[]}>('GET_ANCHORS');anchors.value=a.results??[]}}catch(e){toast.error(e instanceof Error?e.message:'Unable to load users')}finally{loading.value=false}}
+async function load(){loading.value=true;try{const [u,r,o]=await Promise.all([dispatch<{results:UserRow[]}>('GET_USERS'),dispatch<{results:Role[]}>('GET_ROLES'),dispatch<{results:Org[]}>('GET_ORGANIZATIONS')]);users.value=u.results??[];roles.value=r.results??[];orgs.value=o.results??[];if(auth.isSystemAdmin){const a=await dispatch<{results:Anchor[]}>('GET_ANCHORS',{status:1});anchors.value=a.results??[]}}catch(e){toast.error(e instanceof Error?e.message:'Unable to load users')}finally{loading.value=false}}
 async function selectTargetAnchor(){form.organisationCode='';form.roleId=null;if(!form.targetAnchorId){roles.value=[];return}try{const r=await dispatch<{results:Role[]}>('GET_ROLES',{targetAnchorId:form.targetAnchorId});roles.value=r.results??[]}catch(e){toast.error(e instanceof Error?e.message:'Unable to load roles for this anchor')}}
-function openCreate(){Object.assign(form,{email:'',username:'',firstName:'',surname:'',userScope:'ORGANISATION',organisationCode:auth.user?.partnerCode??'',roleId:null,targetAnchorId:auth.isSystemAdmin?null:auth.user?.anchorId??null});dialog.value=true}
+function openCreate(){
+ // Org admins have no scope picker at all (they can only ever create organisation users, see
+ // the template below and Administration#createUser's own enforcement of that) so it's fixed
+ // for them -- everyone who does get a picker (system/anchor admin) starts with it unset, so
+ // they have to actively choose rather than accept a silent default.
+ const fixedScope = auth.isSystemAdmin||auth.isAnchor ? null : 'ORGANISATION'
+ Object.assign(form,{email:'',username:'',firstName:'',surname:'',userScope:fixedScope,organisationCode:auth.user?.partnerCode??'',roleId:null,targetAnchorId:auth.isSystemAdmin?null:auth.user?.anchorId??null});dialog.value=true
+}
 async function create(){
- if(!form.firstName.trim()||!/.+@.+\..+/.test(form.email)||!form.username.trim()||!form.roleId||(form.userScope==='ORGANISATION'&&!form.organisationCode)||(form.userScope!=='SYSTEM'&&auth.isSystemAdmin&&!form.targetAnchorId)){toast.error('Complete the anchor, first name, valid email, username, access scope, organisation and role');return}
+ if(!form.userScope||!form.firstName.trim()||!/.+@.+\..+/.test(form.email)||!form.username.trim()||!form.roleId||(form.userScope==='ORGANISATION'&&!form.organisationCode)||(form.userScope!=='SYSTEM'&&auth.isSystemAdmin&&!form.targetAnchorId)){toast.error('Complete the access scope, anchor, first name, valid email, username, organisation and role');return}
  saving.value=true;try{await dispatch('CREATE_USER',{...form});toast.success('User created. A temporary password was emailed to them.');dialog.value=false;await load()}catch(e){toast.error(e instanceof Error?e.message:'Create failed')}finally{saving.value=false}
 }
 async function toggle(u:UserRow){const deactivating=u.status===1;if(!await confirmAction({title:`${deactivating?'Deactivate':'Activate'} user?`,message:deactivating?`${u.email} will no longer be able to sign in.`:`${u.email} will be able to sign in again.`,confirmLabel:deactivating?'Deactivate':'Activate',color:deactivating?'warning':'secondary'}))return;try{await dispatch('TOGGLE_USER_STATUS',{userId:u.id,status:deactivating?0:1});toast.success(deactivating?'User deactivated':'User activated');await load()}catch(e){toast.error(e instanceof Error?e.message:'Status update failed')}}
@@ -49,8 +56,8 @@ onMounted(load)
    </v-data-table>
   </v-card>
   <v-dialog v-model="dialog" max-width="660"><v-card class="pa-2"><dialog-close-button @close="dialog=false"/><v-card-title>Create dashboard user</v-card-title><v-card-subtitle>A temporary password is generated automatically and emailed to the user.</v-card-subtitle><v-card-text class="form-grid">
-   <v-select v-if="auth.isSystemAdmin" v-model="form.userScope" :items="scopeOptions" label="Access scope" variant="outlined"/>
-   <v-select v-else-if="auth.isAnchor" v-model="form.userScope" :items="tenantScopeOptions" label="Access scope" variant="outlined"/>
+   <v-select v-if="auth.isSystemAdmin" v-model="form.userScope" :items="scopeOptions" label="Access scope" placeholder="Choose an access scope" variant="outlined"/>
+   <v-select v-else-if="auth.isAnchor" v-model="form.userScope" :items="tenantScopeOptions" label="Access scope" placeholder="Choose an access scope" variant="outlined"/>
    <v-select v-if="auth.isSystemAdmin&&form.userScope!=='SYSTEM'" v-model="form.targetAnchorId" :items="anchors" item-title="name" item-value="id" label="Anchor" variant="outlined" placeholder="Choose an anchor" @update:model-value="selectTargetAnchor"/>
    <v-select v-if="form.userScope==='ORGANISATION'&&auth.isAnchor" v-model="form.organisationCode" :items="availableOrganisations" item-title="name" item-value="organisationCode" label="Organisation" variant="outlined" placeholder="Choose an organisation" :disabled="auth.isSystemAdmin&&!form.targetAnchorId"/>
    <p v-if="form.userScope==='SYSTEM'" class="text-caption text-medium-emphasis" style="grid-column:1/-1">A Platform Owner has permanent, tenantless access to every anchor and organisation.</p>

@@ -64,14 +64,27 @@ public class Administration extends AbstractVerticle {
     private void getAnchors(Message<Object> message) {
         JsonObject p = data(message);
         if (!anchor(p)) { fail(message, "Only the platform owner or an anchor administrator can view anchor settings"); return; }
-        // An anchor is its Anchor Administrator's own row in `users` (user_scope='ANCHOR'),
-        // not a separate table -- so "every anchor" is every such row. The system admin can
-        // browse every anchor (for the anchor-picker on admin@biopay.com's sessions); a plain
-        // anchor admin only ever sees their own row.
+        // An anchor is a row in `anchors`; each has exactly one administrator, resolved here
+        // via OUTER APPLY (TOP 1, oldest first) rather than a plain JOIN so a data anomaly that
+        // ever left more than one anchor-wide "Anchor Administrator"-role user under the same
+        // anchor can't silently duplicate that anchor in the list -- see saveRole/createUser
+        // for how that role gets assigned. The system admin can browse every anchor (for the
+        // anchor-picker on admin@biopay.com's sessions); a plain anchor admin only ever sees
+        // their own row. `status` is an opt-in filter: the Anchors management list omits it
+        // deliberately (a deactivated anchor must still show there to be restored), while a
+        // picker used to scope a new record (create household/org/user/API client) passes
+        // status=1 so a deactivated anchor can't be picked for new work.
+        Integer status = systemAdmin(p) ? p.getInteger("status") : null;
+        String base = "SELECT a.id, a.anchor_code, a.anchor_name, a.phone, a.address, a.country, a.city, a.status, "
+                + "admin.first_name, admin.surname, admin.email FROM anchors a OUTER APPLY ("
+                + "SELECT TOP 1 first_name, surname, email FROM users "
+                + "WHERE anchor_id=a.id AND user_scope='ANCHOR' "
+                + "AND role_id IN (SELECT id FROM roles WHERE role_name='Anchor Administrator' AND anchor_id IS NULL) "
+                + "ORDER BY created_at ASC) admin ";
         String sql = systemAdmin(p)
-                ? "SELECT * FROM users WHERE user_scope='ANCHOR' AND id=anchor_id ORDER BY anchor_name"
-                : "SELECT * FROM users WHERE user_scope='ANCHOR' AND id=anchor_id AND id=@p1";
-        Tuple params = systemAdmin(p) ? Tuple.tuple() : Tuple.of(Integer.parseInt(p.getValue("anchorId").toString()));
+                ? base + "WHERE (@p1 IS NULL OR a.status=@p1) ORDER BY a.anchor_name"
+                : base + "WHERE a.id=@p1";
+        Tuple params = systemAdmin(p) ? Tuple.of(status) : Tuple.of(Integer.parseInt(p.getValue("anchorId").toString()));
         pool.preparedQuery(sql)
                 .execute(params)
                 .onFailure(e -> dbFail(message, e)).onSuccess(rows -> {
@@ -105,16 +118,18 @@ public class Administration extends AbstractVerticle {
         String username = authorisedEmail;
         String createdBy = String.valueOf(p.getValue("actorId"));
         Utilities.nextAnchorCode(pool).compose(anchorCode -> pool.withTransaction(connection -> connection.preparedQuery(
-                        "INSERT INTO users (email,username,password,first_name,surname,role_id,active,status,user_scope,is_system_admin,"
-                                + "anchor_code,anchor_name,phone,address,country,city,must_change_password,created_by,created_at,updated_at) "
-                                + "OUTPUT INSERTED.id VALUES (@p1,@p2,@p3,@p4,@p5,(SELECT TOP 1 id FROM roles WHERE role_name='Anchor Administrator' AND anchor_id IS NULL AND status=1),"
-                                + "1,1,'ANCHOR',0,@p6,@p7,@p8,@p9,@p10,@p11,1,@p12,GETDATE(),GETDATE())")
-                .execute(Tuple.of(authorisedEmail, username, passwordHash, authorisedFirstName, authorisedSurname, anchorCode, name,
-                        p.getString("authorisedContact"), p.getString("address"), p.getString("country"),
-                        p.getString("city"), createdBy))
+                        "INSERT INTO anchors (anchor_code,anchor_name,phone,address,country,city,status,created_at,updated_at) "
+                                + "OUTPUT INSERTED.id VALUES (@p1,@p2,@p3,@p4,@p5,@p6,1,GETDATE(),GETDATE())")
+                .execute(Tuple.of(anchorCode, name, p.getString("authorisedContact"), p.getString("address"),
+                        p.getString("country"), p.getString("city")))
                 .map(rows -> Rows.intVal(rows.iterator().next(), "id"))
-                .compose(userId -> connection.preparedQuery("UPDATE users SET anchor_id=id WHERE id=@p1")
-                        .execute(Tuple.of(userId)).map(userId))))
+                .compose(anchorId -> connection.preparedQuery(
+                        "INSERT INTO users (email,username,password,first_name,surname,role_id,active,status,user_scope,is_system_admin,"
+                                + "anchor_id,must_change_password,created_by,created_at,updated_at) "
+                                + "VALUES (@p1,@p2,@p3,@p4,@p5,(SELECT TOP 1 id FROM roles WHERE role_name='Anchor Administrator' AND anchor_id IS NULL AND status=1),"
+                                + "1,1,'ANCHOR',0,@p6,1,@p7,GETDATE(),GETDATE())")
+                        .execute(Tuple.of(authorisedEmail, username, passwordHash, authorisedFirstName, authorisedSurname, anchorId, createdBy))
+                        .map(v -> anchorId))))
                 .onFailure(e -> fail(message, "Administrator email already exists"))
                 .onSuccess(anchorId -> {
                     eventBus.send("EMAIL", new JsonObject()
@@ -133,26 +148,51 @@ public class Administration extends AbstractVerticle {
         int targetAnchorId = systemAdmin(p)
                 ? p.getInteger("targetAnchorId", Integer.parseInt(p.getValue("anchorId").toString()))
                 : Integer.parseInt(p.getValue("anchorId").toString());
-        pool.preparedQuery("UPDATE users SET anchor_name=@p1, first_name=@p2, surname=@p3, phone=@p4, address=@p5, country=@p6, city=@p7, updated_at=GETDATE() WHERE id=@p8 AND user_scope='ANCHOR' AND id=anchor_id")
-                .execute(Tuple.of(p.getString("name","").trim(),strOrEmpty(p.getString("authorisedFirstName")).trim(),strOrEmpty(p.getString("authorisedSurname")).trim(),
-                        p.getString("authorisedContact"),p.getString("address"),strOrEmpty(p.getString("country")).trim(),
-                        strOrEmpty(p.getString("city")).trim(),targetAnchorId))
-                .onFailure(e -> dbFail(message,e)).onSuccess(r -> ok(message,"Anchor updated",null));
+        String name = strOrEmpty(p.getString("name")).trim();
+        if (name.isEmpty()) { fail(message, "Anchor name is required"); return; }
+        String firstName = strOrEmpty(p.getString("authorisedFirstName")).trim();
+        String surname = strOrEmpty(p.getString("authorisedSurname")).trim();
+        // Two rows now carry what used to be one: the anchor's own identity (name/phone/
+        // address/country/city) lives on `anchors`, the administrator's personal name on their
+        // own `users` row -- resolved the same TOP-1-oldest way getAnchors reads it, so an edit
+        // never touches more than the one row a fresh anchor's signup/create actually created.
+        pool.withTransaction(connection -> connection.preparedQuery(
+                        "UPDATE anchors SET anchor_name=@p1, phone=@p2, address=@p3, country=@p4, city=@p5, updated_at=GETDATE() WHERE id=@p6")
+                .execute(Tuple.of(name, p.getString("authorisedContact"), p.getString("address"),
+                        strOrEmpty(p.getString("country")).trim(), strOrEmpty(p.getString("city")).trim(), targetAnchorId))
+                .compose(rows -> rows.rowCount() == 0
+                        ? Future.failedFuture("Anchor not found")
+                        : connection.preparedQuery(
+                                "UPDATE users SET first_name=@p1, surname=@p2, updated_at=GETDATE() WHERE id=(SELECT TOP 1 id FROM users "
+                                        + "WHERE anchor_id=@p3 AND user_scope='ANCHOR' "
+                                        + "AND role_id IN (SELECT id FROM roles WHERE role_name='Anchor Administrator' AND anchor_id IS NULL) "
+                                        + "ORDER BY created_at ASC)")
+                                .execute(Tuple.of(firstName, surname, targetAnchorId))))
+                .onFailure(e -> fail(message, e.getMessage() != null && !e.getMessage().startsWith("com.") ? e.getMessage() : "Database operation failed"))
+                .onSuccess(r -> ok(message,"Anchor updated",null));
     }
 
-    /** Anchors have no separate table to hard-delete a row from -- an anchor IS its Anchor
-     *  Administrator's own `users` row, and every organisation/user/household beneath it
-     *  references that row. "Delete" is therefore the same reversible soft-delete pattern
-     *  used for organisations: status=0 blocks sign-in and hides it from active lists, and
-     *  it can be reactivated the same way. */
+    /** "Delete" is the same reversible soft-delete pattern used for organisations: status=0
+     *  blocks the administrator's sign-in and hides the anchor from active lists, and it can be
+     *  reactivated the same way. Only the anchor row and its administrator's own sign-in are
+     *  touched -- anchor-wide staff users keep their individual status, same as deactivating an
+     *  organisation never touches its staff either (see Organization#toggleStatus). */
     private void toggleAnchorStatus(Message<Object> message) {
         JsonObject p = data(message);
         if (!systemAdmin(p)) { fail(message, "Only the platform owner can delete or restore an anchor"); return; }
         Integer targetAnchorId = p.getInteger("targetAnchorId");
         Integer status = p.getInteger("status");
         if (targetAnchorId == null || status == null) { fail(message, "targetAnchorId and status are required"); return; }
-        pool.preparedQuery("UPDATE users SET status=@p1, updated_at=GETDATE() WHERE id=@p2 AND user_scope='ANCHOR' AND id=anchor_id")
+        pool.withTransaction(connection -> connection.preparedQuery("UPDATE anchors SET status=@p1, updated_at=GETDATE() WHERE id=@p2")
                 .execute(Tuple.of(status, targetAnchorId))
+                .compose(rows -> rows.rowCount() == 0
+                        ? Future.failedFuture("Anchor not found")
+                        : connection.preparedQuery(
+                                "UPDATE users SET status=@p1, updated_at=GETDATE() WHERE id=(SELECT TOP 1 id FROM users "
+                                        + "WHERE anchor_id=@p2 AND user_scope='ANCHOR' "
+                                        + "AND role_id IN (SELECT id FROM roles WHERE role_name='Anchor Administrator' AND anchor_id IS NULL) "
+                                        + "ORDER BY created_at ASC)")
+                                .execute(Tuple.of(status, targetAnchorId))))
                 .onFailure(e -> dbFail(message, e))
                 .onSuccess(rows -> {
                     if (rows.rowCount() == 0) { fail(message, "Anchor not found"); return; }
@@ -234,7 +274,7 @@ public class Administration extends AbstractVerticle {
         String secret = Utilities.generateRandomPassword(40);
         String syntheticEmail = keyId + "@api-clients.biopay.internal";
         pool.preparedQuery("SELECT 1 AS allowed FROM roles WHERE id=@p1 AND role_scope=@p2 AND status=1 AND (anchor_id IS NULL OR anchor_id=@p3) "
-                        + "AND EXISTS (SELECT 1 FROM users a WHERE a.id=@p3 AND a.user_scope='ANCHOR' AND a.id=a.anchor_id)")
+                        + "AND EXISTS (SELECT 1 FROM anchors WHERE id=@p3)")
                 .execute(Tuple.of(roleId, requestedScope, anchorId))
                 .compose(roleRows -> roleRows.size()==0 ? Future.failedFuture("Role is outside the selected anchor or has the wrong scope")
                         : pool.preparedQuery("INSERT INTO users (organization_code,email,username,password,first_name,role_id,active,status,"
@@ -281,7 +321,7 @@ public class Administration extends AbstractVerticle {
         String tempPassword = Utilities.generateRandomPassword(10);
         Integer roleId = p.getInteger("roleId");
         pool.preparedQuery("SELECT 1 AS allowed FROM roles WHERE id=@p1 AND role_scope=@p2 AND status=1 AND (anchor_id IS NULL OR anchor_id=@p3) "
-                        + "AND EXISTS (SELECT 1 FROM users a WHERE a.id=@p3 AND a.user_scope='ANCHOR' AND a.id=a.anchor_id)")
+                        + "AND EXISTS (SELECT 1 FROM anchors WHERE id=@p3)")
                 .execute(Tuple.of(roleId, requestedScope, anchorId))
                 .compose(roleRows -> roleRows.size()==0 ? Future.failedFuture("Role is outside the selected anchor or has the wrong scope")
                         : pool.preparedQuery("INSERT INTO users (organization_code,email,username,password,first_name,surname,role_id,active,status,anchor_id,user_scope,must_change_password,created_by,created_at,updated_at) VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,1,1,@p8,@p9,1,@p10,GETDATE(),GETDATE())")
@@ -447,7 +487,12 @@ public class Administration extends AbstractVerticle {
     }
 
     private void getRoles(Message<Object> message) {
-        JsonObject p=data(message); Integer anchorId=TenantScope.anchorId(p);
+        JsonObject p=data(message);
+        if (!TenantScope.managesRoles(p)) { fail(message,"Only the platform owner, an anchor administrator, or an organisation administrator can view roles"); return; }
+        Integer anchorId=TenantScope.anchorId(p);
+        boolean isOrgActor = TenantScope.isOrganisationAdministrator(p);
+        String organizationCode = isOrgActor ? p.getString("partnerCode") : null;
+        if (isOrgActor && (organizationCode==null || organizationCode.isBlank())) { fail(message,"Organisation is required"); return; }
         // Explicit column list rather than r.* -- MSSQL requires every selected column to be
         // aggregated or in GROUP BY, so r.* silently breaks the moment the roles table carries
         // any column (e.g. a legacy one on an older database) that isn't in the GROUP BY list.
@@ -455,29 +500,57 @@ public class Administration extends AbstractVerticle {
         // without first picking a target anchor shows every anchor's roles (plus its own System
         // Owner role) rather than nothing; picking an anchor narrows the list to just that tenant.
         boolean browseAll = systemAdmin(p) && anchorId == null;
-        String sql="SELECT r.id, r.role_name, r.description, r.anchor_id, r.organization_code, r.role_scope, r.status, r.created_at, r.updated_at, "
-                + "STRING_AGG(p.permission_name, ',') AS permission_names FROM roles r LEFT JOIN role_permissions rp ON rp.role_id=r.id AND rp.status=1 LEFT JOIN permissions p ON p.id=rp.permission_id "
-                + (browseAll
-                    ? "WHERE r.status=1 "
-                    // The NOT EXISTS guard drops the shared NULL-anchor template once this anchor
-                    // has forked its own copy (see saveRole) -- without it, an anchor that has
-                    // customized "Organisation Administrator" would see both its own row and the
-                    // unmodified template under the same name.
-                    : "WHERE r.status=1 AND r.role_scope<>'SYSTEM' AND ("
-                        + "(r.anchor_id IS NULL AND r.role_name IN ('Anchor Administrator','Organisation Administrator') "
-                        + "AND NOT EXISTS (SELECT 1 FROM roles r2 WHERE r2.anchor_id=@p1 AND r2.role_name=r.role_name AND r2.status=1)) "
-                        + "OR r.anchor_id=@p1) ")
-                + "GROUP BY r.id,r.role_name,r.description,r.anchor_id,r.organization_code,r.role_scope,r.status,r.created_at,r.updated_at ORDER BY r.role_name";
-        pool.preparedQuery(sql).execute(browseAll ? Tuple.tuple() : Tuple.of(anchorId)).onFailure(e->dbFail(message,e)).onSuccess(rows->{
-            JsonArray out=new JsonArray(); for(Row r:rows){String roleName=Rows.str(r,"role_name");String names=Rows.str(r,"permission_names");boolean builtIn="Platform Owner".equals(roleName)||"Anchor Administrator".equals(roleName)||"Organisation Administrator".equals(roleName);out.add(new JsonObject().put("id",Rows.intVal(r,"id")).put("name",roleName).put("description",Rows.str(r,"description")).put("scope",Rows.str(r,"role_scope")).put("anchorId",Rows.intVal(r,"anchor_id")).put("builtIn",builtIn).put("systemRole","SYSTEM".equalsIgnoreCase(Rows.str(r,"role_scope"))).put("status",Rows.intVal(r,"status")).put("permissions",names==null?new JsonArray():new JsonArray(java.util.Arrays.asList(names.split(",")))));}
+        String columns = "r.id, r.role_name, r.description, r.anchor_id, r.organization_code, r.role_scope, r.status, r.created_at, r.updated_at, "
+                + "STRING_AGG(p.permission_name, ',') AS permission_names FROM roles r LEFT JOIN role_permissions rp ON rp.role_id=r.id AND rp.status=1 LEFT JOIN permissions p ON p.id=rp.permission_id ";
+        String groupBy = "GROUP BY r.id,r.role_name,r.description,r.anchor_id,r.organization_code,r.role_scope,r.status,r.created_at,r.updated_at ORDER BY r.role_name";
+        String sql;
+        Tuple params;
+        if (isOrgActor) {
+            // Mirrors the anchor-level fallback below, one tier deeper: a role resolves to this
+            // organisation's own fork if it has one (see saveRole), else its anchor's fork if
+            // that anchor has one, else the platform-wide shared template -- "most specific
+            // wins" per role_name, so an org never sees both its own fork and the row(s) it forked
+            // from under the same name.
+            sql = "SELECT " + columns + "WHERE r.status=1 AND r.role_scope='ORGANISATION' AND ("
+                    + "r.organization_code=@p1 "
+                    + "OR (r.organization_code IS NULL "
+                    + "AND NOT EXISTS (SELECT 1 FROM roles ro WHERE ro.organization_code=@p1 AND ro.role_name=r.role_name AND ro.status=1) "
+                    + "AND (r.anchor_id=@p2 "
+                    + "OR (r.anchor_id IS NULL AND NOT EXISTS (SELECT 1 FROM roles ra WHERE ra.anchor_id=@p2 AND ra.role_name=r.role_name AND ra.status=1))))) "
+                    + groupBy;
+            params = Tuple.of(organizationCode, anchorId);
+        } else {
+            sql = "SELECT " + columns
+                    + (browseAll
+                        ? "WHERE r.status=1 "
+                        // The NOT EXISTS guard drops the shared NULL-anchor template once this anchor
+                        // has forked its own copy (see saveRole) -- without it, an anchor that has
+                        // customized "Organisation Administrator" would see both its own row and the
+                        // unmodified template under the same name.
+                        : "WHERE r.status=1 AND r.role_scope<>'SYSTEM' AND ("
+                            + "(r.anchor_id IS NULL AND r.role_name IN ('Anchor Administrator','Organisation Administrator') "
+                            + "AND NOT EXISTS (SELECT 1 FROM roles r2 WHERE r2.anchor_id=@p1 AND r2.role_name=r.role_name AND r2.status=1)) "
+                            + "OR r.anchor_id=@p1) ")
+                    + groupBy;
+            params = browseAll ? Tuple.tuple() : Tuple.of(anchorId);
+        }
+        pool.preparedQuery(sql).execute(params).onFailure(e->dbFail(message,e)).onSuccess(rows->{
+            JsonArray out=new JsonArray(); for(Row r:rows){String roleName=Rows.str(r,"role_name");String names=Rows.str(r,"permission_names");boolean builtIn="Platform Owner".equals(roleName)||"Anchor Administrator".equals(roleName)||"Organisation Administrator".equals(roleName);
+                // Only the platform owner's own role is undeletable (see deleteRole) -- every other
+                // role, built-in templates included, can be removed once no user is assigned to it.
+                boolean undeletable="Platform Owner".equals(roleName);
+                out.add(new JsonObject().put("id",Rows.intVal(r,"id")).put("name",roleName).put("description",Rows.str(r,"description")).put("scope",Rows.str(r,"role_scope")).put("anchorId",Rows.intVal(r,"anchor_id")).put("organisationCode",Rows.str(r,"organization_code")).put("builtIn",builtIn).put("systemRole","SYSTEM".equalsIgnoreCase(Rows.str(r,"role_scope"))).put("undeletable",undeletable).put("status",Rows.intVal(r,"status")).put("permissions",names==null?new JsonArray():new JsonArray(java.util.Arrays.asList(names.split(",")))));}
             ok(message,"Roles found",out);
         });
     }
 
     private void saveRole(Message<Object> message) {
-        JsonObject p=data(message); if(!anchor(p)){fail(message,"Only the platform owner or an anchor administrator can manage roles");return;}
+        JsonObject p=data(message); if(!TenantScope.managesRoles(p)){fail(message,"Only the platform owner, an anchor administrator, or an organisation administrator can manage roles");return;}
         boolean isSystemAdmin=systemAdmin(p);
+        boolean isOrgActor=TenantScope.isOrganisationAdministrator(p);
         Integer anchorId=TenantScope.anchorId(p);
+        String organizationCode = isOrgActor ? p.getString("partnerCode") : null;
+        if(isOrgActor && (organizationCode==null || organizationCode.isBlank())){fail(message,"Organisation is required");return;}
         Integer roleId=p.getInteger("roleId"); String name=p.getString("name","").trim(); JsonArray ids=p.getJsonArray("permissionIds",new JsonArray());
         if(name.isEmpty()){fail(message,"Role name is required");return;}
         String scope=p.getString("scope","ORGANISATION").toUpperCase();
@@ -486,25 +559,65 @@ public class Administration extends AbstractVerticle {
         // never allowed for anyone else, at creation or edit.
         boolean systemScopeAllowed = "SYSTEM".equals(scope) && isSystemAdmin;
         if(!"ANCHOR".equals(scope) && !"ORGANISATION".equals(scope) && !systemScopeAllowed){fail(message,"Role scope must be Anchor or Organisation");return;}
+        // An organisation administrator can only ever grant organisation-wide access -- Anchor
+        // scope would reach beyond their own organisation, into every other org under the anchor.
+        if(isOrgActor && !"ORGANISATION".equals(scope)){fail(message,"Organisation administrators can only manage organisation-scoped roles");return;}
         if(roleId==null && ("Platform Owner".equalsIgnoreCase(name) || "Anchor Administrator".equalsIgnoreCase(name) || "Organisation Administrator".equalsIgnoreCase(name))){fail(message,"That role name is reserved for a built-in administrator");return;}
         // A brand-new tenant role (Anchor/Organisation scope) has to belong to some anchor, so
         // creating one still needs a target chosen first -- unless it's SYSTEM-scoped, which by
         // definition belongs to no anchor. Editing an existing role never does: an Anchor
-        // Administrator's own anchor is always known from their session, and the Super Admin --
-        // who manages every role and permission by definition -- can edit any anchor's role
-        // without first narrowing the page down to that one tenant.
+        // Administrator's own anchor (or an Organisation Administrator's own anchor+organisation)
+        // is always known from their session, and the Super Admin -- who manages every role and
+        // permission by definition -- can edit any anchor's role without first narrowing the
+        // page down to that one tenant.
         if(anchorId==null && roleId==null && !systemScopeAllowed){fail(message,"Choose an anchor before creating a new role for it");return;}
         if(anchorId==null && !isSystemAdmin){fail(message,"Choose an anchor before managing its roles");return;}
         Future<Integer> roleFuture;
         if(roleId==null){
             Integer insertAnchorId = systemScopeAllowed ? null : anchorId;
-            roleFuture=pool.preparedQuery("INSERT INTO roles (role_name,description,anchor_id,role_scope,status,created_at) OUTPUT INSERTED.id VALUES (@p1,@p2,@p3,@p4,1,GETDATE())")
-                    .execute(Tuple.of(name,p.getString("description"),insertAnchorId,scope))
+            roleFuture=pool.preparedQuery("INSERT INTO roles (role_name,description,anchor_id,organization_code,role_scope,status,created_at) OUTPUT INSERTED.id VALUES (@p1,@p2,@p3,@p4,@p5,1,GETDATE())")
+                    .execute(Tuple.of(name,p.getString("description"),insertAnchorId,organizationCode,scope))
                     .map(rows->Rows.intVal(rows.iterator().next(),"id"));
         }else if(isSystemAdmin){
             roleFuture=pool.preparedQuery("UPDATE roles SET role_name=@p1,description=@p2,role_scope=@p3,updated_at=GETDATE() OUTPUT INSERTED.id WHERE id=@p4")
                     .execute(Tuple.of(name,p.getString("description"),scope,roleId))
                     .compose(rows->rows.size()==0?Future.failedFuture("Role not found or is system-managed"):Future.succeededFuture(Rows.intVal(rows.iterator().next(),"id")));
+        }else if(isOrgActor){
+            Integer editAnchorId=anchorId;
+            String editOrgCode=organizationCode;
+            // A role resolving for this organisation today (see getRoles' cascade) is either
+            // this org's own fork already (organization_code=editOrgCode -- plain UPDATE below),
+            // or a shared row it inherited from its anchor's fork or the platform-wide template
+            // (organization_code IS NULL) -- the first edit of one of those forks it into an
+            // org-owned row instead of rewriting a row other organisations still resolve against,
+            // mirroring the anchor-level fork just above one tier deeper. Later edits of that
+            // fork find it directly via organization_code and just UPDATE it.
+            roleFuture=pool.preparedQuery("SELECT role_name, anchor_id, organization_code FROM roles WHERE id=@p1 AND role_scope='ORGANISATION'").execute(Tuple.of(roleId))
+                    .compose(lookupRows->{
+                        if(lookupRows.size()==0) return Future.failedFuture("Role not found or is system-managed");
+                        Row existing=lookupRows.iterator().next();
+                        String existingOrgCode=Rows.str(existing,"organization_code");
+                        if(editOrgCode.equals(existingOrgCode)){
+                            return pool.preparedQuery("UPDATE roles SET role_name=@p1,description=@p2,updated_at=GETDATE() OUTPUT INSERTED.id WHERE id=@p3 AND organization_code=@p4")
+                                    .execute(Tuple.of(name,p.getString("description"),roleId,editOrgCode))
+                                    .compose(rows->rows.size()==0?Future.failedFuture("Role not found or is system-managed"):Future.succeededFuture(Rows.intVal(rows.iterator().next(),"id")));
+                        }
+                        if(existingOrgCode!=null) return Future.failedFuture("Role not found or is system-managed");
+                        Integer existingAnchorId=Rows.intVal(existing,"anchor_id");
+                        if(existingAnchorId!=null && !existingAnchorId.equals(editAnchorId)) return Future.failedFuture("Role not found or is system-managed");
+                        Integer templateRoleId=roleId;
+                        return pool.preparedQuery("INSERT INTO roles (role_name,description,anchor_id,organization_code,role_scope,status,created_at) OUTPUT INSERTED.id VALUES (@p1,@p2,@p3,@p4,'ORGANISATION',1,GETDATE())")
+                                .execute(Tuple.of(name,p.getString("description"),editAnchorId,editOrgCode))
+                                .map(rows->Rows.intVal(rows.iterator().next(),"id"))
+                                // Repoint this organisation's own users off the shared row and onto
+                                // their new fork -- otherwise the customization silently does not
+                                // apply to anyone (already-existing users are still pointed at
+                                // templateRoleId; see the anchor-level repoint just above).
+                                .compose(newRoleId -> pool.preparedQuery(
+                                        "UPDATE users SET role_id=@p1 WHERE role_id=@p2 AND organization_code=@p3 AND user_scope='ORGANISATION'")
+                                        .execute(Tuple.of(newRoleId,templateRoleId,editOrgCode))
+                                        .map(v -> newRoleId));
+                    });
         }else{
             Integer editAnchorId=anchorId;
             // "Organisation Administrator" ships as one shared, anchor_id-NULL template row every
@@ -560,20 +673,30 @@ public class Administration extends AbstractVerticle {
 
     private void deleteRole(Message<Object> message) {
         JsonObject p=data(message);
-        if(!anchor(p)){fail(message,"Only a platform owner or an anchor administrator can manage roles");return;}
+        if(!TenantScope.managesRoles(p)){fail(message,"Only a platform owner, anchor administrator, or organisation administrator can manage roles");return;}
         Integer roleId=p.getInteger("roleId");
         if(roleId==null){fail(message,"Role is required");return;}
         boolean isSystemAdmin=systemAdmin(p);
+        boolean isOrgActor=TenantScope.isOrganisationAdministrator(p);
         Integer anchorId=TenantScope.anchorId(p);
+        String organizationCode = isOrgActor ? p.getString("partnerCode") : null;
         if(anchorId==null && !isSystemAdmin){fail(message,"Choose an anchor before managing its roles");return;}
-        String scopeFilter = isSystemAdmin ? "" : " AND anchor_id=@p2";
-        Tuple lookupParams = isSystemAdmin ? Tuple.of(roleId) : Tuple.of(roleId,anchorId);
+        if(isOrgActor && (organizationCode==null || organizationCode.isBlank())){fail(message,"Organisation is required");return;}
+        // An organisation administrator can only ever delete a role their own organisation owns
+        // (its own fork -- see saveRole) -- never the shared anchor/template row it inherited from,
+        // which other organisations may still be resolving against.
+        String scopeFilter = isSystemAdmin ? "" : isOrgActor ? " AND organization_code=@p2" : " AND anchor_id=@p2";
+        Tuple lookupParams = isSystemAdmin ? Tuple.of(roleId) : isOrgActor ? Tuple.of(roleId,organizationCode) : Tuple.of(roleId,anchorId);
         pool.preparedQuery("SELECT role_name FROM roles WHERE id=@p1" + scopeFilter).execute(lookupParams)
                 .compose(roleRows -> {
                     if (roleRows.size()==0) return Future.failedFuture("Role not found");
                     String roleName = Rows.str(roleRows.iterator().next(),"role_name");
-                    if ("Platform Owner".equals(roleName) || "Anchor Administrator".equals(roleName) || "Organisation Administrator".equals(roleName)) {
-                        return Future.failedFuture("Built-in administrator roles cannot be deleted");
+                    // Only the platform owner's own role is permanently protected -- every other
+                    // role, including the built-in Anchor/Organisation Administrator templates,
+                    // may be deleted (still guarded below by the "assigned to a user" check, so an
+                    // anchor can't delete the role its own admins are actively using).
+                    if ("Platform Owner".equals(roleName)) {
+                        return Future.failedFuture("The platform owner role cannot be deleted");
                     }
                     return pool.preparedQuery("SELECT COUNT(*) AS c FROM users WHERE role_id=@p1").execute(Tuple.of(roleId));
                 })

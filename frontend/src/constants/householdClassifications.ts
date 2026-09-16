@@ -18,6 +18,7 @@ export const LEGAL_STATUS_OPTIONS = [
   { title: 'Internally displaced person (IDP)', value: 'IDP' },
   { title: 'Asylum seeker', value: 'ASYLUM_SEEKER' },
   { title: 'Returnee', value: 'RETURNEE' },
+  { title: 'Host community', value: 'HOST_COMMUNITY' },
   { title: 'Stateless', value: 'STATELESS' },
   { title: 'Other', value: 'OTHER' },
 ] as const

@@ -51,7 +51,7 @@ public class Audit extends AbstractVerticle {
                 + "LEFT JOIN users u ON u.id=l.actor_id AND l.actor_type IN ('USER','SYSTEM','ANCHOR_USER','ORGANISATION_USER','API') "
                 + "LEFT JOIN field_officers f ON f.id=l.actor_id AND l.actor_type='SUPERVISOR' "
                 + "LEFT JOIN roles ru ON ru.id=u.role_id "
-                + "LEFT JOIN users a ON a.id=l.anchor_id AND a.user_scope='ANCHOR' AND a.id=a.anchor_id "
+                + "LEFT JOIN anchors a ON a.id=l.anchor_id "
                 + "LEFT JOIN organizations o ON o.organization_code=l.organization_code AND o.anchor_id=l.anchor_id "
                 + "WHERE (@p1=1 OR l.anchor_id=@p2) "
                 + "AND (@p3=0 OR l.organization_code=@p4) "

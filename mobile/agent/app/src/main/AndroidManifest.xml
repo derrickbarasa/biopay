@@ -7,6 +7,9 @@
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Not needed for the manual/first install, which is a plain browser download; this gates
+         AppUpdateManager launching the installer for a self-downloaded update APK. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <uses-feature android:name="android.hardware.usb.host" android:required="false" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
 
@@ -82,6 +85,20 @@
             android:name=".ui.PhotoViewerActivity"
             android:exported="false"
             android:screenOrientation="portrait" />
+
+        <!-- Exposes the self-downloaded update APK (see AppUpdateManager) to the package
+             installer as a content:// URI, since a file:// URI can't be shared across apps
+             on API 24+. Not used for anything else: the camera capture flow keeps its files
+             entirely private and never needs to hand them to another app. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
 
     </application>
 </manifest>

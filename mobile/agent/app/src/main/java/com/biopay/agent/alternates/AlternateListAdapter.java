@@ -49,7 +49,8 @@ public class AlternateListAdapter extends RecyclerView.Adapter<AlternateListAdap
                 : alternate.relationship;
         holder.household.setText(relationship);
         String phone = alternate.phoneNumber == null || alternate.phoneNumber.isEmpty()
-                ? alternate.alternateNumber : alternate.phoneNumber;
+                ? holder.itemView.getContext().getString(R.string.person_detail_not_recorded)
+                : alternate.phoneNumber;
         String gender = alternate.gender == null || alternate.gender.trim().isEmpty()
                 ? holder.itemView.getContext().getString(R.string.gender_not_recorded)
                 : alternate.gender.trim();
@@ -57,7 +58,7 @@ public class AlternateListAdapter extends RecyclerView.Adapter<AlternateListAdap
                 ? holder.itemView.getContext().getString(R.string.person_detail_not_recorded)
                 : String.valueOf(alternate.age);
         holder.detail.setText(holder.itemView.getContext().getString(
-                R.string.alternate_detail_with_gender, gender, age, phone));
+                R.string.alternate_detail_with_gender, alternate.alternateNumber, gender, age, phone));
 
         holder.itemView.setOnClickListener(v -> listener.onAlternateClick(alternate));
         holder.editButton.setOnClickListener(v -> listener.onAlternateEdit(alternate));

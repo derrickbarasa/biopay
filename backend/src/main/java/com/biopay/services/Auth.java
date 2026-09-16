@@ -469,20 +469,23 @@ public class Auth extends AbstractVerticle {
         String displayFirstName = authorisedFirstName.isEmpty() ? name : authorisedFirstName;
         String surname = authorisedFirstName.isEmpty() ? "" : authorisedSurname;
 
-        // An anchor is its Anchor Administrator's own row in `users` -- signup creates one
-        // row, self-referencing anchor_id to its own id, instead of a separate anchors row.
+        // An anchor is its own row in `anchors`; signup creates that row first, then the
+        // administrator's own `users` row pointing at it via anchor_id -- same shape every
+        // other anchor-scoped user already has.
         Utilities.nextAnchorCode(pool).compose(anchorCode -> pool.withTransaction(connection -> connection.preparedQuery(
+                        "INSERT INTO anchors (anchor_code, anchor_name, phone, address, status, created_at, updated_at) "
+                                + "OUTPUT INSERTED.id VALUES (@p1, @p2, @p3, @p4, 1, GETDATE(), GETDATE())")
+                .execute(Tuple.of(anchorCode, name, phone, address))
+                .map(rows -> intOr(rows.iterator().next(), "id", 0))
+                .compose(anchorId -> connection.preparedQuery(
                         "INSERT INTO users (email, username, password, first_name, surname, "
-                                + "role_id, active, status, user_scope, anchor_code, anchor_name, phone, address, created_at, updated_at) "
+                                + "role_id, active, status, user_scope, anchor_id, created_at, updated_at) "
                                 + "OUTPUT INSERTED.id "
                                 + "VALUES (@p1, @p1, @p2, @p3, @p4, "
                                 + "(SELECT TOP 1 id FROM roles WHERE role_name='Anchor Administrator' AND status=1), "
-                                + "1, 1, 'ANCHOR', @p5, @p6, @p7, @p8, GETDATE(), GETDATE())")
-                .execute(Tuple.of(email, passwordHash, displayFirstName, surname, anchorCode, name, phone, address))
-                .map(rows -> intOr(rows.iterator().next(), "id", 0))
-                .compose(userId -> connection.preparedQuery("UPDATE users SET anchor_id=id WHERE id=@p1")
-                        .execute(Tuple.of(userId))
-                        .map(r -> new JsonObject().put("anchorId", userId).put("userId", userId)))))
+                                + "1, 1, 'ANCHOR', @p5, GETDATE(), GETDATE())")
+                        .execute(Tuple.of(email, passwordHash, displayFirstName, surname, anchorId))
+                        .map(rows -> new JsonObject().put("anchorId", anchorId).put("userId", intOr(rows.iterator().next(), "id", 0))))))
                 .onFailure(err -> onDbError(message, err))
                 .onSuccess(ids -> {
                     int userId = ids.getInteger("userId");

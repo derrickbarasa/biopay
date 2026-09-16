@@ -34,8 +34,8 @@ const organisationFilter = ref<string | null>(null)
 const scopeReady = computed(() => true)
 
 const headers = [
-  { title: 'Household', key: 'householdNumber' },
-  { title: 'Beneficiary', key: 'beneficiaryId' },
+  { title: 'Household Code', key: 'householdNumber', minWidth: 156, nowrap: true },
+  { title: 'Beneficiary Code', key: 'beneficiaryId', minWidth: 164, nowrap: true },
   { title: 'Organization', key: 'organisationCode' },
   { title: 'Type', key: 'beneficiaryType' },
   { title: 'Clock', key: 'clock' },
@@ -101,7 +101,7 @@ onMounted(() => {
 
 function exportCsv() {
   const rows = [
-    ['Household', 'Beneficiary', 'Organization', 'Type', 'Clock', 'Time', 'Date', 'Work Code'],
+    ['Household Code', 'Beneficiary Code', 'Organization', 'Type', 'Clock', 'Time', 'Date', 'Work Code'],
     ...records.value.map((r) => [
       r.householdNumber, r.beneficiaryId, orgName(r.organisationCode), r.beneficiaryType === 1 ? 'Head' : 'Alternate',
       r.clock === 'I' ? 'In' : 'Out', r.time, r.attendanceDate, r.workCode ?? '',

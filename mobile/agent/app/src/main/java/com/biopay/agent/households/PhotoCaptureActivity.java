@@ -4,6 +4,7 @@ import android.Manifest;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.os.Bundle;
+import android.util.Size;
 
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
@@ -86,6 +87,11 @@ public class PhotoCaptureActivity extends BaseActivity {
 
         imageCapture = new ImageCapture.Builder()
                 .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
+                // Dashboard photos are identity references, not archival originals. Keeping the
+                // capture bounded makes head and alternate photos reliable over field networks
+                // and safely below the server's upload limit after base64 encoding.
+                .setTargetResolution(new Size(1600, 1200))
+                .setJpegQuality(85)
                 .build();
 
         CameraSelector selector = new CameraSelector.Builder()

@@ -149,7 +149,7 @@ const payrollFields = [
   { field: 'organisationCode', required: true, notes: 'Required for Organisation accounts; Anchor/System accounts pass it explicitly.' },
   { field: 'periodStart / periodEnd', required: true, notes: 'ISO dates, e.g. "2026-09-01".' },
   { field: 'currency', required: true, notes: 'e.g. USD, SSP, KES, UGX, ETB, EUR, GBP.' },
-  { field: 'beneficiaries', required: true, notes: 'One row per household with householdNumber, amountFcy, exchangeRate and amountLcy. Amount LCY must equal Amount FCY × Exchange Rate.' },
+  { field: 'beneficiaries', required: true, notes: 'One row per household with householdNumber (the household code), amountFcy, exchangeRate and amountLcy. Amount LCY must equal Amount FCY × Exchange Rate.' },
   { field: 'otpCode', required: true, notes: 'From REQUEST_PAYROLL_OTP — emailed to the account generating the cycle.' },
 ]
 </script>
@@ -391,7 +391,7 @@ h2, h3 { color: rgb(var(--v-theme-on-surface)); }
   padding: 12px 40px 12px 14px;
   overflow-x: auto;
 }
-.code-block pre { margin: 0; font-family: 'JetBrains Mono', 'Fira Code', Consolas, monospace; font-size: .78rem; white-space: pre; }
+.code-block pre { margin: 0; font-family: 'Outfit', sans-serif; font-size: .78rem; white-space: pre; }
 .copy-btn { position: absolute; top: 4px; right: 4px; color: #e2e8f0 !important; }
 code { background: rgba(15, 23, 42, .06); padding: 1px 5px; border-radius: 4px; font-size: .85em; }
 </style>

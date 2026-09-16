@@ -124,15 +124,15 @@ public class Subscription extends AbstractVerticle {
 
     // ---- GET_SUBSCRIPTION -----------------------------------------------------------
 
-    /** Whether the anchor account itself (its own row in `users`, user_scope='ANCHOR') is
-     *  active -- distinct from subscription status. A deactivated anchor blocks its own
-     *  login already (see Auth#loginUser), but organisation/field-officer accounts under it
-     *  stay individually active, so they need this to know to show "Contact your anchor"
+    /** Whether the anchor itself (its own row in `anchors`) is active -- distinct from
+     *  subscription status. A deactivated anchor blocks its own administrator's login already
+     *  (see Administration#toggleAnchorStatus), but organisation/field-officer accounts under
+     *  it stay individually active, so they need this to know to show "Contact your anchor"
      *  instead of getting a confusing stream of failed requests. Fails open (true) on error
      *  or a missing row, same fail-open convention as {@link #statusFor}. */
     public static Future<Boolean> anchorActiveFor(MSSQLPool pool, Integer anchorId) {
         if (anchorId == null) return Future.succeededFuture(true);
-        return pool.preparedQuery("SELECT status FROM users WHERE id=@p1 AND user_scope='ANCHOR' AND id=anchor_id")
+        return pool.preparedQuery("SELECT status FROM anchors WHERE id=@p1")
                 .execute(Tuple.of(anchorId))
                 .map(rows -> rows.size() == 0 || Rows.intVal(rows.iterator().next(), "status") == 1)
                 .recover(err -> Future.succeededFuture(true));
@@ -205,7 +205,7 @@ public class Subscription extends AbstractVerticle {
                 + "     WHEN CAST(GETDATE() AS DATE) <= DATEADD(DAY, s.grace_days, s.expires_at) THEN 'GRACE' "
                 + "     ELSE 'ARCHIVED' END AS status, "
                 + "DATEDIFF(DAY, CAST(GETDATE() AS DATE), s.expires_at) AS days_to_expiry "
-                + "FROM users a LEFT JOIN subscriptions s ON s.anchor_id = a.id WHERE a.user_scope='ANCHOR' AND a.id=a.anchor_id ORDER BY a.anchor_name";
+                + "FROM anchors a LEFT JOIN subscriptions s ON s.anchor_id = a.id ORDER BY a.anchor_name";
         pool.query(sql).execute()
                 .onFailure(err -> onDbError(message, err))
                 .onSuccess(rows -> {
@@ -394,9 +394,8 @@ public class Subscription extends AbstractVerticle {
         Future<Row> defaultRow = pool.query("SELECT default_amount, default_currency FROM billing_settings WHERE id=1").execute()
                 .map(rows -> rows.size() == 0 ? null : rows.iterator().next());
         Future<JsonArray> anchorRows = pool.query(
-                "SELECT a.id AS anchor_id, a.anchor_name, p.amount, p.currency FROM users a "
-                        + "LEFT JOIN subscription_prices p ON p.anchor_id = a.id "
-                        + "WHERE a.user_scope='ANCHOR' AND a.id=a.anchor_id ORDER BY a.anchor_name").execute()
+                "SELECT a.id AS anchor_id, a.anchor_name, p.amount, p.currency FROM anchors a "
+                        + "LEFT JOIN subscription_prices p ON p.anchor_id = a.id ORDER BY a.anchor_name").execute()
                 .map(rows -> {
                     JsonArray arr = new JsonArray();
                     for (Row r : rows) {
@@ -544,11 +543,11 @@ public class Subscription extends AbstractVerticle {
         Tuple params;
         if (systemOwner && anchorId == null) {
             sql = "SELECT r.*, a.anchor_name FROM subscription_payment_requests r "
-                    + "JOIN users a ON a.id = r.anchor_id AND a.user_scope='ANCHOR' AND a.id=a.anchor_id ORDER BY r.created_at DESC";
+                    + "JOIN anchors a ON a.id = r.anchor_id ORDER BY r.created_at DESC";
             params = Tuple.tuple();
         } else if (anchorId != null) {
             sql = "SELECT r.*, a.anchor_name FROM subscription_payment_requests r "
-                    + "JOIN users a ON a.id = r.anchor_id AND a.user_scope='ANCHOR' AND a.id=a.anchor_id WHERE r.anchor_id=@p1 ORDER BY r.created_at DESC";
+                    + "JOIN anchors a ON a.id = r.anchor_id WHERE r.anchor_id=@p1 ORDER BY r.created_at DESC";
             params = Tuple.of(anchorId);
         } else {
             reply(message, new JsonObject().put("responseCode", "000").put("responseMessage", "OK").put("results", new JsonArray()));
@@ -667,7 +666,7 @@ public class Subscription extends AbstractVerticle {
     }
 
     private void emailPushPaymentLink(Message<Object> message, int anchorId, double amount, String currency, String comment) {
-        Future<String> anchorNameFuture = pool.preparedQuery("SELECT anchor_name FROM users WHERE id=@p1 AND user_scope='ANCHOR' AND id=anchor_id")
+        Future<String> anchorNameFuture = pool.preparedQuery("SELECT anchor_name FROM anchors WHERE id=@p1")
                 .execute(Tuple.of(anchorId))
                 .map(rows -> rows.size() == 0 ? "" : Rows.str(rows.iterator().next(), "anchor_name"));
         Future<JsonArray> recipientEmailsFuture = pool.preparedQuery(
@@ -771,7 +770,7 @@ public class Subscription extends AbstractVerticle {
     private void sendGraceReminders() {
         String sql = "SELECT s.anchor_id, a.anchor_name, "
                 + "DATEDIFF(DAY, CAST(GETDATE() AS DATE), DATEADD(DAY, s.grace_days, s.expires_at)) AS days_to_archive "
-                + "FROM subscriptions s JOIN users a ON a.id = s.anchor_id AND a.user_scope='ANCHOR' AND a.id=a.anchor_id "
+                + "FROM subscriptions s JOIN anchors a ON a.id = s.anchor_id "
                 + "WHERE CAST(GETDATE() AS DATE) > s.expires_at "
                 + "  AND CAST(GETDATE() AS DATE) <= DATEADD(DAY, s.grace_days, s.expires_at) "
                 + "  AND s.lifecycle_status='ACTIVE' "
@@ -852,7 +851,7 @@ public class Subscription extends AbstractVerticle {
             return;
         }
         pool.preparedQuery("SELECT i.*, a.anchor_name FROM subscription_invoices i "
-                        + "JOIN users a ON a.id = i.anchor_id AND a.user_scope='ANCHOR' AND a.id=a.anchor_id "
+                        + "JOIN anchors a ON a.id = i.anchor_id "
                         + "WHERE i.anchor_id=@p1 AND i.invoice_number=@p2")
                 .execute(Tuple.of(anchorId, invoiceNumber))
                 .onFailure(err -> onDbError(message, err))

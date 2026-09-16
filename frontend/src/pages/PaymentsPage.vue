@@ -55,11 +55,11 @@ const scopeReady = computed(() => true)
 const headers = [
   { title: 'Household', key: 'householdName' },
   { title: 'Organization', key: 'organisationCode' },
-  { title: 'Cycle', key: 'cycle' },
+  { title: 'Cycle Code', key: 'cycle', minWidth: 128, nowrap: true },
   { title: 'Amount', key: 'amount' },
   { title: 'Status', key: 'status' },
   { title: 'Date', key: 'createdAt' },
-  { title: 'Actions', key: 'actions', sortable: false, align: 'start' as const },
+  { title: 'Actions', key: 'actions', sortable: false, align: 'start' as const, width: 96, minWidth: 96, fixed: true, nowrap: true },
 ]
 
 const orgNameByCode = computed(() => new Map(organizations.value.map((o) => [o.organisationCode, o.name])))
@@ -150,7 +150,7 @@ onMounted(() => {
 
 function exportCsv() {
   const rows = [
-    ['Household', 'Organization', 'Cycle', 'Amount', 'Status', 'Date'],
+    ['Household', 'Organization', 'Cycle Code', 'Amount', 'Status', 'Date'],
     ...payments.value.map((p) => [
       p.householdName, orgName(p.organisationCode), p.cycle ?? '', String(p.amount),
       p.status === 1 ? 'Paid' : p.status === 2 ? 'Failed' : 'Pending', p.createdAt ?? '',
@@ -228,29 +228,96 @@ function printReceipt(row: PaymentRow) {
     toast.error('Allow pop-ups to view the receipt')
     return
   }
+  const org = orgName(row.organisationCode)
   const channel = row.paymentChannel === 'ONLINE' ? 'Online payment' : 'Field payment'
-  receipt.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Payment receipt ${escapeHtml(row.id)}</title>
+  // "Payment cycle" doubles as the receipt number -- it's already the one human-readable id
+  // this payment carries (see Utilities#nextCycleCode, e.g. PAYROLL-20260910-85ECDD), so a
+  // separate synthetic receipt number would just be a second id for the same thing.
+  const receiptNumber = row.cycle || `PAYMENT-${row.id}`
+  const period = row.dateFrom || row.dateTo ? `${row.dateFrom || '—'} to ${row.dateTo || '—'}` : '—'
+  const reference = row.onlineReference
+    ? `<div class="drow"><dt>Transaction reference</dt><dd>${escapeHtml(row.onlineReference)}</dd></div>` : ''
+  receipt.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Payment receipt ${escapeHtml(receiptNumber)}</title>
     <style>
-      * { box-sizing: border-box; font-family: "Segoe UI", sans-serif; }
-      body { margin: 0; padding: 32px; color: #0f172a; }
-      .receipt { max-width: 520px; margin: 0 auto; border: 2px solid #0d9488; border-radius: 16px; padding: 30px; }
-      h1 { margin: 0; color: #0f766e; font-size: 22px; }
-      .sub { margin: 5px 0 24px; color: #64748b; font-size: 13px; }
-      .row { display: flex; justify-content: space-between; gap: 24px; padding: 11px 0; border-bottom: 1px solid #e2e8f0; font-size: 13px; }
-      .row span:first-child { color: #64748b; }
-      .row span:last-child { max-width: 65%; font-weight: 650; text-align: right; overflow-wrap: anywhere; }
-      .total { color: #0f766e; font-size: 20px; font-weight: 800; }
-      @media print { body { padding: 0; } }
+      @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap');
+      * { box-sizing: border-box; font-family: "Outfit", sans-serif; }
+      body { margin: 0; padding: 28px; background: #f1f5f9; color: #0f172a; }
+      .receipt { max-width: 700px; margin: 0 auto; background: #fff; border: 1px solid #e2e8f0; border-radius: 20px; padding: 40px; }
+      .hdr { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; }
+      .org-name { margin: 0; color: #0f766e; font-size: 28px; font-weight: 800; letter-spacing: -.02em; }
+      .hdr-right { text-align: right; }
+      .hdr-right .title { margin: 0; color: #0f172a; font-size: 17px; font-weight: 700; }
+      .hdr-right .meta { margin: 3px 0 0; color: #64748b; font-size: 12.5px; }
+      hr { border: none; border-top: 1px solid #e2e8f0; margin: 24px 0; }
+      .paidto-row { display: flex; justify-content: space-between; align-items: center; gap: 20px; flex-wrap: wrap; }
+      .label { margin: 0; color: #64748b; font-size: 11px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; }
+      .household-name { margin: 6px 0 0; font-size: 23px; font-weight: 800; }
+      .household-number { margin: 6px 0 0; color: #64748b; font-size: 14px; }
+      .paidto-note { margin: 4px 0 0; color: #94a3b8; font-size: 12.5px; }
+      .badge { display: flex; align-items: center; gap: 12px; background: #ecfdf5; border-radius: 14px; padding: 14px 20px; flex-shrink: 0; }
+      .badge-icon { width: 38px; height: 38px; border-radius: 50%; background: #059669; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0; }
+      .badge-text .paid { margin: 0; color: #059669; font-size: 16px; font-weight: 800; }
+      .badge-text .paid-sub { margin: 1px 0 0; color: #64748b; font-size: 11.5px; }
+      h2 { margin: 0 0 16px; font-size: 18px; font-weight: 800; color: #0f172a; }
+      .details-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 28px; }
+      .details-col { border-left: 1px solid #e2e8f0; padding-left: 28px; }
+      .details-col:first-child { border-left: none; padding-left: 0; }
+      .drow { display: flex; justify-content: space-between; gap: 16px; padding: 7px 0; font-size: 13.5px; }
+      .drow dt { margin: 0; color: #64748b; }
+      .drow dd { margin: 0; font-weight: 600; text-align: right; overflow-wrap: anywhere; }
+      table { width: 100%; border-collapse: collapse; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; }
+      thead td { background: #ecfdf5; color: #64748b; font-size: 11.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; padding: 12px 16px; }
+      tbody td { padding: 14px 16px; font-size: 14px; border-top: 1px solid #e2e8f0; }
+      td:last-child { text-align: right; }
+      .total-row td { background: #ecfdf5; padding: 18px 16px; font-size: 22px; font-weight: 800; color: #0f766e; border-top: 1px solid #e2e8f0; }
+      .footer { display: flex; justify-content: space-between; gap: 16px; color: #64748b; font-size: 12.5px; }
+      @media print { body { padding: 0; background: #fff; } .receipt { border: none; padding: 0; } }
     </style></head><body onload="window.print()"><div class="receipt">
-      <h1>${escapeHtml(orgName(row.organisationCode))}</h1><div class="sub">Payment Receipt · Confirmed payment record</div>
-      <div class="row"><span>Household</span><span>${escapeHtml(row.householdName)}</span></div>
-      <div class="row"><span>Household number</span><span>${escapeHtml(row.householdNumber)}</span></div>
-      <div class="row"><span>Organization</span><span>${escapeHtml(orgName(row.organisationCode))}</span></div>
-      <div class="row"><span>Payment cycle</span><span>${escapeHtml(row.cycle || '—')}</span></div>
-      <div class="row"><span>Payment method</span><span>${escapeHtml(channel)}</span></div>
-      ${row.onlineReference ? `<div class="row"><span>Transaction reference</span><span>${escapeHtml(row.onlineReference)}</span></div>` : ''}
-      <div class="row"><span>Paid on</span><span>${escapeHtml(displayDate(row.verifiedAt || row.createdAt))}</span></div>
-      <div class="row total"><span>Amount paid</span><span>${escapeHtml(amountLabel(row))}</span></div>
+      <div class="hdr">
+        <h1 class="org-name">${escapeHtml(org)}</h1>
+        <div class="hdr-right">
+          <p class="title">Payment Receipt</p>
+          <p class="meta">Receipt #${escapeHtml(receiptNumber)}</p>
+          <p class="meta">Generated on ${escapeHtml(new Date().toLocaleDateString())}</p>
+        </div>
+      </div>
+      <hr>
+      <div class="paidto-row">
+        <div>
+          <p class="label">Paid to</p>
+          <p class="household-name">${escapeHtml(row.householdName)}</p>
+          <p class="household-number">Household number: ${escapeHtml(row.householdNumber)}</p>
+          <p class="paidto-note">Confirmed beneficiary payment record.</p>
+        </div>
+        <div class="badge">
+          <div class="badge-icon">&#10003;</div>
+          <div class="badge-text"><p class="paid">PAID</p><p class="paid-sub">Payment disbursed</p></div>
+        </div>
+      </div>
+      <hr>
+      <h2>Payment Details</h2>
+      <div class="details-grid">
+        <div class="details-col">
+          <div class="drow"><dt>Paying organization</dt><dd>${escapeHtml(org)}</dd></div>
+          <div class="drow"><dt>Recipient</dt><dd>${escapeHtml(row.householdName)}</dd></div>
+          <div class="drow"><dt>Payment method</dt><dd>${escapeHtml(channel)}</dd></div>
+          ${reference}
+        </div>
+        <div class="details-col">
+          <div class="drow"><dt>Payment cycle</dt><dd>${escapeHtml(row.cycle || '—')}</dd></div>
+          <div class="drow"><dt>Paid on</dt><dd>${escapeHtml(displayDate(row.verifiedAt || row.createdAt))}</dd></div>
+          <div class="drow"><dt>Payment period</dt><dd>${escapeHtml(period)}</dd></div>
+        </div>
+      </div>
+      <hr>
+      <h2>Payment Summary</h2>
+      <table>
+        <thead><tr><td>Description</td><td>Amount</td></tr></thead>
+        <tbody><tr><td>Household assistance disbursement</td><td>${escapeHtml(amountLabel(row))}</td></tr></tbody>
+        <tfoot><tr class="total-row"><td>Total Paid</td><td>${escapeHtml(amountLabel(row))}</td></tr></tfoot>
+      </table>
+      <hr>
+      <div class="footer"><span>Payment successfully disbursed.</span><span>${escapeHtml(org)}</span></div>
     </div></body></html>`)
   receipt.document.close()
 }
@@ -390,7 +457,7 @@ function printReceipt(row: PaymentRow) {
           <dl v-else class="payment-detail-grid">
             <div><dt>Status</dt><dd><v-chip size="small" :color="detailPayment.status === 1 ? 'success' : detailPayment.status === 2 ? 'error' : 'warning'" variant="tonal">{{ statusLabel(detailPayment.status) }}</v-chip></dd></div>
             <div><dt>Amount</dt><dd class="detail-amount">{{ amountLabel(detailPayment) }}</dd></div>
-            <div><dt>Household number</dt><dd>{{ detailPayment.householdNumber }}</dd></div>
+            <div><dt>Household code</dt><dd>{{ detailPayment.householdNumber }}</dd></div>
             <div><dt>Organization</dt><dd>{{ orgName(detailPayment.organisationCode) }}</dd></div>
             <div><dt>Payment cycle</dt><dd>{{ detailPayment.cycle || '—' }}</dd></div>
             <div><dt>Period</dt><dd>{{ detailPayment.dateFrom || '—' }} to {{ detailPayment.dateTo || '—' }}</dd></div>

@@ -15,7 +15,7 @@ public final class HouseholdClassification {
             "DISABILITY", "ELDERLY_HEADED", "CHILD_HEADED", "CHRONIC_ILLNESS",
             "PREGNANT_OR_LACTATING", "SINGLE_CAREGIVER");
     private static final Set<String> LEGAL_STATUSES = Set.of(
-            "CITIZEN", "REFUGEE", "IDP", "ASYLUM_SEEKER", "RETURNEE", "STATELESS", "OTHER");
+            "CITIZEN", "REFUGEE", "IDP", "ASYLUM_SEEKER", "RETURNEE", "HOST_COMMUNITY", "STATELESS", "OTHER");
 
     private HouseholdClassification() {}
 

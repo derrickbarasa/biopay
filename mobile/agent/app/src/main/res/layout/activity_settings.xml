@@ -188,8 +188,19 @@
                     <TextView android:text="@string/settings_offline_title" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="@color/bp_on_primary_container" android:textSize="16sp" android:textStyle="bold" />
                     <TextView android:text="@string/settings_offline_body" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:textColor="@color/bp_text_secondary" android:textSize="14sp" />
                     <TextView android:id="@+id/tvVersion" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:textColor="@color/bp_text_primary" android:textSize="13sp" />
+                    <TextView android:id="@+id/tvUpdateStatus" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:textColor="@color/bp_text_secondary" android:textSize="13sp" android:visibility="gone" />
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnCheckForUpdates"
+                style="@style/Widget.Material3.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="@string/settings_check_for_updates"
+                android:textAllCaps="false"
+                android:drawableStart="@drawable/ic_sync"
+                android:drawablePadding="8dp" />
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btnSendFeedback"
                 style="@style/Widget.Material3.Button.TextButton"

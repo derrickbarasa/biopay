@@ -65,6 +65,9 @@ android {
             dimension = "biometricDevice"
             versionNameSuffix = "-morpho642"
             buildConfigField("String", "BIOMETRIC_DEVICE_LABEL", "\"IDEMIA embedded scanner (SDK 6.42)\"")
+            // Matches AppReleaseStore.MORPHO_642_FILENAME on the backend -- AppUpdateManager
+            // polls /biopay/downloads/version/<this> and downloads /biopay/downloads/<this>.
+            buildConfigField("String", "RELEASE_APK_FILENAME", "\"biopay-agent-morpho642.apk\"")
             // Without this, onnxruntime-android's x86/x86_64 emulator-only native libs get bundled
             // too -- ~70MB of dead weight on every real (ARM) field device. morphoSmart615 already
             // restricts to real-device ABIs; this flavor was just missing the same filter.
@@ -76,6 +79,9 @@ android {
             dimension = "biometricDevice"
             versionNameSuffix = "-morpho615"
             buildConfigField("String", "BIOMETRIC_DEVICE_LABEL", "\"MorphoSmart 6.15 (Tablet)\"")
+            // Matches AppReleaseStore.MORPHO_615_FILENAME on the backend -- AppUpdateManager
+            // polls /biopay/downloads/version/<this> and downloads /biopay/downloads/<this>.
+            buildConfigField("String", "RELEASE_APK_FILENAME", "\"biopay-agent-morpho615.apk\"")
             // The 6.15 tablets in the field are old stock still running Android 5.0/5.1 (API 21/22).
             // onnxruntime-android 1.22.0+ (what morphoSmart642 uses) declares minSdkVersion 24 in
             // its own manifest, which would force this flavor's floor to 24 too -- so this flavor

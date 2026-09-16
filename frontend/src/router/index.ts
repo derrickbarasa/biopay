@@ -71,7 +71,7 @@ const router = createRouter({
           meta: { title: 'Activity history' },
         },
         { path: 'api-access', name: 'api-access', component: () => import('@/pages/ApiAccessPage.vue'), meta: { roles: ['ANCHOR', 'ORGANISATION'], permission: 'ACCESS_USERS', title: 'API Access' } },
-        { path: 'roles', name: 'roles', component: () => import('@/pages/RolesPage.vue'), meta: { roles: ['ANCHOR'], permission: 'ACCESS_ROLES', title: 'Roles & Permissions' } },
+        { path: 'roles', name: 'roles', component: () => import('@/pages/RolesPage.vue'), meta: { roles: ['ANCHOR', 'ORGANISATION'], permission: 'ACCESS_ROLES', title: 'Roles & Permissions' } },
         {
           path: 'organizations',
           name: 'organizations',

@@ -52,6 +52,7 @@ public class Household extends AbstractVerticle {
         eventBus.consumer("CREATE_ALTERNATE", this::createAlternate);
         eventBus.consumer("UPDATE_ALTERNATE", this::updateAlternate);
         eventBus.consumer("DELETE_ALTERNATE", this::deleteAlternate);
+        eventBus.consumer("ACTIVATE_ALTERNATE", this::activateAlternate);
         eventBus.consumer("GET_ALTERNATES", this::retrieveAlternates);
         startPromise.complete();
     }
@@ -361,16 +362,20 @@ public class Household extends AbstractVerticle {
                         return;
                     }
                     Row r = rows.iterator().next();
-                    Future<Integer> alternatesCount = countWhere("alternates", "household_number", householdNumber);
-                    Future<Integer> fingerprintsCount = countWhere("fingerprints", "beneficiary_id", householdNumber);
-                    Future<JsonArray> imageList = imageUrls(householdNumber);
+                    Future<Integer> alternatesCount = countActiveWhere("alternates", "household_number", householdNumber);
+                    Future<JsonArray> fingerprintNumbers = fingerprintNumbers(householdNumber);
+                    Future<Integer> facesCount = countActiveWhere("faces", "beneficiary_id", householdNumber);
+                    Future<JsonArray> imageList = imageUrls(householdNumber, 1);
 
-                    Future.all(alternatesCount, fingerprintsCount, imageList).onComplete(ar -> {
+                    Future.all(alternatesCount, fingerprintNumbers, facesCount, imageList).onComplete(ar -> {
                         JsonObject household = summary(r);
                         if (ar.succeeded()) {
-                            JsonArray images = ar.result().resultAt(2);
+                            JsonArray fingers = ar.result().resultAt(1);
+                            JsonArray images = ar.result().resultAt(3);
                             household.put("alternatesCount", ar.result().resultAt(0))
-                                    .put("fingerprintStatus", ((Integer) ar.result().resultAt(1)) > 0 ? "ENROLLED" : "PENDING")
+                                    .put("fingerprintStatus", fingers.isEmpty() ? "PENDING" : "ENROLLED")
+                                    .put("fingerprintNumbers", fingers)
+                                    .put("faceStatus", ((Integer) ar.result().resultAt(2)) > 0 ? "ENROLLED" : "PENDING")
                                     .put("imageStatus", images.isEmpty() ? "PENDING" : "UPLOADED")
                                     .put("images", images);
                         }
@@ -389,10 +394,33 @@ public class Household extends AbstractVerticle {
                 .recover(err -> Future.succeededFuture(0));
     }
 
+    private Future<Integer> countActiveWhere(String table, String column, String value) {
+        return pool.preparedQuery("SELECT COUNT(*) AS cnt FROM " + table + " WHERE " + column + "=@p1 AND status=1")
+                .execute(Tuple.of(value))
+                .map(rows -> rows.size() == 0 ? 0 : Rows.intVal(rows.iterator().next(), "cnt"))
+                .recover(err -> Future.succeededFuture(0));
+    }
+
+    /** Returns only finger positions, never the encrypted biometric templates themselves. */
+    private Future<JsonArray> fingerprintNumbers(String beneficiaryId) {
+        return pool.preparedQuery("SELECT DISTINCT fingerprint_number FROM fingerprints "
+                        + "WHERE beneficiary_id=@p1 AND status=1 ORDER BY fingerprint_number")
+                .execute(Tuple.of(beneficiaryId))
+                .map(rows -> {
+                    JsonArray results = new JsonArray();
+                    for (Row row : rows) {
+                        results.add(Rows.intVal(row, "fingerprint_number"));
+                    }
+                    return results;
+                })
+                .recover(err -> Future.succeededFuture(new JsonArray()));
+    }
+
     /** Authenticated file URLs for a household's captured photos (served via /files/:filename). */
-    private Future<JsonArray> imageUrls(String householdNumber) {
-        return pool.preparedQuery("SELECT photo_url FROM images WHERE beneficiary_id=@p1 AND status=1 ORDER BY created_at DESC")
-                .execute(Tuple.of(householdNumber))
+    private Future<JsonArray> imageUrls(String beneficiaryId, int beneficiaryType) {
+        return pool.preparedQuery("SELECT photo_url FROM images "
+                        + "WHERE beneficiary_id=@p1 AND beneficiary_type=@p2 AND status=1 ORDER BY created_at DESC")
+                .execute(Tuple.of(beneficiaryId, beneficiaryType))
                 .map(rows -> {
                     JsonArray arr = new JsonArray();
                     for (Row r : rows) {
@@ -1067,23 +1095,50 @@ public class Household extends AbstractVerticle {
                 });
     }
 
+    // ---- ACTIVATE_ALTERNATE ------------------------------------------------------
+
+    private void activateAlternate(Message<Object> message) {
+        JsonObject payload = new JsonObject(message.body().toString());
+        String alternateNumber = payload.getString("alternateNumber", "").trim();
+
+        String sql = "UPDATE alternates SET status=1 WHERE alternate_number=@p1" + (isAnchor(payload)
+                ? " AND (@p2=1 OR organization_code IN (SELECT organization_code FROM organizations WHERE anchor_id=@p3))"
+                : " AND organization_code=@p2");
+        Tuple params = isAnchor(payload)
+                ? Tuple.of(alternateNumber, isSystemAdmin(payload), TenantScope.anchorId(payload))
+                : Tuple.of(alternateNumber, payload.getString("partnerCode", ""));
+
+        pool.preparedQuery(sql)
+                .execute(params)
+                .onFailure(err -> onDbError(message, err))
+                .onSuccess(rows -> {
+                    if (rows.rowCount() > 0) {
+                        reply(message, new JsonObject().put("responseCode", "000").put("responseMessage", "Alternate activated successfully"));
+                    } else {
+                        replyError(message, "Alternate not found or not in your organisation");
+                    }
+                });
+    }
+
     // ---- GET_ALTERNATES (by household) -------------------------------------------
-    // Each alternate carries its own `images` gallery -- the images table's beneficiary_id
-    // is already a generic beneficiary key (household_number OR alternate_number, per the
-    // mobile beneficiaryType convention: 1 = household head, 2 = alternate), so no schema
-    // change is needed to look images up by alternate_number the same way GET_HOUSEHOLD
-    // already does by household_number (see #imageUrls).
+    // Each alternate carries its own `images` gallery, fingerprint coverage and face
+    // enrollment -- the fingerprints/faces/images tables' beneficiary_id is already a generic
+    // beneficiary key (household_number OR alternate_number, per the mobile beneficiaryType
+    // convention: 1 = household head, 2 = alternate), so no schema change is needed to look
+    // these up by alternate_number the same way GET_HOUSEHOLD already does by household_number
+    // (see #imageUrls/#fingerprintNumbers) -- alternates just never surfaced them until now.
 
     private void retrieveAlternates(Message<Object> message) {
         JsonObject payload = new JsonObject(message.body().toString());
         String householdNumber = payload.getString("householdNumber", "").trim();
+        boolean includeInactive = payload.getBoolean("includeInactive", false);
 
-        String sql = "SELECT * FROM alternates WHERE household_number=@p1 AND status=1" + (isAnchor(payload)
-                ? " AND (@p2=1 OR organization_code IN (SELECT organization_code FROM organizations WHERE anchor_id=@p3))"
-                : " AND organization_code=@p2") + " ORDER BY alternate_rank";
+        String sql = "SELECT * FROM alternates WHERE household_number=@p1 AND (@p2=1 OR status=1)" + (isAnchor(payload)
+                ? " AND (@p3=1 OR organization_code IN (SELECT organization_code FROM organizations WHERE anchor_id=@p4))"
+                : " AND organization_code=@p3") + " ORDER BY status DESC, alternate_rank, created_at";
         Tuple params = isAnchor(payload)
-                ? Tuple.of(householdNumber, isSystemAdmin(payload), TenantScope.anchorId(payload))
-                : Tuple.of(householdNumber, payload.getString("partnerCode", ""));
+                ? Tuple.of(householdNumber, includeInactive, isSystemAdmin(payload), TenantScope.anchorId(payload))
+                : Tuple.of(householdNumber, includeInactive, payload.getString("partnerCode", ""));
 
         pool.preparedQuery(sql)
                 .execute(params)
@@ -1093,15 +1148,27 @@ public class Household extends AbstractVerticle {
                     for (Row r : rows) {
                         rowList.add(r);
                     }
-                    java.util.List<Future<?>> imageFutures = new java.util.ArrayList<>();
+                    java.util.List<Future<?>> rowFutures = new java.util.ArrayList<>();
                     for (Row r : rowList) {
-                        imageFutures.add(imageUrls(Rows.str(r, "alternate_number")));
+                        String alternateNumber = Rows.str(r, "alternate_number");
+                        rowFutures.add(Future.all(
+                                imageUrls(alternateNumber, 2),
+                                fingerprintNumbers(alternateNumber),
+                                countActiveWhere("faces", "beneficiary_id", alternateNumber)));
                     }
-                    Future.all(imageFutures).onComplete(ar -> {
+                    Future.all(rowFutures).onComplete(ar -> {
                         JsonArray results = new JsonArray();
                         for (int i = 0; i < rowList.size(); i++) {
                             Row r = rowList.get(i);
-                            JsonArray images = ar.succeeded() ? (JsonArray) ar.result().resultAt(i) : new JsonArray();
+                            JsonArray images = new JsonArray();
+                            JsonArray fingers = new JsonArray();
+                            int faceCount = 0;
+                            if (ar.succeeded()) {
+                                io.vertx.core.CompositeFuture perRow = ar.result().resultAt(i);
+                                images = perRow.resultAt(0);
+                                fingers = perRow.resultAt(1);
+                                faceCount = perRow.resultAt(2);
+                            }
                             results.add(new JsonObject()
                                     .put("alternateNumber", Rows.str(r, "alternate_number"))
                                     .put("alternateName", Rows.str(r, "alternate_name"))
@@ -1111,7 +1178,10 @@ public class Household extends AbstractVerticle {
                                     .put("gender", Rows.str(r, "gender"))
                                     .put("status", Rows.intVal(r, "status"))
                                     .put("createdAt", Rows.str(r, "created_at"))
-                                    .put("images", images));
+                                    .put("images", images)
+                                    .put("fingerprintStatus", fingers.isEmpty() ? "PENDING" : "ENROLLED")
+                                    .put("fingerprintNumbers", fingers)
+                                    .put("faceStatus", faceCount > 0 ? "ENROLLED" : "PENDING"));
                         }
                         reply(message, new JsonObject()
                                 .put("responseCode", "000")

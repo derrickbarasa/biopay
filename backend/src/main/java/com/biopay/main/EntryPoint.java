@@ -48,6 +48,8 @@ import com.biopay.utilities.PermissionPolicy;
  *       session-establishing processing codes (login, refresh).</li>
  *   <li>{@code /biopay/downloads/:filename} -- unauthenticated. Serves the
  *       Android agent APKs from {@link AppReleaseStore}.</li>
+ *   <li>{@code /biopay/downloads/version/:filename} -- unauthenticated. Serves
+ *       that APK's latest-version metadata, polled by the installed app.</li>
  *   <li>{@code /biopay/api/v1/req} -- JWT-protected. Every other processing
  *       code (organisations, officers, households, payments, payroll,
  *       dashboard, biometric sync) is dispatched from here by name over the
@@ -210,6 +212,32 @@ public class EntryPoint extends AbstractVerticle {
             }
         });
 
+        // ---- /biopay/downloads/version/:filename (public: latest-version metadata) --------
+        // Polled by the installed app itself (AppUpdateManager) to learn a newer build exists,
+        // so it's unauthenticated for the same reason as the APK route above: it must work
+        // before/without a session. `filename` is the APK's own name -- the sidecar it looks
+        // up is that name plus ".version.json" (see AppReleaseStore). A missing sidecar just
+        // means no release has been published with update metadata yet, not an error.
+
+        router.route("/biopay/downloads/version/:filename").handler(rtc -> {
+            String filename = rtc.pathParam("filename");
+            if (filename == null || !filename.matches("[A-Za-z0-9._-]+\\.apk")) {
+                rtc.response().setStatusCode(400).end();
+                return;
+            }
+            if (!AppReleaseStore.versionInfoExists(filename)) {
+                rtc.response().setStatusCode(404).end();
+                return;
+            }
+            try {
+                byte[] bytes = AppReleaseStore.readVersionInfo(filename);
+                rtc.response().putHeader("Content-Type", "application/json")
+                        .end(io.vertx.core.buffer.Buffer.buffer(bytes));
+            } catch (Exception ex) {
+                rtc.response().setStatusCode(404).end();
+            }
+        });
+
         // ---- /biopay/api/v1/req (JWT-protected: everything else) ----------
 
         router.route("/biopay/api/v1/*").handler(CorsHandler.create()
@@ -342,8 +370,7 @@ public class EntryPoint extends AbstractVerticle {
             response.setStatusCode(400).end(badRequest("targetAnchorId must identify an anchor").toString());
             return;
         }
-        Datasource.pool().preparedQuery(
-                        "SELECT 1 AS allowed FROM users WHERE id=@p1 AND user_scope='ANCHOR' AND id=anchor_id")
+        Datasource.pool().preparedQuery("SELECT 1 AS allowed FROM anchors WHERE id=@p1")
                 .execute(Tuple.of(targetAnchorId))
                 .onFailure(error -> response.setStatusCode(503).end(new JsonObject()
                         .put("responseCode", "503").put("responseMessage", "Unable to verify the selected anchor").toString()))

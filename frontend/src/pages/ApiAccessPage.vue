@@ -48,7 +48,8 @@ async function load() {
     roles.value = r.results ?? []
     orgs.value = o.results ?? []
     if (auth.isSystemAdmin) {
-      const a = await dispatch<{ results: Anchor[] }>('GET_ANCHORS')
+      // A deactivated anchor can't be picked for a brand-new API client.
+      const a = await dispatch<{ results: Anchor[] }>('GET_ANCHORS', { status: 1 })
       anchors.value = a.results ?? []
     }
   } catch (e) {
@@ -153,7 +154,7 @@ onMounted(load)
       </v-data-table>
     </v-card>
 
-    <v-dialog v-model="dialog" max-width="560" persistent>
+    <v-dialog v-model="dialog" max-width="720" persistent>
       <v-card class="pa-2">
         <dialog-close-button @close="dialog = false" />
         <template v-if="createdCredential">
@@ -173,12 +174,20 @@ onMounted(load)
           <v-card-title>New API client</v-card-title>
           <v-card-subtitle>Generates a key ID and secret; no password or OTP is required to use it.</v-card-subtitle>
           <v-card-text class="form-grid">
-            <v-select v-if="auth.isSystemAdmin" v-model="form.userScope" :items="scopeOptions" label="Access scope" variant="outlined" />
-            <v-select v-else-if="auth.isAnchor" v-model="form.userScope" :items="scopeOptions" label="Access scope" variant="outlined" />
-            <v-select v-if="auth.isSystemAdmin" v-model="form.targetAnchorId" :items="anchors" item-title="name" item-value="id" label="Anchor" variant="outlined" placeholder="Choose an anchor" @update:model-value="selectTargetAnchor" />
-            <v-select v-if="form.userScope === 'ORGANISATION' && auth.isAnchor" v-model="form.organisationCode" :items="availableOrganisations" item-title="name" item-value="organisationCode" label="Organisation" variant="outlined" placeholder="Choose an organisation" :disabled="auth.isSystemAdmin && !form.targetAnchorId" />
-            <v-text-field v-model="form.name" label="Name" placeholder="e.g. Reporting integration" variant="outlined" required class="wide" />
-            <v-select v-model="form.roleId" :items="availableRoles" item-title="name" item-value="id" label="Role" variant="outlined" required class="wide" />
+            <!-- System admin has up to 3 fields here (scope + anchor + organisation), so this row
+                 is 3-across; an anchor admin only ever has up to 2 (scope + organisation, no anchor
+                 picker -- their own anchor is already known), so it's 2-across instead, matching
+                 the Name/Role row below rather than leaving a dead third column. -->
+            <div :class="auth.isSystemAdmin ? 'row-3' : 'row-2'">
+              <v-select v-if="auth.isSystemAdmin" v-model="form.userScope" :items="scopeOptions" label="Access scope" variant="outlined" />
+              <v-select v-else-if="auth.isAnchor" v-model="form.userScope" :items="scopeOptions" label="Access scope" variant="outlined" />
+              <v-select v-if="auth.isSystemAdmin" v-model="form.targetAnchorId" :items="anchors" item-title="name" item-value="id" label="Anchor" variant="outlined" placeholder="Choose an anchor" @update:model-value="selectTargetAnchor" />
+              <v-select v-if="form.userScope === 'ORGANISATION' && auth.isAnchor" v-model="form.organisationCode" :items="availableOrganisations" item-title="name" item-value="organisationCode" label="Organisation" variant="outlined" placeholder="Choose an organisation" :disabled="auth.isSystemAdmin && !form.targetAnchorId" />
+            </div>
+            <div class="row-2">
+              <v-text-field v-model="form.name" label="Name" placeholder="e.g. Reporting integration" variant="outlined" required />
+              <v-select v-model="form.roleId" :items="availableRoles" item-title="name" item-value="id" label="Role" variant="outlined" required />
+            </div>
           </v-card-text>
           <v-card-actions><v-spacer /><v-btn variant="flat" color="error" @click="dialog = false">Cancel</v-btn><v-btn variant="flat" color="secondary" :loading="saving" @click="create">Create</v-btn></v-card-actions>
         </template>
@@ -188,11 +197,13 @@ onMounted(load)
 </template>
 <style scoped>
 .admin-page{width:100%}.admin-head{display:flex;justify-content:space-between;gap:20px;align-items:flex-start;margin-bottom:24px}.admin-head h1{font-size:2rem;letter-spacing:-.04em}.admin-head p{color:#64748b;max-width:52ch}.admin-card{border-radius:18px!important;overflow:hidden}
-.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:4px 16px;padding:8px 4px}.form-grid .wide{grid-column:1/-1}
+.form-grid{display:flex;flex-direction:column;gap:6px;padding:8px 4px}
+.row-3{display:grid;grid-template-columns:repeat(3,1fr);gap:4px 16px}
+.row-2{display:grid;grid-template-columns:repeat(2,1fr);gap:4px 16px}
 .key-id{font-size:.8rem}
 .credential-label{margin:0 0 4px;font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#64748b}
 .credential-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;background:#f8fafc}
 .credential-row code{overflow-wrap:anywhere;font-size:.82rem}
 .empty-state{display:flex;flex-direction:column;align-items:center;gap:8px;padding:40px 20px;color:#64748b;text-align:center}
-@media(max-width:700px){.form-grid{grid-template-columns:1fr}.form-grid .wide{grid-column:auto}}
+@media(max-width:700px){.row-3,.row-2{grid-template-columns:1fr}}
 </style>

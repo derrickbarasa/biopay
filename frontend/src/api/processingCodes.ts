@@ -91,6 +91,7 @@ export type ProcessingCode =
   | 'CREATE_ALTERNATE'
   | 'UPDATE_ALTERNATE'
   | 'DELETE_ALTERNATE'
+  | 'ACTIVATE_ALTERNATE'
   | 'GET_ALTERNATES'
   // organisation modules
   | 'GET_ORGANIZATION_MODULES'

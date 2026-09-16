@@ -82,16 +82,16 @@ const allSubsHeaders = [
   { title: 'Plan', key: 'planCode' },
   { title: 'Expires', key: 'expiresAt' },
   { title: 'Days to expiry', key: 'daysToExpiry' },
-  { title: 'Actions', key: 'actions', sortable: false, align: 'start' as const },
+  { title: 'Actions', key: 'actions', sortable: false, align: 'start' as const, width: 112, minWidth: 112, fixed: true, nowrap: true },
 ]
 
 const headers = [
-  { title: 'Invoice #', key: 'invoiceNumber' },
+  { title: 'Invoice Code', key: 'invoiceNumber', minWidth: 144, nowrap: true },
   { title: 'Period', key: 'period' },
   { title: 'Amount', key: 'amount' },
   { title: 'Status', key: 'status' },
   { title: 'Issued', key: 'createdAt' },
-  { title: 'Actions', key: 'actions', sortable: false, align: 'start' as const },
+  { title: 'Actions', key: 'actions', sortable: false, align: 'start' as const, width: 112, minWidth: 112, fixed: true, nowrap: true },
 ]
 
 function currency(amount: number | undefined, code: string | undefined) {
@@ -227,8 +227,9 @@ async function downloadReceipt(invoice: Invoice) {
     }
     w.document.write(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Receipt ${escapeHtml(r.invoiceNumber)}</title>
       <style>
+        @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800&display=swap');
         * { box-sizing: border-box; }
-        body { margin: 0; padding: 32px; background: #f8fafc; color: #0f172a; font-family: Ubuntu, "Segoe UI", sans-serif; font-variant-numeric: tabular-nums; }
+        body { margin: 0; padding: 32px; background: #f8fafc; color: #0f172a; font-family: Outfit, sans-serif; font-variant-numeric: tabular-nums; }
         .receipt { width: 100%; max-width: 780px; margin: 0 auto; overflow: hidden; background: #fff; border: 1px solid #cbd5e1; border-radius: 16px; }
         .header { display: flex; align-items: center; justify-content: space-between; gap: 32px; padding: 28px 34px; border-bottom: 1px solid #e2e8f0; }
         .logo { display: block; width: 200px; height: auto; }
@@ -269,7 +270,7 @@ async function downloadReceipt(invoice: Invoice) {
             </div>
             <dl class="details">
               <div class="row"><dt>Customer</dt><dd>${escapeHtml(r.anchorName || 'Anchor subscription')}</dd></div>
-              <div class="row"><dt>Invoice number</dt><dd>${escapeHtml(r.invoiceNumber)}</dd></div>
+              <div class="row"><dt>Invoice code</dt><dd>${escapeHtml(r.invoiceNumber)}</dd></div>
               <div class="row"><dt>Plan</dt><dd>${escapeHtml(displayPlan(r.planCode, r.periodDays))}</dd></div>
               <div class="row"><dt>Billing period</dt><dd>${escapeHtml(displayDate(r.periodStart))} &ndash; ${escapeHtml(displayDate(r.periodEnd))}</dd></div>
               <div class="row"><dt>Status</dt><dd>${escapeHtml(r.status)}</dd></div>

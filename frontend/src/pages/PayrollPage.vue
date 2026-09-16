@@ -68,7 +68,7 @@ const scopeReady = computed(() => true)
 // Fixed widths keep long values ("PENDING_APPROVAL", a two-date period) from clipping
 // or wrapping; the table scrolls horizontally instead (both table wrappers support it).
 const headers = [
-  { title: 'Cycle', key: 'cycleCode', width: 190, nowrap: true },
+  { title: 'Cycle Code', key: 'cycleCode', width: 190, nowrap: true },
   { title: 'Organization', key: 'organisationCode', width: 160, nowrap: true },
   { title: 'Period', key: 'period', width: 190, nowrap: true },
   { title: 'Households', key: 'householdCount', width: 90 },

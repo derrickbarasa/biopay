@@ -25,6 +25,15 @@
             android:textColor="@color/bp_warning"
             android:textSize="13sp"
             android:visibility="gone" />
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnCaptureBeneficiary"
+            style="@style/BioPay.PrimaryButton"
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:layout_marginTop="10dp"
+            android:text="@string/payment_verify_capture_now"
+            app:icon="@drawable/ic_fingerprint"
+            android:visibility="gone" />
         <LinearLayout
             android:id="@+id/verifyButtonRow"
             android:layout_width="match_parent"

@@ -15,18 +15,18 @@ colors:
   cancel-red: "#D64545"
 typography:
   headline:
-    fontFamily: "Ubuntu, sans-serif"
+    fontFamily: "Outfit, sans-serif"
     fontSize: "clamp(1.45rem, 1.2rem + 0.8vw, 1.9rem)"
     fontWeight: 750
     lineHeight: 1.18
     letterSpacing: "-0.03em"
   body:
-    fontFamily: "Ubuntu, sans-serif"
+    fontFamily: "Outfit, sans-serif"
     fontSize: "0.9375rem"
     fontWeight: 400
     lineHeight: 1.5
   label:
-    fontFamily: "Ubuntu, sans-serif"
+    fontFamily: "Outfit, sans-serif"
     fontSize: "0.72rem"
     fontWeight: 700
     lineHeight: 1.3
@@ -77,7 +77,7 @@ The palette is restrained: cool neutrals carry most of the interface, deep teal 
 
 ## Typography
 
-Ubuntu is the established display and body face. Headlines are compact and strongly weighted; labels stay small but use sufficient weight and contrast for scanning.
+Outfit is the established display and body face. Headlines are compact and strongly weighted; labels stay small but use sufficient weight and contrast for scanning.
 
 **The Data Stays Still Rule.** Amounts, counts, dates, and ranking indices use tabular numerals so changing values do not disturb alignment.
 
@@ -129,6 +129,7 @@ Organisation comparison uses exact values above six-pixel teal tracks. Tracks en
 
 - **Do** show only data and actions the signed-in role can access.
 - **Do** keep monetary values exact in supporting detail even when headline values are compacted.
+- **Do** label generated identifiers as entity-specific codes in user-facing copy (for example, Household Code and Alternate Code) while preserving legacy API and database field names for compatibility.
 - **Do** use concise empty-state copy that explains what activity will populate the view.
 - **Do** collapse grids predictably at established breakpoints.
 

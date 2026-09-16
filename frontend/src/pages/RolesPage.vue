@@ -7,7 +7,7 @@ import { useAuthStore } from '@/stores/auth'
 import { PERMISSION_GROUPS, isLegacyPermission, permissionActionLabel } from '@/constants/permissionCatalog'
 
 interface Permission { id: number; name: string; displayName?: string; groupKey?: string; description: string; systemDefined?: boolean }
-interface Role { id: number; name: string; description: string; scope: string; permissions: string[]; status: number; builtIn?: boolean; systemRole?: boolean; anchorId?: number }
+interface Role { id: number; name: string; description: string; scope: string; permissions: string[]; status: number; builtIn?: boolean; systemRole?: boolean; undeletable?: boolean; anchorId?: number }
 interface Anchor { id: number; name: string }
 interface PermissionItem { permission: Permission; actionLabel: string }
 interface PermissionGroup { key: string; label: string; description: string; icon: string; items: PermissionItem[] }
@@ -17,6 +17,44 @@ const auth = useAuthStore()
 const { confirmAction } = useConfirm()
 
 const SENSITIVE_CODES = new Set(['PAY_ONLINE', 'ACCESS_PAYMENTS', 'ACCESS_PAYMENT_CYCLES', 'ACCESS_VOUCHERS'])
+
+// Starting points for common BioPay roles. "Use template" opens the create-role editor with
+// these permissions pre-selected -- an anchor/org still reviews and adjusts before saving, it
+// never creates the role silently. Codes reference the real catalogue in permissionCatalog.ts;
+// any not present on this installation (e.g. a permission an anchor admin can't see) are dropped.
+interface RoleTemplate { key: string; name: string; description: string; icon: string; permissionCodes: string[] }
+const ROLE_TEMPLATES: RoleTemplate[] = [
+  {
+    key: 'FIELD_OFFICER', name: 'Field Officer', icon: 'mdi-account-hard-hat-outline',
+    description: 'Front-line registration: households, alternates and attendance at assigned locations.',
+    permissionCodes: ['ACCESS_HOUSEHOLDS', 'ACCESS_ALTERNATES', 'ACCESS_ATTENDANCE'],
+  },
+  {
+    key: 'ANCHOR_COORDINATOR', name: 'Anchor Coordinator', icon: 'mdi-account-tie-outline',
+    description: 'Runs an anchor day-to-day: everything a field officer does, plus payments, vouchers and reports.',
+    permissionCodes: ['ACCESS_HOUSEHOLDS', 'ACCESS_ALTERNATES', 'ACCESS_ATTENDANCE', 'ACCESS_PAYMENTS', 'ACCESS_VOUCHERS', 'VIEW_REPORTS', 'DOWNLOAD_REPORTS', 'ACCESS_LOCATIONS'],
+  },
+  {
+    key: 'PAYMENTS_OFFICER', name: 'Payments Officer', icon: 'mdi-cash-multiple',
+    description: 'Processes disbursements: payments, payment cycles, vouchers and online pay-outs.',
+    permissionCodes: ['ACCESS_PAYMENTS', 'PAY_ONLINE', 'ACCESS_PAYMENT_CYCLES', 'ACCESS_VOUCHERS', 'VIEW_REPORTS'],
+  },
+  {
+    key: 'FINANCE_OFFICER', name: 'Finance Officer', icon: 'mdi-finance',
+    description: 'Headquarters finance: payment cycles, subscription/billing and full reporting.',
+    permissionCodes: ['ACCESS_PAYMENTS', 'ACCESS_PAYMENT_CYCLES', 'ACCESS_SUBSCRIPTION', 'VIEW_REPORTS', 'DOWNLOAD_REPORTS'],
+  },
+  {
+    key: 'COMPLIANCE_AUDITOR', name: 'Compliance / Auditor', icon: 'mdi-shield-search-outline',
+    description: 'Read-only oversight: views and downloads reports, no operational access.',
+    permissionCodes: ['VIEW_REPORTS', 'DOWNLOAD_REPORTS'],
+  },
+  {
+    key: 'USER_ADMINISTRATOR', name: 'User Administrator', icon: 'mdi-account-cog-outline',
+    description: 'Manages who has access: users, roles, permissions and field officers.',
+    permissionCodes: ['ACCESS_USERS', 'ACCESS_ROLES', 'ACCESS_PERMISSIONS', 'ACCESS_SUPERVISORS'],
+  },
+]
 
 const loading = ref(false)
 const saving = ref(false)
@@ -43,14 +81,23 @@ function roleAnchorName(role: Role) { return role.anchorId != null ? anchorNameB
 // of it (forked into an anchor-owned row server-side on first save, see Administration#saveRole),
 // but not "Anchor Administrator" (their own role -- editable-by-self risks a self-lockout) or
 // the system-only "Super Admin" role, which anchor admins never see in their role list anyway.
+// Organisation administrator: the same "Organisation Administrator" exception, one tier deeper
+// -- they may fork it into an org-owned copy the same way an anchor forks the shared template
+// (see Administration#saveRole's isOrgActor branch); they never see "Anchor Administrator" or
+// "Platform Owner" in their role list at all, so no extra exclusion is needed here for those.
 const isBuiltInRole = computed(() => {
   if (auth.isSystemAdmin) return false
   const role = selectedRole.value
   if (!role?.builtIn) return false
-  return !(auth.isAnchorAdministrator && role.scope === 'ORGANISATION')
+  return !((auth.isAnchorAdministrator || auth.isOrganisation) && role.scope === 'ORGANISATION')
 })
 const isUnlimitedRole = computed(() => !auth.isSystemAdmin && !!selectedRole.value?.systemRole)
-const isFixedScopeRole = computed(() => selectedRole.value?.scope === 'SYSTEM')
+// An organisation administrator can only ever grant organisation-wide access -- Anchor scope
+// would reach beyond their own organisation, so their scope picker is always locked to it,
+// not just once a role is selected (unlike the SYSTEM-scope lock below, which only matters when
+// editing an existing System role since nobody but a Super Admin can create one in the first
+// place, so there's no equivalent "locked while creating" case to cover).
+const isFixedScopeRole = computed(() => selectedRole.value?.scope === 'SYSTEM' || auth.isOrganisation)
 const canSave = computed(() => auth.can('ACCESS_ROLES') && (!auth.isSystemAdmin || form.roleId !== null || form.scope === 'SYSTEM' || !!form.anchorId) && !isBuiltInRole.value)
 const selectedPermissionCount = computed(() => form.permissionIds.filter((id) => assignablePermissions.value.some((permission) => permission.id === id)).length)
 
@@ -99,7 +146,7 @@ const headers = computed(() => [
   { title: 'Scope', key: 'scope' },
   { title: 'Permissions', key: 'permissionCount' },
   ...(auth.isSystemAdmin ? [{ title: 'Anchor', key: 'anchorName' }] : []),
-  { title: 'Actions', key: 'actions', sortable: false, align: 'start' as const },
+  { title: 'Actions', key: 'actions', sortable: false, align: 'start' as const, width: 104, minWidth: 104, fixed: true, nowrap: true },
 ])
 const tableRows = computed(() => sortedRoles.value.map((role) => ({
   ...role,
@@ -148,6 +195,27 @@ function openEdit(role: Role) {
 
 function createRole() {
   Object.assign(form, { roleId: null, name: '', description: '', scope: 'ORGANISATION', permissionIds: [], anchorId: null })
+  permissionSearch.value = ''
+  openModules.value = permissionGroups.value.map((g) => g.key)
+  dialog.value = true
+}
+
+const displayedTemplates = computed(() => ROLE_TEMPLATES.map((template) => {
+  const matched = permissions.value.filter((permission) => template.permissionCodes.includes(permission.name) && !isLegacyPermission(permission.name))
+  const moneyMovingCount = matched.filter((permission) => isSensitive(permission.name)).length
+  const exists = sortedRoles.value.some((role) => role.name.toLowerCase() === template.name.toLowerCase())
+  return { ...template, matched, moneyMovingCount, exists }
+}))
+
+function useTemplate(template: (typeof displayedTemplates.value)[number]) {
+  Object.assign(form, {
+    roleId: null,
+    name: template.name,
+    description: template.description,
+    scope: 'ORGANISATION',
+    permissionIds: template.matched.map((permission) => permission.id),
+    anchorId: null,
+  })
   permissionSearch.value = ''
   openModules.value = permissionGroups.value.map((g) => g.key)
   dialog.value = true
@@ -259,20 +327,42 @@ onMounted(async () => {
     </div>
 
     <v-card variant="flat" border>
-      <v-data-table :headers="headers" :items="tableRows" :search="tableSearch" :loading="loading">
+      <v-data-table class="roles-table" :headers="headers" :items="tableRows" :search="tableSearch" :loading="loading">
         <template #item.scope="{ item }"><v-chip size="small" variant="tonal">{{ scopeLabel(item.scope) }}</v-chip></template>
         <template #item.permissionCount="{ item }">{{ item.systemRole ? 'Unlimited' : item.permissionCount }}</template>
         <template #item.description="{ item }">{{ item.description || '—' }}</template>
         <template #item.actions="{ item }">
           <v-btn icon="mdi-pencil" variant="text" size="small" :aria-label="`Edit ${item.name}`" @click="openEdit(item)" />
           <v-btn
-            v-if="canSave && !item.builtIn && !item.systemRole" icon="mdi-delete-outline" variant="text" size="small" color="error"
+            v-if="auth.can('ACCESS_ROLES') && !item.undeletable" icon="mdi-delete-outline" variant="text" size="small" color="error"
             :aria-label="`Delete ${item.name}`" @click="removeRole(item)"
           />
         </template>
         <template #no-data>No roles yet. Create the first one.</template>
       </v-data-table>
     </v-card>
+
+    <section v-if="auth.can('ACCESS_ROLES')" class="templates-section">
+      <div class="templates-heading">
+        <h2>Templates</h2>
+        <p>Starting points for common roles. Using one opens a new role with its permissions already selected — adjust them before you create it.</p>
+      </div>
+      <div class="templates-grid">
+        <v-card v-for="template in displayedTemplates" :key="template.key" variant="flat" border class="template-card">
+          <div class="template-card-header">
+            <v-icon :icon="template.icon" size="20" />
+            <span class="template-name">{{ template.name }}</span>
+            <v-chip v-if="template.exists" size="x-small" variant="tonal">Role exists</v-chip>
+          </div>
+          <p class="template-description">{{ template.description }}</p>
+          <div class="template-meta">
+            <v-chip size="small" variant="tonal">{{ template.matched.length }} permission{{ template.matched.length === 1 ? '' : 's' }}</v-chip>
+            <v-chip v-if="template.moneyMovingCount" size="small" variant="tonal" color="error">{{ template.moneyMovingCount }} money-moving</v-chip>
+          </div>
+          <v-btn size="small" variant="outlined" prepend-icon="mdi-content-copy" class="mt-3" @click="useTemplate(template)">Use template</v-btn>
+        </v-card>
+      </div>
+    </section>
 
     <v-dialog v-model="dialog" max-width="760" scrollable>
       <v-card class="role-editor" variant="flat" border>
@@ -291,7 +381,9 @@ onMounted(async () => {
               v-model="form.scope"
               :items="auth.isSystemAdmin
                 ? [{ title: 'Organisation', value: 'ORGANISATION' }, { title: 'Anchor', value: 'ANCHOR' }, { title: 'System', value: 'SYSTEM' }]
-                : [{ title: 'Organisation', value: 'ORGANISATION' }, { title: 'Anchor', value: 'ANCHOR' }]"
+                : auth.isOrganisation
+                  ? [{ title: 'Organisation', value: 'ORGANISATION' }]
+                  : [{ title: 'Organisation', value: 'ORGANISATION' }, { title: 'Anchor', value: 'ANCHOR' }]"
               label="Access scope" :disabled="isBuiltInRole || isFixedScopeRole" density="compact" hide-details="auto"
             />
             <v-select
@@ -352,7 +444,7 @@ onMounted(async () => {
 
         <v-card-actions class="editor-actions">
           <p v-if="!canSave" class="lock-copy">{{ isUnlimitedRole ? 'Platform Owner access is fixed by the platform.' : isBuiltInRole ? 'This role is managed by BioPay policy.' : auth.isSystemAdmin && form.roleId === null && form.scope !== 'SYSTEM' && !form.anchorId ? 'Choose an anchor for this role.' : 'You can view roles but not change them.' }}</p>
-          <v-btn v-if="canSave && form.roleId !== null" variant="outlined" color="error" @click="removeRole(selectedRole!)">Delete role</v-btn>
+          <v-btn v-if="form.roleId !== null && !selectedRole?.undeletable && auth.can('ACCESS_ROLES')" variant="outlined" color="error" @click="removeRole(selectedRole!)">Delete role</v-btn>
           <v-spacer />
           <v-btn variant="flat" color="error" @click="dialog = false">Cancel</v-btn>
           <v-btn variant="flat" color="secondary" :loading="saving" :disabled="!canSave" @click="save">{{ form.roleId === null ? 'Create role' : 'Save changes' }}</v-btn>
@@ -387,6 +479,16 @@ onMounted(async () => {
 
 <style scoped>
 .roles-page { width: 100%; }
+.roles-table :deep(table) { min-width: 980px; }
+.templates-section { margin-top: 28px; }
+.templates-heading h2 { font-size: 1.1rem; font-weight: 700; color: #0f172a; letter-spacing: -.02em; }
+.templates-heading p { color: #64748b; font-size: .85rem; margin: 4px 0 14px; }
+.templates-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; }
+.template-card { padding: 16px; display: flex; flex-direction: column; }
+.template-card-header { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.template-name { font-weight: 650; font-size: .92rem; color: #1e293b; }
+.template-description { color: #64748b; font-size: .8rem; margin: 8px 0 0; flex: 1; }
+.template-meta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
 .page-heading h1 { color: #0f172a; letter-spacing: -.025em; }
 .page-heading p { color: #64748b; font-size: .9rem; margin: 5px 0 0; }
 .role-editor { padding: clamp(18px, 2.4vw, 26px); border-color: #cbd5e1 !important; background: #fff !important; }

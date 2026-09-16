@@ -23,6 +23,30 @@ html, body, #app {
   display: none;
 }
 
+/* Exception: a table's own horizontal scroller (Vuetify's .v-table__wrapper, used by
+   both v-table and v-data-table) is the one place a hidden scrollbar actively hides a
+   capability -- wide tables (e.g. the alternates table) scroll sideways with nothing on
+   screen to suggest it. Kept thin/quiet rather than the bulky OS default, but visible. */
+.v-table__wrapper {
+  scrollbar-width: thin;
+  -ms-overflow-style: auto;
+}
+.v-table__wrapper::-webkit-scrollbar {
+  display: block;
+  height: 7px;
+  width: 7px;
+}
+.v-table__wrapper::-webkit-scrollbar-track {
+  background: transparent;
+}
+.v-table__wrapper::-webkit-scrollbar-thumb {
+  background-color: #cbd5e1;
+  border-radius: 4px;
+}
+.v-table__wrapper::-webkit-scrollbar-thumb:hover {
+  background-color: #94a3b8;
+}
+
 /* Vuetify's own components size themselves in rem against the document root.
    DefaultLayout toggles this class on <html> only while the authenticated app
    shell is mounted, so the dashboard/sidebar/tables shrink proportionally to
@@ -36,19 +60,19 @@ body {
   margin: 0;
   background: #f1f5f9;
   color: #0f172a;
-  font-family: 'Inter', sans-serif;
+  font-family: 'Outfit', sans-serif;
 }
 
 :root {
   --bp-radius-surface: 10px;
   --bp-radius-control: 8px;
-  --bp-dialog-header-bg: #f0fdfa;
-  --bp-dialog-header-border: #ccfbf1;
+  --bp-dialog-header-bg: #ffffff;
+  --bp-dialog-header-border: #e2e8f0;
   --bp-action-disabled-bg: #fde7b0;
   --bp-action-disabled-text: #92400e;
 }
 
-.v-application { font-family: 'Inter', sans-serif !important; }
+.v-application { font-family: 'Outfit', sans-serif !important; }
 .v-application .dashboard-main .v-card,
 .v-overlay[role='dialog'] .v-card,
 .v-application > .v-card { border-radius: var(--bp-radius-surface) !important; border-color: #e2e8f0 !important; }
@@ -151,8 +175,12 @@ body {
   z-index: 3;
   top: 10px;
   right: 10px;
-  background: #f1f5f9 !important;
+  background: transparent !important;
+  box-shadow: none !important;
   color: #334155 !important;
+}
+.dialog-close-button:hover {
+  background: #f1f5f9 !important;
 }
 .v-overlay[role='dialog'] .v-card-title { padding-right: 56px !important; }
 .v-overlay[role='dialog'] .v-btn--variant-text:not(.v-btn--icon) {

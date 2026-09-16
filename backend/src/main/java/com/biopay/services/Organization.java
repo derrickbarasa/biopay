@@ -160,7 +160,7 @@ public class Organization extends AbstractVerticle {
                 + "AND (anchor_id=@p6 OR anchor_id IS NULL) ORDER BY CASE WHEN anchor_id=@p6 THEN 0 ELSE 1 END), "
                 + "1, 1, @p6, 'ORGANISATION', 1, @p7, GETDATE(), GETDATE())";
         int targetAnchorId = Integer.parseInt(anchorIdVal.toString());
-        pool.preparedQuery("SELECT 1 AS found FROM users WHERE id=@p1 AND user_scope='ANCHOR' AND id=anchor_id AND status=1")
+        pool.preparedQuery("SELECT 1 AS found FROM anchors WHERE id=@p1 AND status=1")
                 .execute(Tuple.of(targetAnchorId))
                 .onFailure(err -> onDbError(message, err))
                 .onSuccess(anchorRows -> {
@@ -276,6 +276,14 @@ public class Organization extends AbstractVerticle {
             replyError(message, "organisationCode is required");
             return;
         }
+        // The frontend already requires this, but that's bypassable by anyone calling the API
+        // directly -- and a blank name here shows as an unlabelled row in every organisation
+        // picker, the same failure mode UPDATE_ANCHOR had (see Administration#updateAnchor).
+        String name = payload.getString("name", "").trim();
+        if (name.isEmpty()) {
+            replyError(message, "Organisation name is required");
+            return;
+        }
 
         String verificationMethod = strOrEmpty(payload.getString("verificationMethod")).trim().toUpperCase();
         if (!verificationMethod.isEmpty() && !"BIOMETRIC".equals(verificationMethod)
@@ -290,7 +298,7 @@ public class Organization extends AbstractVerticle {
                 + "AND (@p10=1 OR anchor_id=@p11)";
         pool.preparedQuery(sql)
                 .execute(Tuple.of(
-                        payload.getString("name", "").trim(),
+                        name,
                         payload.getString("authorisedName", "").trim(),
                         payload.getString("authorisedEmail", "").trim(),
                         payload.getString("authorisedContact", "").trim(),
@@ -369,7 +377,7 @@ public class Organization extends AbstractVerticle {
         // inside this asynchronous success callback, which left the event-bus
         // request unanswered and made the browser wait until its HTTP timeout.
         pool.preparedQuery("SELECT p.*, a.anchor_name FROM organizations p "
-                        + "LEFT JOIN users a ON a.id=p.anchor_id AND a.user_scope='ANCHOR' AND a.id=a.anchor_id "
+                        + "LEFT JOIN anchors a ON a.id=p.anchor_id "
                         + "WHERE p.organization_code=@p1 AND (@p2=1 OR p.anchor_id=@p3 OR p.organization_code=@p4)")
                 .execute(Tuple.of(partnerId, isSystemAdmin(payload), TenantScope.anchorId(payload), payload.getString("partnerCode", "")))
                 .onFailure(err -> onDbError(message, err))
@@ -392,20 +400,24 @@ public class Organization extends AbstractVerticle {
 
         String sql;
         Tuple params;
+        // The blank-name guards below are a safety net for rows written before UPDATE_ORGANIZATION
+        // required a non-empty name (see #update above) -- without it a blank/whitespace org name
+        // sorts first and shows as an unlabelled row in every organisation picker. Left off the
+        // single-organisation lookup below (its own `else` branch), which must resolve regardless.
         if (isSystemAdmin(payload)) {
             Integer status = payload.getInteger("status");
             Integer targetAnchorId = TenantScope.anchorId(payload);
-            sql = "SELECT p.*, a.anchor_name FROM organizations p JOIN users a ON a.id=p.anchor_id AND a.user_scope='ANCHOR' AND a.id=a.anchor_id "
-                    + "WHERE (@p1 IS NULL OR p.status=@p1) AND (@p2 IS NULL OR p.anchor_id=@p2) ORDER BY a.anchor_name,p.name";
+            sql = "SELECT p.*, a.anchor_name FROM organizations p JOIN anchors a ON a.id=p.anchor_id "
+                    + "WHERE LTRIM(RTRIM(ISNULL(p.name,'')))<>'' AND (@p1 IS NULL OR p.status=@p1) AND (@p2 IS NULL OR p.anchor_id=@p2) ORDER BY a.anchor_name,p.name";
             params = Tuple.of(status, targetAnchorId);
         } else if (isAnchor(payload)) {
             Object anchorId = payload.getValue("anchorId");
             Integer status = payload.getInteger("status");
-            sql = "SELECT p.*, a.anchor_name FROM organizations p JOIN users a ON a.id=p.anchor_id AND a.user_scope='ANCHOR' AND a.id=a.anchor_id WHERE p.anchor_id=@p1 AND (@p2 IS NULL OR p.status=@p2) ORDER BY p.name";
+            sql = "SELECT p.*, a.anchor_name FROM organizations p JOIN anchors a ON a.id=p.anchor_id WHERE p.anchor_id=@p1 AND LTRIM(RTRIM(ISNULL(p.name,'')))<>'' AND (@p2 IS NULL OR p.status=@p2) ORDER BY p.name";
             params = Tuple.of(anchorId, status);
         } else {
             String partnerCode = payload.getString("partnerCode", "");
-            sql = "SELECT p.*, a.anchor_name FROM organizations p JOIN users a ON a.id=p.anchor_id AND a.user_scope='ANCHOR' AND a.id=a.anchor_id WHERE p.organization_code=@p1";
+            sql = "SELECT p.*, a.anchor_name FROM organizations p JOIN anchors a ON a.id=p.anchor_id WHERE p.organization_code=@p1";
             params = Tuple.of(partnerCode);
         }
 

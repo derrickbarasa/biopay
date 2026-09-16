@@ -11,8 +11,10 @@ logs/
 *.p8.pem
 .env
 
-# Android agent APKs served at /biopay/downloads (drop builds locally; not committed)
+# Android agent APKs (and their update-check metadata) served at /biopay/downloads
+# (drop builds locally; not committed)
 app-releases/*.apk
+app-releases/*.version.json
 
 # User-uploaded files (photos, documents) -- runtime data, not committed
 uploads/

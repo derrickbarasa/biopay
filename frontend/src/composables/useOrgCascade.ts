@@ -25,6 +25,10 @@ export function useOrgCascade() {
     try {
       const res = await dispatch<{ results: OrgOption[] }>('GET_ORGANIZATIONS', {
         targetAnchorId: auth.isSystemAdmin ? anchorId : undefined,
+        // Always a create-dialog picker (Field Officers, Households) -- a deactivated
+        // organisation can't be picked for new work, same reasoning as the anchor picker's
+        // activeOnly option (see useAnchorScope).
+        status: 1,
       })
       dialogOrganizations.value = res.results ?? []
     } finally {

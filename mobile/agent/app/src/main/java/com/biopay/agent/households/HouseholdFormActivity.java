@@ -51,9 +51,9 @@ public class HouseholdFormActivity extends BaseActivity {
     private static final String[] GENDER_OPTIONS = {"Male", "Female"};
     private static final String[] LEGAL_STATUS_LABELS = {
             "Citizen", "Refugee", "Internally displaced person (IDP)",
-            "Asylum seeker", "Returnee", "Stateless", "Other"};
+            "Asylum seeker", "Returnee", "Host community", "Stateless", "Other"};
     private static final String[] LEGAL_STATUS_CODES = {
-            "CITIZEN", "REFUGEE", "IDP", "ASYLUM_SEEKER", "RETURNEE", "STATELESS", "OTHER"};
+            "CITIZEN", "REFUGEE", "IDP", "ASYLUM_SEEKER", "RETURNEE", "HOST_COMMUNITY", "STATELESS", "OTHER"};
 
     private static final String OPTION_FINGERPRINT = "FINGERPRINT";
     private static final String OPTION_FACE = "FACE";
@@ -136,6 +136,8 @@ public class HouseholdFormActivity extends BaseActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        // Warm a fresh one-shot fix while the officer completes the form; Save reads it below.
+        LocationHelper.requestFreshLocation(this);
         setContentView(R.layout.activity_household_form);
         setupBackToolbar(R.id.toolbar);
 

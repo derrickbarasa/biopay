@@ -20,13 +20,13 @@ const tableSearch = ref('')
 const anchor = reactive<Anchor>({ id: 0, anchorCode: '', name: '', status: 1 })
 
 const headers = [
-  { title: 'Code', key: 'anchorCode' },
+  { title: 'Anchor Code', key: 'anchorCode', minWidth: 136, nowrap: true },
   { title: 'Name', key: 'name' },
   { title: 'Administrator', key: 'authorisedName' },
   { title: 'Email', key: 'authorisedEmail' },
   { title: 'Country', key: 'country' },
   { title: 'Status', key: 'status' },
-  { title: 'Actions', key: 'actions', sortable: false, align: 'start' as const },
+  { title: 'Actions', key: 'actions', sortable: false, align: 'start' as const, width: 96, minWidth: 96, fixed: true, nowrap: true },
 ]
 
 async function load() {
@@ -102,7 +102,7 @@ onMounted(load)
       <v-card title="Edit anchor">
         <dialog-close-button @close="editDialog = false" />
         <v-card-text class="form-grid">
-          <v-text-field :model-value="anchor.anchorCode" label="Code" variant="outlined" readonly hint="Assigned automatically when the anchor was created" persistent-hint />
+          <v-text-field :model-value="anchor.anchorCode" label="Anchor code" variant="outlined" readonly hint="Assigned automatically when the anchor was created" persistent-hint />
           <v-text-field v-model="anchor.name" label="Name" placeholder="e.g. Frontier Trust Bank" variant="outlined" required />
           <v-text-field v-model="anchor.authorisedFirstName" label="Authorised contact first name" placeholder="e.g. Jane" variant="outlined" />
           <v-text-field v-model="anchor.authorisedSurname" label="Authorised contact surname" placeholder="e.g. Mwangi" variant="outlined" />

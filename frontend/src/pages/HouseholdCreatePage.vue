@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { dispatch } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
@@ -7,6 +7,8 @@ import { useToast } from '@/composables/useToast'
 import { useAnchorScope } from '@/composables/useAnchorScope'
 import { useOrgCascade } from '@/composables/useOrgCascade'
 import { LEGAL_STATUS_OPTIONS, MARITAL_STATUS_OPTIONS, VULNERABILITY_OPTIONS } from '@/constants/householdClassifications'
+
+const maritalStatusItems: readonly string[] = MARITAL_STATUS_OPTIONS
 
 interface GeoNode {
   code: string
@@ -27,7 +29,7 @@ interface DuplicateCandidate {
 const auth = useAuthStore()
 const toast = useToast()
 const router = useRouter()
-const { anchors } = useAnchorScope()
+const { anchors } = useAnchorScope({ activeOnly: true })
 const { dialogAnchorId, dialogOrganizations, resetDialogScope } = useOrgCascade()
 
 const saving = ref(false)
@@ -44,11 +46,17 @@ const locationsForCounty = (code: string) => (code ? locations.value.filter((l) 
 const villagesForLocation = (code: string) => (code ? villages.value.filter((v) => v.locationCode === code) : villages.value)
 
 const form = ref({
-  householdName: '', age: null as number | null, gender: '', maritalStatus: '', spouseName: '', phoneNumber: '',
+  householdName: '', age: null as number | null, gender: '', maritalStatus: null as string | null, spouseName: '', phoneNumber: '',
   householdSize: null as number | null, stateCode: '', countyCode: '', locationCode: '', villageCode: '',
-  vulnerabilityStatuses: [] as string[], legalStatus: '',
+  vulnerabilityStatuses: [] as string[], legalStatus: null as string | null,
   organisationCode: null as string | null,
+  photo: null as File | null,
 })
+
+// A Super Admin's org list is re-fetched for whichever anchor they pick (see useOrgCascade) --
+// a previously chosen organisation almost never belongs to the new anchor, so it's cleared
+// rather than left stale/invalid in the field.
+watch(dialogAnchorId, () => { form.value.organisationCode = null })
 
 function onStateChange() { form.value.countyCode = ''; form.value.locationCode = ''; form.value.villageCode = '' }
 function onCountyChange() { form.value.locationCode = ''; form.value.villageCode = '' }
@@ -108,10 +116,24 @@ async function attemptSave() {
   await save()
 }
 
+function onPhotoFile(event: Event) {
+  form.value.photo = (event.target as HTMLInputElement).files?.[0] ?? null
+}
+
+function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result ?? ''))
+    reader.onerror = () => reject(reader.error ?? new Error('Failed to read the selected file'))
+    reader.readAsDataURL(file)
+  })
+}
+
 async function save() {
   saving.value = true
   try {
-    await dispatch('CREATE_HOUSEHOLD', {
+    const organisationCode = form.value.organisationCode || undefined
+    const created = await dispatch<{ householdNumber: string }>('CREATE_HOUSEHOLD', {
       householdName: form.value.householdName, age: form.value.age, gender: form.value.gender,
       maritalStatus: form.value.maritalStatus || undefined, spouseName: form.value.spouseName || undefined,
       phoneNumber: form.value.phoneNumber, householdSize: form.value.householdSize,
@@ -119,8 +141,27 @@ async function save() {
       legalStatus: form.value.legalStatus || undefined,
       stateCode: form.value.stateCode, countyCode: form.value.countyCode,
       payamCode: form.value.locationCode, bomaCode: form.value.villageCode,
-      organisationCode: form.value.organisationCode || undefined,
+      organisationCode,
     })
+    if (form.value.photo) {
+      try {
+        const dataUrl = await fileToDataUrl(form.value.photo)
+        const extension = (form.value.photo.name.split('.').pop() || 'jpg').toLowerCase()
+        await dispatch('UPLOAD_IMAGE', {
+          beneficiaryId: created.householdNumber,
+          beneficiaryType: 1,
+          imageBase64: dataUrl,
+          extension,
+          organisationCode,
+        })
+      } catch (err) {
+        toast.error(err instanceof Error
+          ? `Household registered, but the photo failed to upload: ${err.message}`
+          : 'Household registered, but the photo failed to upload')
+        goToList()
+        return
+      }
+    }
     toast.success('Household registered')
     goToList()
   } catch (err) {
@@ -145,21 +186,21 @@ onMounted(() => {
 
     <v-card variant="flat" border>
       <v-card-text>
-        <v-row v-if="auth.isSystemAdmin || auth.isAnchor">
-          <v-col cols="12" sm="6">
+        <v-row v-if="auth.isAnchor">
+          <v-col v-if="auth.isSystemAdmin" cols="12" sm="4">
             <v-select
-              v-if="auth.isSystemAdmin"
               v-model="dialogAnchorId" :items="anchors" item-title="name" item-value="id"
               label="Anchor" placeholder="Choose an anchor" required
             />
+          </v-col>
+          <v-col cols="12" :sm="auth.isSystemAdmin ? 4 : 6">
             <v-select
-              v-else-if="auth.isAnchor"
               v-model="form.organisationCode" :items="dialogOrganizations" item-title="name" item-value="organisationCode"
               label="Organisation" placeholder="Choose an organisation"
               :disabled="auth.isSystemAdmin && !dialogAnchorId" required
             />
           </v-col>
-          <v-col cols="12" sm="6">
+          <v-col cols="12" :sm="auth.isSystemAdmin ? 4 : 6">
             <v-text-field v-model="form.householdName" label="Head of household name" placeholder="e.g. Jane Doe" />
           </v-col>
         </v-row>
@@ -173,13 +214,13 @@ onMounted(() => {
         </v-row>
         <v-row>
           <v-col cols="6" sm="4">
-            <v-select v-model="form.maritalStatus" label="Marital status" :items="[...MARITAL_STATUS_OPTIONS]" clearable />
+            <v-select v-model="form.maritalStatus" label="Marital status" :items="maritalStatusItems" clearable />
           </v-col>
           <v-col cols="6" sm="4"><v-text-field v-model="form.spouseName" label="Spouse name" /></v-col>
           <v-col cols="12" sm="4"><v-text-field v-model="form.phoneNumber" label="Phone number" /></v-col>
         </v-row>
         <v-row>
-          <v-col cols="12" sm="6">
+          <v-col cols="12" sm="4">
             <v-select
               v-model="form.legalStatus"
               :items="LEGAL_STATUS_OPTIONS"
@@ -189,7 +230,7 @@ onMounted(() => {
               clearable
             />
           </v-col>
-          <v-col cols="12" sm="6">
+          <v-col cols="12" sm="4">
             <v-select
               v-model="form.vulnerabilityStatuses"
               :items="VULNERABILITY_OPTIONS"
@@ -201,6 +242,19 @@ onMounted(() => {
               multiple
               chips
               closable-chips
+            />
+          </v-col>
+          <v-col cols="12" sm="4">
+            <v-file-input
+              label="Household head photo (optional)"
+              hint="You can also capture this photo later from the mobile field app"
+              persistent-hint
+              accept="image/*"
+              prepend-icon="mdi-camera-outline"
+              show-size
+              density="compact"
+              clearable
+              @change="onPhotoFile"
             />
           </v-col>
         </v-row>

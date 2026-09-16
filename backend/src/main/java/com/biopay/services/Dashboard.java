@@ -118,11 +118,9 @@ public class Dashboard extends AbstractVerticle {
                 "SELECT COUNT(*) AS v FROM faces f JOIN organizations p ON p.organization_code=f.organization_code "
                         + "WHERE (@p1 IS NULL OR p.anchor_id=@p1) AND f.status=1", Tuple.of(anchorId));
         // Platform-wide count, only surfaced to system admins (see totalAnchors below) --
-        // cheap enough to always run rather than branch the Future.all index list. An anchor
-        // is a `users` row with user_scope='ANCHOR' (the standalone `anchors` table was
-        // dropped in migration 030_anchors_into_users.sql), same model Subscription.java
-        // queries elsewhere -- `status=1` here is the anchor's own active/deactivated flag.
-        Future<Integer> totalAnchors = scalarInt("SELECT COUNT(*) AS v FROM users WHERE user_scope='ANCHOR' AND id=anchor_id AND status=1", Tuple.tuple());
+        // cheap enough to always run rather than branch the Future.all index list. `status=1`
+        // is the anchor's own active/deactivated flag (see 053_dedicated_anchors_table.sql).
+        Future<Integer> totalAnchors = scalarInt("SELECT COUNT(*) AS v FROM anchors WHERE status=1", Tuple.tuple());
         Future<Integer> pendingPayrolls = scalarInt(
                 "SELECT COUNT(*) AS v FROM payment_cycles WHERE (@p1 IS NULL OR anchor_id=@p1) AND status='PENDING_APPROVAL'", Tuple.of(anchorId));
         Future<Row> generatedPayrolls = pool.preparedQuery(
