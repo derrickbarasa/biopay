@@ -6,7 +6,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
 import { useAnchorScope } from '@/composables/useAnchorScope'
 import { useOrgCascade } from '@/composables/useOrgCascade'
-import { LEGAL_STATUS_OPTIONS, VULNERABILITY_OPTIONS } from '@/constants/householdClassifications'
+import { LEGAL_STATUS_OPTIONS, MARITAL_STATUS_OPTIONS, VULNERABILITY_OPTIONS } from '@/constants/householdClassifications'
 
 interface GeoNode {
   code: string
@@ -44,7 +44,7 @@ const locationsForCounty = (code: string) => (code ? locations.value.filter((l) 
 const villagesForLocation = (code: string) => (code ? villages.value.filter((v) => v.locationCode === code) : villages.value)
 
 const form = ref({
-  householdName: '', age: null as number | null, gender: '', phoneNumber: '',
+  householdName: '', age: null as number | null, gender: '', maritalStatus: '', spouseName: '', phoneNumber: '',
   householdSize: null as number | null, stateCode: '', countyCode: '', locationCode: '', villageCode: '',
   vulnerabilityStatuses: [] as string[], legalStatus: '',
   organisationCode: null as string | null,
@@ -113,6 +113,7 @@ async function save() {
   try {
     await dispatch('CREATE_HOUSEHOLD', {
       householdName: form.value.householdName, age: form.value.age, gender: form.value.gender,
+      maritalStatus: form.value.maritalStatus || undefined, spouseName: form.value.spouseName || undefined,
       phoneNumber: form.value.phoneNumber, householdSize: form.value.householdSize,
       vulnerabilityStatuses: form.value.vulnerabilityStatuses,
       legalStatus: form.value.legalStatus || undefined,
@@ -171,8 +172,14 @@ onMounted(() => {
           <v-col cols="12" sm="4"><v-text-field v-model.number="form.householdSize" label="Household size" type="number" /></v-col>
         </v-row>
         <v-row>
+          <v-col cols="6" sm="4">
+            <v-select v-model="form.maritalStatus" label="Marital status" :items="[...MARITAL_STATUS_OPTIONS]" clearable />
+          </v-col>
+          <v-col cols="6" sm="4"><v-text-field v-model="form.spouseName" label="Spouse name" /></v-col>
           <v-col cols="12" sm="4"><v-text-field v-model="form.phoneNumber" label="Phone number" /></v-col>
-          <v-col cols="12" sm="4">
+        </v-row>
+        <v-row>
+          <v-col cols="12" sm="6">
             <v-select
               v-model="form.legalStatus"
               :items="LEGAL_STATUS_OPTIONS"
@@ -182,7 +189,7 @@ onMounted(() => {
               clearable
             />
           </v-col>
-          <v-col cols="12" sm="4">
+          <v-col cols="12" sm="6">
             <v-select
               v-model="form.vulnerabilityStatuses"
               :items="VULNERABILITY_OPTIONS"

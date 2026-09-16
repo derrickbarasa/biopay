@@ -44,6 +44,8 @@ public class HouseholdDao {
         put(values, "phone_number", row, "phoneNumber");
         putInt(values, "age", row, "age");
         put(values, "gender", row, "gender");
+        put(values, "marital_status", row, "maritalStatus");
+        put(values, "spouse_name", row, "spouseName");
         putInt(values, "household_size", row, "householdSize");
         putInt(values, "male_dependants", row, "maleDependants");
         putInt(values, "female_dependants", row, "femaleDependants");
@@ -157,6 +159,8 @@ public class HouseholdDao {
         public String idNumber;
         public String phoneNumber;
         public String gender;
+        public String maritalStatus;
+        public String spouseName;
         public Integer age;
         public String stateCode;
         public String countyCode;
@@ -183,6 +187,8 @@ public class HouseholdDao {
             h.idNumber = c.getString(c.getColumnIndexOrThrow("id_number"));
             h.phoneNumber = c.getString(c.getColumnIndexOrThrow("phone_number"));
             h.gender = c.getString(c.getColumnIndexOrThrow("gender"));
+            h.maritalStatus = c.getString(c.getColumnIndexOrThrow("marital_status"));
+            h.spouseName = c.getString(c.getColumnIndexOrThrow("spouse_name"));
             int ageIdx = c.getColumnIndexOrThrow("age");
             h.age = c.isNull(ageIdx) ? null : c.getInt(ageIdx);
             h.stateCode = c.getString(c.getColumnIndexOrThrow("state_code"));

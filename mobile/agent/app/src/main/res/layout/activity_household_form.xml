@@ -69,6 +69,19 @@
                 </com.google.android.material.textfield.TextInputLayout>
             </LinearLayout>
 
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:baselineAligned="false"
+                android:orientation="horizontal">
+                <com.google.android.material.textfield.TextInputLayout style="@style/BioPay.DropdownField" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginEnd="4dp" android:layout_marginBottom="12dp" android:layout_weight="1" android:hint="@string/field_marital_status">
+                    <com.google.android.material.textfield.MaterialAutoCompleteTextView android:id="@+id/spinnerMaritalStatus" android:layout_width="match_parent" android:layout_height="wrap_content" android:inputType="none" />
+                </com.google.android.material.textfield.TextInputLayout>
+                <com.google.android.material.textfield.TextInputLayout style="@style/BioPay.FormField" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="4dp" android:layout_weight="1" android:hint="@string/field_spouse_name">
+                    <com.google.android.material.textfield.TextInputEditText android:id="@+id/etSpouseName" android:layout_width="match_parent" android:layout_height="wrap_content" android:inputType="textCapWords" android:imeOptions="actionNext" android:singleLine="true" />
+                </com.google.android.material.textfield.TextInputLayout>
+            </LinearLayout>
+
             <TextView style="@style/BioPay.SectionHeader" android:text="@string/section_location" />
             <TextView style="@style/BioPay.SupportingText" android:text="@string/location_picker_note" />
 

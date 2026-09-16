@@ -99,7 +99,7 @@ const headers = computed(() => [
   { title: 'Scope', key: 'scope' },
   { title: 'Permissions', key: 'permissionCount' },
   ...(auth.isSystemAdmin ? [{ title: 'Anchor', key: 'anchorName' }] : []),
-  { title: 'Actions', key: 'actions', sortable: false, align: 'end' as const },
+  { title: 'Actions', key: 'actions', sortable: false, align: 'start' as const },
 ])
 const tableRows = computed(() => sortedRoles.value.map((role) => ({
   ...role,

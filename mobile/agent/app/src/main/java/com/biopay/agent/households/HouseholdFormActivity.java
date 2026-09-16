@@ -99,6 +99,9 @@ public class HouseholdFormActivity extends BaseActivity {
     private EditText etPhoneNumber;
     private EditText etAge;
     private AutoCompleteTextView spinnerGender;
+    private AutoCompleteTextView spinnerMaritalStatus;
+    private EditText etSpouseName;
+    private String[] maritalStatusOptions;
     private AutoCompleteTextView spinnerRegistrationMethod;
 
     private View locationPickerGroup;
@@ -151,6 +154,8 @@ public class HouseholdFormActivity extends BaseActivity {
         etPhoneNumber = findViewById(R.id.etPhoneNumber);
         etAge = findViewById(R.id.etAge);
         spinnerGender = findViewById(R.id.spinnerGender);
+        spinnerMaritalStatus = findViewById(R.id.spinnerMaritalStatus);
+        etSpouseName = findViewById(R.id.etSpouseName);
         spinnerRegistrationMethod = findViewById(R.id.spinnerRegistrationMethod);
 
         locationPickerGroup = findViewById(R.id.locationPickerGroup);
@@ -179,6 +184,10 @@ public class HouseholdFormActivity extends BaseActivity {
 
         spinnerGender.setAdapter(new ArrayAdapter<>(this,
                 android.R.layout.simple_dropdown_item_1line, GENDER_OPTIONS));
+
+        maritalStatusOptions = getResources().getStringArray(R.array.marital_status_options);
+        spinnerMaritalStatus.setAdapter(new ArrayAdapter<>(this,
+                android.R.layout.simple_dropdown_item_1line, maritalStatusOptions));
 
         spinnerLegalStatus.setAdapter(new ArrayAdapter<>(this,
                 android.R.layout.simple_dropdown_item_1line, LEGAL_STATUS_LABELS));
@@ -313,6 +322,10 @@ public class HouseholdFormActivity extends BaseActivity {
         if (genderIndex >= 0) {
             spinnerGender.setText(GENDER_OPTIONS[genderIndex], false);
         }
+        int maritalIndex = household.maritalStatus == null ? -1
+                : java.util.Arrays.asList(maritalStatusOptions).indexOf(household.maritalStatus);
+        spinnerMaritalStatus.setText(maritalIndex >= 0 ? maritalStatusOptions[maritalIndex] : "", false);
+        etSpouseName.setText(household.spouseName);
         int registrationIndex = household.registrationMethod == null ? -1
                 : java.util.Arrays.asList(registrationOptions).indexOf(household.registrationMethod);
         spinnerRegistrationMethod.setText(registrationLabels[Math.max(0, registrationIndex)], false);
@@ -433,6 +446,8 @@ public class HouseholdFormActivity extends BaseActivity {
         values.put("phone_number", etPhoneNumber.getText().toString().trim());
         values.put("age", parseIntOrNull(etAge.getText().toString()));
         values.put("gender", gender);
+        values.put("marital_status", spinnerMaritalStatus.getText().toString().trim());
+        values.put("spouse_name", etSpouseName.getText().toString().trim());
         values.put("registration_method", selectedRegistrationCode());
         // Manual entry stores the place name the officer typed directly -- state_code/county_code/
         // payam_code/boma_code are loosely-typed free text columns (no FK to the geo hierarchy, see

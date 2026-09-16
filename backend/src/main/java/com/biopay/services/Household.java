@@ -223,15 +223,16 @@ public class Household extends AbstractVerticle {
         }
 
         String scopeClause = isAnchor(payload)
-                ? " AND (@p12=1 OR organization_code IN (SELECT organization_code FROM organizations WHERE anchor_id=@p13))"
-                : " AND organization_code=@p12";
-        String sql = "UPDATE households SET household_name=@p1, age=@p2, marital_status=@p3, phone_number=@p4, "
-                + "gender=@p5, household_size=@p6, boma_code=@p7, vulnerability_status=@p8, legal_status=@p9, "
-                + "updated_by=@p10, updated_at=GETDATE() WHERE household_number=@p11"
+                ? " AND (@p13=1 OR organization_code IN (SELECT organization_code FROM organizations WHERE anchor_id=@p14))"
+                : " AND organization_code=@p13";
+        String sql = "UPDATE households SET household_name=@p1, age=@p2, marital_status=@p3, spouse_name=@p4, phone_number=@p5, "
+                + "gender=@p6, household_size=@p7, boma_code=@p8, vulnerability_status=@p9, legal_status=@p10, "
+                + "updated_by=@p11, updated_at=GETDATE() WHERE household_number=@p12"
                 + scopeClause;
 
         Tuple params = Tuple.of(
                 payload.getString("householdName"), payload.getInteger("age"), payload.getString("maritalStatus"),
+                payload.getString("spouseName"),
                 payload.getString("phoneNumber"), payload.getString("gender"), payload.getInteger("householdSize"),
                 payload.getString("bomaCode"), vulnerabilityStatuses, legalStatus,
                 String.valueOf(payload.getValue("actorId")), householdNumber);
@@ -1015,14 +1016,14 @@ public class Household extends AbstractVerticle {
         JsonObject payload = new JsonObject(message.body().toString());
         String alternateNumber = payload.getString("alternateNumber", "").trim();
         String scopeClause = isAnchor(payload)
-                ? " AND (@p6=1 OR organization_code IN (SELECT organization_code FROM organizations WHERE anchor_id=@p7))"
-                : " AND organization_code=@p6";
+                ? " AND (@p7=1 OR organization_code IN (SELECT organization_code FROM organizations WHERE anchor_id=@p8))"
+                : " AND organization_code=@p7";
 
-        String sql = "UPDATE alternates SET alternate_name=@p1, relationship=@p2, phone_number=@p3, gender=@p4 "
-                + "WHERE alternate_number=@p5" + scopeClause;
+        String sql = "UPDATE alternates SET alternate_name=@p1, relationship=@p2, phone_number=@p3, gender=@p4, age=@p5 "
+                + "WHERE alternate_number=@p6" + scopeClause;
         Tuple params = Tuple.of(
                 payload.getString("alternateName"), payload.getString("relationship"),
-                payload.getString("phoneNumber"), payload.getString("gender"), alternateNumber);
+                payload.getString("phoneNumber"), payload.getString("gender"), payload.getInteger("age"), alternateNumber);
         if (isAnchor(payload)) {
             params = params.addBoolean(isSystemAdmin(payload)).addInteger(TenantScope.anchorId(payload));
         } else {
@@ -1077,7 +1078,7 @@ public class Household extends AbstractVerticle {
         JsonObject payload = new JsonObject(message.body().toString());
         String householdNumber = payload.getString("householdNumber", "").trim();
 
-        String sql = "SELECT * FROM alternates WHERE household_number=@p1" + (isAnchor(payload)
+        String sql = "SELECT * FROM alternates WHERE household_number=@p1 AND status=1" + (isAnchor(payload)
                 ? " AND (@p2=1 OR organization_code IN (SELECT organization_code FROM organizations WHERE anchor_id=@p3))"
                 : " AND organization_code=@p2") + " ORDER BY alternate_rank";
         Tuple params = isAnchor(payload)
@@ -1109,6 +1110,7 @@ public class Household extends AbstractVerticle {
                                     .put("phoneNumber", Rows.str(r, "phone_number"))
                                     .put("gender", Rows.str(r, "gender"))
                                     .put("status", Rows.intVal(r, "status"))
+                                    .put("createdAt", Rows.str(r, "created_at"))
                                     .put("images", images));
                         }
                         reply(message, new JsonObject()

@@ -34,9 +34,9 @@ html.app-shell-scale {
 
 body {
   margin: 0;
-  background: #f8fafc;
+  background: #f1f5f9;
   color: #0f172a;
-  font-family: 'Ubuntu', sans-serif;
+  font-family: 'Inter', sans-serif;
 }
 
 :root {
@@ -48,7 +48,7 @@ body {
   --bp-action-disabled-text: #92400e;
 }
 
-.v-application { font-family: 'Ubuntu', sans-serif !important; }
+.v-application { font-family: 'Inter', sans-serif !important; }
 .v-application .dashboard-main .v-card,
 .v-overlay[role='dialog'] .v-card,
 .v-application > .v-card { border-radius: var(--bp-radius-surface) !important; border-color: #e2e8f0 !important; }
@@ -63,6 +63,18 @@ body {
 .v-application .dashboard-main .permission-group,
 .v-application .dashboard-main .module-option,
 .v-application .dashboard-main .dashboard-empty { border-radius: var(--bp-radius-surface) !important; }
+/* Section headings on ordinary page cards (never inside a dialog, which keeps its own
+ * teal-tinted band above) read as a small uppercase label -- quiet and structural --
+ * instead of a large bold heading, so the card's own content stays the visual focus. */
+.dashboard-main .v-card > .v-card-title {
+  font-size: .72rem !important;
+  font-weight: 700 !important;
+  letter-spacing: .07em !important;
+  text-transform: uppercase !important;
+  color: #64748b !important;
+  padding-top: 14px !important;
+  padding-bottom: 10px !important;
+}
 .v-data-table, .v-table { border-radius: var(--bp-radius-surface); overflow: hidden; font-size: .84rem; }
 .v-data-table th, .v-table th { font-size: .72rem !important; }
 .v-btn { border-radius: var(--bp-radius-control) !important; font-weight: 700; letter-spacing: 0; text-transform: none; }

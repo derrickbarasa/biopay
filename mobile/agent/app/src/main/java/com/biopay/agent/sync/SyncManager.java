@@ -200,6 +200,8 @@ public class SyncManager {
                 params.put("householdName", h.householdName);
                 params.put("age", h.age);
                 params.put("gender", h.gender);
+                params.put("maritalStatus", h.maritalStatus);
+                params.put("spouseName", h.spouseName);
                 params.put("phoneNumber", h.phoneNumber);
                 params.put("idNumber", h.idNumber);
                 params.put("householdSize", h.householdSize);

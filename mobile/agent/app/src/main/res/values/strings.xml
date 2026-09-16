@@ -165,6 +165,15 @@
     <string name="gender_male">Male</string>
     <string name="gender_female">Female</string>
     <string name="gender_required">Choose the household head\'s gender.</string>
+    <string name="field_marital_status">Marital status</string>
+    <string name="field_spouse_name">Spouse name</string>
+    <string-array name="marital_status_options">
+        <item>Single</item>
+        <item>Married</item>
+        <item>Widowed</item>
+        <item>Divorced</item>
+        <item>Separated</item>
+    </string-array>
     <string name="field_registration_method">Biometric method</string>
     <string name="field_alternate_name">Full name</string>
     <string name="field_alternate_relationship">Relationship to household head</string>

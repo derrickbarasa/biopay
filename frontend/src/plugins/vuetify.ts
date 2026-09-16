@@ -17,7 +17,7 @@ const bioPayTheme = {
     info: '#15803D',
     success: '#10B981',
     warning: '#F59E0B',
-    background: '#F8FAFC',
+    background: '#F1F5F9',
     surface: '#FFFFFF',
   },
 }

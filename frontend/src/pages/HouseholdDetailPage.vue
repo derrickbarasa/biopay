@@ -5,15 +5,18 @@ import { apiClient, dispatch } from '@/api/client'
 import { apiRelativeFilePath } from '@/api/paths'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
+import { useConfirm } from '@/composables/useConfirm'
 import { downloadCsv, toCsv } from '@/utils/csv'
 import { householdReviewStatus } from '@/utils/householdReview'
 import HouseholdReviewActions from '@/components/HouseholdReviewActions.vue'
 import {
   LEGAL_STATUS_OPTIONS,
+  MARITAL_STATUS_OPTIONS,
   VULNERABILITY_OPTIONS,
   legalStatusLabel,
   vulnerabilityLabel,
 } from '@/constants/householdClassifications'
+import { ALTERNATE_RELATIONSHIP_OPTIONS, inferGenderFromRelationship } from '@/constants/alternateRelationship'
 
 interface Alternate {
   alternateNumber?: string
@@ -23,12 +26,14 @@ interface Alternate {
   age?: number
   gender?: string
   images?: string[]
+  createdAt?: string
 }
 
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
 const toast = useToast()
+const { confirmAction } = useConfirm()
 
 interface GeoNode { code: string; name: string; stateCode?: string; countyCode?: string; locationCode?: string }
 
@@ -342,7 +347,7 @@ async function printVoucher() {
 const editDialog = ref(false)
 const editing = ref(false)
 const editForm = ref({
-  householdName: '', age: null as number | null, gender: '', maritalStatus: '', phoneNumber: '',
+  householdName: '', age: null as number | null, gender: '', maritalStatus: '', spouseName: '', phoneNumber: '',
   householdSize: null as number | null, stateCode: '', countyCode: '', locationCode: '', villageCode: '',
   vulnerabilityStatuses: [] as string[], legalStatus: '',
 })
@@ -361,6 +366,7 @@ function openEdit() {
     age: d.age ?? null,
     gender: d.gender ?? '',
     maritalStatus: d.maritalStatus ?? '',
+    spouseName: d.spouseName ?? '',
     phoneNumber: d.phoneNumber ?? '',
     householdSize: d.householdSize ?? null,
     stateCode: d.stateCode ?? '',
@@ -386,6 +392,7 @@ async function saveEdit() {
       age: editForm.value.age ?? undefined,
       gender: editForm.value.gender || undefined,
       maritalStatus: editForm.value.maritalStatus || undefined,
+      spouseName: editForm.value.spouseName || undefined,
       phoneNumber: editForm.value.phoneNumber || undefined,
       householdSize: editForm.value.householdSize ?? undefined,
       bomaCode: editForm.value.villageCode || undefined,
@@ -422,11 +429,73 @@ const addAltDialog = ref(false)
 const addingAlt = ref(false)
 const altForm = ref({ alternateName: '', relationship: '', phoneNumber: '', gender: '', age: null as number | null })
 const altPhotoFile = ref<File | null>(null)
+// null while adding; the alternate being edited otherwise -- the same dialog and altForm
+// serve both flows, only the dispatch code and dialog title differ.
+const editingAlternateNumber = ref<string | null>(null)
+
+const altTableHeaders = [
+  { title: 'Photo', key: 'photo', sortable: false, width: 64 },
+  { title: 'Name', key: 'alternateName' },
+  { title: 'Relationship', key: 'relationship' },
+  { title: 'Gender', key: 'gender' },
+  { title: 'Added', key: 'createdAt' },
+  { title: 'Actions', key: 'actions', sortable: false, align: 'start' as const },
+]
+
+function formatTimestamp(value?: string) {
+  if (!value) return '—'
+  const d = new Date(value)
+  return Number.isNaN(d.getTime()) ? value : d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+}
 
 function openAddAlternate() {
+  editingAlternateNumber.value = null
   altForm.value = { alternateName: '', relationship: '', phoneNumber: '', gender: '', age: null }
   altPhotoFile.value = null
   addAltDialog.value = true
+}
+
+function openEditAlternate(a: Alternate) {
+  editingAlternateNumber.value = a.alternateNumber ?? null
+  altForm.value = {
+    alternateName: a.alternateName ?? '',
+    relationship: a.relationship ?? '',
+    phoneNumber: a.phoneNumber ?? '',
+    gender: a.gender ?? '',
+    age: a.age ?? null,
+  }
+  altPhotoFile.value = null
+  addAltDialog.value = true
+}
+
+const viewAltDialog = ref(false)
+const viewAltTarget = ref<Alternate | null>(null)
+function openViewAlternate(a: Alternate) {
+  viewAltTarget.value = a
+  viewAltDialog.value = true
+}
+
+async function deactivateAlternate(a: Alternate) {
+  if (!await confirmAction({
+    title: 'Deactivate alternate?',
+    message: `${a.alternateName} will no longer appear as an alternate for this household. Their record is kept, but re-adding them would need a new entry.`,
+    confirmLabel: 'Deactivate',
+    color: 'error',
+  })) return
+  try {
+    await dispatch('DELETE_ALTERNATE', { alternateNumber: a.alternateNumber })
+    toast.success('Alternate deactivated')
+    await load()
+  } catch (err) {
+    toast.error(err instanceof Error ? err.message : 'Failed to deactivate alternate')
+  }
+}
+
+// Auto-picks gender for relationships with an unambiguous gender (e.g. "Husband" -> M);
+// left alone for exceptions like Cousin/In-law/Ward/Other so the officer can choose it.
+function onAltRelationshipChange(relationship: string | null) {
+  const inferred = inferGenderFromRelationship(relationship ?? undefined)
+  if (inferred) altForm.value.gender = inferred
 }
 
 function onAltPhotoFile(event: Event) {
@@ -450,7 +519,8 @@ async function saveAlternate() {
   addingAlt.value = true
   try {
     const organisationCode = auth.isAnchor ? detail.value?.organisationCode : undefined
-    const created = await dispatch<{ alternateNumber: string }>('CREATE_ALTERNATE', {
+    const editing = editingAlternateNumber.value
+    const alternateNumber = editing ?? (await dispatch<{ alternateNumber: string }>('CREATE_ALTERNATE', {
       householdNumber: householdNumber.value,
       organisationCode,
       alternateName: altForm.value.alternateName.trim(),
@@ -458,13 +528,23 @@ async function saveAlternate() {
       phoneNumber: altForm.value.phoneNumber || undefined,
       gender: altForm.value.gender || undefined,
       age: altForm.value.age ?? undefined,
-    })
+    })).alternateNumber
+    if (editing) {
+      await dispatch('UPDATE_ALTERNATE', {
+        alternateNumber,
+        alternateName: altForm.value.alternateName.trim(),
+        relationship: altForm.value.relationship || undefined,
+        phoneNumber: altForm.value.phoneNumber || undefined,
+        gender: altForm.value.gender || undefined,
+        age: altForm.value.age ?? undefined,
+      })
+    }
     if (altPhotoFile.value) {
       try {
         const dataUrl = await fileToDataUrl(altPhotoFile.value)
         const extension = (altPhotoFile.value.name.split('.').pop() || 'jpg').toLowerCase()
         await dispatch('UPLOAD_IMAGE', {
-          beneficiaryId: created.alternateNumber,
+          beneficiaryId: alternateNumber,
           beneficiaryType: 2,
           imageBase64: dataUrl,
           extension,
@@ -472,18 +552,18 @@ async function saveAlternate() {
         })
       } catch (err) {
         toast.error(err instanceof Error
-          ? `Alternate added, but the photo failed to upload: ${err.message}`
-          : 'Alternate added, but the photo failed to upload')
+          ? `Alternate saved, but the photo failed to upload: ${err.message}`
+          : 'Alternate saved, but the photo failed to upload')
         addAltDialog.value = false
         await load()
         return
       }
     }
-    toast.success('Alternate added')
+    toast.success(editing ? 'Alternate updated' : 'Alternate added')
     addAltDialog.value = false
     await load()
   } catch (err) {
-    toast.error(err instanceof Error ? err.message : 'Failed to add alternate')
+    toast.error(err instanceof Error ? err.message : 'Failed to save alternate')
   } finally {
     addingAlt.value = false
   }
@@ -578,29 +658,6 @@ onMounted(() => { load(); loadNameLookups() })
           </v-card-text>
         </v-card>
 
-        <v-card variant="flat" border class="mb-4">
-          <v-card-title class="text-subtitle-1 font-weight-bold d-flex align-center">
-            Location
-            <v-spacer />
-            <v-btn v-if="coordinates" variant="text" size="small" prepend-icon="mdi-open-in-new" :href="mapLinkUrl" target="_blank" rel="noopener">
-              Open larger map
-            </v-btn>
-          </v-card-title>
-          <v-divider />
-          <v-card-text>
-            <template v-if="coordinates">
-              <iframe
-                class="household-map" :src="mapEmbedUrl" title="Household registration location" loading="lazy"
-                referrerpolicy="no-referrer-when-downgrade"
-              />
-              <div class="text-caption text-medium-emphasis mt-2">{{ coordinates.lat.toFixed(6) }}, {{ coordinates.lon.toFixed(6) }} &middot; from the registering field officer's device location</div>
-            </template>
-            <div v-else class="text-medium-emphasis">
-              No location on file for this household. Coordinates are captured automatically by the BioPay Android field app at registration.
-            </div>
-          </v-card-text>
-        </v-card>
-
         <v-card v-if="auth.can('ACCESS_ALTERNATES')" variant="flat" border>
           <v-card-title class="text-subtitle-1 font-weight-bold d-flex align-center">
             Alternates ({{ alternates.length }})
@@ -625,48 +682,39 @@ onMounted(() => { load(); loadNameLookups() })
             </v-btn>
           </v-card-title>
           <v-divider />
-          <v-list v-if="alternates.length">
-            <template v-for="a in alternates" :key="a.alternateNumber ?? a.alternateName">
-              <v-list-item
-                :title="a.alternateName"
-                :subtitle="[a.relationship, a.phoneNumber].filter(Boolean).join(' · ') || undefined"
+          <v-data-table
+            v-if="alternates.length"
+            :headers="altTableHeaders"
+            :items="alternates"
+            item-value="alternateNumber"
+            density="comfortable"
+            class="alt-table"
+          >
+            <template #item.photo="{ item }">
+              <v-avatar
+                v-if="alternatePhotoUrls[item.alternateNumber ?? '']?.length"
+                size="36"
+                role="button"
+                tabindex="0"
+                :aria-label="`View ${item.alternateName ?? 'alternate'}'s photo full size`"
+                @click="lightboxSrc = alternatePhotoUrls[item.alternateNumber ?? '']![0]"
+                @keyup.enter="lightboxSrc = alternatePhotoUrls[item.alternateNumber ?? '']![0]"
               >
-                <template #prepend>
-                  <v-avatar
-                    v-if="alternatePhotoUrls[a.alternateNumber ?? '']?.length"
-                    size="40"
-                    role="button"
-                    tabindex="0"
-                    :aria-label="`View ${a.alternateName ?? 'alternate'}'s photo full size`"
-                    @click="lightboxSrc = alternatePhotoUrls[a.alternateNumber ?? '']![0]"
-                    @keyup.enter="lightboxSrc = alternatePhotoUrls[a.alternateNumber ?? '']![0]"
-                  >
-                    <v-img :src="alternatePhotoUrls[a.alternateNumber ?? '']![0]" cover />
-                  </v-avatar>
-                  <v-icon v-else icon="mdi-account-child-outline" />
-                </template>
-              </v-list-item>
-              <div
-                v-if="(alternatePhotoUrls[a.alternateNumber ?? ''] ?? []).length > 1"
-                class="px-4 pb-3 d-flex ga-2 flex-wrap"
-              >
-                <v-img
-                  v-for="(src, i) in (alternatePhotoUrls[a.alternateNumber ?? ''] ?? []).slice(1)"
-                  :key="i"
-                  :src="src"
-                  width="56"
-                  height="56"
-                  cover
-                  class="rounded-lg clickable-photo"
-                  role="button"
-                  tabindex="0"
-                  aria-label="View photo full size"
-                  @click="lightboxSrc = src"
-                  @keyup.enter="lightboxSrc = src"
-                />
-              </div>
+                <v-img :src="alternatePhotoUrls[item.alternateNumber ?? '']![0]" cover />
+              </v-avatar>
+              <v-avatar v-else size="36" color="surface-variant">
+                <v-icon icon="mdi-account-child-outline" size="18" />
+              </v-avatar>
             </template>
-          </v-list>
+            <template #item.relationship="{ item }">{{ item.relationship || '—' }}</template>
+            <template #item.gender="{ item }">{{ genderLabel(item.gender) }}</template>
+            <template #item.createdAt="{ item }">{{ formatTimestamp(item.createdAt) }}</template>
+            <template #item.actions="{ item }">
+              <v-btn icon="mdi-eye-outline" variant="text" size="small" density="comfortable" aria-label="View alternate" @click="openViewAlternate(item)" />
+              <v-btn icon="mdi-pencil-outline" variant="text" size="small" density="comfortable" aria-label="Edit alternate" @click="openEditAlternate(item)" />
+              <v-btn icon="mdi-account-cancel-outline" variant="text" size="small" density="comfortable" color="error" aria-label="Deactivate alternate" @click="deactivateAlternate(item)" />
+            </template>
+          </v-data-table>
           <v-card-text v-else class="text-medium-emphasis">
             No alternates registered for this household.
           </v-card-text>
@@ -735,6 +783,29 @@ onMounted(() => { load(); loadNameLookups() })
       </v-col>
 
       <v-col cols="12" md="4">
+        <v-card variant="flat" border class="mb-4">
+          <v-card-title class="text-subtitle-1 font-weight-bold d-flex align-center">
+            Location
+            <v-spacer />
+            <v-btn v-if="coordinates" variant="text" size="small" prepend-icon="mdi-open-in-new" :href="mapLinkUrl" target="_blank" rel="noopener">
+              Open larger map
+            </v-btn>
+          </v-card-title>
+          <v-divider />
+          <v-card-text>
+            <template v-if="coordinates">
+              <iframe
+                class="household-map" :src="mapEmbedUrl" title="Household registration location" loading="lazy"
+                referrerpolicy="no-referrer-when-downgrade"
+              />
+              <div class="text-caption text-medium-emphasis mt-2">{{ coordinates.lat.toFixed(6) }}, {{ coordinates.lon.toFixed(6) }} &middot; from the registering field officer's device location</div>
+            </template>
+            <div v-else class="text-medium-emphasis">
+              No location on file for this household. Coordinates are captured automatically by the BioPay Android field app at registration.
+            </div>
+          </v-card-text>
+        </v-card>
+
         <v-card variant="flat" border class="mb-4">
           <v-card-title class="text-subtitle-1 font-weight-bold">Household head photo</v-card-title>
           <v-divider />
@@ -816,9 +887,16 @@ onMounted(() => { load(); loadNameLookups() })
               <v-select v-model="editForm.gender" label="Gender" :items="['M', 'F']" />
             </v-col>
           </v-row>
-          <v-text-field v-model="editForm.maritalStatus" label="Marital status" />
-          <v-text-field v-model="editForm.phoneNumber" label="Phone number" />
-          <v-text-field v-model.number="editForm.householdSize" label="Household size" type="number" />
+          <v-row>
+            <v-col cols="6">
+              <v-select v-model="editForm.maritalStatus" label="Marital status" :items="[...MARITAL_STATUS_OPTIONS]" clearable />
+            </v-col>
+            <v-col cols="6"><v-text-field v-model="editForm.spouseName" label="Spouse name" /></v-col>
+          </v-row>
+          <v-row>
+            <v-col cols="6"><v-text-field v-model="editForm.phoneNumber" label="Phone number" /></v-col>
+            <v-col cols="6"><v-text-field v-model.number="editForm.householdSize" label="Household size" type="number" /></v-col>
+          </v-row>
           <v-select
             v-model="editForm.vulnerabilityStatuses"
             :items="VULNERABILITY_OPTIONS"
@@ -858,15 +936,22 @@ onMounted(() => { load(); loadNameLookups() })
     <v-dialog v-model="addAltDialog" max-width="520">
       <v-card>
         <v-card-title class="d-flex align-center">
-          Add alternate
+          {{ editingAlternateNumber ? 'Edit alternate' : 'Add alternate' }}
           <v-spacer />
         </v-card-title>
         <dialog-close-button @close="addAltDialog = false" />
         <v-divider />
         <v-card-text class="d-flex flex-column ga-3 pt-4">
           <v-text-field v-model="altForm.alternateName" label="Full name" hide-details density="compact" />
-          <v-text-field v-model="altForm.relationship" label="Relationship to household head" hide-details density="compact" />
-          <div class="d-flex ga-3">
+          <v-select
+            v-model="altForm.relationship"
+            :items="[...ALTERNATE_RELATIONSHIP_OPTIONS]"
+            label="Relationship to household head"
+            hide-details
+            density="compact"
+            @update:model-value="onAltRelationshipChange"
+          />
+          <div class="d-flex ga-3 alt-form-row">
             <v-text-field v-model.number="altForm.age" label="Age" type="number" hide-details density="compact" />
             <v-select
               v-model="altForm.gender"
@@ -879,7 +964,7 @@ onMounted(() => { load(); loadNameLookups() })
           </div>
           <v-text-field v-model="altForm.phoneNumber" label="Phone number" hide-details density="compact" />
           <v-file-input
-            label="Photo (optional)"
+            label="Attach photo (optional)"
             accept="image/*"
             prepend-icon="mdi-camera-outline"
             hide-details
@@ -894,10 +979,72 @@ onMounted(() => { load(); loadNameLookups() })
         </v-card-actions>
       </v-card>
     </v-dialog>
+
+    <v-dialog v-model="viewAltDialog" max-width="480">
+      <v-card v-if="viewAltTarget">
+        <v-card-title class="d-flex align-center">
+          {{ viewAltTarget.alternateName }}
+          <v-spacer />
+        </v-card-title>
+        <dialog-close-button @close="viewAltDialog = false" />
+        <v-divider />
+        <v-card-text class="d-flex flex-column ga-3 pt-4">
+          <div v-if="(alternatePhotoUrls[viewAltTarget.alternateNumber ?? ''] ?? []).length" class="d-flex ga-2 flex-wrap">
+            <v-img
+              v-for="(src, i) in alternatePhotoUrls[viewAltTarget.alternateNumber ?? '']"
+              :key="i"
+              :src="src"
+              width="72"
+              height="72"
+              cover
+              class="rounded-lg clickable-photo"
+              role="button"
+              tabindex="0"
+              aria-label="View photo full size"
+              @click="lightboxSrc = src"
+              @keyup.enter="lightboxSrc = src"
+            />
+          </div>
+          <v-row dense>
+            <v-col cols="6">
+              <div class="text-caption text-medium-emphasis">Relationship</div>
+              <div class="text-body-1">{{ viewAltTarget.relationship || '—' }}</div>
+            </v-col>
+            <v-col cols="6">
+              <div class="text-caption text-medium-emphasis">Gender</div>
+              <div class="text-body-1">{{ genderLabel(viewAltTarget.gender) }}</div>
+            </v-col>
+            <v-col cols="6">
+              <div class="text-caption text-medium-emphasis">Age</div>
+              <div class="text-body-1">{{ viewAltTarget.age ?? '—' }}</div>
+            </v-col>
+            <v-col cols="6">
+              <div class="text-caption text-medium-emphasis">Phone number</div>
+              <div class="text-body-1">{{ viewAltTarget.phoneNumber || '—' }}</div>
+            </v-col>
+            <v-col cols="12">
+              <div class="text-caption text-medium-emphasis">Added</div>
+              <div class="text-body-1">{{ formatTimestamp(viewAltTarget.createdAt) }}</div>
+            </v-col>
+          </v-row>
+        </v-card-text>
+        <v-card-actions class="pa-4 pt-0">
+          <v-spacer />
+          <v-btn variant="flat" color="secondary" @click="viewAltDialog = false; openEditAlternate(viewAltTarget!)">Edit</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </div>
 </template>
 
 <style scoped>
+/* Age and Gender share one row and must be exactly the same size -- give both
+ * an equal flex basis instead of letting either grow from its own content/hint. */
+.alt-form-row > * {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
 .household-map {
   width: 100%;
   height: 260px;

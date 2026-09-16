@@ -372,7 +372,7 @@ function onNavClick(event: MouseEvent | KeyboardEvent, to: string) {
   overscroll-behavior-y: contain;
   scrollbar-width: thin;
   scrollbar-color: #94a3b8 transparent;
-  background: #f8fafc;
+  background: #f1f5f9;
 }
 .dashboard-main::-webkit-scrollbar { display: block; width: 9px; }
 .dashboard-main::-webkit-scrollbar-track { background: transparent; }

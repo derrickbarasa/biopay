@@ -7,6 +7,11 @@ export const VULNERABILITY_OPTIONS = [
   { title: 'Single caregiver', value: 'SINGLE_CAREGIVER' },
 ] as const
 
+// Stored as the plain label itself (not a code) -- marital_status is a free-text column
+// and the mobile field app (see mobile/agent .../strings.xml marital_status_options) writes
+// these same literal words, so dashboard- and mobile-registered households read identically.
+export const MARITAL_STATUS_OPTIONS = ['Single', 'Married', 'Widowed', 'Divorced', 'Separated'] as const
+
 export const LEGAL_STATUS_OPTIONS = [
   { title: 'Citizen', value: 'CITIZEN' },
   { title: 'Refugee', value: 'REFUGEE' },
