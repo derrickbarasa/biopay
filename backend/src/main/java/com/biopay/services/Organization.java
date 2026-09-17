@@ -331,14 +331,22 @@ public class Organization extends AbstractVerticle {
             return;
         }
 
-        pool.preparedQuery("UPDATE organizations SET status=@p1, updated_at=GETDATE() WHERE organization_code=@p2 AND (@p3=1 OR anchor_id=@p4)")
+        // An organisation is dependent on its anchor -- while the anchor itself is deactivated,
+        // none of its organisations can be (re)activated; they only become activatable again once
+        // the anchor is. This applies to every actor, including the Super Admin, since it's a
+        // structural dependency, not a permission check. Deactivating an organisation is never
+        // blocked by this.
+        pool.preparedQuery("UPDATE organizations SET status=@p1, updated_at=GETDATE() WHERE organization_code=@p2 AND (@p3=1 OR anchor_id=@p4) "
+                        + "AND (@p1=0 OR EXISTS (SELECT 1 FROM anchors a WHERE a.id=organizations.anchor_id AND a.status=1))")
                 .execute(Tuple.of(status, partnerId, isSystemAdmin(payload), TenantScope.anchorId(payload)))
                 .onFailure(err -> onDbError(message, err))
                 .onSuccess(rows -> {
                     if (rows.rowCount() > 0) {
                         reply(message, new JsonObject().put("responseCode", "000").put("responseMessage", "Organisation status updated"));
                     } else {
-                        replyError(message, "Organisation not found");
+                        replyError(message, status == 1
+                                ? "Organisation not found, or its anchor is deactivated"
+                                : "Organisation not found");
                     }
                 });
     }
@@ -353,7 +361,7 @@ public class Organization extends AbstractVerticle {
         // anchor_name.  Selecting only organizations.* caused summary() to throw
         // inside this asynchronous success callback, which left the event-bus
         // request unanswered and made the browser wait until its HTTP timeout.
-        pool.preparedQuery("SELECT p.*, a.anchor_name FROM organizations p "
+        pool.preparedQuery("SELECT p.*, a.anchor_name, a.status AS anchor_status FROM organizations p "
                         + "LEFT JOIN anchors a ON a.id=p.anchor_id "
                         + "WHERE p.organization_code=@p1 AND (@p2=1 OR p.anchor_id=@p3 OR p.organization_code=@p4)")
                 .execute(Tuple.of(partnerId, isSystemAdmin(payload), TenantScope.anchorId(payload), payload.getString("partnerCode", "")))
@@ -384,17 +392,17 @@ public class Organization extends AbstractVerticle {
         if (isSystemAdmin(payload)) {
             Integer status = payload.getInteger("status");
             Integer targetAnchorId = TenantScope.anchorId(payload);
-            sql = "SELECT p.*, a.anchor_name FROM organizations p JOIN anchors a ON a.id=p.anchor_id "
+            sql = "SELECT p.*, a.anchor_name, a.status AS anchor_status FROM organizations p JOIN anchors a ON a.id=p.anchor_id "
                     + "WHERE LTRIM(RTRIM(ISNULL(p.name,'')))<>'' AND (@p1 IS NULL OR p.status=@p1) AND (@p2 IS NULL OR p.anchor_id=@p2) ORDER BY a.anchor_name,p.name";
             params = Tuple.of(status, targetAnchorId);
         } else if (isAnchor(payload)) {
             Object anchorId = payload.getValue("anchorId");
             Integer status = payload.getInteger("status");
-            sql = "SELECT p.*, a.anchor_name FROM organizations p JOIN anchors a ON a.id=p.anchor_id WHERE p.anchor_id=@p1 AND LTRIM(RTRIM(ISNULL(p.name,'')))<>'' AND (@p2 IS NULL OR p.status=@p2) ORDER BY p.name";
+            sql = "SELECT p.*, a.anchor_name, a.status AS anchor_status FROM organizations p JOIN anchors a ON a.id=p.anchor_id WHERE p.anchor_id=@p1 AND LTRIM(RTRIM(ISNULL(p.name,'')))<>'' AND (@p2 IS NULL OR p.status=@p2) ORDER BY p.name";
             params = Tuple.of(anchorId, status);
         } else {
             String partnerCode = payload.getString("partnerCode", "");
-            sql = "SELECT p.*, a.anchor_name FROM organizations p JOIN anchors a ON a.id=p.anchor_id WHERE p.organization_code=@p1";
+            sql = "SELECT p.*, a.anchor_name, a.status AS anchor_status FROM organizations p JOIN anchors a ON a.id=p.anchor_id WHERE p.organization_code=@p1";
             params = Tuple.of(partnerCode);
         }
 
@@ -426,6 +434,7 @@ public class Organization extends AbstractVerticle {
                 .put("verificationMethod", Rows.str(r, "verification_method"))
                 .put("anchorId", Rows.intVal(r, "anchor_id"))
                 .put("anchorName", Rows.str(r, "anchor_name"))
+                .put("anchorStatus", Rows.intVal(r, "anchor_status"))
                 .put("status", Rows.intVal(r, "status"))
                 .put("createdAt", Rows.str(r, "created_at"))
                 .put("updatedAt", Rows.str(r, "updated_at"));

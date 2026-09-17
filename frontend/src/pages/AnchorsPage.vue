@@ -73,7 +73,7 @@ async function toggleStatus(item: Anchor) {
       ? `${item.name} and its administrator will no longer be able to sign in. Every organization, field officer and dashboard user under it will also be deactivated -- the anchor holds the subscription, so nothing under it can keep operating. This can be undone, but reactivating only restores the anchor itself; anything deactivated by this action must be reactivated individually.`
       : `${item.name} will be reactivated and its administrator can sign in again. Organizations, field officers and users under it stay deactivated until reactivated individually.`,
     confirmLabel: deactivating ? 'Deactivate anchor' : 'Activate anchor',
-    color: deactivating ? 'error' : 'secondary',
+    color: deactivating ? 'error' : 'success',
   })) return
   try {
     await dispatch('TOGGLE_ANCHOR_STATUS', { targetAnchorId: item.id, status: deactivating ? 0 : 1 })
@@ -127,7 +127,7 @@ onMounted(load)
         <template #item.actions="{ item }">
           <v-btn :to="{ name: 'anchor-detail', params: { anchorId: item.id } }" icon="mdi-eye-outline" variant="text" size="small" :aria-label="`View ${item.name}`" />
           <v-btn icon="mdi-pencil" variant="text" size="small" :aria-label="`Edit ${item.name}`" @click="openEdit(item)" />
-          <v-btn :icon="item.status === 1 ? 'mdi-account-cancel-outline' : 'mdi-account-check-outline'" variant="text" size="small" :color="item.status === 1 ? 'error' : 'secondary'" :aria-label="`${item.status === 1 ? 'Deactivate' : 'Activate'} ${item.name}`" @click="toggleStatus(item)" />
+          <v-btn :icon="item.status === 1 ? 'mdi-account-cancel-outline' : 'mdi-account-check-outline'" variant="text" size="small" :color="item.status === 1 ? 'error' : 'success'" :aria-label="`${item.status === 1 ? 'Deactivate' : 'Activate'} ${item.name}`" @click="toggleStatus(item)" />
         </template>
       </v-data-table>
     </v-card>

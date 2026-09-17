@@ -103,7 +103,7 @@ async function toggle(client: ApiClientRow) {
       ? `${client.name} will no longer be able to obtain new access tokens. Any tokens it already holds keep working until they expire.`
       : `${client.name} will be able to obtain access tokens again.`,
     confirmLabel: revoking ? 'Revoke' : 'Restore',
-    color: revoking ? 'warning' : 'secondary',
+    color: revoking ? 'error' : 'success',
   })) return
   try {
     await dispatch('TOGGLE_API_CLIENT_STATUS', { userId: client.id, status: revoking ? 0 : 1 })

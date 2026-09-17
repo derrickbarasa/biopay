@@ -244,7 +244,7 @@ async function toggleStatus(level: typeof dialogLevel.value, item: GeoNode) {
       ? `${item.name} will be hidden from pickers and can no longer be used for new work. Its existing records stay intact and it can be reactivated any time.`
       : `${item.name} will become available again for new work.`,
     confirmLabel: deactivating ? 'Deactivate' : 'Activate',
-    color: deactivating ? 'warning' : 'secondary',
+    color: deactivating ? 'error' : 'success',
   })) return
   try {
     await dispatch('TOGGLE_GEO_NODE_STATUS', {
@@ -406,7 +406,7 @@ async function submitBulk() {
               </template>
               <template #item.actions="{ item }">
                 <v-btn v-if="auth.can('ACCESS_LOCATIONS')" icon="mdi-pencil-outline" size="small" variant="text" :aria-label="`Edit state ${item.name}`" @click="openEdit('STATE', item)" />
-                <v-btn v-if="auth.can('ACCESS_LOCATIONS')" :icon="item.status === 0 ? 'mdi-check-circle-outline' : 'mdi-cancel'" size="small" variant="text" :color="item.status === 0 ? 'secondary' : 'warning'" :aria-label="`${item.status === 0 ? 'Activate' : 'Deactivate'} state ${item.name}`" @click="toggleStatus('STATE', item)" />
+                <v-btn v-if="auth.can('ACCESS_LOCATIONS')" :icon="item.status === 0 ? 'mdi-check-circle-outline' : 'mdi-cancel'" size="small" variant="text" :color="item.status === 0 ? 'success' : 'error'" :aria-label="`${item.status === 0 ? 'Activate' : 'Deactivate'} state ${item.name}`" @click="toggleStatus('STATE', item)" />
                 <v-btn v-if="auth.can('ACCESS_LOCATIONS')" icon="mdi-delete" size="small" variant="text" color="error" :aria-label="`Delete state ${item.name}`" @click="remove('STATE', item)" />
               </template>
               <template #no-data><div class="text-center text-medium-emphasis py-4">No states configured yet</div></template>
@@ -438,7 +438,7 @@ async function submitBulk() {
               </template>
               <template #item.actions="{ item }">
                 <v-btn v-if="auth.can('ACCESS_LOCATIONS')" icon="mdi-pencil-outline" size="small" variant="text" :aria-label="`Edit county ${item.name}`" @click="openEdit('COUNTY', item)" />
-                <v-btn v-if="auth.can('ACCESS_LOCATIONS')" :icon="item.status === 0 ? 'mdi-check-circle-outline' : 'mdi-cancel'" size="small" variant="text" :color="item.status === 0 ? 'secondary' : 'warning'" :aria-label="`${item.status === 0 ? 'Activate' : 'Deactivate'} county ${item.name}`" @click="toggleStatus('COUNTY', item)" />
+                <v-btn v-if="auth.can('ACCESS_LOCATIONS')" :icon="item.status === 0 ? 'mdi-check-circle-outline' : 'mdi-cancel'" size="small" variant="text" :color="item.status === 0 ? 'success' : 'error'" :aria-label="`${item.status === 0 ? 'Activate' : 'Deactivate'} county ${item.name}`" @click="toggleStatus('COUNTY', item)" />
                 <v-btn v-if="auth.can('ACCESS_LOCATIONS')" icon="mdi-delete" size="small" variant="text" color="error" :aria-label="`Delete county ${item.name}`" @click="remove('COUNTY', item)" />
               </template>
               <template #no-data><div class="text-center text-medium-emphasis py-4">No counties configured yet</div></template>
@@ -471,7 +471,7 @@ async function submitBulk() {
               </template>
               <template #item.actions="{ item }">
                 <v-btn v-if="auth.can('ACCESS_LOCATIONS')" icon="mdi-pencil-outline" size="small" variant="text" :aria-label="`Edit location ${item.name}`" @click="openEdit('LOCATION', item)" />
-                <v-btn v-if="auth.can('ACCESS_LOCATIONS')" :icon="item.status === 0 ? 'mdi-check-circle-outline' : 'mdi-cancel'" size="small" variant="text" :color="item.status === 0 ? 'secondary' : 'warning'" :aria-label="`${item.status === 0 ? 'Activate' : 'Deactivate'} location ${item.name}`" @click="toggleStatus('LOCATION', item)" />
+                <v-btn v-if="auth.can('ACCESS_LOCATIONS')" :icon="item.status === 0 ? 'mdi-check-circle-outline' : 'mdi-cancel'" size="small" variant="text" :color="item.status === 0 ? 'success' : 'error'" :aria-label="`${item.status === 0 ? 'Activate' : 'Deactivate'} location ${item.name}`" @click="toggleStatus('LOCATION', item)" />
                 <v-btn v-if="auth.can('ACCESS_LOCATIONS')" icon="mdi-delete" size="small" variant="text" color="error" :aria-label="`Delete location ${item.name}`" @click="remove('LOCATION', item)" />
               </template>
               <template #no-data><div class="text-center text-medium-emphasis py-4">No locations configured yet</div></template>
@@ -505,7 +505,7 @@ async function submitBulk() {
               </template>
               <template #item.actions="{ item }">
                 <v-btn v-if="auth.can('ACCESS_LOCATIONS')" icon="mdi-pencil-outline" size="small" variant="text" :aria-label="`Edit village ${item.name}`" @click="openEdit('VILLAGE', item)" />
-                <v-btn v-if="auth.can('ACCESS_LOCATIONS')" :icon="item.status === 0 ? 'mdi-check-circle-outline' : 'mdi-cancel'" size="small" variant="text" :color="item.status === 0 ? 'secondary' : 'warning'" :aria-label="`${item.status === 0 ? 'Activate' : 'Deactivate'} village ${item.name}`" @click="toggleStatus('VILLAGE', item)" />
+                <v-btn v-if="auth.can('ACCESS_LOCATIONS')" :icon="item.status === 0 ? 'mdi-check-circle-outline' : 'mdi-cancel'" size="small" variant="text" :color="item.status === 0 ? 'success' : 'error'" :aria-label="`${item.status === 0 ? 'Activate' : 'Deactivate'} village ${item.name}`" @click="toggleStatus('VILLAGE', item)" />
                 <v-btn v-if="auth.can('ACCESS_LOCATIONS')" icon="mdi-delete" size="small" variant="text" color="error" :aria-label="`Delete village ${item.name}`" @click="remove('VILLAGE', item)" />
               </template>
               <template #no-data><div class="text-center text-medium-emphasis py-4">No villages configured yet</div></template>

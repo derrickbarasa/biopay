@@ -9,6 +9,7 @@ interface OrganizationRow {
   country?: string
   verificationMethod?: string
   anchorName?: string
+  anchorStatus?: number
   status: number
 }
 
@@ -54,6 +55,13 @@ function verificationMethodLabel(method?: string) {
   if (method === 'BOTH') return 'Both'
   return 'Fingerprint'
 }
+
+// An organisation is dependent on its anchor -- it can't be (re)activated while the anchor
+// itself is deactivated (enforced server-side too, see Organization#toggleStatus). Deactivating
+// an organisation is never blocked by this.
+function cannotActivate(item: OrganizationRow) {
+  return item.status !== 1 && item.anchorStatus === 0
+}
 </script>
 
 <template>
@@ -87,11 +95,19 @@ function verificationMethodLabel(method?: string) {
         :aria-label="`View ${item.name}`"
       />
       <v-btn v-if="canManage" icon="mdi-pencil" variant="text" size="small" :aria-label="`Edit ${item.name}`" @click="emit('edit', item)" />
+      <v-tooltip v-if="canManage && cannotActivate(item)" text="This organisation's anchor is deactivated -- reactivate the anchor first" location="top">
+        <template #activator="{ props: tip }">
+          <span v-bind="tip">
+            <v-btn icon="mdi-account-check-outline" variant="text" size="small" disabled :aria-label="`Activate ${item.name}`" />
+          </span>
+        </template>
+      </v-tooltip>
       <v-btn
-        v-if="canManage"
-        :icon="item.status === 1 ? 'mdi-toggle-switch-off-outline' : 'mdi-toggle-switch'"
+        v-else-if="canManage"
+        :icon="item.status === 1 ? 'mdi-account-cancel-outline' : 'mdi-account-check-outline'"
         variant="text"
         size="small"
+        :color="item.status === 1 ? 'error' : 'success'"
         :aria-label="`${item.status === 1 ? 'Deactivate' : 'Activate'} ${item.name}`"
         @click="emit('toggle-status', item)"
       />

@@ -147,7 +147,6 @@ export type ProcessingCode =
   | 'GET_PAYMENTS'
   | 'GET_PAYMENT'
   | 'UPDATE_PAYMENT_STATUS'
-  | 'DELETE_PAYMENT'
   | 'PAYMENT_SUMMARY'
   | 'PAY_PAYMENT_ONLINE'
   // dashboard

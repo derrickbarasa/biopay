@@ -33,7 +33,6 @@ public class Payment extends AbstractVerticle {
         eventBus.consumer("GET_PAYMENTS", this::retrieveAll);
         eventBus.consumer("GET_PAYMENT", this::getOne);
         eventBus.consumer("UPDATE_PAYMENT_STATUS", this::updateStatus);
-        eventBus.consumer("DELETE_PAYMENT", this::delete);
         eventBus.consumer("PAYMENT_SUMMARY", this::summary);
         eventBus.consumer("PAY_PAYMENT_ONLINE", this::payOnline);
         startPromise.complete();
@@ -137,28 +136,6 @@ public class Payment extends AbstractVerticle {
         // recorded by the field attempt; Paid is set only by verified field payment or authorised
         // online recovery of that failure.
         replyError(message, "Payment status is set by beneficiary verification or approved online recovery");
-    }
-
-    // ---- DELETE_PAYMENT (only if not yet disbursed) --------------------------------
-
-    private void delete(Message<Object> message) {
-        JsonObject payload = new JsonObject(message.body().toString());
-        Integer id = payload.getInteger("id");
-        String scopeClause = isAnchor(payload) ? " AND (@p2=1 OR anchor_id=@p3)" : " AND organization_code=@p2";
-
-        // Released cycle entitlements belong to the cycle audit trail and cannot be deleted here.
-        // Pre-release line changes are handled by REJECT_PAYROLL_ITEMS.
-        pool.preparedQuery("DELETE FROM payments WHERE id=@p1 AND status=0 AND rejected=0 "
-                        + "AND payment_cycle_id IS NULL" + scopeClause)
-                .execute(isAnchor(payload) ? Tuple.of(id, isSystemAdmin(payload), TenantScope.anchorId(payload)) : Tuple.of(id, payload.getString("partnerCode", "")))
-                .onFailure(err -> onDbError(message, err))
-                .onSuccess(rows -> {
-                    if (rows.rowCount() > 0) {
-                        reply(message, new JsonObject().put("responseCode", "000").put("responseMessage", "Payment deleted"));
-                    } else {
-                        replyError(message, "Only a pending payment in your organisation can be deleted");
-                    }
-                });
     }
 
     // ---- PAY_PAYMENT_ONLINE (System Owner, or a role explicitly granted PAY_ONLINE,

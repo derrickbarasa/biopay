@@ -21,6 +21,7 @@ interface Organization {
   verificationMethod?: string
   anchorId?: number
   anchorName?: string
+  anchorStatus?: number
   status: number
   createdAt?: string
 }
@@ -152,7 +153,7 @@ async function toggleStatus(org: Organization) {
       ? `${org.name} will no longer be able to operate in BioPay until it is reactivated.`
       : `${org.name} will regain access to its enabled BioPay modules.`,
     confirmLabel: deactivating ? 'Deactivate' : 'Activate',
-    color: deactivating ? 'warning' : 'secondary',
+    color: deactivating ? 'error' : 'success',
   })) return
   try {
     await dispatch('TOGGLE_ORGANIZATION_STATUS', {

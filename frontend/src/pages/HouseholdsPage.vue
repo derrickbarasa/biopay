@@ -271,7 +271,7 @@ async function toggleStatus(row: HouseholdRow) {
       ? `${row.householdName} (${row.householdNumber}) will be hidden from active programme records until reactivated.`
       : `${row.householdName} (${row.householdNumber}) will be restored to active programme records.`,
     confirmLabel: deactivating ? 'Deactivate' : 'Activate',
-    color: deactivating ? 'warning' : 'secondary',
+    color: deactivating ? 'error' : 'success',
   })) return
   try {
     await dispatch(deactivating ? 'DEACTIVATE_HOUSEHOLD' : 'ACTIVATE_HOUSEHOLD', { householdNumber: row.householdNumber })
@@ -555,9 +555,9 @@ async function submitBulk() {
               @updated="load"
             />
             <v-btn
-              v-if="auth.can('ACCESS_HOUSEHOLDS')"
+              v-if="auth.can('ACCESS_HOUSEHOLDS') && householdReviewStatus(item.reviewStatus) === 'APPROVED'"
               :icon="item.status === 1 ? 'mdi-account-cancel-outline' : 'mdi-account-check-outline'"
-              variant="text" size="small" :color="item.status === 1 ? 'warning' : 'secondary'"
+              variant="text" size="small" :color="item.status === 1 ? 'error' : 'success'"
               :aria-label="`${item.status === 1 ? 'Deactivate' : 'Activate'} household ${item.householdName}`"
               @click="toggleStatus(item)"
             />

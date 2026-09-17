@@ -224,15 +224,22 @@ public class Administration extends AbstractVerticle {
         String sql;
         Tuple params;
         // account_type='HUMAN' -- API clients (see getApiClients/createApiClient) live in this
-        // same table but have their own management page, not the Users list.
+        // same table but have their own management page, not the Users list. The anchors join
+        // resolves anchor_id to a real name so an anchor-wide user's actual tenant is visible on
+        // the Users list instead of the generic "Anchor-wide" scope label -- a NULL anchor_name
+        // here (join miss) surfaces a dangling anchor_id (e.g. one left over from an anchor that
+        // no longer exists at that id) that would otherwise silently and invisibly exclude that
+        // user from every anchor-scoped list (e.g. Anchor Detail's Anchor Users tab, which filters
+        // client-side on an exact anchor_id match).
+        String anchorJoin = "LEFT JOIN anchors a ON a.id=u.anchor_id ";
         if (systemAdmin(p)) {
-            sql = "SELECT u.*, r.role_name FROM users u LEFT JOIN roles r ON r.id=u.role_id WHERE u.account_type='HUMAN' ORDER BY u.created_at DESC";
+            sql = "SELECT u.*, r.role_name, a.anchor_name FROM users u LEFT JOIN roles r ON r.id=u.role_id " + anchorJoin + "WHERE u.account_type='HUMAN' ORDER BY u.created_at DESC";
             params = Tuple.tuple();
         } else if (anchor(p)) {
-            sql = "SELECT u.*, r.role_name FROM users u LEFT JOIN roles r ON r.id=u.role_id WHERE u.account_type='HUMAN' AND u.anchor_id=@p1 ORDER BY u.created_at DESC";
+            sql = "SELECT u.*, r.role_name, a.anchor_name FROM users u LEFT JOIN roles r ON r.id=u.role_id " + anchorJoin + "WHERE u.account_type='HUMAN' AND u.anchor_id=@p1 ORDER BY u.created_at DESC";
             params = Tuple.of(Integer.parseInt(p.getValue("anchorId").toString()));
         } else {
-            sql = "SELECT u.*, r.role_name FROM users u LEFT JOIN roles r ON r.id=u.role_id WHERE u.account_type='HUMAN' AND u.organization_code=@p1 ORDER BY u.created_at DESC";
+            sql = "SELECT u.*, r.role_name, a.anchor_name FROM users u LEFT JOIN roles r ON r.id=u.role_id " + anchorJoin + "WHERE u.account_type='HUMAN' AND u.organization_code=@p1 ORDER BY u.created_at DESC";
             params = Tuple.of(p.getString("partnerCode", ""));
         }
         pool.preparedQuery(sql).execute(params).onFailure(e -> dbFail(message,e)).onSuccess(rows -> {
@@ -240,7 +247,7 @@ public class Administration extends AbstractVerticle {
             for (Row r: rows) out.add(new JsonObject().put("id",Rows.intVal(r,"id")).put("email",Rows.str(r,"email"))
                     .put("username",Rows.str(r,"username")).put("firstName",Rows.str(r,"first_name"))
                     .put("surname",Rows.str(r,"surname")).put("partnerCode",Rows.str(r,"organization_code"))
-                    .put("anchorId",Rows.intVal(r,"anchor_id"))
+                    .put("anchorId",Rows.intVal(r,"anchor_id")).put("anchorName",Rows.str(r,"anchor_name"))
                     .put("userScope",Rows.str(r,"user_scope")).put("roleId",Rows.intVal(r,"role_id"))
                     .put("roleName",Rows.str(r,"role_name")).put("status",Rows.intVal(r,"status"))
                     .put("systemAdmin",Boolean.TRUE.equals(r.getBoolean("is_system_admin")))
@@ -541,15 +548,35 @@ public class Administration extends AbstractVerticle {
         } else {
             sql = "SELECT " + columns
                     + (browseAll
-                        ? "WHERE r.status=1 "
+                        // Every role the Super Admin creates at ANCHOR or ORGANISATION scope ships as
+                        // one shared, anchor_id/organization_code-NULL row every tenant resolves
+                        // against (see saveRole) -- it's a common role, not a per-tenant one, so the
+                        // browse-all view shows it once, not once per anchor that happens to have
+                        // forked its own copy. A fork only surfaces here when it has NO NULL-anchor
+                        // sibling under the same role_name, meaning it isn't a customization of a
+                        // common role at all but a genuinely standalone role that tenant created for
+                        // itself (e.g. one anchor's own one-off custom role).
+                        ? "WHERE r.status=1 AND (r.anchor_id IS NULL "
+                            + "OR NOT EXISTS (SELECT 1 FROM roles rt WHERE rt.role_name=r.role_name AND rt.anchor_id IS NULL AND rt.organization_code IS NULL AND rt.status=1)) "
                         // The NOT EXISTS guard drops the shared NULL-anchor template once this anchor
                         // has forked its own copy (see saveRole) -- without it, an anchor that has
-                        // customized "Organisation Administrator" would see both its own row and the
-                        // unmodified template under the same name.
+                        // customized it would see both its own row and the unmodified template under
+                        // the same name. Any anchor_id/organization_code-NULL row is a template, not
+                        // just the two built-in admin roles -- a role the Super Admin creates at
+                        // ANCHOR or ORGANISATION scope ships the same way (see saveRole), and every
+                        // anchor must resolve it the same "shared unless forked" way, not just those
+                        // two names. Both the guard and the anchor_id match below require
+                        // organization_code IS NULL: an org-specific fork (an organisation forking
+                        // its own copy of an organisation-scoped role, see saveRole's isOrgActor
+                        // branch) still carries this anchor's anchor_id, so without that filter it
+                        // would (a) satisfy NOT EXISTS and wrongly hide the shared template, and (b)
+                        // match r.anchor_id=@p1 itself -- and with more than one organisation under
+                        // the anchor each forking their own copy, that surfaces as multiple rows
+                        // under the same role name in the anchor admin's list.
                         : "WHERE r.status=1 AND r.role_scope<>'SYSTEM' AND ("
-                            + "(r.anchor_id IS NULL AND r.role_name IN ('Anchor Administrator','Organisation Administrator') "
-                            + "AND NOT EXISTS (SELECT 1 FROM roles r2 WHERE r2.anchor_id=@p1 AND r2.role_name=r.role_name AND r2.status=1)) "
-                            + "OR r.anchor_id=@p1) ")
+                            + "(r.anchor_id IS NULL AND r.organization_code IS NULL "
+                            + "AND NOT EXISTS (SELECT 1 FROM roles r2 WHERE r2.anchor_id=@p1 AND r2.organization_code IS NULL AND r2.role_name=r.role_name AND r2.status=1)) "
+                            + "OR (r.anchor_id=@p1 AND r.organization_code IS NULL)) ")
                     + groupBy;
             params = browseAll ? Tuple.tuple() : Tuple.of(anchorId);
         }
@@ -582,18 +609,21 @@ public class Administration extends AbstractVerticle {
         // scope would reach beyond their own organisation, into every other org under the anchor.
         if(isOrgActor && !"ORGANISATION".equals(scope)){fail(message,"Organisation administrators can only manage organisation-scoped roles");return;}
         if(roleId==null && ("Platform Owner".equalsIgnoreCase(name) || "Anchor Administrator".equalsIgnoreCase(name) || "Organisation Administrator".equalsIgnoreCase(name))){fail(message,"That role name is reserved for a built-in administrator");return;}
-        // A brand-new tenant role (Anchor/Organisation scope) has to belong to some anchor, so
-        // creating one still needs a target chosen first -- unless it's SYSTEM-scoped, which by
-        // definition belongs to no anchor. Editing an existing role never does: an Anchor
-        // Administrator's own anchor (or an Organisation Administrator's own anchor+organisation)
-        // is always known from their session, and the Super Admin -- who manages every role and
-        // permission by definition -- can edit any anchor's role without first narrowing the
-        // page down to that one tenant.
-        if(anchorId==null && roleId==null && !systemScopeAllowed){fail(message,"Choose an anchor before creating a new role for it");return;}
+        // A brand-new tenant role (Anchor/Organisation scope) created by an Anchor or Organisation
+        // Administrator has to belong to their own anchor, so creating one still needs that target
+        // known first -- unless it's SYSTEM-scoped, which by definition belongs to no anchor. The
+        // Super Admin never needs one, at creation or edit: a role they create at ANCHOR or
+        // ORGANISATION scope ships anchor_id/organization_code NULL, the same shared-template shape
+        // as the built-in "Anchor Administrator"/"Organisation Administrator" rows, so it resolves
+        // for every anchor (ANCHOR scope) or every organisation (ORGANISATION scope) via getRoles'
+        // cascade instead of being pinned to whichever one anchor they happened to pick -- that
+        // pinning was the earlier source of "Organisation Administrator" (or any custom role)
+        // showing up once per anchor in the roles table.
+        if(anchorId==null && roleId==null && !systemScopeAllowed && !isSystemAdmin){fail(message,"Choose an anchor before creating a new role for it");return;}
         if(anchorId==null && !isSystemAdmin){fail(message,"Choose an anchor before managing its roles");return;}
         Future<Integer> roleFuture;
         if(roleId==null){
-            Integer insertAnchorId = systemScopeAllowed ? null : anchorId;
+            Integer insertAnchorId = isSystemAdmin ? null : anchorId;
             roleFuture=pool.preparedQuery("INSERT INTO roles (role_name,description,anchor_id,organization_code,role_scope,status,created_at) OUTPUT INSERTED.id VALUES (@p1,@p2,@p3,@p4,@p5,1,GETDATE())")
                     .execute(Tuple.of(name,p.getString("description"),insertAnchorId,organizationCode,scope))
                     .map(rows->Rows.intVal(rows.iterator().next(),"id"));
@@ -639,31 +669,37 @@ public class Administration extends AbstractVerticle {
                     });
         }else{
             Integer editAnchorId=anchorId;
-            // "Organisation Administrator" ships as one shared, anchor_id-NULL template row every
-            // anchor's org-admin users resolve against (see the seed script and getRoles' fallback
-            // clause below) -- an anchor administrator is allowed to customize their own anchor's
-            // copy, but a plain UPDATE would either match nothing (anchor_id filter excludes NULL)
-            // or, if it didn't, silently rewrite every other anchor's org admins too. So the first
-            // edit forks it into an anchor-owned row instead; later edits find that row via its own
-            // anchor_id and just UPDATE it like any other tenant role.
-            roleFuture=pool.preparedQuery("SELECT role_name, anchor_id FROM roles WHERE id=@p1").execute(Tuple.of(roleId))
+            // Any Anchor- or Organisation-scope role with anchor_id NULL is a shared template
+            // every anchor resolves against (see getRoles' fallback clause) -- not just the
+            // built-in "Organisation Administrator" row; a role the Super Admin creates at either
+            // scope ships the same way (see the insertAnchorId branch above). An anchor
+            // administrator may customize their own anchor's copy of any of these except
+            // "Anchor Administrator" itself (their own role -- editable-by-self risks a
+            // self-lockout, enforced by isBuiltInRole on the frontend and mirrored here). A plain
+            // UPDATE would either match nothing (anchor_id filter excludes NULL) or, if it didn't,
+            // silently rewrite every other anchor's copy too. So the first edit forks it into an
+            // anchor-owned row instead; later edits find that row via its own anchor_id and just
+            // UPDATE it like any other tenant role.
+            roleFuture=pool.preparedQuery("SELECT role_name, anchor_id, role_scope FROM roles WHERE id=@p1 AND role_scope<>'SYSTEM'").execute(Tuple.of(roleId))
                     .compose(lookupRows->{
                         if(lookupRows.size()==0) return Future.failedFuture("Role not found or is system-managed");
                         Row existing=lookupRows.iterator().next();
-                        boolean isOrgAdminTemplate = Rows.intVal(existing,"anchor_id")==null && "Organisation Administrator".equals(Rows.str(existing,"role_name"));
-                        if(isOrgAdminTemplate){
+                        boolean isSharedTemplate = Rows.intVal(existing,"anchor_id")==null;
+                        if(isSharedTemplate && "Anchor Administrator".equals(Rows.str(existing,"role_name"))) return Future.failedFuture("Role not found or is system-managed");
+                        if(isSharedTemplate){
                             Integer templateRoleId=roleId;
+                            String existingScope=Rows.str(existing,"role_scope");
                             return pool.preparedQuery("INSERT INTO roles (role_name,description,anchor_id,role_scope,status,created_at) OUTPUT INSERTED.id VALUES (@p1,@p2,@p3,@p4,1,GETDATE())")
                                     .execute(Tuple.of(name,p.getString("description"),editAnchorId,scope))
                                     .map(rows->Rows.intVal(rows.iterator().next(),"id"))
-                                    // Repoint this anchor's own org-admin users off the shared template
-                                    // and onto their new fork -- otherwise the customization silently
-                                    // does not apply to anyone (new users would pick it up via
+                                    // Repoint this anchor's own users of the template off it and onto
+                                    // their new fork -- otherwise the customization silently does not
+                                    // apply to anyone (new users would pick it up via
                                     // Organization#createOrganization's own anchor-first lookup, but
                                     // already-existing users are still pointed at templateRoleId).
                                     .compose(newRoleId -> pool.preparedQuery(
-                                            "UPDATE users SET role_id=@p1 WHERE role_id=@p2 AND anchor_id=@p3 AND user_scope='ORGANISATION'")
-                                            .execute(Tuple.of(newRoleId,templateRoleId,editAnchorId))
+                                            "UPDATE users SET role_id=@p1 WHERE role_id=@p2 AND anchor_id=@p3 AND user_scope=@p4")
+                                            .execute(Tuple.of(newRoleId,templateRoleId,editAnchorId,existingScope))
                                             .map(v -> newRoleId));
                         }
                         return pool.preparedQuery("UPDATE roles SET role_name=@p1,description=@p2,role_scope=@p3,updated_at=GETDATE() OUTPUT INSERTED.id WHERE id=@p4 AND anchor_id=@p5")

@@ -33,6 +33,7 @@ interface Organization {
   country?: string
   capitalCity?: string
   verificationMethod?: string
+  anchorStatus?: number
   status: number
 }
 
@@ -188,7 +189,7 @@ async function toggleOrganizationStatus(org: Organization) {
       ? `${org.name} will no longer be able to operate in BioPay until it is reactivated.`
       : `${org.name} will regain access to its enabled BioPay modules.`,
     confirmLabel: deactivating ? 'Deactivate' : 'Activate',
-    color: deactivating ? 'warning' : 'secondary',
+    color: deactivating ? 'error' : 'success',
   })) return
   try {
     await dispatch('TOGGLE_ORGANIZATION_STATUS', { organisationCode: org.organisationCode, status: deactivating ? 0 : 1, targetAnchorId: anchorId.value })
@@ -281,7 +282,7 @@ async function toggleUserStatus(user: UserRow) {
     title: `${deactivating ? 'Deactivate' : 'Activate'} user?`,
     message: deactivating ? `${user.email} will no longer be able to sign in.` : `${user.email} will be able to sign in again.`,
     confirmLabel: deactivating ? 'Deactivate' : 'Activate',
-    color: deactivating ? 'warning' : 'secondary',
+    color: deactivating ? 'error' : 'success',
   })) return
   try {
     await dispatch('TOGGLE_USER_STATUS', { userId: user.id, status: deactivating ? 0 : 1 })

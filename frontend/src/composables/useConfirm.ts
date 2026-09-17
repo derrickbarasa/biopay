@@ -1,6 +1,6 @@
 import { reactive } from 'vue'
 
-type ConfirmColor = 'error' | 'warning' | 'primary' | 'secondary'
+type ConfirmColor = 'error' | 'warning' | 'primary' | 'secondary' | 'success'
 
 interface ConfirmOptions {
   title: string

@@ -183,23 +183,6 @@ async function payOnline(row: PaymentRow) {
   }
 }
 
-async function remove(row: PaymentRow) {
-  if (!await confirmAction({
-    title: 'Delete payment?',
-    message: `The payment record for ${row.householdName} will be removed. This action cannot be undone.`,
-    confirmLabel: 'Delete payment',
-    color: 'error',
-    requireTypedText: 'DELETE',
-  })) return
-  try {
-    await dispatch('DELETE_PAYMENT', { id: row.id })
-    toast.success('Payment deleted')
-    await load()
-  } catch (err) {
-    toast.error(err instanceof Error ? err.message : 'Delete failed')
-  }
-}
-
 async function viewPayment(row: PaymentRow) {
   detailPayment.value = row
   detailError.value = ''
@@ -434,9 +417,6 @@ function printReceipt(row: PaymentRow) {
             </template></v-tooltip>
             <v-tooltip v-if="auth.can('PAY_ONLINE') && item.status === 2" text="Pay online" location="top"><template #activator="{ props: tip }">
               <v-btn v-bind="tip" icon="mdi-credit-card-outline" variant="text" size="small" color="secondary" :aria-label="`Pay ${item.householdName}'s failed payment online`" @click="payOnline(item)" />
-            </template></v-tooltip>
-            <v-tooltip v-if="auth.can('ACCESS_PAYMENTS') && item.status !== 1" text="Delete" location="top"><template #activator="{ props: tip }">
-              <v-btn v-bind="tip" icon="mdi-delete" variant="text" size="small" color="error" :aria-label="`Delete payment to ${item.householdName}`" @click="remove(item)" />
             </template></v-tooltip>
           </div>
         </template>

@@ -277,7 +277,14 @@ public class Household extends AbstractVerticle {
         JsonObject payload = new JsonObject(message.body().toString());
         String householdNumber = payload.getString("householdNumber", "").trim();
 
+        // A household only ever becomes Active by being APPROVED (see setReviewStatus) -- this
+        // toggle re-activates one that was later manually deactivated, it never substitutes for
+        // that review. So activating (status=1) requires review_status='APPROVED' already: a
+        // still-PENDING household hasn't been vetted yet, and a REJECTED one is inactive by
+        // decision, not by toggle -- only overturning the review decision can change either.
+        // Deactivating an already-approved household is unaffected by this guard.
         String sql = "UPDATE households SET status=@p1, updated_by=@p2, updated_at=GETDATE() WHERE household_number=@p3"
+                + (status == 1 ? " AND review_status='APPROVED'" : "")
                 + (isAnchor(payload) ? " AND (@p4=1 OR organization_code IN (SELECT organization_code FROM organizations WHERE anchor_id=@p5))" : " AND organization_code=@p4");
         Tuple params = isAnchor(payload)
                 ? Tuple.of(status, String.valueOf(payload.getValue("actorId")), householdNumber, isSystemAdmin(payload), TenantScope.anchorId(payload))
@@ -290,7 +297,9 @@ public class Household extends AbstractVerticle {
                     if (rows.rowCount() > 0) {
                         reply(message, new JsonObject().put("responseCode", "000").put("responseMessage", successMessage));
                     } else {
-                        replyError(message, "Household not found or not in your organisation");
+                        replyError(message, status == 1
+                                ? "Household not found, not in your organisation, or not yet approved"
+                                : "Household not found or not in your organisation");
                     }
                 });
     }

@@ -7,8 +7,7 @@ import { useAuthStore } from '@/stores/auth'
 import { PERMISSION_GROUPS, isLegacyPermission, permissionActionLabel } from '@/constants/permissionCatalog'
 
 interface Permission { id: number; name: string; displayName?: string; groupKey?: string; description: string; systemDefined?: boolean }
-interface Role { id: number; name: string; description: string; scope: string; permissions: string[]; status: number; builtIn?: boolean; systemRole?: boolean; undeletable?: boolean; anchorId?: number }
-interface Anchor { id: number; name: string }
+interface Role { id: number; name: string; description: string; scope: string; permissions: string[]; status: number; builtIn?: boolean; systemRole?: boolean; undeletable?: boolean; anchorId?: number; organisationCode?: string }
 interface PermissionItem { permission: Permission; actionLabel: string }
 interface PermissionGroup { key: string; label: string; description: string; icon: string; items: PermissionItem[] }
 
@@ -62,21 +61,18 @@ const permissionDialog = ref(false)
 const creatingPermission = ref(false)
 const roles = ref<Role[]>([])
 const permissions = ref<Permission[]>([])
-const anchors = ref<Anchor[]>([])
 const tableSearch = ref('')
 const permissionSearch = ref('')
 const dialog = ref(false)
 const openModules = ref<string[]>([])
 const selectedTemplateKey = ref<string | null>(null)
-const form = reactive({ roleId: null as number | null, name: '', description: '', scope: 'ORGANISATION', permissionIds: [] as number[], anchorId: null as number | null })
+const form = reactive({ roleId: null as number | null, name: '', description: '', scope: 'ORGANISATION', permissionIds: [] as number[] })
 const newPermission = reactive({ name: '', displayName: '', groupKey: 'REPORTS', description: '' })
 
 const assignablePermissions = computed(() => permissions.value.filter((permission) => !isLegacyPermission(permission.name)))
 const selectedRole = computed(() => roles.value.find((role) => role.id === form.roleId))
 const ownScopeRank = (role: Role) => (auth.isSystemAdmin ? (role.scope === 'SYSTEM' ? 0 : 1) : (role.scope === auth.role ? 0 : 1))
 const sortedRoles = computed(() => [...roles.value].sort((a, b) => ownScopeRank(a) - ownScopeRank(b)))
-const anchorNameById = computed(() => new Map(anchors.value.map((a) => [a.id, a.name])))
-function roleAnchorName(role: Role) { return role.anchorId != null ? anchorNameById.value.get(role.anchorId) ?? null : null }
 // System admin: no role is locked, built-in or not. Anchor administrator: every built-in role
 // is locked except "Organisation Administrator" -- they may customize their own anchor's copy
 // of it (forked into an anchor-owned row server-side on first save, see Administration#saveRole),
@@ -99,7 +95,7 @@ const isUnlimitedRole = computed(() => !auth.isSystemAdmin && !!selectedRole.val
 // editing an existing System role since nobody but a Super Admin can create one in the first
 // place, so there's no equivalent "locked while creating" case to cover).
 const isFixedScopeRole = computed(() => selectedRole.value?.scope === 'SYSTEM' || auth.isOrganisation)
-const canSave = computed(() => auth.can('ACCESS_ROLES') && (!auth.isSystemAdmin || form.roleId !== null || form.scope === 'SYSTEM' || !!form.anchorId) && !isBuiltInRole.value)
+const canSave = computed(() => auth.can('ACCESS_ROLES') && !isBuiltInRole.value)
 const selectedPermissionCount = computed(() => form.permissionIds.filter((id) => assignablePermissions.value.some((permission) => permission.id === id)).length)
 
 function isSensitive(code: string) { return SENSITIVE_CODES.has(code) }
@@ -146,13 +142,11 @@ const headers = computed(() => [
   { title: 'Description', key: 'description' },
   { title: 'Scope', key: 'scope' },
   { title: 'Permissions', key: 'permissionCount' },
-  ...(auth.isSystemAdmin ? [{ title: 'Anchor', key: 'anchorName' }] : []),
   { title: 'Actions', key: 'actions', sortable: false, align: 'start' as const, width: 104, minWidth: 104, fixed: true, nowrap: true },
 ])
 const tableRows = computed(() => sortedRoles.value.map((role) => ({
   ...role,
   permissionCount: role.permissions.filter((code) => !isLegacyPermission(code)).length,
-  anchorName: roleAnchorName(role) ?? '—',
 })))
 function scopeLabel(scope: string) { return scope === 'SYSTEM' ? 'System' : scope === 'ANCHOR' ? 'Anchor' : 'Organisation' }
 
@@ -183,7 +177,6 @@ function fillForm(role: Role) {
     description: role.description ?? '',
     scope: role.scope,
     permissionIds: permissions.value.filter((permission) => role.permissions.includes(permission.name) && !isLegacyPermission(permission.name)).map((permission) => permission.id),
-    anchorId: role.anchorId ?? null,
   })
 }
 
@@ -196,7 +189,7 @@ function openEdit(role: Role) {
 }
 
 function createRole() {
-  Object.assign(form, { roleId: null, name: '', description: '', scope: 'ORGANISATION', permissionIds: [], anchorId: null })
+  Object.assign(form, { roleId: null, name: '', description: '', scope: 'ORGANISATION', permissionIds: [] })
   selectedTemplateKey.value = null
   permissionSearch.value = ''
   openModules.value = permissionGroups.value.map((g) => g.key)
@@ -231,7 +224,6 @@ function useTemplate(template: (typeof displayedTemplates.value)[number]) {
     description: template.description,
     scope: 'ORGANISATION',
     permissionIds: template.matched.map((permission) => permission.id),
-    anchorId: null,
   })
   selectedTemplateKey.value = template.key
   permissionSearch.value = ''
@@ -248,14 +240,10 @@ async function save() {
     toast.error('Select at least one permission for this role')
     return
   }
-  if (auth.isSystemAdmin && form.roleId === null && form.scope !== 'SYSTEM' && !form.anchorId) {
-    toast.error('Choose an anchor for this role')
-    return
-  }
   saving.value = true
   try {
     const wasNew = form.roleId === null
-    await dispatch('SAVE_ROLE', { ...form, targetAnchorId: auth.isSystemAdmin && wasNew ? form.anchorId : undefined })
+    await dispatch('SAVE_ROLE', { ...form })
     toast.success(wasNew ? 'Role created' : 'Role permissions updated')
     dialog.value = false
     await load()
@@ -325,10 +313,6 @@ async function createPermission() {
 }
 
 onMounted(async () => {
-  if (auth.isSystemAdmin) {
-    const response = await dispatch<{ results: Anchor[] }>('GET_ANCHORS')
-    anchors.value = response.results ?? []
-  }
   await load()
 })
 </script>
@@ -349,7 +333,7 @@ onMounted(async () => {
     <v-card variant="flat" border>
       <v-data-table class="roles-table" :headers="headers" :items="tableRows" :search="tableSearch" :loading="loading">
         <template #item.scope="{ item }"><v-chip size="small" variant="tonal">{{ scopeLabel(item.scope) }}</v-chip></template>
-        <template #item.permissionCount="{ item }">{{ item.systemRole ? 'Unlimited' : item.permissionCount }}</template>
+        <template #item.permissionCount="{ item }">{{ item.permissionCount }}</template>
         <template #item.description="{ item }">{{ item.description || '—' }}</template>
         <template #item.actions="{ item }">
           <v-btn icon="mdi-pencil" variant="text" size="small" :aria-label="`Edit ${item.name}`" @click="openEdit(item)" />
@@ -406,13 +390,9 @@ onMounted(async () => {
                   : [{ title: 'Organisation', value: 'ORGANISATION' }, { title: 'Anchor', value: 'ANCHOR' }]"
               label="Access scope" :disabled="isBuiltInRole || isFixedScopeRole" density="compact" hide-details="auto"
             />
-            <v-select
-              v-if="auth.isSystemAdmin && form.roleId === null && form.scope !== 'SYSTEM'" v-model="form.anchorId"
-              :items="anchors" item-title="name" item-value="id" label="Anchor" density="compact" hide-details="auto"
-            />
             <v-textarea
               v-model="form.description" label="Description" placeholder="What this role is for" rows="1" auto-grow density="compact" hide-details="auto" :disabled="isBuiltInRole"
-              :class="{ 'span-2': !(auth.isSystemAdmin && form.roleId === null && form.scope !== 'SYSTEM') }"
+              class="span-2"
             />
             <v-select
               v-if="form.roleId === null"
@@ -476,7 +456,7 @@ onMounted(async () => {
         </v-form>
 
         <v-card-actions class="editor-actions">
-          <p v-if="!canSave" class="lock-copy">{{ isUnlimitedRole ? 'Platform Owner access is fixed by the platform.' : isBuiltInRole ? 'This role is managed by BioPay policy.' : auth.isSystemAdmin && form.roleId === null && form.scope !== 'SYSTEM' && !form.anchorId ? 'Choose an anchor for this role.' : 'You can view roles but not change them.' }}</p>
+          <p v-if="!canSave" class="lock-copy">{{ isUnlimitedRole ? 'Platform Owner access is fixed by the platform.' : isBuiltInRole ? 'This role is managed by BioPay policy.' : 'You can view roles but not change them.' }}</p>
           <v-btn v-if="form.roleId !== null && !selectedRole?.undeletable && auth.can('ACCESS_ROLES')" variant="outlined" color="error" @click="removeRole(selectedRole!)">Delete role</v-btn>
           <v-spacer />
           <v-btn variant="flat" color="error" @click="dialog = false">Cancel</v-btn>

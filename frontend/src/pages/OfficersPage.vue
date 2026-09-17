@@ -145,7 +145,7 @@ async function setOfficerActive(officer: Officer, active: boolean) {
       ? `${officer.firstName} ${officer.lastName} will regain access to the field app.`
       : `${officer.firstName} ${officer.lastName} will no longer be able to sign in to the field app.`,
     confirmLabel: active ? 'Activate' : 'Deactivate',
-    color: active ? 'secondary' : 'warning',
+    color: active ? 'success' : 'error',
   })) return
   try {
     await dispatch('TOGGLE_OFFICER_STATUS', { email: officer.email, active: active ? 1 : 0 })
