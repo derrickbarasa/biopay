@@ -7,6 +7,7 @@ import { useToast } from '@/composables/useToast'
 import { useAnchorScope } from '@/composables/useAnchorScope'
 import { useOrgCascade } from '@/composables/useOrgCascade'
 import { LEGAL_STATUS_OPTIONS, MARITAL_STATUS_OPTIONS, VULNERABILITY_OPTIONS } from '@/constants/householdClassifications'
+import { dateOfBirthToAge } from '@/utils/dateOfBirth'
 
 const maritalStatusItems: readonly string[] = MARITAL_STATUS_OPTIONS
 
@@ -46,7 +47,7 @@ const locationsForCounty = (code: string) => (code ? locations.value.filter((l) 
 const villagesForLocation = (code: string) => (code ? villages.value.filter((v) => v.locationCode === code) : villages.value)
 
 const form = ref({
-  householdName: '', age: null as number | null, gender: '', maritalStatus: null as string | null, spouseName: '', phoneNumber: '',
+  householdName: '', dateOfBirth: null as Date | null, gender: '', maritalStatus: null as string | null, spouseName: '', phoneNumber: '',
   householdSize: null as number | null, stateCode: '', countyCode: '', locationCode: '', villageCode: '',
   vulnerabilityStatuses: [] as string[], legalStatus: null as string | null,
   organisationCode: null as string | null,
@@ -134,7 +135,7 @@ async function save() {
   try {
     const organisationCode = form.value.organisationCode || undefined
     const created = await dispatch<{ householdNumber: string }>('CREATE_HOUSEHOLD', {
-      householdName: form.value.householdName, age: form.value.age, gender: form.value.gender,
+      householdName: form.value.householdName, age: dateOfBirthToAge(form.value.dateOfBirth), gender: form.value.gender,
       maritalStatus: form.value.maritalStatus || undefined, spouseName: form.value.spouseName || undefined,
       phoneNumber: form.value.phoneNumber, householdSize: form.value.householdSize,
       vulnerabilityStatuses: form.value.vulnerabilityStatuses,
@@ -206,7 +207,7 @@ onMounted(() => {
         </v-row>
         <v-text-field v-else v-model="form.householdName" label="Head of household name" placeholder="e.g. Jane Doe" />
         <v-row>
-          <v-col cols="6" sm="4"><v-text-field v-model.number="form.age" label="Age" type="number" placeholder="e.g. 34" /></v-col>
+          <v-col cols="6" sm="4"><v-date-input v-model="form.dateOfBirth" label="Date of birth" placeholder="e.g. 12/03/1990" :max="new Date()" clearable /></v-col>
           <v-col cols="6" sm="4">
             <v-select v-model="form.gender" label="Gender" :items="['M', 'F']" />
           </v-col>

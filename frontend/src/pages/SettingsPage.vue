@@ -9,7 +9,7 @@ const auth = useAuthStore()
 const toast = useToast()
 
 type SettingsSection = 'profile' | 'authentication' | 'password' | 'audit'
-const activeSection = ref<SettingsSection | null>(null)
+const activeSection = ref<SettingsSection | null>('profile')
 const sections: { key: SettingsSection; icon: string; label: string; description: string }[] = [
   { key: 'profile', icon: 'mdi-account-outline', label: 'Profile', description: 'Name and account details' },
   { key: 'authentication', icon: 'mdi-shield-key-outline', label: 'Authentication', description: 'Email and authenticator app sign-in' },

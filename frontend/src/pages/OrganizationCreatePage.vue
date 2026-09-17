@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { dispatch } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
@@ -12,12 +12,17 @@ interface Anchor { id: number; name: string; anchorCode: string }
 const auth = useAuthStore()
 const toast = useToast()
 const router = useRouter()
+const route = useRoute()
+
+// Arriving from an anchor's own detail page (its "Add Organization" button) fixes and
+// locks the anchor, and sends Cancel/Save back to that anchor rather than the generic list.
+const fromAnchorId = ref<number | null>(Number(route.query.anchorId) || null)
 
 const saving = ref(false)
 const anchors = ref<Anchor[]>([])
 const form = ref({
   organisationCode: '', name: '', authorisedName: '', authorisedFirstName: '', authorisedSurname: '', authorisedEmail: '', authorisedContact: '', address: '',
-  country: '', capitalCity: '', verificationMethod: 'BIOMETRIC', anchorId: null as number | null,
+  country: '', capitalCity: '', verificationMethod: 'BIOMETRIC', anchorId: fromAnchorId.value,
   modules: [] as string[],
 })
 
@@ -49,6 +54,10 @@ async function loadAnchors() {
 onMounted(loadAnchors)
 
 function goToList() {
+  if (fromAnchorId.value) {
+    router.push({ name: 'anchor-detail', params: { anchorId: fromAnchorId.value } })
+    return
+  }
   router.push({ name: 'organizations' })
 }
 
@@ -107,6 +116,7 @@ async function save() {
             <v-select
               v-if="auth.isSystemAdmin" v-model="form.anchorId" :items="anchors" item-title="name" item-value="id"
               label="Anchor" :rules="[v => !!v || 'Required']" density="compact" hide-details="auto" prepend-inner-icon="mdi-bank-outline"
+              :disabled="!!fromAnchorId"
             />
             <v-text-field v-model="form.name" label="Organization name" placeholder="e.g. Bright Future Trust" :rules="[required]" density="compact" hide-details="auto" />
             <v-autocomplete v-model="form.country" :items="COUNTRIES" label="Country" :rules="[required]" density="compact" hide-details="auto" />

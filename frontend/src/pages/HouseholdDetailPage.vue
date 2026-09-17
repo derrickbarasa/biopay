@@ -16,6 +16,8 @@ import {
   vulnerabilityLabel,
 } from '@/constants/householdClassifications'
 import { ALTERNATE_RELATIONSHIP_OPTIONS, inferGenderFromRelationship } from '@/constants/alternateRelationship'
+import { ageToDateOfBirth, dateOfBirthToAge } from '@/utils/dateOfBirth'
+import { formatCurrency } from '@/utils/currency'
 
 const maritalStatusItems: readonly string[] = MARITAL_STATUS_OPTIONS
 const alternateRelationshipItems: readonly string[] = ALTERNATE_RELATIONSHIP_OPTIONS
@@ -50,12 +52,6 @@ interface PaymentEvent {
   cycle?: string
   createdAt?: string
 }
-interface AuditEvent {
-  action?: string
-  entityType?: string
-  details?: string
-  createdAt?: string
-}
 interface VoucherEvent {
   voucherCode?: string
   amount?: number
@@ -70,7 +66,6 @@ const loading = ref(true)
 const detail = ref<Record<string, any> | null>(null)
 const alternates = ref<Alternate[]>([])
 const payments = ref<PaymentEvent[]>([])
-const events = ref<AuditEvent[]>([])
 const vouchers = ref<VoucherEvent[]>([])
 // Object URLs for photos fetched (with the auth header) through apiClient as blobs --
 // a plain image URL can't reach the JWT-protected /files route.
@@ -323,14 +318,13 @@ async function load() {
       auth.can('ACCESS_ALTERNATES')
         ? dispatch<{ results: Alternate[] }>('GET_ALTERNATES', { householdNumber: householdNumber.value, includeInactive: true })
         : Promise.resolve({ results: [] as Alternate[] }),
-      dispatch<{ results: { payments: PaymentEvent[]; events: AuditEvent[]; vouchers: VoucherEvent[] } }>(
+      dispatch<{ results: { payments: PaymentEvent[]; vouchers: VoucherEvent[] } }>(
         'GET_HOUSEHOLD_HISTORY', { householdNumber: householdNumber.value },
       ),
     ])
     detail.value = h.results?.[0] ?? null
     alternates.value = alts.results ?? []
     payments.value = hist.results?.payments ?? []
-    events.value = hist.results?.events ?? []
     vouchers.value = hist.results?.vouchers ?? []
     const images: string[] = detail.value?.images ?? []
     await loadPhotos(images)
@@ -450,7 +444,7 @@ async function printVoucher() {
 const editDialog = ref(false)
 const editing = ref(false)
 const editForm = ref({
-  householdName: '', age: null as number | null, gender: '', maritalStatus: null as string | null, spouseName: '', phoneNumber: '',
+  householdName: '', dateOfBirth: null as Date | null, gender: '', maritalStatus: null as string | null, spouseName: '', phoneNumber: '',
   householdSize: null as number | null, stateCode: '', countyCode: '', locationCode: '', villageCode: '',
   vulnerabilityStatuses: [] as string[], legalStatus: null as string | null,
   photo: null as File | null,
@@ -472,7 +466,7 @@ function openEdit() {
   if (!d) return
   editForm.value = {
     householdName: d.householdName ?? '',
-    age: d.age ?? null,
+    dateOfBirth: ageToDateOfBirth(d.age),
     gender: d.gender ?? '',
     maritalStatus: d.maritalStatus ?? null,
     spouseName: d.spouseName ?? '',
@@ -499,7 +493,7 @@ async function saveEdit() {
     await dispatch('UPDATE_HOUSEHOLD', {
       householdNumber: householdNumber.value,
       householdName: editForm.value.householdName.trim(),
-      age: editForm.value.age ?? undefined,
+      age: dateOfBirthToAge(editForm.value.dateOfBirth) ?? undefined,
       gender: editForm.value.gender || undefined,
       maritalStatus: editForm.value.maritalStatus || undefined,
       spouseName: editForm.value.spouseName || undefined,
@@ -586,21 +580,39 @@ async function exportAlternates() {
 // app-wide 1=head/2=alternate convention.
 const addAltDialog = ref(false)
 const addingAlt = ref(false)
-const altForm = ref({ alternateName: '', relationship: '', phoneNumber: '', gender: '', age: null as number | null })
+const altForm = ref({ alternateName: '', relationship: '', phoneNumber: '', gender: '', dateOfBirth: null as Date | null })
 const altPhotoFile = ref<File | null>(null)
 // null while adding; the alternate being edited otherwise -- the same dialog and altForm
 // serve both flows, only the dispatch code and dialog title differ.
 const editingAlternateNumber = ref<string | null>(null)
 
 const altTableHeaders = [
-  { title: 'Photo', key: 'photo', sortable: false, width: 72, minWidth: 72 },
-  { title: 'Alternate Code', key: 'alternateNumber', width: 164, minWidth: 164, nowrap: true },
-  { title: 'Name', key: 'alternateName', minWidth: 116 },
-  { title: 'Relationship', key: 'relationship', minWidth: 132 },
-  { title: 'Gender', key: 'gender', width: 92, minWidth: 92 },
-  { title: 'Added', key: 'createdAt', minWidth: 128 },
-  { title: 'Status', key: 'status', width: 100, minWidth: 100 },
-  { title: 'Actions', key: 'actions', sortable: false, align: 'start' as const, width: 132, minWidth: 132, fixed: true, nowrap: true },
+  { title: 'Photo', key: 'photo', sortable: false, width: '6%', minWidth: 72 },
+  { title: 'Alternate Code', key: 'alternateNumber', width: '16%', minWidth: 164, nowrap: true },
+  { title: 'Name', key: 'alternateName', width: '17%', minWidth: 116 },
+  { title: 'Relationship', key: 'relationship', width: '17%', minWidth: 132 },
+  { title: 'Gender', key: 'gender', width: '9%', minWidth: 92 },
+  { title: 'Added', key: 'createdAt', width: '15%', minWidth: 128 },
+  { title: 'Status', key: 'status', width: '9%', minWidth: 100 },
+  { title: 'Actions', key: 'actions', sortable: false, align: 'start' as const, width: '11%', minWidth: 132, fixed: true, nowrap: true },
+]
+
+const paymentTableHeaders = [
+  { title: 'Payment ID', key: 'id', width: '14%', minWidth: 112, nowrap: true },
+  { title: 'Cycle Code', key: 'cycle', width: '27%', minWidth: 240, nowrap: true },
+  { title: 'Amount', key: 'amount', width: '18%', minWidth: 128 },
+  { title: 'Status', key: 'status', width: '16%', minWidth: 112 },
+  { title: 'Payment Date', key: 'createdAt', width: '25%', minWidth: 176, nowrap: true },
+]
+
+const voucherTableHeaders = [
+  { title: 'Voucher Code', key: 'voucherCode', width: '17%', minWidth: 180, nowrap: true },
+  { title: 'Purpose', key: 'purpose', width: '15%', minWidth: 144 },
+  { title: 'Amount', key: 'amount', width: '13%', minWidth: 120 },
+  { title: 'Status', key: 'status', width: '11%', minWidth: 104 },
+  { title: 'Issued', key: 'createdAt', width: '15%', minWidth: 160, nowrap: true },
+  { title: 'Expires', key: 'expiresAt', width: '15%', minWidth: 160, nowrap: true },
+  { title: 'Redeem', key: 'redemptionStatus', width: '14%', minWidth: 160, nowrap: true },
 ]
 
 function formatTimestamp(value?: string) {
@@ -609,9 +621,27 @@ function formatTimestamp(value?: string) {
   return Number.isNaN(d.getTime()) ? value : d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
 }
 
+function paymentStatusLabel(status?: number) {
+  return status === 1 ? 'Paid' : status === 2 ? 'Failed' : 'Pending'
+}
+
+function paymentStatusColor(status?: number) {
+  return status === 1 ? 'success' : status === 2 ? 'error' : 'warning'
+}
+
+function voucherStatusColor(status?: string) {
+  return status === 'REDEEMED' ? 'success' : status === 'VOID' ? 'error' : 'warning'
+}
+
+function voucherRedemptionState(voucher: VoucherEvent) {
+  if (voucher.status === 'REDEEMED' || voucher.redeemedAt) return { label: 'Success', color: 'success' }
+  if (voucher.status === 'VOID') return { label: 'Failed', color: 'error' }
+  return { label: 'Pending', color: 'warning' }
+}
+
 function openAddAlternate() {
   editingAlternateNumber.value = null
-  altForm.value = { alternateName: '', relationship: '', phoneNumber: '', gender: '', age: null }
+  altForm.value = { alternateName: '', relationship: '', phoneNumber: '', gender: '', dateOfBirth: null }
   altPhotoFile.value = null
   addAltDialog.value = true
 }
@@ -623,7 +653,7 @@ function openEditAlternate(a: Alternate) {
     relationship: a.relationship ?? '',
     phoneNumber: a.phoneNumber ?? '',
     gender: a.gender ?? '',
-    age: a.age ?? null,
+    dateOfBirth: ageToDateOfBirth(a.age),
   }
   altPhotoFile.value = null
   addAltDialog.value = true
@@ -691,6 +721,7 @@ async function saveAlternate() {
   try {
     const organisationCode = auth.isAnchor ? detail.value?.organisationCode : undefined
     const editing = editingAlternateNumber.value
+    const age = dateOfBirthToAge(altForm.value.dateOfBirth) ?? undefined
     const alternateNumber = editing ?? (await dispatch<{ alternateNumber: string }>('CREATE_ALTERNATE', {
       householdNumber: householdNumber.value,
       organisationCode,
@@ -698,7 +729,7 @@ async function saveAlternate() {
       relationship: altForm.value.relationship || undefined,
       phoneNumber: altForm.value.phoneNumber || undefined,
       gender: altForm.value.gender || undefined,
-      age: altForm.value.age ?? undefined,
+      age,
     })).alternateNumber
     if (editing) {
       await dispatch('UPDATE_ALTERNATE', {
@@ -707,7 +738,7 @@ async function saveAlternate() {
         relationship: altForm.value.relationship || undefined,
         phoneNumber: altForm.value.phoneNumber || undefined,
         gender: altForm.value.gender || undefined,
-        age: altForm.value.age ?? undefined,
+        age,
       })
     }
     if (altPhotoFile.value) {
@@ -829,136 +860,6 @@ onMounted(() => { load(); loadNameLookups() })
           </v-card-text>
         </v-card>
 
-        <v-card v-if="auth.can('ACCESS_ALTERNATES')" variant="flat" border>
-          <v-card-title class="alternates-card-title text-subtitle-1 font-weight-bold d-flex align-center">
-            <span>Alternates ({{ alternates.length }})</span>
-            <v-spacer />
-            <div class="alternates-toolbar">
-              <v-btn
-                v-if="alternates.length && auth.can('DOWNLOAD_REPORTS')"
-                size="small"
-                variant="text"
-                prepend-icon="mdi-download"
-                :loading="exportingAlternates"
-                @click="exportAlternates"
-              >
-                Export Excel
-              </v-btn>
-              <v-btn v-if="auth.can('ACCESS_ALTERNATES')"
-                size="small"
-                color="secondary"
-                prepend-icon="mdi-account-plus-outline"
-                @click="openAddAlternate"
-              >
-                Add alternate
-              </v-btn>
-            </div>
-          </v-card-title>
-          <v-divider />
-          <v-data-table
-            v-if="alternates.length"
-            :headers="altTableHeaders"
-            :items="alternates"
-            item-value="alternateNumber"
-            density="comfortable"
-            class="alt-table"
-          >
-            <template #item.photo="{ item }">
-              <v-avatar
-                v-if="alternatePhotoUrls[item.alternateNumber ?? '']?.length"
-                size="36"
-                role="button"
-                tabindex="0"
-                :aria-label="`View ${item.alternateName ?? 'alternate'}'s photo full size`"
-                @click="openLightbox(alternatePhotoUrls[item.alternateNumber ?? '']![0], item.alternateName ?? 'alternate', item.alternateNumber)"
-                @keyup.enter="openLightbox(alternatePhotoUrls[item.alternateNumber ?? '']![0], item.alternateName ?? 'alternate', item.alternateNumber)"
-              >
-                <v-img :src="alternatePhotoUrls[item.alternateNumber ?? '']![0]" cover />
-              </v-avatar>
-              <v-avatar v-else size="36" color="surface-variant">
-                <v-icon icon="mdi-account-child-outline" size="18" />
-              </v-avatar>
-            </template>
-            <template #item.relationship="{ item }">{{ item.relationship || '—' }}</template>
-            <template #item.gender="{ item }">{{ genderLabel(item.gender) }}</template>
-            <template #item.createdAt="{ item }">{{ formatTimestamp(item.createdAt) }}</template>
-            <template #item.status="{ item }">
-              <v-chip size="small" :color="item.status === 1 ? 'success' : 'default'" variant="tonal">
-                {{ item.status === 1 ? 'Active' : 'Inactive' }}
-              </v-chip>
-            </template>
-            <template #item.actions="{ item }">
-              <v-btn icon="mdi-eye-outline" variant="text" size="small" density="comfortable" aria-label="View alternate" @click="openViewAlternate(item)" />
-              <v-btn v-if="item.status === 1" icon="mdi-pencil-outline" variant="text" size="small" density="comfortable" aria-label="Edit alternate" @click="openEditAlternate(item)" />
-              <v-btn v-if="item.status === 1" icon="mdi-account-cancel-outline" variant="text" size="small" density="comfortable" color="error" aria-label="Deactivate alternate" @click="deactivateAlternate(item)" />
-              <v-btn v-else icon="mdi-account-check-outline" variant="text" size="small" density="comfortable" color="success" aria-label="Activate alternate" @click="activateAlternate(item)" />
-            </template>
-          </v-data-table>
-          <v-card-text v-else class="text-medium-emphasis">
-            No alternates registered for this household.
-          </v-card-text>
-        </v-card>
-
-        <v-card variant="flat" border class="mt-4">
-          <v-card-title class="text-subtitle-1 font-weight-bold">Payment history</v-card-title>
-          <v-divider />
-          <v-list v-if="payments.length">
-            <v-list-item
-              v-for="p in payments"
-              :key="p.id"
-              :title="`${(p.amount ?? 0).toLocaleString()}${p.cycle ? ' · ' + p.cycle : ''}`"
-              :subtitle="p.createdAt || undefined"
-              prepend-icon="mdi-cash"
-            >
-              <template #append>
-                <v-chip size="small" :color="p.status === 1 ? 'success' : 'warning'" variant="tonal">
-                  {{ p.status === 1 ? 'Paid' : 'Pending' }}
-                </v-chip>
-              </template>
-            </v-list-item>
-          </v-list>
-          <v-card-text v-else class="text-medium-emphasis">No payments recorded for this household.</v-card-text>
-        </v-card>
-
-        <v-card variant="flat" border class="mt-4">
-          <v-card-title class="text-subtitle-1 font-weight-bold">Voucher history</v-card-title>
-          <v-divider />
-          <v-list v-if="vouchers.length">
-            <v-list-item
-              v-for="v in vouchers"
-              :key="v.voucherCode"
-              :title="`${(v.amount ?? 0).toLocaleString()}${v.purpose ? ' · ' + v.purpose : ''}`"
-              :subtitle="[v.voucherCode, v.status === 'REDEEMED' ? v.redeemedAt : v.createdAt].filter(Boolean).join(' · ') || undefined"
-              prepend-icon="mdi-ticket-confirmation-outline"
-            >
-              <template #append>
-                <v-chip
-                  size="small"
-                  variant="tonal"
-                  :color="v.status === 'REDEEMED' ? 'success' : v.status === 'VOID' ? 'error' : 'warning'"
-                >
-                  {{ v.status ?? 'ISSUED' }}
-                </v-chip>
-              </template>
-            </v-list-item>
-          </v-list>
-          <v-card-text v-else class="text-medium-emphasis">No vouchers issued to this household.</v-card-text>
-        </v-card>
-
-        <v-card variant="flat" border class="mt-4">
-          <v-card-title class="text-subtitle-1 font-weight-bold">Audit history</v-card-title>
-          <v-divider />
-          <v-list v-if="events.length">
-            <v-list-item
-              v-for="(e, i) in events"
-              :key="i"
-              :title="e.action"
-              :subtitle="[e.entityType, e.createdAt].filter(Boolean).join(' · ') || undefined"
-              prepend-icon="mdi-history"
-            />
-          </v-list>
-          <v-card-text v-else class="text-medium-emphasis">No audit events recorded for this household.</v-card-text>
-        </v-card>
       </v-col>
 
       <v-col cols="12" md="4">
@@ -1066,6 +967,141 @@ onMounted(() => { load(); loadNameLookups() })
       </v-col>
     </v-row>
 
+    <v-row v-if="detail" class="mt-0">
+      <v-col cols="12">
+        <v-card v-if="auth.can('ACCESS_ALTERNATES')" variant="flat" border class="mb-4">
+          <v-card-title class="alternates-card-title text-subtitle-1 font-weight-bold d-flex align-center">
+            <span>Alternates ({{ alternates.length }})</span>
+            <v-spacer />
+            <div class="alternates-toolbar">
+              <v-btn
+                v-if="alternates.length && auth.can('DOWNLOAD_REPORTS')"
+                size="small"
+                variant="text"
+                prepend-icon="mdi-download"
+                :loading="exportingAlternates"
+                @click="exportAlternates"
+              >
+                Export Excel
+              </v-btn>
+              <v-btn
+                size="small"
+                color="secondary"
+                prepend-icon="mdi-account-plus-outline"
+                @click="openAddAlternate"
+              >
+                Add alternate
+              </v-btn>
+            </div>
+          </v-card-title>
+          <v-divider />
+          <v-data-table
+            v-if="alternates.length"
+            :headers="altTableHeaders"
+            :items="alternates"
+            item-value="alternateNumber"
+            density="comfortable"
+            class="alt-table"
+          >
+            <template #item.photo="{ item }">
+              <v-avatar
+                v-if="alternatePhotoUrls[item.alternateNumber ?? '']?.length"
+                size="36"
+                role="button"
+                tabindex="0"
+                :aria-label="`View ${item.alternateName ?? 'alternate'}'s photo full size`"
+                @click="openLightbox(alternatePhotoUrls[item.alternateNumber ?? '']![0], item.alternateName ?? 'alternate', item.alternateNumber)"
+                @keyup.enter="openLightbox(alternatePhotoUrls[item.alternateNumber ?? '']![0], item.alternateName ?? 'alternate', item.alternateNumber)"
+              >
+                <v-img :src="alternatePhotoUrls[item.alternateNumber ?? '']![0]" cover />
+              </v-avatar>
+              <v-avatar v-else size="36" color="surface-variant">
+                <v-icon icon="mdi-account-child-outline" size="18" />
+              </v-avatar>
+            </template>
+            <template #item.relationship="{ item }">{{ item.relationship || '—' }}</template>
+            <template #item.gender="{ item }">{{ genderLabel(item.gender) }}</template>
+            <template #item.createdAt="{ item }">{{ formatTimestamp(item.createdAt) }}</template>
+            <template #item.status="{ item }">
+              <v-chip size="small" :color="item.status === 1 ? 'success' : 'default'" variant="tonal">
+                {{ item.status === 1 ? 'Active' : 'Inactive' }}
+              </v-chip>
+            </template>
+            <template #item.actions="{ item }">
+              <v-btn icon="mdi-eye-outline" variant="text" size="small" density="comfortable" aria-label="View alternate" @click="openViewAlternate(item)" />
+              <v-btn v-if="item.status === 1" icon="mdi-pencil-outline" variant="text" size="small" density="comfortable" aria-label="Edit alternate" @click="openEditAlternate(item)" />
+              <v-btn v-if="item.status === 1" icon="mdi-account-cancel-outline" variant="text" size="small" density="comfortable" color="error" aria-label="Deactivate alternate" @click="deactivateAlternate(item)" />
+              <v-btn v-else icon="mdi-account-check-outline" variant="text" size="small" density="comfortable" color="success" aria-label="Activate alternate" @click="activateAlternate(item)" />
+            </template>
+          </v-data-table>
+          <v-card-text v-else class="text-medium-emphasis">
+            No alternates registered for this household.
+          </v-card-text>
+        </v-card>
+
+        <v-card variant="flat" border>
+          <v-card-title class="text-subtitle-1 font-weight-bold">Payment history</v-card-title>
+          <v-divider />
+          <v-data-table
+            :headers="paymentTableHeaders"
+            :items="payments"
+            item-value="id"
+            :items-per-page="5"
+            :items-per-page-options="[5, 10, 25]"
+            density="comfortable"
+            class="history-table"
+            no-data-text="No payments recorded for this household."
+          >
+            <template #item.id="{ item }">{{ item.id ?? '—' }}</template>
+            <template #item.cycle="{ item }">{{ item.cycle || '—' }}</template>
+            <template #item.amount="{ item }"><span class="history-amount">{{ formatCurrency(item.amount) }}</span></template>
+            <template #item.status="{ item }">
+              <v-chip size="small" :color="paymentStatusColor(item.status)" variant="tonal">
+                {{ paymentStatusLabel(item.status) }}
+              </v-chip>
+            </template>
+            <template #item.createdAt="{ item }">{{ formatTimestamp(item.createdAt) }}</template>
+          </v-data-table>
+        </v-card>
+
+        <v-card variant="flat" border class="mt-4">
+          <v-card-title class="text-subtitle-1 font-weight-bold">Voucher history</v-card-title>
+          <v-divider />
+          <v-data-table
+            :headers="voucherTableHeaders"
+            :items="vouchers"
+            item-value="voucherCode"
+            :items-per-page="5"
+            :items-per-page-options="[5, 10, 25]"
+            density="comfortable"
+            class="history-table"
+            no-data-text="No vouchers issued to this household."
+          >
+            <template #item.voucherCode="{ item }">{{ item.voucherCode || '—' }}</template>
+            <template #item.purpose="{ item }">{{ item.purpose || '—' }}</template>
+            <template #item.amount="{ item }"><span class="history-amount">{{ formatCurrency(item.amount) }}</span></template>
+            <template #item.status="{ item }">
+              <v-chip size="small" :color="voucherStatusColor(item.status)" variant="tonal">
+                {{ item.status ?? 'ISSUED' }}
+              </v-chip>
+            </template>
+            <template #item.createdAt="{ item }">{{ formatTimestamp(item.createdAt) }}</template>
+            <template #item.expiresAt="{ item }">{{ formatTimestamp(item.expiresAt) }}</template>
+            <template #item.redemptionStatus="{ item }">
+              <div class="redemption-state">
+                <v-chip size="small" :color="voucherRedemptionState(item).color" variant="tonal">
+                  {{ voucherRedemptionState(item).label }}
+                </v-chip>
+                <span v-if="item.redeemedAt" class="text-caption text-medium-emphasis">
+                  {{ formatTimestamp(item.redeemedAt) }}
+                </span>
+              </div>
+            </template>
+          </v-data-table>
+        </v-card>
+      </v-col>
+    </v-row>
+
     <v-dialog :model-value="!!lightboxSrc" max-width="720" @update:model-value="lightboxSrc = null; lightboxContext = null">
       <v-card v-if="lightboxSrc">
         <dialog-close-button @close="lightboxSrc = null; lightboxContext = null" />
@@ -1133,7 +1169,7 @@ onMounted(() => { load(); loadNameLookups() })
         <v-card-text class="pt-4">
           <v-text-field v-model="editForm.householdName" label="Head of household name" />
           <v-row>
-            <v-col cols="6" sm="4"><v-text-field v-model.number="editForm.age" label="Age" type="number" /></v-col>
+            <v-col cols="6" sm="4"><v-date-input v-model="editForm.dateOfBirth" label="Date of birth" :max="new Date()" clearable /></v-col>
             <v-col cols="6" sm="4">
               <v-select v-model="editForm.gender" label="Gender" :items="['M', 'F']" />
             </v-col>
@@ -1221,7 +1257,7 @@ onMounted(() => { load(); loadNameLookups() })
             @update:model-value="onAltRelationshipChange"
           />
           <div class="d-flex ga-3 alt-form-row">
-            <v-text-field v-model.number="altForm.age" label="Age" type="number" hide-details density="compact" />
+            <v-date-input v-model="altForm.dateOfBirth" label="Date of birth" :max="new Date()" hide-details density="compact" clearable />
             <v-select
               v-model="altForm.gender"
               :items="[{ title: 'Male', value: 'M' }, { title: 'Female', value: 'F' }]"
@@ -1432,6 +1468,32 @@ onMounted(() => { load(); loadNameLookups() })
 
 .alt-table :deep(table) {
   min-width: 936px;
+  table-layout: fixed;
+}
+
+.history-table :deep(table) {
+  min-width: 760px;
+  table-layout: fixed;
+}
+
+.alt-table :deep(th),
+.alt-table :deep(td),
+.history-table :deep(th),
+.history-table :deep(td) {
+  padding-inline: 20px;
+}
+
+.history-amount {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.redemption-state {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  font-variant-numeric: tabular-nums;
 }
 
 .alternates-card-title,

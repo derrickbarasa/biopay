@@ -170,11 +170,21 @@ body {
   margin-top: -8px;
   padding-top: 16px;
 }
+/* Positioned close to the card's own rounded corner (top-right), a square-cornered
+ * button whose inset is smaller than the card's border-radius visually pokes its
+ * corner past the card's curve into the backdrop -- looking like its background
+ * "spills over" the header border. Forcing a circular shape (regardless of the
+ * app-wide VBtn `rounded: md` default) and a small fixed size keeps its footprint
+ * fully inside the curve at any card corner radius, and a bit more inset adds
+ * further clearance. */
 .dialog-close-button {
   position: absolute !important;
   z-index: 3;
-  top: 10px;
-  right: 10px;
+  top: 12px;
+  right: 12px;
+  width: 28px !important;
+  height: 28px !important;
+  border-radius: 50% !important;
   background: transparent !important;
   box-shadow: none !important;
   color: #334155 !important;

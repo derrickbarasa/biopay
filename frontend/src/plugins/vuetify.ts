@@ -36,9 +36,16 @@ export default createVuetify({
     VCard: { rounded: 'lg' },
     VBtn: { rounded: 'md', elevation: 0 },
     VTextField: { variant: 'outlined', density: 'comfortable' },
-    VSelect: { variant: 'outlined', density: 'comfortable' },
-    VAutocomplete: { variant: 'outlined', density: 'comfortable' },
+    // itemColor picks the color used for the active/selected item inside the
+    // dropdown menu (and its hover tint) -- set to the orange "secondary" brand
+    // color so selections read as orange rather than Vuetify's default grey.
+    VSelect: { variant: 'outlined', density: 'comfortable', itemColor: 'secondary' },
+    VAutocomplete: { variant: 'outlined', density: 'comfortable', itemColor: 'secondary' },
     VTextarea: { variant: 'outlined', density: 'comfortable' },
-    VCombobox: { variant: 'outlined', density: 'comfortable' },
+    VCombobox: { variant: 'outlined', density: 'comfortable', itemColor: 'secondary' },
+    // VDateInput's own default puts the calendar icon in `prependIcon`, which VTextField
+    // renders OUTSIDE the outlined box (a separate element to its left) -- move it to
+    // `prependInnerIcon` so it sits inside the field like every other field's icon.
+    VDateInput: { variant: 'outlined', density: 'comfortable', pickerProps: { color: 'secondary' }, prependIcon: '', prependInnerIcon: '$calendar' },
   },
 })

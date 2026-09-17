@@ -67,6 +67,7 @@ const tableSearch = ref('')
 const permissionSearch = ref('')
 const dialog = ref(false)
 const openModules = ref<string[]>([])
+const selectedTemplateKey = ref<string | null>(null)
 const form = reactive({ roleId: null as number | null, name: '', description: '', scope: 'ORGANISATION', permissionIds: [] as number[], anchorId: null as number | null })
 const newPermission = reactive({ name: '', displayName: '', groupKey: 'REPORTS', description: '' })
 
@@ -188,6 +189,7 @@ function fillForm(role: Role) {
 
 function openEdit(role: Role) {
   fillForm(role)
+  selectedTemplateKey.value = null
   permissionSearch.value = ''
   openModules.value = permissionGroups.value.map((g) => g.key)
   dialog.value = true
@@ -195,6 +197,7 @@ function openEdit(role: Role) {
 
 function createRole() {
   Object.assign(form, { roleId: null, name: '', description: '', scope: 'ORGANISATION', permissionIds: [], anchorId: null })
+  selectedTemplateKey.value = null
   permissionSearch.value = ''
   openModules.value = permissionGroups.value.map((g) => g.key)
   dialog.value = true
@@ -207,6 +210,20 @@ const displayedTemplates = computed(() => ROLE_TEMPLATES.map((template) => {
   return { ...template, matched, moneyMovingCount, exists }
 }))
 
+const roleTemplateItems = computed(() => displayedTemplates.value.map((template) => ({
+  title: `${template.name} (${template.matched.length} permission${template.matched.length === 1 ? '' : 's'})`,
+  value: template.key,
+})))
+
+function applyRoleTemplate(templateKey: string | null) {
+  if (!templateKey) return
+  const template = displayedTemplates.value.find((item) => item.key === templateKey)
+  if (!template) return
+  form.permissionIds = template.matched.map((permission) => permission.id)
+  permissionSearch.value = ''
+  openModules.value = permissionGroups.value.map((group) => group.key)
+}
+
 function useTemplate(template: (typeof displayedTemplates.value)[number]) {
   Object.assign(form, {
     roleId: null,
@@ -216,6 +233,7 @@ function useTemplate(template: (typeof displayedTemplates.value)[number]) {
     permissionIds: template.matched.map((permission) => permission.id),
     anchorId: null,
   })
+  selectedTemplateKey.value = template.key
   permissionSearch.value = ''
   openModules.value = permissionGroups.value.map((g) => g.key)
   dialog.value = true
@@ -394,6 +412,19 @@ onMounted(async () => {
               v-model="form.description" label="Description" placeholder="What this role is for" rows="1" auto-grow density="compact" hide-details="auto" :disabled="isBuiltInRole"
               :class="{ 'span-2': !(auth.isSystemAdmin && form.roleId === null && form.scope !== 'SYSTEM') }"
             />
+            <v-select
+              v-if="form.roleId === null"
+              v-model="selectedTemplateKey"
+              :items="roleTemplateItems"
+              label="Start from template (optional)"
+              hint="Pre-selects permissions; you can still add or remove any of them."
+              prepend-inner-icon="mdi-content-copy"
+              class="span-2 role-template-select"
+              density="compact"
+              persistent-hint
+              clearable
+              @update:model-value="applyRoleTemplate"
+            />
           </div>
 
           <section class="permissions-section">
@@ -497,6 +528,7 @@ onMounted(async () => {
 .editor-heading p { color: #64748b; font-size: .82rem; margin: 3px 0 0; }
 .identity-grid { display: grid; grid-template-columns: 1fr 1fr; column-gap: 16px; row-gap: 16px; margin-top: 18px; align-items: start; }
 .identity-grid .span-2 { grid-column: 1 / -1; }
+.role-template-select { margin-top: 2px; }
 .permission-form { margin-top: 20px; }
 @media (max-width: 600px) { .identity-grid { grid-template-columns: 1fr; } }
 .permissions-section { border-top: 1px solid #e2e8f0; margin-top: 18px; padding-top: 16px; }
