@@ -191,7 +191,7 @@ public class Biometric extends AbstractVerticle {
         if (stateCode != null) {
             String prefix = organizationCountry != null
                     ? organizationCountry : CountryCodes.alpha2OrNamePrefix(stateCode);
-            chain = chain.compose(ignored -> nextStateDisplayCode(client, anchorId, prefix)
+            chain = chain.compose(ignored -> stateDisplayCode(client, prefix, stateCode)
                     .compose(displayCode -> mergeGeoNode(client,
                             "MERGE geo_states WITH (HOLDLOCK) AS target "
                                     + "USING (SELECT @p1 anchor_id, @p2 state_code) source "
@@ -232,14 +232,26 @@ public class Biometric extends AbstractVerticle {
         return chain;
     }
 
-    private Future<String> nextStateDisplayCode(SqlClient client, int anchorId, String prefix) {
-        String sql = "SELECT COALESCE(MAX(CASE WHEN PATINDEX('%[0-9]%', display_code) > 0 "
+    private Future<String> stateDisplayCode(SqlClient client, String prefix, String stateName) {
+        String sql = "SELECT TOP 1 display_code FROM geo_states WITH (UPDLOCK, HOLDLOCK) "
+                + "WHERE country=@p1 AND display_code IS NOT NULL "
+                + "AND LOWER(LTRIM(RTRIM(name)))=LOWER(LTRIM(RTRIM(@p2))) "
+                + "ORDER BY CASE WHEN PATINDEX('%[0-9]%', display_code) > 0 "
                 + "THEN TRY_CAST(SUBSTRING(display_code, PATINDEX('%[0-9]%', display_code), LEN(display_code)) AS INT) "
-                + "ELSE NULL END), 999) AS mx FROM geo_states WITH (UPDLOCK, HOLDLOCK) WHERE anchor_id=@p1";
-        return client.preparedQuery(sql).execute(Tuple.of(anchorId)).map(rows -> {
-            Integer maximum = rows.iterator().next().getInteger("mx");
-            return prefix + (maximum == null ? 1000 : ((maximum / 1000) + 1) * 1000);
-        });
+                + "ELSE 2147483647 END, display_code";
+        return client.preparedQuery(sql).execute(Tuple.of(prefix, stateName))
+                .compose(rows -> {
+                    if (rows.size() > 0) {
+                        return Future.succeededFuture(Rows.str(rows.iterator().next(), "display_code"));
+                    }
+                    String nextSql = "SELECT COALESCE(MAX(CASE WHEN PATINDEX('%[0-9]%', display_code) > 0 "
+                            + "THEN TRY_CAST(SUBSTRING(display_code, PATINDEX('%[0-9]%', display_code), LEN(display_code)) AS INT) "
+                            + "ELSE NULL END), 999) AS mx FROM geo_states WITH (UPDLOCK, HOLDLOCK)";
+                    return client.preparedQuery(nextSql).execute().map(maxRows -> {
+                        Integer maximum = maxRows.iterator().next().getInteger("mx");
+                        return prefix + (maximum == null ? 1000 : ((maximum / 1000) + 1) * 1000);
+                    });
+                });
     }
 
     private Future<Void> mergeGeoNode(SqlClient client, String sql, Tuple params) {

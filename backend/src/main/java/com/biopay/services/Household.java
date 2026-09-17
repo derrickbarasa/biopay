@@ -81,6 +81,20 @@ public class Household extends AbstractVerticle {
         return TenantScope.isSystemOwner(payload);
     }
 
+    /** JWT subject values are injected as strings by the HTTP gateway, while a few
+     * internal callers provide numeric values. Normalize both forms before an approval
+     * payload is assembled so a successful household insert always receives its reply. */
+    private static Integer actorId(JsonObject payload) {
+        Object value = payload.getValue("actorId");
+        if (value instanceof Number) return ((Number) value).intValue();
+        if (value == null) return null;
+        try {
+            return Integer.valueOf(value.toString());
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
+    }
+
     /** organisationCode requested by the caller, constrained to their own scope unless anchor. */
     private static String scopedPartnerCode(JsonObject payload) {
         if (isAnchor(payload)) {
@@ -173,19 +187,17 @@ public class Household extends AbstractVerticle {
                                 .put("requestType", "HOUSEHOLD")
                                 .put("referenceCode", householdNumber)
                                 .put("organisationCode", partnerCode)
-                                .put("makerId", payload.getInteger("actorId"))
+                                .put("makerId", actorId(payload))
                                 .put("title", "Household approval")
                                 .put("summary", payload.getString("householdName", "Household").trim()
                                         + " is waiting for review");
-                        eventBus.<Object>request("CREATE_APPROVAL_REQUEST", approvalRequest).onComplete(notification -> {
-                            int recipientCount = approvalRecipientCount(notification.succeeded() ? notification.result().body() : null);
-                            reply(message, response
-                                    .put("approvalRecipientCount", recipientCount)
-                                    .put("approvalEmailSent", recipientCount > 0)
-                                    .put("responseMessage", recipientCount > 0
-                                            ? "Household registered; the approver has been emailed"
-                                            : "Household registered successfully and is pending approval"));
-                        });
+                        // The household row is already committed at this point. Reply before
+                        // preparing approval emails: an unavailable mail/approval worker must
+                        // never leave the operator waiting until the HTTP request times out and
+                        // then believing this successfully-created household failed to save.
+                        reply(message, response.put("responseMessage",
+                                "Household registered successfully and is pending approval"));
+                        eventBus.send("CREATE_APPROVAL_REQUEST", approvalRequest);
                     } else {
                         replyError(message, "Failed to register household");
                     }

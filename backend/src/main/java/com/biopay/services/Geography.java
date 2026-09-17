@@ -26,12 +26,11 @@ import com.biopay.utilities.Rows;
  * anchor_id in their session too (see Auth#loginUser), so writes they make
  * land in the same shared hierarchy as the anchor's own.
  *
- * Codes are generated here, not typed by the caller: <countryPrefix><sequence>,
- * e.g. Kenya -> KE2000, Uganda -> UG3000 (019_geo_location_country_codes.sql).
- * A state's ISO alpha-2 country is required on portal creation and stored on
- * geo_states.country; counties/locations/villages resolve their prefix by
- * looking up their ancestor state's country. Legacy internal keys remain
- * untouched and use geo_states.display_code for their user-facing identifier.
+ * Codes are generated here, not typed by the caller. State display codes are
+ * canonical across anchors by ISO country + normalized state name, so "Kenya"
+ * is always shown with the same public code even when several anchors use it.
+ * Legacy internal keys remain untouched and use geo_states.display_code for
+ * their user-facing identifier.
  */
 public class Geography extends AbstractVerticle {
 
@@ -140,18 +139,17 @@ public class Geography extends AbstractVerticle {
 
     /**
      * Next sequential number for this anchor+table, continuing the same running
-     * sequence regardless of country prefix (so GQ/KE/SO/etc. codes under one
-     * anchor don't each restart their own numbering). Uses 1000-number steps
-     * (GQ1000, KE2000, SO3000). Scans
-     * every row (including soft-deleted ones) because UQ_..._anchor_code isn't
-     * status-filtered -- a deleted code's number can't be reused.
+     * sequence regardless of country prefix. State display codes use the same
+     * sequence globally so the same state cannot drift between anchors.
      */
     private Future<Integer> nextSequence(String table, String codeColumn, Integer anchorId) {
         String sequenceSource = "geo_states".equals(table) ? "COALESCE(display_code, state_code)" : codeColumn;
         String sql = "SELECT MAX(CASE WHEN PATINDEX('%[0-9]%', " + sequenceSource + ") > 0 "
                 + "THEN TRY_CAST(SUBSTRING(" + sequenceSource + ", PATINDEX('%[0-9]%', " + sequenceSource + "), LEN(" + sequenceSource + ")) AS INT) "
-                + "ELSE NULL END) AS mx FROM " + table + " WHERE anchor_id=@p1";
-        return pool.preparedQuery(sql).execute(Tuple.of(anchorId))
+                + "ELSE NULL END) AS mx FROM " + table
+                + ("geo_states".equals(table) ? "" : " WHERE anchor_id=@p1");
+        Tuple params = "geo_states".equals(table) ? Tuple.tuple() : Tuple.of(anchorId);
+        return pool.preparedQuery(sql).execute(params)
                 .map(rows -> {
                     if (rows.size() == 0) return 1000;
                     Integer max = Rows.intVal(rows.iterator().next(), "mx");
@@ -159,8 +157,27 @@ public class Geography extends AbstractVerticle {
                 });
     }
 
+    private Future<String> canonicalStateDisplayCode(String name, String country) {
+        String existingSql = "SELECT TOP 1 display_code FROM geo_states "
+                + "WHERE country=@p1 AND display_code IS NOT NULL "
+                + "AND LOWER(LTRIM(RTRIM(name)))=LOWER(LTRIM(RTRIM(@p2))) "
+                + "ORDER BY CASE WHEN PATINDEX('%[0-9]%', display_code) > 0 "
+                + "THEN TRY_CAST(SUBSTRING(display_code, PATINDEX('%[0-9]%', display_code), LEN(display_code)) AS INT) "
+                + "ELSE 2147483647 END, display_code";
+        return pool.preparedQuery(existingSql).execute(Tuple.of(country, name))
+                .compose(rows -> {
+                    if (rows.size() > 0) {
+                        return Future.succeededFuture(Rows.str(rows.iterator().next(), "display_code"));
+                    }
+                    return nextSequence("geo_states", "state_code", null).map(seq -> country + seq);
+                });
+    }
+
     private Future<String> nextCode(Integer anchorId, String level, String table, String codeColumn,
-            String stateCode, String explicitCountry) {
+            String stateCode, String explicitCountry, String name) {
+        if ("STATE".equalsIgnoreCase(level)) {
+            return canonicalStateDisplayCode(name, explicitCountry);
+        }
         return countryPrefixFor(anchorId, level, stateCode, explicitCountry)
                 .compose(prefix -> nextSequence(table, codeColumn, anchorId).map(seq -> prefix + seq));
     }
@@ -263,7 +280,7 @@ public class Geography extends AbstractVerticle {
                         replyError(message, capitalize(level) + " \"" + name + "\" already exists");
                         return;
                     }
-                    nextCode(anchorId, level, table, codeColumn, stateCode, explicitCountry)
+                    nextCode(anchorId, level, table, codeColumn, stateCode, explicitCountry, name)
                             .onComplete(codeAr -> {
                                 if (codeAr.failed()) {
                                     onDbError(message, codeAr.cause());
@@ -407,7 +424,7 @@ public class Geography extends AbstractVerticle {
                                 actorId, rows, index + 1, created, errors);
                         return;
                     }
-                    nextCode(anchorId, level, table, codeColumn, stateCode, explicitCountry)
+                    nextCode(anchorId, level, table, codeColumn, stateCode, explicitCountry, name)
                             .onComplete(codeAr -> {
                                 if (codeAr.failed()) {
                                     errors.add(new JsonObject().put("row", index + 1).put("message", "Failed to generate code"));
@@ -456,9 +473,29 @@ public class Geography extends AbstractVerticle {
                     + " AND NOT EXISTS (SELECT 1 FROM geo_counties c WHERE c.anchor_id=t.anchor_id"
                     + " AND c.status=1 AND LOWER(LTRIM(RTRIM(c.name)))=LOWER(LTRIM(RTRIM(t.name))))"
                 : "";
-        String sql = "SELECT t.* FROM " + table + " t WHERE (@p1 IS NULL OR t.anchor_id=@p1)" + statusClause
+        String baseWhere = " WHERE (@p1 IS NULL OR t.anchor_id=@p1)" + statusClause
                 + (filterColumn == null ? "" : " AND (@p2 IS NULL OR t." + filterColumn + "=@p2)")
-                + stateCatalogueGuard + " ORDER BY t.name";
+                + stateCatalogueGuard;
+        String sql;
+        if ("geo_states".equals(table)) {
+            sql = "WITH visible_states AS ("
+                    + "SELECT t.*, ROW_NUMBER() OVER ("
+                    + "PARTITION BY COALESCE(t.country,''), LOWER(LTRIM(RTRIM(t.name))), "
+                    + "COALESCE(t.display_code,t.state_code), t.status "
+                    + "ORDER BY t.id) AS duplicate_rank "
+                    + "FROM geo_states t" + baseWhere
+                    + ") SELECT * FROM visible_states WHERE (@p1 IS NOT NULL OR duplicate_rank=1) ORDER BY name";
+        } else {
+            // The all-anchor browse view is a catalogue, not a tenant data dump. Keep
+            // a place name once for each of its actual parents, so County/Location/
+            // Village pickers cannot offer the same visible choice multiple times just
+            // because another anchor carries the same hierarchy. Anchor-scoped views
+            // retain every row for normal administration.
+            sql = "WITH visible_nodes AS ("
+                    + "SELECT t.*, ROW_NUMBER() OVER (PARTITION BY " + duplicatePartition(table)
+                    + " ORDER BY t.id) AS duplicate_rank FROM " + table + " t" + baseWhere
+                    + ") SELECT * FROM visible_nodes WHERE (@p1 IS NOT NULL OR duplicate_rank=1) ORDER BY name";
+        }
         Tuple params = filterColumn == null ? Tuple.of(anchorId) : Tuple.of(anchorId, filterValue);
         if (statusFilterRequested) params = params.addValue(explicitStatus);
 
@@ -498,6 +535,23 @@ public class Geography extends AbstractVerticle {
         }
     }
 
+    /** Hierarchy-aware visible identity for all-anchor catalogue lists. */
+    private static String duplicatePartition(String table) {
+        String normalizedName = "LOWER(LTRIM(RTRIM(t.name)))";
+        switch (table) {
+            case "geo_counties":
+                return "COALESCE(t.state_code,''), " + normalizedName + ", t.status";
+            case "geo_locations":
+                return "COALESCE(t.state_code,''), COALESCE(t.county_code,''), "
+                        + normalizedName + ", t.status";
+            case "geo_villages":
+                return "COALESCE(t.state_code,''), COALESCE(t.county_code,''), "
+                        + "COALESCE(t.location_code,''), " + normalizedName + ", t.status";
+            default:
+                return normalizedName + ", t.status";
+        }
+    }
+
     // ---- UPDATE_GEO_NODE { level, code, name } -------------------------------------
 
     private void update(Message<Object> message) {
@@ -526,10 +580,21 @@ public class Geography extends AbstractVerticle {
                 replyError(message, error.getMessage());
                 return;
             }
-            sql = "UPDATE geo_states SET name=@p1, country=@p2, "
-                    + "display_code=@p2 + SUBSTRING(display_code, PATINDEX('%[0-9]%', display_code), LEN(display_code)), "
-                    + "updated_at=GETDATE() WHERE anchor_id=@p3 AND state_code=@p4";
-            params = Tuple.of(name, country, anchorId, code);
+            canonicalStateDisplayCode(name, country)
+                    .onFailure(err -> onDbError(message, err))
+                    .onSuccess(displayCode -> pool.preparedQuery(
+                                    "UPDATE geo_states SET name=@p1, country=@p2, display_code=@p3, "
+                                            + "updated_at=GETDATE() WHERE anchor_id=@p4 AND state_code=@p5")
+                            .execute(Tuple.of(name, country, displayCode, anchorId, code))
+                            .onFailure(err -> onDbError(message, err))
+                            .onSuccess(rows -> {
+                                if (rows.rowCount() > 0) {
+                                    reply(message, new JsonObject().put("responseCode", "000").put("responseMessage", "Updated successfully"));
+                                } else {
+                                    replyError(message, "Not found");
+                                }
+                            }));
+            return;
         } else {
             sql = "UPDATE " + table + " SET name=@p1, updated_at=GETDATE() WHERE anchor_id=@p2 AND " + codeColumn + "=@p3";
             params = Tuple.of(name, anchorId, code);

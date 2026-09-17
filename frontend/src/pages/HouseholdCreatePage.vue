@@ -57,7 +57,11 @@ const form = ref({
 // A Super Admin's org list is re-fetched for whichever anchor they pick (see useOrgCascade) --
 // a previously chosen organisation almost never belongs to the new anchor, so it's cleared
 // rather than left stale/invalid in the field.
-watch(dialogAnchorId, () => { form.value.organisationCode = null })
+watch(dialogAnchorId, () => {
+  form.value.organisationCode = null
+  onStateChange()
+  void loadGeo()
+})
 
 function onStateChange() { form.value.countyCode = ''; form.value.locationCode = ''; form.value.villageCode = '' }
 function onCountyChange() { form.value.locationCode = ''; form.value.villageCode = '' }
@@ -65,11 +69,17 @@ function onLocationChange() { form.value.villageCode = '' }
 
 async function loadGeo() {
   try {
+    // A Platform Owner is registering under the anchor selected above. Loading the
+    // catalogue without this scope mixed matching place names from every anchor into
+    // one picker (for example, two separate "Ruiru" rows).
+    const scope = auth.isSystemAdmin && dialogAnchorId.value != null
+      ? { targetAnchorId: dialogAnchorId.value }
+      : {}
     const [s, c, l, v] = await Promise.all([
-      dispatch<{ results: GeoNode[] }>('GET_STATES'),
-      dispatch<{ results: GeoNode[] }>('GET_COUNTIES'),
-      dispatch<{ results: GeoNode[] }>('GET_LOCATIONS'),
-      dispatch<{ results: GeoNode[] }>('GET_VILLAGES'),
+      dispatch<{ results: GeoNode[] }>('GET_STATES', scope),
+      dispatch<{ results: GeoNode[] }>('GET_COUNTIES', scope),
+      dispatch<{ results: GeoNode[] }>('GET_LOCATIONS', scope),
+      dispatch<{ results: GeoNode[] }>('GET_VILLAGES', scope),
     ])
     states.value = s.results
     counties.value = c.results
@@ -117,8 +127,8 @@ async function attemptSave() {
   await save()
 }
 
-function onPhotoFile(event: Event) {
-  form.value.photo = (event.target as HTMLInputElement).files?.[0] ?? null
+function onPhotoFile(file: File | File[] | null) {
+  form.value.photo = Array.isArray(file) ? (file[0] ?? null) : file
 }
 
 function fileToDataUrl(file: File): Promise<string> {
@@ -130,14 +140,21 @@ function fileToDataUrl(file: File): Promise<string> {
   })
 }
 
-// The photo upload is a separate request from CREATE_HOUSEHOLD (base64-encoded, so
-// noticeably larger and slower than the household record itself, especially against a
-// remote DB host). Awaiting it before giving any feedback made Save look hung for as long
-// as that upload took -- the household was already saved, the spinner just hadn't caught
-// up. Uploading in the background after showing success removes that wait entirely.
+// The photo upload is a separate request from CREATE_HOUSEHOLD. Keep the Save action active
+// until that upload completes, so the detail page reached after Save can reliably show the
+// selected photo rather than racing a detached background request.
 async function save() {
   saving.value = true
   try {
+    const photo = form.value.photo
+    if (photo && !['image/jpeg', 'image/png'].includes(photo.type)) {
+      toast.error('Choose a JPG or PNG image for the household head photo')
+      return
+    }
+    if (photo && photo.size > 5 * 1024 * 1024) {
+      toast.error('The household head photo must be 5MB or smaller')
+      return
+    }
     const organisationCode = form.value.organisationCode || undefined
     const created = await dispatch<{ householdNumber: string }>('CREATE_HOUSEHOLD', {
       householdName: form.value.householdName, age: dateOfBirthToAge(form.value.dateOfBirth), gender: form.value.gender,
@@ -149,19 +166,21 @@ async function save() {
       payamCode: form.value.locationCode, bomaCode: form.value.villageCode,
       organisationCode,
     })
-    if (form.value.photo) {
-      const photo = form.value.photo
-      fileToDataUrl(photo)
-        .then((dataUrl) => dispatch('UPLOAD_IMAGE', {
+    if (photo) {
+      try {
+        const dataUrl = await fileToDataUrl(photo)
+        await dispatch('UPLOAD_IMAGE', {
           beneficiaryId: created.householdNumber,
           beneficiaryType: 1,
           imageBase64: dataUrl,
           extension: (photo.name.split('.').pop() || 'jpg').toLowerCase(),
           organisationCode,
-        }))
-        .catch((err) => toast.error(err instanceof Error
+        })
+      } catch (err) {
+        toast.error(err instanceof Error
           ? `Household registered, but the photo failed to upload: ${err.message}`
-          : 'Household registered, but the photo failed to upload'))
+          : 'Household registered, but the photo failed to upload')
+      }
     }
     toast.success('Household registered')
     goToList()
@@ -250,12 +269,12 @@ onMounted(() => {
               label="Household head photo (optional)"
               hint="You can also capture this photo later from the mobile field app"
               persistent-hint
-              accept="image/*"
+              accept="image/jpeg,image/png"
               prepend-icon="mdi-camera-outline"
               show-size
               density="compact"
               clearable
-              @change="onPhotoFile"
+              @update:model-value="onPhotoFile"
             />
           </v-col>
         </v-row>

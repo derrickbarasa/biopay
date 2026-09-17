@@ -3947,3 +3947,27 @@ Fix: `mvn package -DskipTests` to build a fresh `biopay-backend-1.0-SNAPSHOT-jar
 **Verification:** `npx vue-tsc -b` clean; full frontend test suite passes (35/35 across 10 files). **Not done:** still no live browser click-through (same 2FA blocker as the entry above) — in particular the newly-added Assign Location flow on Organization Detail's Field Officers tab has not been exercised in the running app.
 
 **Verification:** production build succeeds; all 35 frontend tests pass; the web manifest parses as JSON and is copied into `dist`; the sitemap parses as XML with one public URL and five supported image locations; deprecated `image:title` is absent; and generation succeeds with all path/privacy/asset guards enabled. No database migration was required for this pass.
+
+### 2026-09-17 - Canonical state display codes across anchors
+
+**1. Same state + same country now reuses one visible state code across anchors.** `Geography.java` no longer generates state `display_code` from the current anchor's local sequence. For state creation and bulk upload, it first looks for an existing row with the same ISO country and normalized state name anywhere in `geo_states`; if found, it reuses that display code. Only genuinely new states receive the next global 1000-step display number. Counties, locations, and villages keep their existing anchor/parent-scoped generation because those are not global state identities.
+
+**2. Mobile manual-location promotion follows the same rule.** `Biometric.java` now resolves a state's mobile-promoted display code by the same global country + normalized state name lookup before allocating a new number, so field-officer sync cannot reintroduce a second visible code for an already-known state.
+
+**3. Existing live data was corrected without rewriting relationship keys.** Added and applied `057_canonical_state_display_codes.sql`, which updates `geo_states.display_code` only. It deliberately does not touch `state_code`, child geography keys, households, officer assignments, or offline-device relationship values.
+
+**Verification:** backend clean recompilation and tests pass (`mvn.cmd test`: 35 tests run, 32 passed, 3 opt-in database tests skipped). Migration `057` was applied to the configured SQL Server and affected one row. A live read-back now shows both Kenya rows as `KE1000`, and the duplicate-check query for active `(country, normalized state name)` groups with more than one display code returns no rows. The backend still needs a rebuild/restart before the new future-code-generation logic is live; the existing database display values are already corrected.
+
+### 2026-09-17 - Deduped all-anchor state lists and location dropdowns
+
+**All-anchor state browsing no longer repeats the same canonical state.** `GET_STATES` now collapses identical active rows by country, normalized state name, display code, and status only when no specific anchor is selected. This fixes the Locations page's unfiltered States tab and every state picker that is viewing all anchors, so Kenya appears once instead of twice and Vuetify no longer renders the selected value as `Kenya Kenya`. Anchor-specific views are unchanged: selecting an anchor still returns that anchor's own geography row, preserving the anchor-scoped location model.
+
+**Verification:** forced backend recompilation and tests pass (`mvn.cmd test`: 35 run, 32 passed, 3 opt-in database tests skipped). A live SQL check using the same all-anchor grouping now returns one Kenya row, while an anchor-specific check for anchor `1069` still returns its own `Kenya` row with `KE1000`. No database migration was required for this list/display fix. The backend must still be rebuilt/restarted for the endpoint behavior to become live in the running app.
+
+### 2026-09-17 - Household registration timeout and photo-upload reliability
+
+**Household creation no longer reports a false backend timeout after successfully inserting the record.** `Household.java` now replies immediately after the household row is committed and marks it pending approval. Preparing approval requests and email notifications is sent asynchronously afterward, so an unavailable or slow approval/email worker cannot hold the original HTTP request open until its 20-second event-bus timeout. The household result is therefore accurate: a successful save is reported as successful while approval delivery remains a follow-up concern.
+
+**Household head photos now reliably accompany the newly created record.** `HouseholdCreatePage.vue` uses Vuetify's `update:model-value` file event instead of relying on the underlying native change event, which could leave the selected file unset. The Save action now waits for the separate image upload before routing back to the household list, eliminating the race where the detail page loads before the detached upload finishes. The picker and client validation intentionally match the server contract: JPG/PNG only and a maximum of 5 MB. If the photo upload fails, the household remains registered and the user receives a specific message explaining that only the image needs attention.
+
+**Verification:** `npm.cmd run build` succeeds; `mvn.cmd test -q` succeeds; the Impeccable UI detector reports no findings for `HouseholdCreatePage.vue`; and `git diff --check` reports no whitespace errors (aside from the repository's existing line-ending notices). The backend must be rebuilt/restarted and the updated frontend deployed before the fix is available to users.

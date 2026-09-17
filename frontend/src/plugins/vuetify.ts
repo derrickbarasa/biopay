@@ -46,6 +46,15 @@ export default createVuetify({
     // VDateInput's own default puts the calendar icon in `prependIcon`, which VTextField
     // renders OUTSIDE the outlined box (a separate element to its left) -- move it to
     // `prependInnerIcon` so it sits inside the field like every other field's icon.
-    VDateInput: { variant: 'outlined', density: 'comfortable', pickerProps: { color: 'secondary' }, prependIcon: '', prependInnerIcon: '$calendar' },
+    VDateInput: {
+      variant: 'outlined',
+      density: 'comfortable',
+      // Do not infer the browser's US-style date order. The same explicit format
+      // controls both what the field displays and how typed dates are parsed.
+      inputFormat: 'dd/mm/yyyy',
+      pickerProps: { color: 'secondary' },
+      prependIcon: '',
+      prependInnerIcon: '$calendar',
+    },
   },
 })
