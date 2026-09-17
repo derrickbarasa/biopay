@@ -7,7 +7,7 @@ import { useToast } from '@/composables/useToast'
 import { useConfirm } from '@/composables/useConfirm'
 interface UserRow{id:number;email:string;username:string;firstName?:string;surname?:string;partnerCode?:string;anchorId?:number;userScope:string;roleId?:number;roleName?:string;status:number;createdAt:string;systemAdmin?:boolean}
 interface Role{id:number;name:string;scope:string;anchorId?:number|null;builtIn?:boolean;systemRole?:boolean}
-interface Org{organisationCode:string;name:string;anchorId?:number}
+interface Org{organisationCode:string;name:string;anchorId?:number;status?:number}
 interface Anchor{id:number;name:string}
 const auth=useAuthStore(),toast=useToast(),router=useRouter(),loading=ref(false),saving=ref(false),dialog=ref(false),editDialog=ref(false),editSaving=ref(false),editLoading=ref(false),search=ref(''),roleFilter=ref<string|null>(null),users=ref<UserRow[]>([]),roles=ref<Role[]>([]),orgs=ref<Org[]>([]),anchors=ref<Anchor[]>([])
 const roleFilterOptions=computed(()=>[...new Set(users.value.map(u=>u.roleName).filter((n):n is string=>!!n))].sort())
@@ -21,7 +21,11 @@ const availableRoles=computed(()=>roles.value.filter(r=>r.scope===form.userScope
 const tenantScopeOptions=[{title:'Anchor-wide user',value:'ANCHOR'},{title:'Organisation user',value:'ORGANISATION'}]
 const scopeOptions=computed(()=>auth.isSystemAdmin?[{title:'System-wide platform owner',value:'SYSTEM'},...tenantScopeOptions]:tenantScopeOptions);
 const availableEditRoles=computed(()=>roles.value.filter(r=>r.scope===editForm.userScope));
-const availableOrganisations=computed(()=>auth.isSystemAdmin?orgs.value.filter(o=>o.anchorId===form.targetAnchorId):orgs.value)
+// A deactivated organisation can't be picked for a new user -- same "no new work under
+// something disabled" rule as the anchor/organisation pickers elsewhere (useAnchorScope,
+// useOrgCascade). orgs.value itself stays unfiltered so orgName() can still resolve names
+// for existing users who belong to an org that's since been deactivated.
+const availableOrganisations=computed(()=>orgs.value.filter(o=>o.status!==0&&(!auth.isSystemAdmin||o.anchorId===form.targetAnchorId)))
 const orgNameByCode=computed(()=>new Map(orgs.value.map(o=>[o.organisationCode,o.name])));
 function orgName(code?:string){return (code&&orgNameByCode.value.get(code))||code||'—'}
 async function load(){loading.value=true;try{const [u,r,o]=await Promise.all([dispatch<{results:UserRow[]}>('GET_USERS'),dispatch<{results:Role[]}>('GET_ROLES'),dispatch<{results:Org[]}>('GET_ORGANIZATIONS')]);users.value=u.results??[];roles.value=r.results??[];orgs.value=o.results??[];if(auth.isSystemAdmin){const a=await dispatch<{results:Anchor[]}>('GET_ANCHORS',{status:1});anchors.value=a.results??[]}}catch(e){toast.error(e instanceof Error?e.message:'Unable to load users')}finally{loading.value=false}}
@@ -39,6 +43,8 @@ async function create(){
  saving.value=true;try{await dispatch('CREATE_USER',{...form});toast.success('User created. A temporary password was emailed to them.');dialog.value=false;await load()}catch(e){toast.error(e instanceof Error?e.message:'Create failed')}finally{saving.value=false}
 }
 async function toggle(u:UserRow){const deactivating=u.status===1;if(!await confirmAction({title:`${deactivating?'Deactivate':'Activate'} user?`,message:deactivating?`${u.email} will no longer be able to sign in.`:`${u.email} will be able to sign in again.`,confirmLabel:deactivating?'Deactivate':'Activate',color:deactivating?'warning':'secondary'}))return;try{await dispatch('TOGGLE_USER_STATUS',{userId:u.id,status:deactivating?0:1});toast.success(deactivating?'User deactivated':'User activated');await load()}catch(e){toast.error(e instanceof Error?e.message:'Status update failed')}}
+// Only a user already deactivated can be permanently deleted (see Administration#deleteUser).
+async function removeUser(u:UserRow){if(!await confirmAction({title:'Delete user?',message:`${u.email} will be permanently removed. This cannot be undone.`,confirmLabel:'Delete user',color:'error',requireTypedText:'DELETE'}))return;try{await dispatch('DELETE_USER',{userId:u.id});toast.success('User deleted');await load()}catch(e){toast.error(e instanceof Error?e.message:'Delete failed')}}
 async function openEdit(u:UserRow){editDialog.value=true;editLoading.value=true;try{const roleRequest=auth.isSystemAdmin&&u.anchorId?dispatch<{results:Role[]}>('GET_ROLES',{targetAnchorId:u.anchorId}):Promise.resolve({results:roles.value});const [{results:r},roleResult]=await Promise.all([dispatch<{results:UserRow}>('GET_USER',{userId:u.id}),roleRequest]);roles.value=roleResult.results??[];Object.assign(editForm,{id:r.id,email:r.email,firstName:r.firstName??'',surname:r.surname??'',roleId:r.roleId??null,userScope:r.userScope})}catch(e){toast.error(e instanceof Error?e.message:'Unable to load user');editDialog.value=false}finally{editLoading.value=false}}
 async function saveEdit(){editSaving.value=true;try{await dispatch('UPDATE_USER',{userId:editForm.id,firstName:editForm.firstName,surname:editForm.surname,roleId:editForm.roleId});toast.success('User updated');editDialog.value=false;await load()}catch(e){toast.error(e instanceof Error?e.message:'Update failed')}finally{editSaving.value=false}}
 function openHistory(user:UserRow){router.push({name:'activity-history',params:{actorKind:'USER',actorId:user.id},query:{name:user.firstName||user.email||'User'}})}
@@ -52,7 +58,7 @@ onMounted(load)
     <template #item.email="{item}"><div class="py-2"><strong>{{ item.firstName }} {{ item.surname }}</strong><div class="text-caption text-medium-emphasis">{{ item.email }}</div></div></template>
     <template #item.userScope="{item}"><v-chip size="small" variant="tonal" :color="item.systemAdmin?'warning':item.userScope==='ANCHOR'?'primary':'secondary'">{{ item.systemAdmin?'System-wide':item.userScope==='ANCHOR'?'Anchor-wide':orgName(item.partnerCode) }}</v-chip></template>
     <template #item.status="{item}"><v-chip size="small" :color="item.status===1?'success':'error'" variant="tonal">{{ item.status===1?'Active':'Inactive' }}</v-chip></template>
-    <template #item.actions="{item}"><v-btn v-if="auth.can('ACCESS_USERS')" size="small" variant="text" icon="mdi-history" :aria-label="`View ${item.email} activity history`" @click="openHistory(item)"/><v-btn v-if="auth.can('ACCESS_USERS')" size="small" variant="text" icon="mdi-pencil-outline" aria-label="Edit user" class="mr-1" @click="openEdit(item)"/><v-btn v-if="auth.can('ACCESS_USERS')" size="small" variant="text" :color="item.status===1?'error':'success'" @click="toggle(item)">{{ item.status===1?'Deactivate':'Activate' }}</v-btn></template>
+    <template #item.actions="{item}"><v-btn v-if="auth.can('ACCESS_USERS')" size="small" variant="text" icon="mdi-history" :aria-label="`View ${item.email} activity history`" @click="openHistory(item)"/><v-btn v-if="auth.can('ACCESS_USERS')" size="small" variant="text" icon="mdi-pencil-outline" aria-label="Edit user" class="mr-1" @click="openEdit(item)"/><v-btn v-if="auth.can('ACCESS_USERS')" size="small" variant="text" :color="item.status===1?'error':'success'" @click="toggle(item)">{{ item.status===1?'Deactivate':'Activate' }}</v-btn><v-btn v-if="auth.can('ACCESS_USERS')&&item.status!==1&&!item.systemAdmin" size="small" variant="text" icon="mdi-delete-outline" color="error" :aria-label="`Delete ${item.email}`" @click="removeUser(item)"/></template>
    </v-data-table>
   </v-card>
   <v-dialog v-model="dialog" max-width="660"><v-card class="pa-2"><dialog-close-button @close="dialog=false"/><v-card-title>Create dashboard user</v-card-title><v-card-subtitle>A temporary password is generated automatically and emailed to the user.</v-card-subtitle><v-card-text class="form-grid">

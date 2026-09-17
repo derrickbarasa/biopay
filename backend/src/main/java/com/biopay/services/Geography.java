@@ -12,6 +12,7 @@ import io.vertx.sqlclient.Row;
 import io.vertx.sqlclient.RowSet;
 import io.vertx.sqlclient.Tuple;
 import com.biopay.databases.Datasource;
+import com.biopay.utilities.CountryCodes;
 import com.biopay.utilities.Logging;
 import com.biopay.utilities.Rows;
 
@@ -27,11 +28,10 @@ import com.biopay.utilities.Rows;
  *
  * Codes are generated here, not typed by the caller: <countryPrefix><sequence>,
  * e.g. Kenya -> KE2000, Uganda -> UG3000 (019_geo_location_country_codes.sql).
- * A state's country is chosen on creation and stored on geo_states.country;
- * counties/locations/villages resolve their prefix by looking up their
- * ancestor state's country. A state created without a country (the column is
- * nullable) keeps the old plain-numeric-code behaviour for itself and
- * everything under it.
+ * A state's ISO alpha-2 country is required on portal creation and stored on
+ * geo_states.country; counties/locations/villages resolve their prefix by
+ * looking up their ancestor state's country. Legacy internal keys remain
+ * untouched and use geo_states.display_code for their user-facing identifier.
  */
 public class Geography extends AbstractVerticle {
 
@@ -65,6 +65,7 @@ public class Geography extends AbstractVerticle {
 
         eventBus.consumer("UPDATE_GEO_NODE", this::update);
         eventBus.consumer("DELETE_GEO_NODE", this::delete);
+        eventBus.consumer("TOGGLE_GEO_NODE_STATUS", this::toggleStatus);
         startPromise.complete();
     }
 
@@ -87,7 +88,12 @@ public class Geography extends AbstractVerticle {
     }
 
     private static Integer anchorIdOf(JsonObject payload) {
-        Object v = payload.getValue("anchorId");
+        // Tenant actors can never widen their geography scope with a supplied
+        // targetAnchorId. EntryPoint already replaces anchorId from the JWT; use the
+        // separate JWT-derived value again here as defense in depth.
+        Object v = payload.getBoolean("systemAdmin", false)
+                ? payload.getValue("anchorId")
+                : payload.getValue("sessionAnchorId");
         return v == null ? null : Integer.parseInt(v.toString());
     }
 
@@ -115,9 +121,8 @@ public class Geography extends AbstractVerticle {
     // ---- code generation: <countryPrefix><sequence>, e.g. KE2000 -------------------
 
     /**
-     * A state's own chosen country (may be empty/absent -> no prefix) or, for
-     * every other level, its ancestor state's geo_states.country (may be null
-     * if that state was never given one -> no prefix).
+     * A state's chosen country or, for every other level, its ancestor state's
+     * geo_states.country. Legacy states may still have no country until edited.
      */
     private Future<String> countryPrefixFor(Integer anchorId, String level, String stateCode, String explicitCountry) {
         if ("STATE".equalsIgnoreCase(level)) {
@@ -135,20 +140,22 @@ public class Geography extends AbstractVerticle {
 
     /**
      * Next sequential number for this anchor+table, continuing the same running
-     * sequence regardless of country prefix (so KE/UG/etc. codes under one
-     * anchor don't each restart their own numbering). Starts at 1000. Scans
+     * sequence regardless of country prefix (so GQ/KE/SO/etc. codes under one
+     * anchor don't each restart their own numbering). Uses 1000-number steps
+     * (GQ1000, KE2000, SO3000). Scans
      * every row (including soft-deleted ones) because UQ_..._anchor_code isn't
      * status-filtered -- a deleted code's number can't be reused.
      */
     private Future<Integer> nextSequence(String table, String codeColumn, Integer anchorId) {
-        String sql = "SELECT MAX(CASE WHEN PATINDEX('%[0-9]%', " + codeColumn + ") > 0 "
-                + "THEN TRY_CAST(SUBSTRING(" + codeColumn + ", PATINDEX('%[0-9]%', " + codeColumn + "), LEN(" + codeColumn + ")) AS INT) "
+        String sequenceSource = "geo_states".equals(table) ? "COALESCE(display_code, state_code)" : codeColumn;
+        String sql = "SELECT MAX(CASE WHEN PATINDEX('%[0-9]%', " + sequenceSource + ") > 0 "
+                + "THEN TRY_CAST(SUBSTRING(" + sequenceSource + ", PATINDEX('%[0-9]%', " + sequenceSource + "), LEN(" + sequenceSource + ")) AS INT) "
                 + "ELSE NULL END) AS mx FROM " + table + " WHERE anchor_id=@p1";
         return pool.preparedQuery(sql).execute(Tuple.of(anchorId))
                 .map(rows -> {
                     if (rows.size() == 0) return 1000;
                     Integer max = Rows.intVal(rows.iterator().next(), "mx");
-                    return (max == null ? 999 : max) + 1;
+                    return max == null ? 1000 : ((max / 1000) + 1) * 1000;
                 });
     }
 
@@ -158,10 +165,24 @@ public class Geography extends AbstractVerticle {
                 .compose(prefix -> nextSequence(table, codeColumn, anchorId).map(seq -> prefix + seq));
     }
 
-    private static String statePrefix(String name, String requestedPrefix) {
-        if (requestedPrefix != null && !requestedPrefix.isBlank()) return requestedPrefix.trim().toUpperCase();
-        String letters = name.replaceAll("[^A-Za-z]", "").toUpperCase();
-        return letters.substring(0, Math.min(2, letters.length()));
+    /**
+     * Two active rows in the same table, same anchor and same immediate parent
+     * (e.g. same state for a county) must never share a name -- that's how a
+     * place like "Kenya" ends up listed twice with two different codes. Compared
+     * case- and whitespace-insensitively since typed names vary that way.
+     */
+    private Future<Boolean> nameExists(String table, Integer anchorId, String[] parentColumns,
+            String[] parentValues, String name) {
+        StringBuilder sql = new StringBuilder(
+                "SELECT TOP 1 1 FROM " + table + " WHERE anchor_id=@p1 AND status=1 "
+                        + "AND LOWER(LTRIM(RTRIM(name)))=LOWER(LTRIM(RTRIM(@p2)))");
+        Tuple params = Tuple.of(anchorId).addString(name);
+        int idx = 3;
+        for (int i = 0; i < parentColumns.length; i++) {
+            sql.append(" AND ").append(parentColumns[i]).append("=@p").append(idx++);
+            params = params.addString(parentValues[i]);
+        }
+        return pool.preparedQuery(sql.toString()).execute(params).map(rows -> rows.size() > 0);
     }
 
     // ---- shared insert used by both the single create() and the bulk loop ---------
@@ -181,6 +202,11 @@ public class Geography extends AbstractVerticle {
             columns.append("country, ");
             placeholders.append("@p").append(idx++).append(", ");
             params = params.addString(country.trim().toUpperCase());
+        }
+        if ("geo_states".equals(table)) {
+            columns.append("display_code, ");
+            placeholders.append("@p").append(idx++).append(", ");
+            params = params.addString(code);
         }
         columns.append(codeColumn).append(", name, status, created_by, created_at");
         placeholders.append("@p").append(idx++).append(", @p").append(idx++).append(", 1, @p").append(idx).append(", GETDATE()");
@@ -220,30 +246,50 @@ public class Geography extends AbstractVerticle {
             parentValues[i] = v;
         }
         String stateCode = parentFields.length > 0 ? parentValues[0] : null;
-        final String explicitCountry = "STATE".equalsIgnoreCase(level)
-                ? statePrefix(name, payload.getString("country")) : payload.getString("country");
+        final String explicitCountry;
+        try {
+            explicitCountry = "STATE".equalsIgnoreCase(level)
+                    ? CountryCodes.requireAlpha2(payload.getString("country"))
+                    : payload.getString("country");
+        } catch (IllegalArgumentException error) {
+            replyError(message, error.getMessage());
+            return;
+        }
 
-        nextCode(anchorId, level, table, codeColumn, stateCode, explicitCountry)
-                .onComplete(codeAr -> {
-                    if (codeAr.failed()) {
-                        onDbError(message, codeAr.cause());
+        nameExists(table, anchorId, parentColumns, parentValues, name)
+                .onFailure(err -> onDbError(message, err))
+                .onSuccess(exists -> {
+                    if (exists) {
+                        replyError(message, capitalize(level) + " \"" + name + "\" already exists");
                         return;
                     }
-                    String code = codeAr.result();
-                    insertGeoRow(table, codeColumn, anchorId, parentColumns, parentValues, code, name,
-                            "STATE".equalsIgnoreCase(level) ? explicitCountry : null, payload.getValue("actorId"))
-                            .onFailure(err -> onDbError(message, err))
-                            .onSuccess(rows -> {
-                                if (rows.rowCount() > 0) {
-                                    reply(message, new JsonObject()
-                                            .put("responseCode", "000")
-                                            .put("responseMessage", "Created successfully")
-                                            .put("code", code));
-                                } else {
-                                    replyError(message, "Failed to create. Code may already exist");
+                    nextCode(anchorId, level, table, codeColumn, stateCode, explicitCountry)
+                            .onComplete(codeAr -> {
+                                if (codeAr.failed()) {
+                                    onDbError(message, codeAr.cause());
+                                    return;
                                 }
+                                String code = codeAr.result();
+                                insertGeoRow(table, codeColumn, anchorId, parentColumns, parentValues, code, name,
+                                        "STATE".equalsIgnoreCase(level) ? explicitCountry : null, payload.getValue("actorId"))
+                                        .onFailure(err -> onDbError(message, err))
+                                        .onSuccess(rows -> {
+                                            if (rows.rowCount() > 0) {
+                                                reply(message, new JsonObject()
+                                                        .put("responseCode", "000")
+                                                        .put("responseMessage", "Created successfully")
+                                                        .put("code", code));
+                                            } else {
+                                                replyError(message, "Failed to create. Code may already exist");
+                                            }
+                                        });
                             });
                 });
+    }
+
+    private static String capitalize(String level) {
+        String lower = level.toLowerCase();
+        return Character.toUpperCase(lower.charAt(0)) + lower.substring(1);
     }
 
     // ---- BULK_UPLOAD_GEO_NODES { level, stateCode?, countyCode?, locationCode?, rows:[{name, country?}] } ----
@@ -336,28 +382,51 @@ public class Geography extends AbstractVerticle {
                     actorId, rows, index + 1, created, errors);
             return;
         }
-        final String explicitCountry = "STATE".equalsIgnoreCase(level)
-                ? statePrefix(name, row.getString("country")) : row.getString("country");
+        final String explicitCountry;
+        try {
+            explicitCountry = "STATE".equalsIgnoreCase(level)
+                    ? CountryCodes.requireAlpha2(row.getString("country"))
+                    : row.getString("country");
+        } catch (IllegalArgumentException error) {
+            errors.add(new JsonObject().put("row", index + 1).put("message", error.getMessage()));
+            processGeoUploadRow(message, level, table, codeColumn, anchorId, stateCode, parentColumns, parentValues,
+                    actorId, rows, index + 1, created, errors);
+            return;
+        }
 
-        nextCode(anchorId, level, table, codeColumn, stateCode, explicitCountry)
-                .onComplete(codeAr -> {
-                    if (codeAr.failed()) {
-                        errors.add(new JsonObject().put("row", index + 1).put("message", "Failed to generate code"));
+        nameExists(table, anchorId, parentColumns, parentValues, name)
+                .onFailure(err -> {
+                    errors.add(new JsonObject().put("row", index + 1).put("message", "Failed to validate " + name));
+                    processGeoUploadRow(message, level, table, codeColumn, anchorId, stateCode, parentColumns, parentValues,
+                            actorId, rows, index + 1, created, errors);
+                })
+                .onSuccess(exists -> {
+                    if (exists) {
+                        errors.add(new JsonObject().put("row", index + 1).put("message", name + " already exists"));
                         processGeoUploadRow(message, level, table, codeColumn, anchorId, stateCode, parentColumns, parentValues,
                                 actorId, rows, index + 1, created, errors);
                         return;
                     }
-                    String code = codeAr.result();
-                    insertGeoRow(table, codeColumn, anchorId, parentColumns, parentValues, code, name,
-                            "STATE".equalsIgnoreCase(level) ? explicitCountry : null, actorId)
-                            .onComplete(insertAr -> {
-                                if (insertAr.succeeded() && insertAr.result().rowCount() > 0) {
-                                    created.add(new JsonObject().put("code", code).put("name", name));
-                                } else {
-                                    errors.add(new JsonObject().put("row", index + 1).put("message", "Failed to create " + name));
+                    nextCode(anchorId, level, table, codeColumn, stateCode, explicitCountry)
+                            .onComplete(codeAr -> {
+                                if (codeAr.failed()) {
+                                    errors.add(new JsonObject().put("row", index + 1).put("message", "Failed to generate code"));
+                                    processGeoUploadRow(message, level, table, codeColumn, anchorId, stateCode, parentColumns, parentValues,
+                                            actorId, rows, index + 1, created, errors);
+                                    return;
                                 }
-                                processGeoUploadRow(message, level, table, codeColumn, anchorId, stateCode, parentColumns, parentValues,
-                                        actorId, rows, index + 1, created, errors);
+                                String code = codeAr.result();
+                                insertGeoRow(table, codeColumn, anchorId, parentColumns, parentValues, code, name,
+                                        "STATE".equalsIgnoreCase(level) ? explicitCountry : null, actorId)
+                                        .onComplete(insertAr -> {
+                                            if (insertAr.succeeded() && insertAr.result().rowCount() > 0) {
+                                                created.add(new JsonObject().put("code", code).put("name", name));
+                                            } else {
+                                                errors.add(new JsonObject().put("row", index + 1).put("message", "Failed to create " + name));
+                                            }
+                                            processGeoUploadRow(message, level, table, codeColumn, anchorId, stateCode, parentColumns, parentValues,
+                                                    actorId, rows, index + 1, created, errors);
+                                        });
                             });
                 });
     }
@@ -372,16 +441,26 @@ public class Geography extends AbstractVerticle {
         // the JWT, so this never affects that role.
         Integer anchorId = anchorIdOf(payload);
         String filterValue = filterField == null ? null : payload.getString(filterField, null);
+        // Every existing caller (create-flow pickers, bulk-upload parent selects, ...) calls this
+        // without a status opinion and must keep seeing active rows only. The Locations management
+        // page is the only caller that ever needs inactive rows back (to show/restore them), so it
+        // opts in explicitly by sending a "status" key at all (its value may be 0, 1, or left blank
+        // for "every status") rather than the default changing under every other caller.
+        boolean statusFilterRequested = payload.containsKey("status");
+        Integer explicitStatus = statusFilterRequested ? payload.getInteger("status") : null;
+        int statusParamIdx = filterColumn == null ? 2 : 3;
+        String statusClause = statusFilterRequested ? " AND (@p" + statusParamIdx + " IS NULL OR t.status=@p" + statusParamIdx + ")" : " AND t.status=1";
 
         String stateCatalogueGuard = "geo_states".equals(table)
                 ? " AND t.name NOT LIKE 'E2E Test%'"
                     + " AND NOT EXISTS (SELECT 1 FROM geo_counties c WHERE c.anchor_id=t.anchor_id"
                     + " AND c.status=1 AND LOWER(LTRIM(RTRIM(c.name)))=LOWER(LTRIM(RTRIM(t.name))))"
                 : "";
-        String sql = "SELECT t.* FROM " + table + " t WHERE (@p1 IS NULL OR t.anchor_id=@p1) AND t.status=1"
+        String sql = "SELECT t.* FROM " + table + " t WHERE (@p1 IS NULL OR t.anchor_id=@p1)" + statusClause
                 + (filterColumn == null ? "" : " AND (@p2 IS NULL OR t." + filterColumn + "=@p2)")
                 + stateCatalogueGuard + " ORDER BY t.name";
         Tuple params = filterColumn == null ? Tuple.of(anchorId) : Tuple.of(anchorId, filterValue);
+        if (statusFilterRequested) params = params.addValue(explicitStatus);
 
         pool.preparedQuery(sql)
                 .execute(params)
@@ -392,11 +471,15 @@ public class Geography extends AbstractVerticle {
                         JsonObject obj = new JsonObject()
                                 .put("code", Rows.str(r, codeColumn))
                                 .put("name", Rows.str(r, "name"))
-                                .put("anchorId", Rows.intVal(r, "anchor_id"));
+                                .put("anchorId", Rows.intVal(r, "anchor_id"))
+                                .put("status", Rows.intVal(r, "status"));
                         if (hasColumn(table, "state_code")) obj.put("stateCode", Rows.str(r, "state_code"));
                         if (hasColumn(table, "county_code")) obj.put("countyCode", Rows.str(r, "county_code"));
                         if (hasColumn(table, "location_code")) obj.put("locationCode", Rows.str(r, "location_code"));
-                        if ("geo_states".equals(table)) obj.put("country", Rows.str(r, "country"));
+                        if ("geo_states".equals(table)) {
+                            obj.put("country", Rows.str(r, "country"));
+                            obj.put("displayCode", Rows.str(r, "display_code"));
+                        }
                         results.add(obj);
                     }
                     reply(message, new JsonObject()
@@ -433,9 +516,26 @@ public class Geography extends AbstractVerticle {
             return;
         }
 
-        String sql = "UPDATE " + table + " SET name=@p1, updated_at=GETDATE() WHERE anchor_id=@p2 AND " + codeColumn + "=@p3";
+        String sql;
+        Tuple params;
+        if ("geo_states".equals(table)) {
+            final String country;
+            try {
+                country = CountryCodes.requireAlpha2(payload.getString("country"));
+            } catch (IllegalArgumentException error) {
+                replyError(message, error.getMessage());
+                return;
+            }
+            sql = "UPDATE geo_states SET name=@p1, country=@p2, "
+                    + "display_code=@p2 + SUBSTRING(display_code, PATINDEX('%[0-9]%', display_code), LEN(display_code)), "
+                    + "updated_at=GETDATE() WHERE anchor_id=@p3 AND state_code=@p4";
+            params = Tuple.of(name, country, anchorId, code);
+        } else {
+            sql = "UPDATE " + table + " SET name=@p1, updated_at=GETDATE() WHERE anchor_id=@p2 AND " + codeColumn + "=@p3";
+            params = Tuple.of(name, anchorId, code);
+        }
         pool.preparedQuery(sql)
-                .execute(Tuple.of(name, anchorId, code))
+                .execute(params)
                 .onFailure(err -> onDbError(message, err))
                 .onSuccess(rows -> {
                     if (rows.rowCount() > 0) {
@@ -446,7 +546,81 @@ public class Geography extends AbstractVerticle {
                 });
     }
 
-    // ---- DELETE_GEO_NODE { level, code } (soft delete) ------------------------------
+    // ---- TOGGLE_GEO_NODE_STATUS { level, code, status } (deactivate / reactivate) --
+
+    private void toggleStatus(Message<Object> message) {
+        JsonObject payload = new JsonObject(message.body().toString());
+        if (!canManage(payload)) {
+            replyError(message, "Not authorised to manage locations");
+            return;
+        }
+        String level = payload.getString("level", "");
+        String table = tableForLevel(level);
+        String codeColumn = codeColumnForLevel(level);
+        Integer anchorId = anchorIdOf(payload);
+        String code = payload.getString("code", "").trim();
+        Integer status = payload.getInteger("status");
+        if (table == null || anchorId == null || code.isEmpty() || status == null) {
+            replyError(message, "level, code and status are required");
+            return;
+        }
+
+        String sql = "UPDATE " + table + " SET status=@p1, updated_at=GETDATE() WHERE anchor_id=@p2 AND " + codeColumn + "=@p3";
+        pool.preparedQuery(sql)
+                .execute(Tuple.of(status, anchorId, code))
+                .onFailure(err -> onDbError(message, err))
+                .onSuccess(rows -> {
+                    if (rows.rowCount() > 0) {
+                        reply(message, new JsonObject().put("responseCode", "000")
+                                .put("responseMessage", status == 1 ? capitalize(level) + " activated" : capitalize(level) + " deactivated"));
+                    } else {
+                        replyError(message, "Not found");
+                    }
+                });
+    }
+
+    // ---- DELETE_GEO_NODE { level, code } (real delete, blocked while anything still --
+    // ---- depends on this node -- deactivate instead if it does) --------------------
+
+    /**
+     * Whether anything still points at this node: a child geo row (any status -- a
+     * deactivated child would otherwise dangle), a household, or an officer's location
+     * assignment. Households/officer_locations store codes as loosely-coupled strings
+     * with no FK (see 006_geo_hierarchy.sql), so a hard delete here would silently orphan
+     * them if it weren't blocked first.
+     */
+    private Future<Boolean> hasDependents(String level, Integer anchorId, String code) {
+        String sql;
+        switch (level.toUpperCase()) {
+            case "STATE":
+                sql = "SELECT 1 WHERE EXISTS (SELECT 1 FROM geo_counties c WHERE c.anchor_id=@p1 AND c.state_code=@p2) "
+                        + "OR EXISTS (SELECT 1 FROM households h JOIN organizations o ON o.organization_code=h.organization_code "
+                        + "WHERE o.anchor_id=@p1 AND h.state_code=@p2) "
+                        + "OR EXISTS (SELECT 1 FROM officer_locations ol JOIN field_officers fo ON fo.officer_code=ol.officer_code "
+                        + "WHERE fo.anchor_id=@p1 AND ol.state_code=@p2)";
+                break;
+            case "COUNTY":
+                sql = "SELECT 1 WHERE EXISTS (SELECT 1 FROM geo_locations l WHERE l.anchor_id=@p1 AND l.county_code=@p2) "
+                        + "OR EXISTS (SELECT 1 FROM households h JOIN organizations o ON o.organization_code=h.organization_code "
+                        + "WHERE o.anchor_id=@p1 AND h.county_code=@p2) "
+                        + "OR EXISTS (SELECT 1 FROM officer_locations ol JOIN field_officers fo ON fo.officer_code=ol.officer_code "
+                        + "WHERE fo.anchor_id=@p1 AND ol.county_code=@p2)";
+                break;
+            case "LOCATION":
+                sql = "SELECT 1 WHERE EXISTS (SELECT 1 FROM geo_villages v WHERE v.anchor_id=@p1 AND v.location_code=@p2) "
+                        + "OR EXISTS (SELECT 1 FROM households h JOIN organizations o ON o.organization_code=h.organization_code "
+                        + "WHERE o.anchor_id=@p1 AND (h.location_code=@p2 OR h.payam_code=@p2)) "
+                        + "OR EXISTS (SELECT 1 FROM officer_locations ol JOIN field_officers fo ON fo.officer_code=ol.officer_code "
+                        + "WHERE fo.anchor_id=@p1 AND (ol.location_code=@p2 OR ol.payam_code=@p2))";
+                break;
+            default:
+                sql = "SELECT 1 WHERE EXISTS (SELECT 1 FROM households h JOIN organizations o ON o.organization_code=h.organization_code "
+                        + "WHERE o.anchor_id=@p1 AND (h.village_code=@p2 OR h.boma_code=@p2)) "
+                        + "OR EXISTS (SELECT 1 FROM officer_locations ol JOIN field_officers fo ON fo.officer_code=ol.officer_code "
+                        + "WHERE fo.anchor_id=@p1 AND (ol.village_code=@p2 OR ol.boma_code=@p2))";
+        }
+        return pool.preparedQuery(sql).execute(Tuple.of(anchorId, code)).map(rows -> rows.size() > 0);
+    }
 
     private void delete(Message<Object> message) {
         JsonObject payload = new JsonObject(message.body().toString());
@@ -454,8 +628,9 @@ public class Geography extends AbstractVerticle {
             replyError(message, "Not authorised to manage locations");
             return;
         }
-        String table = tableForLevel(payload.getString("level", ""));
-        String codeColumn = codeColumnForLevel(payload.getString("level", ""));
+        String level = payload.getString("level", "");
+        String table = tableForLevel(level);
+        String codeColumn = codeColumnForLevel(level);
         Integer anchorId = anchorIdOf(payload);
         String code = payload.getString("code", "").trim();
         if (table == null || anchorId == null || code.isEmpty()) {
@@ -463,16 +638,24 @@ public class Geography extends AbstractVerticle {
             return;
         }
 
-        String sql = "UPDATE " + table + " SET status=0, updated_at=GETDATE() WHERE anchor_id=@p1 AND " + codeColumn + "=@p2";
-        pool.preparedQuery(sql)
-                .execute(Tuple.of(anchorId, code))
+        hasDependents(level, anchorId, code)
                 .onFailure(err -> onDbError(message, err))
-                .onSuccess(rows -> {
-                    if (rows.rowCount() > 0) {
-                        reply(message, new JsonObject().put("responseCode", "000").put("responseMessage", "Deleted successfully"));
-                    } else {
-                        replyError(message, "Not found");
+                .onSuccess(dependents -> {
+                    if (dependents) {
+                        replyError(message, "Deactivate it instead -- it still has locations, households or officer assignments under it");
+                        return;
                     }
+                    String sql = "DELETE FROM " + table + " WHERE anchor_id=@p1 AND " + codeColumn + "=@p2";
+                    pool.preparedQuery(sql)
+                            .execute(Tuple.of(anchorId, code))
+                            .onFailure(err -> onDbError(message, err))
+                            .onSuccess(rows -> {
+                                if (rows.rowCount() > 0) {
+                                    reply(message, new JsonObject().put("responseCode", "000").put("responseMessage", "Deleted successfully"));
+                                } else {
+                                    replyError(message, "Not found");
+                                }
+                            });
                 });
     }
 }

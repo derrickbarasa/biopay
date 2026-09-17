@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { routeNavigating } from '@/composables/useRouteProgress'
+import { applyRouteSeo } from '@/seo'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -9,6 +10,13 @@ const router = createRouter({
       path: '/',
       name: 'home',
       component: () => import('@/pages/LandingPage.vue'),
+      meta: {
+        seoTitle: 'BioPay | Biometric Payment Infrastructure',
+        description: 'Offline-first biometric registration, cash-transfer and voucher infrastructure for accountable humanitarian programmes.',
+        indexable: true,
+        canonicalPath: '/',
+        socialImage: '/og-image.jpg',
+      },
     },
     {
       path: '/login',
@@ -171,7 +179,15 @@ const router = createRouter({
         { path: 'billing', name: 'billing', component: () => import('@/pages/BillingPage.vue'), meta: { roles: ['ANCHOR'], systemOnly: true, title: 'Billing' } },
       ],
     },
-    { path: '/:pathMatch(.*)*', redirect: { name: 'home' } },
+    {
+      path: '/:pathMatch(.*)*',
+      name: 'not-found',
+      component: () => import('@/pages/NotFoundPage.vue'),
+      meta: {
+        title: 'Page not found',
+        description: 'The requested BioPay page could not be found.',
+      },
+    },
   ],
 })
 
@@ -186,8 +202,7 @@ router.beforeEach(() => {
 router.afterEach((to) => {
   routeNavigating.value = false
   recoveringLazyRoute = false
-  const pageTitle = to.meta.title as string | undefined
-  document.title = pageTitle ? `${pageTitle} | BioPay` : 'BioPay | biometric payment infrastructure'
+  applyRouteSeo(to)
 })
 
 router.beforeEach((to) => {

@@ -39,6 +39,8 @@ public class Household extends AbstractVerticle {
 
         eventBus.consumer("CREATE_HOUSEHOLD", this::create);
         eventBus.consumer("UPDATE_HOUSEHOLD", this::update);
+        eventBus.consumer("DEACTIVATE_HOUSEHOLD", this::deactivate);
+        eventBus.consumer("ACTIVATE_HOUSEHOLD", this::activate);
         eventBus.consumer("DELETE_HOUSEHOLD", this::delete);
         eventBus.consumer("GET_HOUSEHOLD", this::getOne);
         eventBus.consumer("GET_HOUSEHOLDS", this::retrieveAll);
@@ -255,28 +257,92 @@ public class Household extends AbstractVerticle {
                 });
     }
 
-    // ---- DELETE_HOUSEHOLD (soft delete) ------------------------------------------
+    // ---- DEACTIVATE_HOUSEHOLD / ACTIVATE_HOUSEHOLD (reversible) --------------------
 
-    private void delete(Message<Object> message) {
+    private void setHouseholdStatus(Message<Object> message, int status, String successMessage) {
         JsonObject payload = new JsonObject(message.body().toString());
         String householdNumber = payload.getString("householdNumber", "").trim();
 
-        String sql = "UPDATE households SET status=0, updated_by=@p1, updated_at=GETDATE() WHERE household_number=@p2"
-                + (isAnchor(payload) ? " AND (@p3=1 OR organization_code IN (SELECT organization_code FROM organizations WHERE anchor_id=@p4))" : " AND organization_code=@p3");
+        String sql = "UPDATE households SET status=@p1, updated_by=@p2, updated_at=GETDATE() WHERE household_number=@p3"
+                + (isAnchor(payload) ? " AND (@p4=1 OR organization_code IN (SELECT organization_code FROM organizations WHERE anchor_id=@p5))" : " AND organization_code=@p4");
         Tuple params = isAnchor(payload)
-                ? Tuple.of(String.valueOf(payload.getValue("actorId")), householdNumber, isSystemAdmin(payload), TenantScope.anchorId(payload))
-                : Tuple.of(String.valueOf(payload.getValue("actorId")), householdNumber, payload.getString("partnerCode", ""));
+                ? Tuple.of(status, String.valueOf(payload.getValue("actorId")), householdNumber, isSystemAdmin(payload), TenantScope.anchorId(payload))
+                : Tuple.of(status, String.valueOf(payload.getValue("actorId")), householdNumber, payload.getString("partnerCode", ""));
 
         pool.preparedQuery(sql)
                 .execute(params)
                 .onFailure(err -> onDbError(message, err))
                 .onSuccess(rows -> {
                     if (rows.rowCount() > 0) {
-                        reply(message, new JsonObject().put("responseCode", "000").put("responseMessage", "Household deleted successfully"));
+                        reply(message, new JsonObject().put("responseCode", "000").put("responseMessage", successMessage));
                     } else {
                         replyError(message, "Household not found or not in your organisation");
                     }
                 });
+    }
+
+    private void deactivate(Message<Object> message) {
+        setHouseholdStatus(message, 0, "Household deactivated successfully");
+    }
+
+    private void activate(Message<Object> message) {
+        setHouseholdStatus(message, 1, "Household activated successfully");
+    }
+
+    // ---- DELETE_HOUSEHOLD (genuine, irreversible delete) ---------------------------
+
+    /**
+     * A genuine delete -- distinct from {@link #deactivate}/{@link #activate}, which stay the
+     * reversible pair. Only permitted while the household has no recorded activity of any kind
+     * (payments, attendance, vouchers, alternates, enrolled biometrics/photos) and is already
+     * deactivated -- a beneficiary record with real history should never be removable, only a
+     * mistaken/duplicate entry that nothing has touched yet. Matches the same "deactivate first,
+     * block on real dependents" shape as {@link Organization#delete}/{@link Officer#delete}.
+     */
+    private void delete(Message<Object> message) {
+        JsonObject payload = new JsonObject(message.body().toString());
+        String householdNumber = payload.getString("householdNumber", "").trim();
+        boolean anchorScoped = isAnchor(payload);
+        boolean systemAdmin = isSystemAdmin(payload);
+        Integer anchorId = TenantScope.anchorId(payload);
+        String partnerCode = payload.getString("partnerCode", "");
+
+        String findSql = "SELECT status FROM households WHERE household_number=@p1"
+                + (anchorScoped ? " AND (@p2=1 OR organization_code IN (SELECT organization_code FROM organizations WHERE anchor_id=@p3))" : " AND organization_code=@p2");
+        Tuple findParams = anchorScoped
+                ? Tuple.of(householdNumber, systemAdmin, anchorId)
+                : Tuple.of(householdNumber, partnerCode);
+
+        pool.preparedQuery(findSql).execute(findParams)
+                .compose(found -> {
+                    if (found.size() == 0) return Future.failedFuture("__NOT_FOUND__");
+                    if (Rows.intVal(found.iterator().next(), "status") != 0) {
+                        return Future.failedFuture("Deactivate the household before deleting it");
+                    }
+                    return pool.preparedQuery("SELECT 1 WHERE EXISTS(SELECT 1 FROM payments WHERE household_number=@p1) "
+                                    + "OR EXISTS(SELECT 1 FROM attendances WHERE household_number=@p1) "
+                                    + "OR EXISTS(SELECT 1 FROM vouchers WHERE household_number=@p1) "
+                                    + "OR EXISTS(SELECT 1 FROM alternates WHERE household_number=@p1) "
+                                    + "OR EXISTS(SELECT 1 FROM fingerprints WHERE beneficiary_id=@p1) "
+                                    + "OR EXISTS(SELECT 1 FROM faces WHERE beneficiary_id=@p1) "
+                                    + "OR EXISTS(SELECT 1 FROM images WHERE beneficiary_id=@p1)")
+                            .execute(Tuple.of(householdNumber))
+                            .compose(guardRows -> guardRows.size() > 0
+                                    ? Future.failedFuture("This household still has payments, attendance, vouchers, alternates or "
+                                            + "enrolled biometrics/photos -- it can't be deleted")
+                                    : pool.preparedQuery("DELETE FROM households WHERE household_number=@p1").execute(Tuple.of(householdNumber)));
+                })
+                .onFailure(err -> {
+                    if ("__NOT_FOUND__".equals(err.getMessage())) {
+                        replyError(message, "Household not found or not in your organisation");
+                    } else if (err.getMessage() != null
+                            && (err.getMessage().startsWith("Deactivate") || err.getMessage().startsWith("This household"))) {
+                        replyError(message, err.getMessage());
+                    } else {
+                        onDbError(message, err);
+                    }
+                })
+                .onSuccess(rows -> reply(message, new JsonObject().put("responseCode", "000").put("responseMessage", "Household deleted successfully")));
     }
 
     // ---- SET_HOUSEHOLD_REVIEW_STATUS (PENDING -> APPROVED/REJECTED) ------------

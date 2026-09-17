@@ -130,6 +130,11 @@ function fileToDataUrl(file: File): Promise<string> {
   })
 }
 
+// The photo upload is a separate request from CREATE_HOUSEHOLD (base64-encoded, so
+// noticeably larger and slower than the household record itself, especially against a
+// remote DB host). Awaiting it before giving any feedback made Save look hung for as long
+// as that upload took -- the household was already saved, the spinner just hadn't caught
+// up. Uploading in the background after showing success removes that wait entirely.
 async function save() {
   saving.value = true
   try {
@@ -145,23 +150,18 @@ async function save() {
       organisationCode,
     })
     if (form.value.photo) {
-      try {
-        const dataUrl = await fileToDataUrl(form.value.photo)
-        const extension = (form.value.photo.name.split('.').pop() || 'jpg').toLowerCase()
-        await dispatch('UPLOAD_IMAGE', {
+      const photo = form.value.photo
+      fileToDataUrl(photo)
+        .then((dataUrl) => dispatch('UPLOAD_IMAGE', {
           beneficiaryId: created.householdNumber,
           beneficiaryType: 1,
           imageBase64: dataUrl,
-          extension,
+          extension: (photo.name.split('.').pop() || 'jpg').toLowerCase(),
           organisationCode,
-        })
-      } catch (err) {
-        toast.error(err instanceof Error
+        }))
+        .catch((err) => toast.error(err instanceof Error
           ? `Household registered, but the photo failed to upload: ${err.message}`
-          : 'Household registered, but the photo failed to upload')
-        goToList()
-        return
-      }
+          : 'Household registered, but the photo failed to upload'))
     }
     toast.success('Household registered')
     goToList()

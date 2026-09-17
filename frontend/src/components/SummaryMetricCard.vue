@@ -61,18 +61,21 @@ const hasProgress = computed(() => props.progress !== null && props.progress !==
 .summary-metric-card {
   --metric-color: #0f766e;
   --metric-soft: #ccfbf1;
+  --metric-highlight: rgba(15, 118, 110, .055);
+  --metric-highlight-border: rgba(15, 118, 110, .4);
   min-height: 124px;
   padding: 18px 20px !important;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
+  transition: background-color 180ms cubic-bezier(.16, 1, .3, 1), border-color 180ms cubic-bezier(.16, 1, .3, 1);
 }
 
-.summary-metric-card--green { --metric-color: #047857; --metric-soft: #d1fae5; }
-.summary-metric-card--amber { --metric-color: #b45309; --metric-soft: #fef3c7; }
-.summary-metric-card--red { --metric-color: #b91c1c; --metric-soft: #fee2e2; }
-.summary-metric-card--slate { --metric-color: #475569; --metric-soft: #f1f5f9; }
+.summary-metric-card--green { --metric-color: #047857; --metric-soft: #d1fae5; --metric-highlight: rgba(4, 120, 87, .055); --metric-highlight-border: rgba(4, 120, 87, .4); }
+.summary-metric-card--amber { --metric-color: #b45309; --metric-soft: #fef3c7; --metric-highlight: rgba(180, 83, 9, .055); --metric-highlight-border: rgba(180, 83, 9, .4); }
+.summary-metric-card--red { --metric-color: #b91c1c; --metric-soft: #fee2e2; --metric-highlight: rgba(185, 28, 28, .05); --metric-highlight-border: rgba(185, 28, 28, .38); }
+.summary-metric-card--slate { --metric-color: #475569; --metric-soft: #f1f5f9; --metric-highlight: rgba(71, 85, 105, .05); --metric-highlight-border: rgba(71, 85, 105, .38); }
 
 .summary-metric-card__copy {
   min-width: 0;
@@ -133,6 +136,17 @@ const hasProgress = computed(() => props.progress !== null && props.progress !==
 
 .summary-metric-card__ring-track { stroke: #e8eef3; }
 .summary-metric-card__ring-value { stroke: var(--metric-color); }
+
+@media (hover: hover) and (pointer: fine) {
+  .summary-metric-card:hover {
+    border-color: var(--metric-highlight-border) !important;
+    background-color: var(--metric-highlight);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .summary-metric-card { transition-duration: 0.01ms; }
+}
 
 @media (max-width: 420px) {
   .summary-metric-card { min-height: 112px; padding: 16px !important; }

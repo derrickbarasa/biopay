@@ -29,7 +29,7 @@ interface GeoNode {
 const auth = useAuthStore()
 const toast = useToast()
 const router = useRouter()
-const { anchors } = useAnchorScope()
+const { anchors } = useAnchorScope({ activeOnly: true })
 const { dialogAnchorId, dialogOrganizations, resetDialogScope } = useOrgCascade()
 const CURRENCIES = ['USD', 'SSP', 'KES', 'UGX', 'ETB', 'EUR', 'GBP']
 

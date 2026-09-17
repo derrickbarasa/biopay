@@ -263,12 +263,34 @@ function viewDetail(row: HouseholdRow) {
   router.push({ name: 'household-detail', params: { householdNumber: row.householdNumber } })
 }
 
+async function toggleStatus(row: HouseholdRow) {
+  const deactivating = row.status === 1
+  if (!await confirmAction({
+    title: `${deactivating ? 'Deactivate' : 'Activate'} household?`,
+    message: deactivating
+      ? `${row.householdName} (${row.householdNumber}) will be hidden from active programme records until reactivated.`
+      : `${row.householdName} (${row.householdNumber}) will be restored to active programme records.`,
+    confirmLabel: deactivating ? 'Deactivate' : 'Activate',
+    color: deactivating ? 'warning' : 'secondary',
+  })) return
+  try {
+    await dispatch(deactivating ? 'DEACTIVATE_HOUSEHOLD' : 'ACTIVATE_HOUSEHOLD', { householdNumber: row.householdNumber })
+    toast.success(deactivating ? 'Household deactivated' : 'Household activated')
+    await load()
+  } catch (err) {
+    toast.error(err instanceof Error ? err.message : 'Status update failed')
+  }
+}
+
+// Only a deactivated household with no recorded activity (payments, attendance, vouchers,
+// alternates, enrolled biometrics/photos) can be permanently deleted (see Household#delete).
 async function remove(row: HouseholdRow) {
   if (!await confirmAction({
     title: 'Delete household?',
-    message: `${row.householdName} (${row.householdNumber}) will be removed from programme records. This action cannot be undone.`,
+    message: `${row.householdName} (${row.householdNumber}) will be permanently removed. This cannot be undone. It must already be deactivated and have no recorded activity.`,
     confirmLabel: 'Delete household',
     color: 'error',
+    requireTypedText: 'DELETE',
   })) return
   try {
     await dispatch('DELETE_HOUSEHOLD', { householdNumber: row.householdNumber })
@@ -551,7 +573,14 @@ async function submitBulk() {
               compact
               @updated="load"
             />
-            <v-btn v-if="auth.can('ACCESS_HOUSEHOLDS')" icon="mdi-delete" variant="text" size="small" color="error" :aria-label="`Delete household ${item.householdName}`" @click="remove(item)" />
+            <v-btn
+              v-if="auth.can('ACCESS_HOUSEHOLDS')"
+              :icon="item.status === 1 ? 'mdi-account-cancel-outline' : 'mdi-account-check-outline'"
+              variant="text" size="small" :color="item.status === 1 ? 'warning' : 'secondary'"
+              :aria-label="`${item.status === 1 ? 'Deactivate' : 'Activate'} household ${item.householdName}`"
+              @click="toggleStatus(item)"
+            />
+            <v-btn v-if="auth.can('ACCESS_HOUSEHOLDS') && item.status !== 1" icon="mdi-delete" variant="text" size="small" color="error" :aria-label="`Delete household ${item.householdName}`" @click="remove(item)" />
           </div>
         </template>
       </v-data-table>

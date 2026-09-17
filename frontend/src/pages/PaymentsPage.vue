@@ -189,6 +189,7 @@ async function remove(row: PaymentRow) {
     message: `The payment record for ${row.householdName} will be removed. This action cannot be undone.`,
     confirmLabel: 'Delete payment',
     color: 'error',
+    requireTypedText: 'DELETE',
   })) return
   try {
     await dispatch('DELETE_PAYMENT', { id: row.id })

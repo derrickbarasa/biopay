@@ -1,0 +1,21 @@
+{
+  "id": "/",
+  "name": "BioPay",
+  "short_name": "BioPay",
+  "description": "Offline-first biometric registration, payment and voucher infrastructure for humanitarian programmes.",
+  "lang": "en",
+  "start_url": "/",
+  "scope": "/",
+  "display": "browser",
+  "background_color": "#f4f7f6",
+  "theme_color": "#0f766e",
+  "categories": ["business", "finance", "productivity"],
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

@@ -1,6 +1,7 @@
 package com.biopay.services;
 
 import io.vertx.core.AbstractVerticle;
+import io.vertx.core.Future;
 import io.vertx.core.Promise;
 import io.vertx.core.eventbus.EventBus;
 import io.vertx.core.eventbus.Message;
@@ -148,28 +149,60 @@ public class Officer extends AbstractVerticle {
                 });
     }
 
-    // ---- DELETE_OFFICER (soft delete: active=0) -------------------------------------
+    // ---- DELETE_OFFICER (permanent hard delete) --------------------------------
 
+    /**
+     * A genuine, irreversible delete -- distinct from {@link #toggleStatus}, which stays the
+     * reversible deactivate/activate action. Gated so it can never destroy live state: the
+     * officer must already be deactivated (active='0') before their field_officers row can be
+     * removed. Their own officer_locations assignments are cleaned up here too, since a location
+     * assignment has no independent meaning once the officer is gone -- that's cleanup of the
+     * officer's own data, not a blocked dependent. Every other table that carries this officer's
+     * officer_code (households, fingerprints, faces, images, payments, attendances, alternates,
+     * and vouchers.redeemed_by_officer_id) is a point-in-time "who processed this" snapshot, not
+     * a live foreign key -- matching this codebase's no-FK, code/id based integration convention
+     * (see 006_geo_hierarchy.sql) -- so those are deliberately left untouched and never block
+     * this delete. Runs as a single transaction so the active check can't go stale before the
+     * deletes (see Administration#toggleAnchorStatus for the same withTransaction pattern).
+     */
     private void delete(Message<Object> message) {
         JsonObject payload = new JsonObject(message.body().toString());
         String email = payload.getString("email", "").trim().toLowerCase();
+        if (email.isEmpty()) {
+            replyError(message, "email is required");
+            return;
+        }
+        boolean anchorScoped = isAnchor(payload);
+        boolean systemAdmin = isSystemAdmin(payload);
+        Integer anchorId = TenantScope.anchorId(payload);
+        String partnerCode = payload.getString("partnerCode", "");
 
-        String sql = "UPDATE field_officers SET active=@p1, updated_at=GETDATE() WHERE email=@p2"
-                + (isAnchor(payload) ? " AND (@p3=1 OR anchor_id=@p4)" : " AND organization_code=@p3");
-        Tuple params = isAnchor(payload)
-                ? Tuple.of("0", email, isSystemAdmin(payload), TenantScope.anchorId(payload))
-                : Tuple.of("0", email, payload.getString("partnerCode", ""));
+        String findSql = "SELECT id, officer_code, active FROM field_officers WHERE email=@p1"
+                + (anchorScoped ? " AND (@p2=1 OR anchor_id=@p3)" : " AND organization_code=@p2");
+        Tuple findParams = anchorScoped
+                ? Tuple.of(email, systemAdmin, anchorId)
+                : Tuple.of(email, partnerCode);
 
-        pool.preparedQuery(sql)
-                .execute(params)
-                .onFailure(err -> onDbError(message, err))
-                .onSuccess(rows -> {
-                    if (rows.rowCount() > 0) {
-                        reply(message, new JsonObject().put("responseCode", "000").put("responseMessage", "Officer deleted successfully"));
-                    } else {
-                        replyError(message, "Officer not found or not in your organisation");
-                    }
-                });
+        pool.withTransaction(connection -> connection.preparedQuery(findSql).execute(findParams)
+                        .compose(found -> {
+                            if (found.size() == 0) {
+                                return Future.failedFuture("Officer not found or not in your organisation");
+                            }
+                            Row officer = found.iterator().next();
+                            if (!"0".equals(Rows.str(officer, "active"))) {
+                                return Future.failedFuture("Deactivate the officer before deleting them");
+                            }
+                            Integer officerCode = Rows.intVal(officer, "officer_code");
+                            Integer officerId = Rows.intVal(officer, "id");
+                            return connection.preparedQuery("DELETE FROM officer_locations WHERE officer_code=@p1")
+                                    .execute(Tuple.of(officerCode))
+                                    .compose(v -> connection.preparedQuery("DELETE FROM field_officers WHERE id=@p1")
+                                            .execute(Tuple.of(officerId)));
+                        }))
+                .onFailure(err -> replyError(message, err.getMessage() != null && !err.getMessage().startsWith("com.")
+                        ? err.getMessage() : "Failed to delete officer"))
+                .onSuccess(rows -> reply(message, new JsonObject().put("responseCode", "000")
+                        .put("responseMessage", "Officer permanently deleted")));
     }
 
     private void toggleStatus(Message<Object> message) {

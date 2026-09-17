@@ -7,6 +7,8 @@ import { useToast } from '@/composables/useToast'
 import { useConfirm } from '@/composables/useConfirm'
 import { ORG_MODULES, COUNTRIES } from '@/types/user'
 import { capitalFor } from '@/utils/countries'
+import { scopedUserHeaders } from '@/constants/tableHeaders'
+import OrganizationDataTable from '@/components/OrganizationDataTable.vue'
 
 interface Anchor {
   id: number
@@ -69,22 +71,6 @@ const anchorId = computed(() => Number(route.params.anchorId))
 const anchorUsers = computed(() => users.value.filter((user) => user.anchorId === anchorId.value && user.userScope === 'ANCHOR'))
 
 const activeTab = ref('profile')
-
-const organizationHeaders = [
-  { title: 'Organization', key: 'name' },
-  { title: 'Organization Code', key: 'organisationCode', minWidth: 172, nowrap: true },
-  { title: 'Authorized contact', key: 'authorisedName' },
-  { title: 'Country', key: 'country' },
-  { title: 'Status', key: 'status' },
-  { title: 'Actions', key: 'actions', sortable: false, align: 'start' as const, width: 168, minWidth: 168, fixed: true, nowrap: true },
-]
-
-const userHeaders = [
-  { title: 'User', key: 'email' },
-  { title: 'Role', key: 'roleName' },
-  { title: 'Status', key: 'status' },
-  { title: 'Actions', key: 'actions', sortable: false, align: 'start' as const, width: 148, minWidth: 148, fixed: true, nowrap: true },
-]
 
 function displayName(user: UserRow) {
   return [user.firstName, user.surname].filter(Boolean).join(' ') || 'Name not set'
@@ -383,22 +369,14 @@ onMounted(load)
               </div>
               <v-btn v-if="auth.can('ACCESS_ORGANISATIONS')" color="secondary" prepend-icon="mdi-domain-plus" @click="openCreateOrganization">Add Organization</v-btn>
             </div>
-            <v-data-table :headers="organizationHeaders" :items="organizations" density="comfortable" class="detail-table">
-              <template #item.name="{ item }">
-                <div class="entity-cell"><strong>{{ item.name }}</strong><span>{{ item.authorisedEmail || 'No contact email' }}</span></div>
-              </template>
-              <template #item.country="{ item }">{{ item.country || '—' }}</template>
-              <template #item.status="{ item }">
-                <v-chip size="small" variant="tonal" :color="item.status === 1 ? 'success' : 'error'">{{ item.status === 1 ? 'Active' : 'Inactive' }}</v-chip>
-              </template>
-              <template #item.actions="{ item }">
-                <v-btn :to="{ name: 'organization-detail', params: { organisationCode: item.organisationCode } }" icon="mdi-eye-outline" variant="text" size="small" :aria-label="`View ${item.name}`" />
-                <v-btn v-if="auth.can('ACCESS_ORGANISATIONS')" icon="mdi-pencil" variant="text" size="small" :aria-label="`Edit ${item.name}`" @click="openEditOrganization(item)" />
-                <v-btn v-if="auth.can('ACCESS_ORGANISATIONS')" :icon="item.status === 1 ? 'mdi-toggle-switch-off-outline' : 'mdi-toggle-switch'" variant="text" size="small" :aria-label="`${item.status === 1 ? 'Deactivate' : 'Activate'} ${item.name}`" @click="toggleOrganizationStatus(item)" />
-                <v-btn v-if="auth.can('ACCESS_ORGANISATIONS')" icon="mdi-delete" variant="text" size="small" color="error" :aria-label="`Delete ${item.name}`" @click="deleteOrganization(item)" />
-              </template>
-              <template #no-data><div class="empty-state">No organizations are registered under this anchor yet.</div></template>
-            </v-data-table>
+            <OrganizationDataTable
+              :items="organizations"
+              :can-manage="auth.can('ACCESS_ORGANISATIONS')"
+              no-data-text="No organizations are registered under this anchor yet."
+              @edit="openEditOrganization"
+              @toggle-status="toggleOrganizationStatus"
+              @delete="deleteOrganization"
+            />
           </section>
         </v-window-item>
 
@@ -414,13 +392,11 @@ onMounted(load)
                 <v-btn v-if="auth.can('ACCESS_USERS')" color="secondary" prepend-icon="mdi-account-plus-outline" @click="openCreateUser">Add User</v-btn>
               </div>
             </div>
-            <v-data-table :headers="userHeaders" :items="anchorUsers" density="comfortable" class="detail-table">
-              <template #item.email="{ item }">
-                <div class="entity-cell"><strong>{{ displayName(item) }}</strong><span>{{ item.email }}</span></div>
-              </template>
+            <v-data-table :headers="scopedUserHeaders" :items="anchorUsers" density="comfortable" class="detail-table">
+              <template #item.name="{ item }">{{ displayName(item) }}</template>
               <template #item.roleName="{ item }">{{ item.roleName || 'Anchor user' }}</template>
               <template #item.status="{ item }">
-                <v-chip size="small" variant="tonal" :color="item.status === 1 ? 'success' : 'error'">{{ item.status === 1 ? 'Can sign in' : 'Inactive' }}</v-chip>
+                <v-chip size="small" variant="tonal" :color="item.status === 1 ? 'success' : 'error'">{{ item.status === 1 ? 'Active' : 'Inactive' }}</v-chip>
               </template>
               <template #item.actions="{ item }">
                 <v-btn v-if="auth.can('ACCESS_USERS')" icon="mdi-history" variant="text" size="small" :aria-label="`View ${item.email} activity history`" @click="openUserHistory(item)" />
@@ -554,9 +530,6 @@ onMounted(load)
 .detail-grid dt { color: #64748b; font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
 .detail-grid dd { color: #0f172a; font-size: .9rem; margin: 5px 0 0; overflow-wrap: anywhere; }
 .detail-table { border-top: 1px solid #e2e8f0; }
-.entity-cell { display: grid; gap: 2px; padding-block: 8px; }
-.entity-cell strong { color: #0f172a; font-size: .88rem; }
-.entity-cell span { color: #64748b; font-size: .76rem; }
 .empty-state { color: #64748b; padding: 28px 16px; text-align: center; }
 .not-found { margin-top: 8px; }
 .org-editor { padding: clamp(18px, 2.4vw, 26px); border-color: #cbd5e1 !important; background: #fff !important; }

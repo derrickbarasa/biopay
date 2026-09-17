@@ -4,7 +4,10 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "generate:seo": "node scripts/generate-seo-files.mjs",
+    "predev": "npm run generate:seo",
     "dev": "vite",
+    "prebuild": "npm run generate:seo",
     "build": "vue-tsc -b && vite build",
     "test": "vitest run",
     "preview": "vite preview"

@@ -360,7 +360,7 @@ const alternatePeriodTotal = computed(() => alternatesSeries.value.reduce((total
 .panel-heading h2, .panel-heading h3 { margin: 0; color: #0f172a; font-size: .82rem; font-weight: 700; letter-spacing: -.01em; }
 .panel-heading span { margin: 2px 0 0; color: #64748b; font-size: .67rem; }
 .metric-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
-.metric-card { --metric-color: #0d9488; --metric-soft: #e6fffb; display: grid; grid-template-columns: minmax(0, 1fr) 34px; align-items: start; gap: 10px; min-height: 92px; padding: 12px; overflow: hidden; border: 1px solid #e2e8f0; border-radius: 14px; background: #fff; }
+.metric-card { --metric-color: #0d9488; --metric-soft: #e6fffb; display: grid; grid-template-columns: minmax(0, 1fr) 34px; align-items: start; gap: 10px; min-height: 92px; padding: 12px; overflow: hidden; border: 1px solid #e2e8f0; border-radius: 14px; background: #fff; transition: background-color 180ms cubic-bezier(.16, 1, .3, 1), border-color 180ms cubic-bezier(.16, 1, .3, 1); }
 .metric-card.tone-amber { --metric-color: #b45309; --metric-soft: #fff7ed; }
 .metric-card.tone-green { --metric-color: #15803d; --metric-soft: #f0fdf4; }
 .metric-card.tone-slate { --metric-color: #475569; --metric-soft: #f1f5f9; }
@@ -421,6 +421,12 @@ const alternatePeriodTotal = computed(() => alternatesSeries.value.reduce((total
 .table-scroll:focus-visible { outline: 2px solid #0d9488; }
 .table-scroll :deep(table) { font-size: .76rem; }
 .table-scroll :deep(th) { color: #64748b; font-size: .65rem !important; }
+@media (hover: hover) and (pointer: fine) {
+  .metric-card:hover { border-color: rgba(245, 158, 11, .42); background-color: rgba(245, 158, 11, .055); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .metric-card { transition-duration: 0.01ms; }
+}
 @media (max-width: 1200px) { .metric-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 @media (max-width: 900px) { .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .analytics-grid, .operations-grid { grid-template-columns: 1fr; } }
 @media (max-width: 720px) { .dashboard-heading { flex-direction: column; } .dashboard-actions { width: 100%; justify-content: flex-start; } .dashboard-actions :deep(.v-btn) { flex: 1 1 auto; } }

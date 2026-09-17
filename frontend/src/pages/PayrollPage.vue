@@ -138,6 +138,7 @@ async function removeCycle(cycle: Cycle) {
     message: `${cycle.cycleCode} and its generated payment lines will be removed. This action cannot be undone.`,
     confirmLabel: 'Delete cycle',
     color: 'error',
+    requireTypedText: 'DELETE',
   })) return
   try {
     await dispatch('DELETE_PAYROLL', { cycleCode: cycle.cycleCode })

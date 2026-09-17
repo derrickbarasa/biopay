@@ -66,21 +66,40 @@ function openCreate() {
 }
 
 async function toggleStatus(item: Anchor) {
-  const deleting = item.status === 1
+  const deactivating = item.status === 1
   if (!await confirmAction({
-    title: deleting ? 'Delete anchor?' : 'Restore anchor?',
-    message: deleting
-      ? `${item.name} and its administrator will no longer be able to sign in. Every organization beneath it is unaffected but will also lose access until restored. This can be undone.`
-      : `${item.name} will be restored and its administrator can sign in again.`,
-    confirmLabel: deleting ? 'Delete anchor' : 'Restore anchor',
-    color: deleting ? 'error' : 'secondary',
+    title: deactivating ? 'Deactivate anchor?' : 'Activate anchor?',
+    message: deactivating
+      ? `${item.name} and its administrator will no longer be able to sign in. Every organization, field officer and dashboard user under it will also be deactivated -- the anchor holds the subscription, so nothing under it can keep operating. This can be undone, but reactivating only restores the anchor itself; anything deactivated by this action must be reactivated individually.`
+      : `${item.name} will be reactivated and its administrator can sign in again. Organizations, field officers and users under it stay deactivated until reactivated individually.`,
+    confirmLabel: deactivating ? 'Deactivate anchor' : 'Activate anchor',
+    color: deactivating ? 'error' : 'secondary',
   })) return
   try {
-    await dispatch('TOGGLE_ANCHOR_STATUS', { targetAnchorId: item.id, status: deleting ? 0 : 1 })
-    toast.success(deleting ? 'Anchor deleted' : 'Anchor restored')
+    await dispatch('TOGGLE_ANCHOR_STATUS', { targetAnchorId: item.id, status: deactivating ? 0 : 1 })
+    toast.success(deactivating ? 'Anchor deactivated' : 'Anchor activated')
     await load()
   } catch (e) {
     toast.error(e instanceof Error ? e.message : 'Update failed')
+  }
+}
+
+// Only a deactivated anchor with no organizations left under it can be permanently
+// deleted (see Administration#deleteAnchor) -- delete every organization first.
+async function removeAnchor(item: Anchor) {
+  if (!await confirmAction({
+    title: 'Delete anchor?',
+    message: `${item.name} will be permanently removed. This cannot be undone. The anchor must already be deactivated, with every organization under it already deleted.`,
+    confirmLabel: 'Delete anchor',
+    color: 'error',
+    requireTypedText: 'DELETE',
+  })) return
+  try {
+    await dispatch('DELETE_ANCHOR', { targetAnchorId: item.id })
+    toast.success('Anchor deleted')
+    await load()
+  } catch (e) {
+    toast.error(e instanceof Error ? e.message : 'Delete failed')
   }
 }
 
@@ -122,12 +141,13 @@ onMounted(load)
       </v-card-text>
       <v-data-table :headers="headers" :items="anchors" :search="tableSearch" :loading="loading">
         <template #item.status="{ item }">
-          <v-chip size="small" :color="item.status === 1 ? 'success' : 'error'" variant="tonal">{{ item.status === 1 ? 'Active' : 'Deleted' }}</v-chip>
+          <v-chip size="small" :color="item.status === 1 ? 'success' : 'error'" variant="tonal">{{ item.status === 1 ? 'Active' : 'Inactive' }}</v-chip>
         </template>
         <template #item.actions="{ item }">
           <v-btn :to="{ name: 'anchor-detail', params: { anchorId: item.id } }" icon="mdi-eye-outline" variant="text" size="small" :aria-label="`View ${item.name}`" />
           <v-btn icon="mdi-pencil" variant="text" size="small" :aria-label="`Edit ${item.name}`" @click="openEdit(item)" />
-          <v-btn :icon="item.status === 1 ? 'mdi-delete' : 'mdi-restore'" variant="text" size="small" :color="item.status === 1 ? 'error' : 'secondary'" :aria-label="`${item.status === 1 ? 'Delete' : 'Restore'} ${item.name}`" @click="toggleStatus(item)" />
+          <v-btn :icon="item.status === 1 ? 'mdi-account-cancel-outline' : 'mdi-account-check-outline'" variant="text" size="small" :color="item.status === 1 ? 'error' : 'secondary'" :aria-label="`${item.status === 1 ? 'Deactivate' : 'Activate'} ${item.name}`" @click="toggleStatus(item)" />
+          <v-btn v-if="item.status !== 1" icon="mdi-delete-outline" variant="text" size="small" color="error" :aria-label="`Delete ${item.name}`" @click="removeAnchor(item)" />
         </template>
       </v-data-table>
     </v-card>

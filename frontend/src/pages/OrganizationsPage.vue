@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { dispatch } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
@@ -7,6 +7,7 @@ import { useToast } from '@/composables/useToast'
 import { ORG_MODULES, COUNTRIES } from '@/types/user'
 import { capitalFor } from '@/utils/countries'
 import { useConfirm } from '@/composables/useConfirm'
+import OrganizationDataTable from '@/components/OrganizationDataTable.vue'
 
 interface Organization {
   organisationCode: string
@@ -61,25 +62,8 @@ function verificationMethodIcon(method?: string) {
   return 'mdi-fingerprint'
 }
 
-function verificationMethodLabel(method?: string) {
-  if (method === 'FACIAL') return 'Facial'
-  if (method === 'BOTH') return 'Both'
-  return 'Fingerprint'
-}
-
 const required = (value: string) => !!value?.trim() || 'Required'
 const emailRule = (value: string) => /.+@.+\..+/.test(value ?? '') || 'A valid email is required to sign in'
-
-const headers = computed(() => [
-  ...(auth.isSystemAdmin ? [{ title: 'Anchor', key: 'anchorName' }] : []),
-  { title: 'Org Name', key: 'name' },
-  { title: 'Contact', key: 'authorisedName' },
-  { title: 'Email', key: 'authorisedEmail' },
-  { title: 'Country', key: 'country' },
-  { title: 'Verification', key: 'verificationMethod' },
-  { title: 'Status', key: 'status' },
-  { title: 'Actions', key: 'actions', sortable: false, align: 'start' as const },
-])
 
 async function loadAnchors() {
   if (!auth.isSystemAdmin) return
@@ -134,9 +118,10 @@ async function openEdit(org: Organization) {
 async function remove(org: Organization) {
   if (!await confirmAction({
     title: 'Delete organization?',
-    message: `${org.name} and its dashboard access will be removed. This action cannot be undone.`,
+    message: `${org.name} will be permanently removed. This cannot be undone. It must already be deactivated, with no active households, field officers or users left under it -- deactivate or reassign those first.`,
     confirmLabel: 'Delete organization',
     color: 'error',
+    requireTypedText: 'DELETE',
   })) return
   try {
     await dispatch('DELETE_ORGANIZATION', { organisationCode: org.organisationCode, targetAnchorId: auth.isSystemAdmin ? org.anchorId : undefined })
@@ -285,24 +270,16 @@ async function toggleStatus(org: Organization) {
           <v-btn class="filter-submit" color="secondary" @click="load">Submit</v-btn>
         </div>
       </v-card-text>
-      <v-data-table :headers="headers" :items="organizations" :search="tableSearch" :loading="loading">
-        <template #item.status="{ item }">
-          <v-chip size="small" :color="item.status === 1 ? 'success' : 'error'" variant="tonal">{{ item.status === 1 ? 'Active' : 'Inactive' }}</v-chip>
-        </template>
-        <template #item.country="{ item }">{{ item.country || '—' }}</template>
-        <template #item.verificationMethod="{ item }">
-          <v-chip size="small" color="primary" variant="tonal">
-            <v-icon :icon="verificationMethodIcon(item.verificationMethod)" start />
-            {{ verificationMethodLabel(item.verificationMethod) }}
-          </v-chip>
-        </template>
-        <template #item.actions="{ item }">
-          <v-btn :to="{ name: 'organization-detail', params: { organisationCode: item.organisationCode } }" icon="mdi-eye-outline" variant="text" size="small" :aria-label="`View ${item.name}`" />
-          <v-btn v-if="auth.can('ACCESS_ORGANISATIONS')" icon="mdi-pencil" variant="text" size="small" :aria-label="`Edit ${item.name}`" @click="openEdit(item)" />
-          <v-btn v-if="auth.can('ACCESS_ORGANISATIONS')" :icon="item.status === 1 ? 'mdi-toggle-switch-off-outline' : 'mdi-toggle-switch'" variant="text" size="small" :aria-label="`${item.status === 1 ? 'Deactivate' : 'Activate'} ${item.name}`" @click="toggleStatus(item)" />
-          <v-btn v-if="auth.can('ACCESS_ORGANISATIONS')" icon="mdi-delete" variant="text" size="small" color="error" :aria-label="`Delete ${item.name}`" @click="remove(item)" />
-        </template>
-      </v-data-table>
+      <OrganizationDataTable
+        :items="organizations"
+        :search="tableSearch"
+        :loading="loading"
+        :show-anchor="auth.isSystemAdmin"
+        :can-manage="auth.can('ACCESS_ORGANISATIONS')"
+        @edit="openEdit"
+        @toggle-status="toggleStatus"
+        @delete="remove"
+      />
     </v-card>
   </div>
 </template>

@@ -1,8 +1,22 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
   <url>
     <loc>https://biopay.app/</loc>
-    <changefreq>weekly</changefreq>
-    <priority>1.0</priority>
+    <image:image>
+      <image:loc>https://biopay.app/hero/cash-transfer.webp</image:loc>
+    </image:image>
+    <image:image>
+      <image:loc>https://biopay.app/hero/voucher-redemption.webp</image:loc>
+    </image:image>
+    <image:image>
+      <image:loc>https://biopay.app/hero/biometric-verification.webp</image:loc>
+    </image:image>
+    <image:image>
+      <image:loc>https://biopay.app/hero/deduplication.webp</image:loc>
+    </image:image>
+    <image:image>
+      <image:loc>https://biopay.app/hero/ai-agent.webp</image:loc>
+    </image:image>
   </url>
 </urlset>

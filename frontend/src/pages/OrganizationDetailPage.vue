@@ -5,6 +5,9 @@ import { dispatch } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
 import { useConfirm } from '@/composables/useConfirm'
+import OfficerDataTable from '@/components/OfficerDataTable.vue'
+import OfficerLocationDialog from '@/components/OfficerLocationDialog.vue'
+import { scopedUserHeaders } from '@/constants/tableHeaders'
 
 interface Organization {
   organisationCode: string
@@ -24,7 +27,7 @@ interface Organization {
 
 interface Anchor { id: number; name: string; anchorCode: string }
 interface UserRow { id: number; email: string; firstName?: string; surname?: string; partnerCode?: string; userScope: string; roleId?: number; roleName?: string; status: number }
-interface Officer { id: number; email: string; firstName?: string; lastName?: string; organisationCode: string; active: string; createdAt?: string }
+interface Officer { id: number; email: string; firstName: string; lastName: string; organisationCode: string; active: string; createdAt?: string }
 interface Role { id: number; name: string; scope: string; anchorId?: number | null; builtIn?: boolean }
 
 const route = useRoute()
@@ -41,6 +44,7 @@ const roles = ref<Role[]>([])
 
 const organisationCode = computed(() => String(route.params.organisationCode ?? ''))
 const organizationUsers = computed(() => users.value.filter((user) => user.partnerCode === organisationCode.value && user.userScope === 'ORGANISATION'))
+const organizationOptions = computed(() => organization.value ? [{ organisationCode: organization.value.organisationCode, name: organization.value.name }] : [])
 const anchor = computed(() => anchors.value.find((item) => item.id === organization.value?.anchorId) ?? null)
 // System admins scope roles/users/officers by the organization's parent anchor; anchor and
 // organisation viewers already only ever see their own tenant, so no anchor id is needed.
@@ -48,25 +52,8 @@ const targetAnchorId = computed(() => (auth.isSystemAdmin ? organization.value?.
 
 const activeTab = ref('profile')
 
-const userHeaders = [
-  { title: 'User', key: 'email' },
-  { title: 'Role', key: 'roleName' },
-  { title: 'Status', key: 'status' },
-  { title: 'Actions', key: 'actions', sortable: false, align: 'start' as const, width: 148, minWidth: 148, fixed: true, nowrap: true },
-]
-const officerHeaders = [
-  { title: 'Field officer', key: 'email' },
-  { title: 'Status', key: 'active' },
-  { title: 'Added', key: 'createdAt' },
-  { title: 'Actions', key: 'actions', sortable: false, align: 'start' as const, width: 148, minWidth: 148, fixed: true, nowrap: true },
-]
-
 function personName(firstName?: string, lastName?: string) {
   return [firstName, lastName].filter(Boolean).join(' ') || 'Name not set'
-}
-
-function isActive(value: string | number | undefined) {
-  return value === 1 || value === '1' || value === 'true'
 }
 
 function verificationLabel(method?: string) {
@@ -282,6 +269,14 @@ function openOfficerHistory(officer: Officer) {
   })
 }
 
+const officerLocationDialog = ref(false)
+const officerLocationTarget = ref<Officer | null>(null)
+
+function openOfficerLocations(officer: Officer) {
+  officerLocationTarget.value = officer
+  officerLocationDialog.value = true
+}
+
 onMounted(load)
 </script>
 
@@ -356,13 +351,11 @@ onMounted(load)
                 <v-btn v-if="auth.can('ACCESS_USERS')" color="secondary" prepend-icon="mdi-account-plus-outline" @click="openCreateUser">Add User</v-btn>
               </div>
             </div>
-            <v-data-table v-if="auth.can('ACCESS_USERS')" :headers="userHeaders" :items="organizationUsers" density="comfortable" class="detail-table">
-              <template #item.email="{ item }">
-                <div class="entity-cell"><strong>{{ personName(item.firstName, item.surname) }}</strong><span>{{ item.email }}</span></div>
-              </template>
+            <v-data-table v-if="auth.can('ACCESS_USERS')" :headers="scopedUserHeaders" :items="organizationUsers" density="comfortable" class="detail-table">
+              <template #item.name="{ item }">{{ personName(item.firstName, item.surname) }}</template>
               <template #item.roleName="{ item }">{{ item.roleName || 'Organization user' }}</template>
               <template #item.status="{ item }">
-                <v-chip size="small" variant="tonal" :color="item.status === 1 ? 'success' : 'error'">{{ item.status === 1 ? 'Can sign in' : 'Inactive' }}</v-chip>
+                <v-chip size="small" variant="tonal" :color="item.status === 1 ? 'success' : 'error'">{{ item.status === 1 ? 'Active' : 'Inactive' }}</v-chip>
               </template>
               <template #item.actions="{ item }">
                 <v-btn icon="mdi-history" variant="text" size="small" :aria-label="`View ${item.email} activity history`" @click="openUserHistory(item)" />
@@ -387,26 +380,19 @@ onMounted(load)
                 <v-btn v-if="auth.can('ACCESS_SUPERVISORS')" color="secondary" prepend-icon="mdi-account-plus" @click="openCreateOfficer">Add Field Officer</v-btn>
               </div>
             </div>
-            <v-data-table v-if="auth.can('ACCESS_SUPERVISORS')" :headers="officerHeaders" :items="officers" density="comfortable" class="detail-table">
-              <template #item.email="{ item }">
-                <div class="entity-cell"><strong>{{ personName(item.firstName, item.lastName) }}</strong><span>{{ item.email }}</span></div>
-              </template>
-              <template #item.active="{ item }">
-                <v-chip size="small" variant="tonal" :color="isActive(item.active) ? 'success' : 'error'">{{ isActive(item.active) ? 'Active' : 'Inactive' }}</v-chip>
-              </template>
-              <template #item.createdAt="{ item }">{{ formatDate(item.createdAt) }}</template>
-              <template #item.actions="{ item }">
-                <v-btn icon="mdi-history" variant="text" size="small" :aria-label="`View ${item.firstName} ${item.lastName} activity history`" @click="openOfficerHistory(item)" />
-                <v-btn icon="mdi-pencil" variant="text" size="small" :aria-label="`Edit ${item.firstName} ${item.lastName}`" @click="openEditOfficer(item)" />
-                <v-btn
-                  :icon="isActive(item.active) ? 'mdi-account-cancel-outline' : 'mdi-account-check-outline'"
-                  variant="text" size="small" :color="isActive(item.active) ? 'error' : 'success'"
-                  :aria-label="`${isActive(item.active) ? 'Deactivate' : 'Activate'} ${item.firstName} ${item.lastName}`"
-                  @click="toggleOfficerStatus(item, !isActive(item.active))"
-                />
-              </template>
-              <template #no-data><div class="empty-state">No field officers are assigned to this organization yet.</div></template>
-            </v-data-table>
+            <OfficerDataTable
+              v-if="auth.can('ACCESS_SUPERVISORS')"
+              :items="officers"
+              :organizations="organizationOptions"
+              can-manage
+              can-view-history
+              can-assign-locations
+              no-data-text="No field officers are assigned to this organization yet."
+              @history="openOfficerHistory"
+              @edit="openEditOfficer"
+              @toggle-status="toggleOfficerStatus"
+              @assign-location="openOfficerLocations"
+            />
             <div v-else class="permission-state">You do not have permission to view field officers.</div>
           </section>
         </v-window-item>
@@ -414,6 +400,8 @@ onMounted(load)
     </template>
 
     <v-alert v-else type="warning" variant="tonal" title="Organization not found" text="This organization does not exist or is outside your permitted scope." class="not-found" />
+
+    <OfficerLocationDialog v-model="officerLocationDialog" :officer="officerLocationTarget" />
 
     <v-dialog v-model="userDialog" max-width="660">
       <v-card class="pa-2">
@@ -504,9 +492,6 @@ onMounted(load)
 .detail-grid dt { color: #64748b; font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
 .detail-grid dd { color: #0f172a; font-size: .9rem; margin: 5px 0 0; overflow-wrap: anywhere; }
 .detail-table { border-top: 1px solid #e2e8f0; }
-.entity-cell { display: grid; gap: 2px; padding-block: 8px; }
-.entity-cell strong { color: #0f172a; font-size: .88rem; }
-.entity-cell span { color: #64748b; font-size: .76rem; }
 .empty-state, .permission-state { color: #64748b; padding: 28px 16px; text-align: center; border-top: 1px solid #e2e8f0; }
 .not-found { margin-top: 8px; }
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 16px; }

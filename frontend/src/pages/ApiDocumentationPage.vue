@@ -75,7 +75,7 @@ const createHouseholdExample = `{
   "householdSize": 5,
   "femaleDependants": 3,
   "maleDependants": 1,
-  "stateCode": "STC001",
+  "stateCode": "KE1000",
   "countyCode": "CTY004",
   "payamCode": "LOC010",
   "bomaCode": "VLG022"

@@ -14,6 +14,7 @@ import io.vertx.sqlclient.SqlClient;
 import io.vertx.sqlclient.Tuple;
 import com.biopay.databases.Datasource;
 import com.biopay.utilities.Crypto;
+import com.biopay.utilities.CountryCodes;
 import com.biopay.utilities.FileStore;
 import com.biopay.utilities.FaceEmbedding;
 import com.biopay.utilities.HouseholdClassification;
@@ -150,15 +151,17 @@ public class Biometric extends AbstractVerticle {
                 actor, payload.getString("idNumber"),
                 payload.getInteger("maleDependants"), payload.getInteger("femaleDependants"));
 
-        pool.preparedQuery("SELECT anchor_id FROM organizations WHERE organization_code=@p1 AND status=1")
+        pool.preparedQuery("SELECT anchor_id, country FROM organizations WHERE organization_code=@p1 AND status=1")
                 .execute(Tuple.of(partnerCode))
                 .compose(organizations -> {
                     if (!organizations.iterator().hasNext()) {
                         return Future.failedFuture("Organization not found");
                     }
-                    int anchorId = organizations.iterator().next().getInteger("anchor_id");
+                    Row organization = organizations.iterator().next();
+                    int anchorId = organization.getInteger("anchor_id");
+                    String countryCode = CountryCodes.alpha2ForName(Rows.str(organization, "country"));
                     return pool.withTransaction(client -> ensureHouseholdGeoHierarchy(client, anchorId,
-                                    stateCode, countyCode, locationCode, villageCode, actor)
+                                    stateCode, countyCode, locationCode, villageCode, countryCode, actor)
                             .compose(ignored -> client.preparedQuery(sql).execute(householdParams)));
                 })
                 .onFailure(err -> onDbError(message, err))
@@ -181,17 +184,23 @@ public class Biometric extends AbstractVerticle {
      * can resolve and select them. Existing catalogue entries are deliberately left untouched.
      */
     private Future<Void> ensureHouseholdGeoHierarchy(SqlClient client, int anchorId,
-            String stateCode, String countyCode, String locationCode, String villageCode, String actor) {
+            String stateCode, String countyCode, String locationCode, String villageCode,
+            String organizationCountry, String actor) {
         Future<Void> chain = Future.succeededFuture();
 
         if (stateCode != null) {
-            chain = chain.compose(ignored -> mergeGeoNode(client,
-                    "MERGE geo_states WITH (HOLDLOCK) AS target "
-                            + "USING (SELECT @p1 anchor_id, @p2 state_code) source "
-                            + "ON target.anchor_id=source.anchor_id AND target.state_code=source.state_code "
-                            + "WHEN NOT MATCHED THEN INSERT (anchor_id,state_code,name,status,created_by,created_at) "
-                            + "VALUES (@p1,@p2,@p2,1,@p3,GETDATE());",
-                    Tuple.of(anchorId, stateCode, actor)));
+            String prefix = organizationCountry != null
+                    ? organizationCountry : CountryCodes.alpha2OrNamePrefix(stateCode);
+            chain = chain.compose(ignored -> nextStateDisplayCode(client, anchorId, prefix)
+                    .compose(displayCode -> mergeGeoNode(client,
+                            "MERGE geo_states WITH (HOLDLOCK) AS target "
+                                    + "USING (SELECT @p1 anchor_id, @p2 state_code) source "
+                                    + "ON target.anchor_id=source.anchor_id AND target.state_code=source.state_code "
+                                    + "WHEN MATCHED THEN UPDATE SET country=COALESCE(target.country,@p4), "
+                                    + "display_code=COALESCE(target.display_code,@p5) "
+                                    + "WHEN NOT MATCHED THEN INSERT (anchor_id,state_code,name,country,display_code,status,created_by,created_at) "
+                                    + "VALUES (@p1,@p2,@p2,@p4,@p5,1,@p3,GETDATE());",
+                            Tuple.of(anchorId, stateCode, actor, organizationCountry, displayCode))));
         }
         if (stateCode != null && countyCode != null) {
             chain = chain.compose(ignored -> mergeGeoNode(client,
@@ -221,6 +230,16 @@ public class Biometric extends AbstractVerticle {
                     Tuple.of(anchorId, stateCode, countyCode, locationCode, villageCode, actor)));
         }
         return chain;
+    }
+
+    private Future<String> nextStateDisplayCode(SqlClient client, int anchorId, String prefix) {
+        String sql = "SELECT COALESCE(MAX(CASE WHEN PATINDEX('%[0-9]%', display_code) > 0 "
+                + "THEN TRY_CAST(SUBSTRING(display_code, PATINDEX('%[0-9]%', display_code), LEN(display_code)) AS INT) "
+                + "ELSE NULL END), 999) AS mx FROM geo_states WITH (UPDLOCK, HOLDLOCK) WHERE anchor_id=@p1";
+        return client.preparedQuery(sql).execute(Tuple.of(anchorId)).map(rows -> {
+            Integer maximum = rows.iterator().next().getInteger("mx");
+            return prefix + (maximum == null ? 1000 : ((maximum / 1000) + 1) * 1000);
+        });
     }
 
     private Future<Void> mergeGeoNode(SqlClient client, String sql, Tuple params) {

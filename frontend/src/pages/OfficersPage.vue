@@ -7,6 +7,8 @@ import { useToast } from '@/composables/useToast'
 import { useConfirm } from '@/composables/useConfirm'
 import { useAnchorScope } from '@/composables/useAnchorScope'
 import { useOrgCascade } from '@/composables/useOrgCascade'
+import OfficerDataTable from '@/components/OfficerDataTable.vue'
+import OfficerLocationDialog from '@/components/OfficerLocationDialog.vue'
 
 interface Officer {
   id: number
@@ -18,21 +20,15 @@ interface Officer {
   createdAt?: string
 }
 
-interface GeoNode {
-  code: string
-  name: string
-  stateCode?: string
-  countyCode?: string
-  locationCode?: string
-}
-
-interface OfficerLocation { stateCode?: string; countyCode?: string; payamCode?: string; bomaCode?: string }
-
 const auth = useAuthStore()
 const toast = useToast()
 const router = useRouter()
 const { confirmAction } = useConfirm()
 const { anchors, selectedAnchorId, anchorGateActive } = useAnchorScope()
+// Separate, activeOnly list for the "create officer" dialog's anchor picker -- a
+// deactivated anchor must still show on the page-level filter above (so its
+// existing officers stay reviewable) but can't be picked for new work.
+const { anchors: dialogAnchors } = useAnchorScope({ activeOnly: true })
 const { dialogAnchorId, dialogOrganizations, resetDialogScope } = useOrgCascade()
 const loading = ref(true)
 const officers = ref<Officer[]>([])
@@ -43,44 +39,10 @@ const editing = ref(false)
 const saving = ref(false)
 const form = ref({ firstName: '', lastName: '', email: '', organisationCode: '' })
 
-const states = ref<GeoNode[]>([])
-const counties = ref<GeoNode[]>([])
-const locations = ref<GeoNode[]>([])
-const villages = ref<GeoNode[]>([])
-const geoLoading = ref(true)
-
 const filters = ref({ organisationCode: null as string | null, active: null as string | null })
 
 // Always true: an unset anchor/organisation filter already means "show all" server-side.
 const scopeReady = computed(() => true)
-
-const headers = [
-  { title: 'Name', key: 'name' },
-  { title: 'Email', key: 'email' },
-  { title: 'Organization', key: 'organisationCode' },
-  { title: 'Status', key: 'active' },
-  { title: 'Location', key: 'location', sortable: false, align: 'start' as const },
-  { title: 'Actions', key: 'actions', sortable: false, align: 'start' as const },
-]
-
-const orgNameByCode = computed(() => new Map(organizations.value.map((o) => [o.organisationCode, o.name])))
-const stateNameByCode = computed(() => new Map(states.value.map((s) => [s.code, s.name])))
-const countyNameByCode = computed(() => new Map(counties.value.map((c) => [c.code, c.name])))
-const locationNameByCode = computed(() => new Map(locations.value.map((l) => [l.code, l.name])))
-const villageNameByCode = computed(() => new Map(villages.value.map((v) => [v.code, v.name])))
-function orgName(code?: string) { return (code && orgNameByCode.value.get(code)) || code || '—' }
-function stateName(code?: string) { return (code && stateNameByCode.value.get(code)) || code || '—' }
-function countyName(code?: string) { return (code && countyNameByCode.value.get(code)) || code || '—' }
-function locationNodeName(code?: string) { return (code && locationNameByCode.value.get(code)) || code || '—' }
-function villageName(code?: string) { return (code && villageNameByCode.value.get(code)) || code || '—' }
-// Villages can share a name across states/counties, so show the full path, not just the village.
-function locationPath(loc: OfficerLocation) {
-  return [stateName(loc.stateCode), countyName(loc.countyCode), locationNodeName(loc.payamCode), villageName(loc.bomaCode)].join(' › ')
-}
-
-const countiesForState = (stateCode: string) => stateCode ? counties.value.filter((c) => c.stateCode === stateCode) : counties.value
-const locationsForCounty = (countyCode: string) => countyCode ? locations.value.filter((l) => l.countyCode === countyCode) : locations.value
-const villagesForLocation = (locationCode: string) => locationCode ? villages.value.filter((v) => v.locationCode === locationCode) : villages.value
 
 async function load() {
   loading.value = true
@@ -108,26 +70,6 @@ function clearFilters() {
   load()
 }
 
-async function loadGeo() {
-  geoLoading.value = true
-  try {
-    const [s, c, l, v] = await Promise.all([
-      dispatch<{ results: GeoNode[] }>('GET_STATES'),
-      dispatch<{ results: GeoNode[] }>('GET_COUNTIES'),
-      dispatch<{ results: GeoNode[] }>('GET_LOCATIONS'),
-      dispatch<{ results: GeoNode[] }>('GET_VILLAGES'),
-    ])
-    states.value = s.results
-    counties.value = c.results
-    locations.value = l.results
-    villages.value = v.results
-  } catch {
-    // Assign-location dialog just shows empty pickers; the rest of the page still works.
-  } finally {
-    geoLoading.value = false
-  }
-}
-
 async function loadOrganizations() {
   try {
     const res = await dispatch<{ results: typeof organizations.value }>('GET_ORGANIZATIONS', {
@@ -141,7 +83,6 @@ async function loadOrganizations() {
 
 onMounted(() => {
   load()
-  loadGeo()
   loadOrganizations()
 })
 
@@ -215,52 +156,29 @@ async function setOfficerActive(officer: Officer, active: boolean) {
   }
 }
 
-// ---- Assign locations ----
-const locationDialog = ref(false)
-const locationTarget = ref<Officer | null>(null)
-const locationForm = ref({ stateCode: '', countyCode: '', locationCode: '', villageCode: '' })
-const assignedLocations = ref<OfficerLocation[]>([])
-const loadingLocations = ref(false)
-const assigningLocation = ref(false)
-
-async function openAssignLocations(officer: Officer) {
-  locationTarget.value = officer
-  locationForm.value = { stateCode: '', countyCode: '', locationCode: '', villageCode: '' }
-  assignedLocations.value = []
-  locationDialog.value = true
-  loadingLocations.value = true
+async function removeOfficer(officer: Officer) {
+  if (!await confirmAction({
+    title: 'Delete officer?',
+    message: `${officer.firstName} ${officer.lastName} will be permanently removed. This cannot be undone. The officer must already be deactivated first.`,
+    confirmLabel: 'Delete officer',
+    color: 'error',
+    requireTypedText: 'DELETE',
+  })) return
   try {
-    const res = await dispatch<{ results: { locations?: OfficerLocation[] }[] }>('GET_OFFICER', { email: officer.email })
-    assignedLocations.value = res.results?.[0]?.locations ?? []
+    await dispatch('DELETE_OFFICER', { email: officer.email })
+    toast.success('Officer deleted')
+    await load()
   } catch (err) {
-    toast.error(err instanceof Error ? err.message : 'Failed to load assigned locations')
-  } finally {
-    loadingLocations.value = false
+    toast.error(err instanceof Error ? err.message : 'Delete failed')
   }
 }
 
-async function assignLocation() {
-  if (!locationTarget.value || !locationForm.value.villageCode) {
-    toast.error('Pick a village to assign')
-    return
-  }
-  assigningLocation.value = true
-  try {
-    await dispatch('ASSIGN_OFFICER_LOCATION', {
-      supervisorId: locationTarget.value.id,
-      stateCode: locationForm.value.stateCode || undefined,
-      countyCode: locationForm.value.countyCode || undefined,
-      payamCode: locationForm.value.locationCode || undefined,
-      bomaCode: locationForm.value.villageCode,
-    })
-    toast.success('Location assigned')
-    assignedLocations.value = [{ ...locationForm.value, payamCode: locationForm.value.locationCode, bomaCode: locationForm.value.villageCode }, ...assignedLocations.value]
-    locationForm.value = { stateCode: '', countyCode: '', locationCode: '', villageCode: '' }
-  } catch (err) {
-    toast.error(err instanceof Error ? err.message : 'Failed to assign location')
-  } finally {
-    assigningLocation.value = false
-  }
+// ---- Assign locations ----
+const locationDialog = ref(false)
+const locationTarget = ref<Officer | null>(null)
+function openAssignLocations(officer: Officer) {
+  locationTarget.value = officer
+  locationDialog.value = true
 }
 </script>
 
@@ -292,31 +210,20 @@ async function assignLocation() {
           </v-col>
         </v-row>
       </v-card-text>
-      <v-data-table :headers="headers" :items="officers" :search="tableSearch" :loading="loading">
-        <template #item.name="{ item }">{{ item.firstName }} {{ item.lastName }}</template>
-        <template #item.organisationCode="{ item }">{{ orgName(item.organisationCode) }}</template>
-        <template #item.active="{ item }">
-          <v-chip size="small" :color="item.active === '1' ? 'success' : 'error'" variant="tonal">
-            {{ item.active === '1' ? 'Active' : 'Inactive' }}
-          </v-chip>
-        </template>
-        <template #item.location="{ item }">
-          <v-btn v-if="auth.can('ACCESS_SUPERVISORS')" variant="tonal" size="small" color="primary" prepend-icon="mdi-map-marker-outline" @click="openAssignLocations(item)">
-            Assign Location
-          </v-btn>
-        </template>
-        <template #item.actions="{ item }">
-          <v-btn v-if="auth.can('ACCESS_USERS') || auth.can('ACCESS_SUPERVISORS')" icon="mdi-history" variant="text" size="small" :aria-label="`View ${item.firstName} ${item.lastName} activity history`" @click="openHistory(item)" />
-          <v-btn v-if="auth.can('ACCESS_SUPERVISORS')" icon="mdi-pencil" variant="text" size="small" :aria-label="`Edit ${item.firstName} ${item.lastName}`" @click="openEdit(item)" />
-          <v-btn
-            v-if="auth.can('ACCESS_SUPERVISORS')"
-            :icon="item.active === '1' ? 'mdi-account-cancel-outline' : 'mdi-account-check-outline'"
-            variant="text" size="small" :color="item.active === '1' ? 'error' : 'success'"
-            :aria-label="`${item.active === '1' ? 'Deactivate' : 'Activate'} ${item.firstName} ${item.lastName}`"
-            @click="setOfficerActive(item, item.active !== '1')"
-          />
-        </template>
-      </v-data-table>
+      <OfficerDataTable
+        :items="officers"
+        :organizations="organizations"
+        :search="tableSearch"
+        :loading="loading"
+        :can-manage="auth.can('ACCESS_SUPERVISORS')"
+        :can-view-history="auth.can('ACCESS_USERS') || auth.can('ACCESS_SUPERVISORS')"
+        :can-assign-locations="auth.can('ACCESS_SUPERVISORS')"
+        @history="openHistory"
+        @edit="openEdit"
+        @toggle-status="setOfficerActive"
+        @assign-location="openAssignLocations"
+        @delete="removeOfficer"
+      />
     </v-card>
     </template>
 
@@ -333,7 +240,7 @@ async function assignLocation() {
           <div class="field-grid">
             <v-select
               v-if="auth.isSystemAdmin && !editing"
-              v-model="dialogAnchorId" :items="anchors" item-title="name" item-value="id"
+              v-model="dialogAnchorId" :items="dialogAnchors" item-title="name" item-value="id"
               label="Anchor" density="compact" placeholder="Choose an anchor" required
             />
             <v-select
@@ -357,42 +264,7 @@ async function assignLocation() {
       </v-card>
     </v-dialog>
 
-    <v-dialog v-model="locationDialog" max-width="560">
-      <v-card v-if="locationTarget">
-        <dialog-close-button @close="locationDialog = false" />
-        <v-card-title>Assign locations — {{ locationTarget.firstName }} {{ locationTarget.lastName }}</v-card-title>
-        <v-card-text>
-          <p class="text-caption text-medium-emphasis mb-3">
-            Map this officer to the villages they cover, so attendance and household activity can be geotagged to a real coverage area.
-          </p>
-          <v-row dense>
-            <v-col cols="6"><v-select v-model="locationForm.stateCode" :items="states" item-title="name" item-value="code" label="State" density="compact" :loading="geoLoading" :disabled="geoLoading" /></v-col>
-            <v-col cols="6"><v-select v-model="locationForm.countyCode" :items="countiesForState(locationForm.stateCode)" item-title="name" item-value="code" label="County" density="compact" :loading="geoLoading" :disabled="geoLoading" /></v-col>
-            <v-col cols="6"><v-select v-model="locationForm.locationCode" :items="locationsForCounty(locationForm.countyCode)" item-title="name" item-value="code" label="Location" density="compact" :loading="geoLoading" :disabled="geoLoading" /></v-col>
-            <v-col cols="6"><v-select v-model="locationForm.villageCode" :items="villagesForLocation(locationForm.locationCode)" item-title="name" item-value="code" label="Village" density="compact" :loading="geoLoading" :disabled="geoLoading" /></v-col>
-          </v-row>
-          <p v-if="!geoLoading && !states.length" class="text-caption text-medium-emphasis mb-2">
-            No location hierarchy configured yet — add states, counties, locations and villages on the Locations page first.
-          </p>
-          <v-btn variant="outlined" size="small" prepend-icon="mdi-plus" :loading="assigningLocation" :disabled="!locationForm.villageCode" @click="assignLocation">
-            Add coverage area
-          </v-btn>
-
-          <v-divider class="my-4" />
-          <div class="text-caption text-medium-emphasis mb-2">Currently assigned</div>
-          <v-progress-linear v-if="loadingLocations" indeterminate color="primary" class="mb-2" />
-          <v-chip v-for="(loc, i) in assignedLocations" :key="i" size="small" variant="tonal" color="primary" class="mr-1 mb-1">
-            <v-icon icon="mdi-map-marker-outline" size="14" start />
-            {{ locationPath(loc) }}
-          </v-chip>
-          <p v-if="!loadingLocations && !assignedLocations.length" class="text-caption text-medium-emphasis">No coverage areas assigned yet.</p>
-        </v-card-text>
-        <v-card-actions>
-          <v-spacer />
-          <v-btn variant="text" @click="locationDialog = false">Close</v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
+    <OfficerLocationDialog v-model="locationDialog" :officer="locationTarget" />
 
   </div>
 </template>

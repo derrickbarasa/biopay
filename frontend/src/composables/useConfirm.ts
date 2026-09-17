@@ -7,6 +7,10 @@ interface ConfirmOptions {
   message: string
   confirmLabel?: string
   color?: ConfirmColor
+  /** When set (e.g. "DELETE"), the confirm button stays disabled until the user types this
+   *  exact text -- an extra deliberate step for irreversible actions, on top of the dialog
+   *  itself, so a reflexive click can't trigger a permanent delete. */
+  requireTypedText?: string
 }
 
 const state = reactive({
@@ -15,6 +19,8 @@ const state = reactive({
   message: '',
   confirmLabel: 'Continue',
   color: 'secondary' as ConfirmColor,
+  requireTypedText: null as string | null,
+  typedInput: '',
 })
 
 let resolvePending: ((confirmed: boolean) => void) | null = null
@@ -34,6 +40,8 @@ export function useConfirm() {
       message: options.message,
       confirmLabel: options.confirmLabel ?? 'Continue',
       color: options.color ?? 'secondary',
+      requireTypedText: options.requireTypedText ?? null,
+      typedInput: '',
     })
     return new Promise<boolean>((resolve) => { resolvePending = resolve })
   }

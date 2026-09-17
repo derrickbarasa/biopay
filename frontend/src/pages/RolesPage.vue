@@ -272,6 +272,7 @@ async function removeRole(role: Role) {
     message: `Delete "${role.name}"? Roles still assigned to a user can't be deleted -- reassign them first.`,
     confirmLabel: 'Delete role',
     color: 'error',
+    requireTypedText: 'DELETE',
   })) return
   try {
     await dispatch('DELETE_ROLE', { roleId: role.id })
@@ -289,6 +290,7 @@ async function deletePermission(permission: Permission) {
     message: `Delete the "${permission.displayName || permission.name}" permission? Any role that has it will lose it.`,
     confirmLabel: 'Delete permission',
     color: 'error',
+    requireTypedText: 'DELETE',
   })) return
   try {
     await dispatch('DELETE_PERMISSION', { permissionId: permission.id })
