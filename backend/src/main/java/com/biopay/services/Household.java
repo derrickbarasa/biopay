@@ -41,7 +41,6 @@ public class Household extends AbstractVerticle {
         eventBus.consumer("UPDATE_HOUSEHOLD", this::update);
         eventBus.consumer("DEACTIVATE_HOUSEHOLD", this::deactivate);
         eventBus.consumer("ACTIVATE_HOUSEHOLD", this::activate);
-        eventBus.consumer("DELETE_HOUSEHOLD", this::delete);
         eventBus.consumer("GET_HOUSEHOLD", this::getOne);
         eventBus.consumer("GET_HOUSEHOLDS", this::retrieveAll);
         eventBus.consumer("GET_HOUSEHOLD_HISTORY", this::history);
@@ -175,7 +174,10 @@ public class Household extends AbstractVerticle {
                         payload.getString("bomaCode"),
                         payload.getString("latitude"),
                         payload.getString("longitude"),
-                        1,
+                        // Starts Inactive -- flipped to Active only when SET_HOUSEHOLD_REVIEW_STATUS
+                        // records an APPROVED decision, so a pending/rejected household never shows
+                        // as "Active" in the meantime.
+                        0,
                         String.valueOf(payload.getValue("actorId"))))
                 .onFailure(err -> onDbError(message, err))
                 .onSuccess(rows -> {
@@ -301,62 +303,6 @@ public class Household extends AbstractVerticle {
         setHouseholdStatus(message, 1, "Household activated successfully");
     }
 
-    // ---- DELETE_HOUSEHOLD (genuine, irreversible delete) ---------------------------
-
-    /**
-     * A genuine delete -- distinct from {@link #deactivate}/{@link #activate}, which stay the
-     * reversible pair. Only permitted while the household has no recorded activity of any kind
-     * (payments, attendance, vouchers, alternates, enrolled biometrics/photos) and is already
-     * deactivated -- a beneficiary record with real history should never be removable, only a
-     * mistaken/duplicate entry that nothing has touched yet. Matches the same "deactivate first,
-     * block on real dependents" shape as {@link Organization#delete}/{@link Officer#delete}.
-     */
-    private void delete(Message<Object> message) {
-        JsonObject payload = new JsonObject(message.body().toString());
-        String householdNumber = payload.getString("householdNumber", "").trim();
-        boolean anchorScoped = isAnchor(payload);
-        boolean systemAdmin = isSystemAdmin(payload);
-        Integer anchorId = TenantScope.anchorId(payload);
-        String partnerCode = payload.getString("partnerCode", "");
-
-        String findSql = "SELECT status FROM households WHERE household_number=@p1"
-                + (anchorScoped ? " AND (@p2=1 OR organization_code IN (SELECT organization_code FROM organizations WHERE anchor_id=@p3))" : " AND organization_code=@p2");
-        Tuple findParams = anchorScoped
-                ? Tuple.of(householdNumber, systemAdmin, anchorId)
-                : Tuple.of(householdNumber, partnerCode);
-
-        pool.preparedQuery(findSql).execute(findParams)
-                .compose(found -> {
-                    if (found.size() == 0) return Future.failedFuture("__NOT_FOUND__");
-                    if (Rows.intVal(found.iterator().next(), "status") != 0) {
-                        return Future.failedFuture("Deactivate the household before deleting it");
-                    }
-                    return pool.preparedQuery("SELECT 1 WHERE EXISTS(SELECT 1 FROM payments WHERE household_number=@p1) "
-                                    + "OR EXISTS(SELECT 1 FROM attendances WHERE household_number=@p1) "
-                                    + "OR EXISTS(SELECT 1 FROM vouchers WHERE household_number=@p1) "
-                                    + "OR EXISTS(SELECT 1 FROM alternates WHERE household_number=@p1) "
-                                    + "OR EXISTS(SELECT 1 FROM fingerprints WHERE beneficiary_id=@p1) "
-                                    + "OR EXISTS(SELECT 1 FROM faces WHERE beneficiary_id=@p1) "
-                                    + "OR EXISTS(SELECT 1 FROM images WHERE beneficiary_id=@p1)")
-                            .execute(Tuple.of(householdNumber))
-                            .compose(guardRows -> guardRows.size() > 0
-                                    ? Future.failedFuture("This household still has payments, attendance, vouchers, alternates or "
-                                            + "enrolled biometrics/photos -- it can't be deleted")
-                                    : pool.preparedQuery("DELETE FROM households WHERE household_number=@p1").execute(Tuple.of(householdNumber)));
-                })
-                .onFailure(err -> {
-                    if ("__NOT_FOUND__".equals(err.getMessage())) {
-                        replyError(message, "Household not found or not in your organisation");
-                    } else if (err.getMessage() != null
-                            && (err.getMessage().startsWith("Deactivate") || err.getMessage().startsWith("This household"))) {
-                        replyError(message, err.getMessage());
-                    } else {
-                        onDbError(message, err);
-                    }
-                })
-                .onSuccess(rows -> reply(message, new JsonObject().put("responseCode", "000").put("responseMessage", "Household deleted successfully")));
-    }
-
     // ---- SET_HOUSEHOLD_REVIEW_STATUS (PENDING -> APPROVED/REJECTED) ------------
     // Review is a single decision. Legacy CHECKED records are treated as pending
     // so they can still receive one final decision after this workflow change.
@@ -394,7 +340,10 @@ public class Household extends AbstractVerticle {
             return;
         }
 
-        String sql = "UPDATE households SET review_status=@p1, "
+        // status follows the decision: APPROVED flips the household Active, REJECTED leaves/confirms
+        // it Inactive -- it's created Inactive (see create/processUploadRow) so it never shows as
+        // "Active" while still Pending or after being Rejected.
+        String sql = "UPDATE households SET review_status=@p1, status=CASE WHEN @p1='APPROVED' THEN 1 ELSE 0 END, "
                 + "rejection_reason=@p2, updated_by=@p3, updated_at=GETDATE() WHERE household_number=@p4 "
                 + "AND (review_status IS NULL OR review_status IN ('PENDING','CHECKED'))"
                 + (isAnchor(payload) ? " AND (@p5=1 OR organization_code IN (SELECT organization_code FROM organizations WHERE anchor_id=@p6))" : " AND organization_code=@p5");
@@ -1038,7 +987,9 @@ public class Household extends AbstractVerticle {
                 + "household_name, age, marital_status, spouse_name, id_number, phone_number, gender, "
                 + "household_size, female_dependants, male_dependants, vulnerability_status, legal_status, state_code, county_code, payam_code, boma_code, "
                 + "review_status, status, created_by, created_at, updated_at) "
-                + "VALUES (@p1,@p2,@p3,'1',@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,@p12,@p13,@p14,@p15,@p16,@p17,@p18,@p19,'PENDING',1,@p20,GETDATE(),GETDATE())";
+                // Starts Inactive, same as the web CREATE_HOUSEHOLD path -- only an APPROVED review
+                // decision (see setReviewStatus) flips it to Active.
+                + "VALUES (@p1,@p2,@p3,'1',@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,@p12,@p13,@p14,@p15,@p16,@p17,@p18,@p19,'PENDING',0,@p20,GETDATE(),GETDATE())";
         pool.preparedQuery(sql)
                 .execute(Tuple.of(
                         String.valueOf(actorId), partnerCode, householdNumber, householdName,

@@ -132,23 +132,6 @@ const orgNameByCode = computed(() => new Map(organizations.value.map((o) => [o.o
 function orgName(code?: string) { return (code && orgNameByCode.value.get(code)) || code || '—' }
 function fmtAmount(v?: number | null) { return (v ?? 0).toLocaleString() }
 
-async function removeCycle(cycle: Cycle) {
-  if (!await confirmAction({
-    title: 'Delete payment cycle?',
-    message: `${cycle.cycleCode} and its generated payment lines will be removed. This action cannot be undone.`,
-    confirmLabel: 'Delete cycle',
-    color: 'error',
-    requireTypedText: 'DELETE',
-  })) return
-  try {
-    await dispatch('DELETE_PAYROLL', { cycleCode: cycle.cycleCode })
-    toast.success('Payroll cycle deleted')
-    await load()
-  } catch (err) {
-    toast.error(err instanceof Error ? err.message : 'Delete failed')
-  }
-}
-
 function openWizard() {
   router.push({ name: 'payroll-generate' })
 }
@@ -378,11 +361,6 @@ function openView(cycle: Cycle) {
             <v-tooltip v-if="auth.isAnchor && auth.can('ACCESS_PAYMENT_CYCLES') && item.status === 'APPROVED'" text="Disburse" location="top">
               <template #activator="{ props: tip }">
                 <v-btn v-bind="tip" icon="mdi-cash-fast" variant="tonal" color="secondary" density="comfortable" size="small" :aria-label="`Disburse ${item.cycleCode}`" @click="disburse(item)" />
-              </template>
-            </v-tooltip>
-            <v-tooltip v-if="auth.can('ACCESS_PAYMENT_CYCLES') && (item.status === 'DRAFT' || item.status === 'PENDING_APPROVAL')" text="Delete" location="top">
-              <template #activator="{ props: tip }">
-                <v-btn v-bind="tip" icon="mdi-delete-outline" variant="text" density="comfortable" size="small" color="error" :aria-label="`Delete cycle ${item.cycleCode}`" @click="removeCycle(item)" />
               </template>
             </v-tooltip>
           </div>

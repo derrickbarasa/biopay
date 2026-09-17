@@ -16,12 +16,14 @@ import com.biopay.agent.home.HomeActivity;
 import android.app.PendingIntent;
 import android.content.Intent;
 
-/** Posts the one local notification this app sends: an alert that offline-captured records are
- * stuck and haven't reached the server after repeated attempts. Gated by {@link SyncAlertsManager}. */
+/** Posts this app's local notifications: an alert that offline-captured records are stuck and
+ * haven't reached the server after repeated attempts (gated by {@link SyncAlertsManager}), and an
+ * alert that a queued voucher redemption was explicitly rejected by the server on sync. */
 public final class NotificationHelper {
 
     private static final String CHANNEL_ID = "sync_alerts";
     private static final int NOTIFICATION_ID = 1001;
+    private static final int VOUCHER_REJECTED_NOTIFICATION_ID = 1002;
 
     private NotificationHelper() {
     }
@@ -65,5 +67,32 @@ public final class NotificationHelper {
 
         NotificationManagerCompat.from(context).notify(NOTIFICATION_ID, notification.build());
         alerts.setAlreadyNotified(true);
+    }
+
+    /** Called after every sync attempt, regardless of overall outcome -- unlike
+     * {@link #reportSyncResult}, this fires immediately (no attempt-count gate or streak
+     * de-duplication) because a rejected redemption is a one-time, actionable event: the agent
+     * may need to recover cash or goods already handed over on the strength of a stale offline
+     * scan. See {@link com.biopay.agent.data.VoucherDao#listFailedRedemptions()}. */
+    public static void reportVoucherRedemptionRejections(Context context, int rejectedCount) {
+        if (rejectedCount <= 0) return;
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS)
+                != PackageManager.PERMISSION_GRANTED) {
+            return;
+        }
+        Intent openIntent = new Intent(context, HomeActivity.class)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        PendingIntent contentIntent = PendingIntent.getActivity(context, 0, openIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+
+        NotificationCompat.Builder notification = new NotificationCompat.Builder(context, CHANNEL_ID)
+                .setSmallIcon(R.drawable.ic_sync)
+                .setContentTitle(context.getString(R.string.notification_voucher_rejected_title))
+                .setContentText(context.getString(R.string.notification_voucher_rejected_body, rejectedCount))
+                .setAutoCancel(true)
+                .setContentIntent(contentIntent)
+                .setPriority(NotificationCompat.PRIORITY_HIGH);
+
+        NotificationManagerCompat.from(context).notify(VOUCHER_REJECTED_NOTIFICATION_ID, notification.build());
     }
 }

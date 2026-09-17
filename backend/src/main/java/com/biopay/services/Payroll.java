@@ -54,7 +54,6 @@ public class Payroll extends AbstractVerticle {
         eventBus.consumer("REJECT_PAYROLL", this::reject);
         eventBus.consumer("REJECT_PAYROLL_ITEMS", this::rejectItems);
         eventBus.consumer("DISBURSE_PAYROLL", this::disburse);
-        eventBus.consumer("DELETE_PAYROLL", this::delete);
         eventBus.consumer("GET_PAYROLL", this::getOne);
         eventBus.consumer("GET_PAYROLLS", this::retrieveAll);
         startPromise.complete();
@@ -547,31 +546,6 @@ public class Payroll extends AbstractVerticle {
                 });
     }
 
-    // ---- DELETE_PAYROLL (draft/pending only) ---------------------------------------
-
-    private void delete(Message<Object> message) {
-        JsonObject payload = new JsonObject(message.body().toString());
-        String cycleCode = payload.getString("cycleCode", "").trim();
-        String scopeClause = isAnchor(payload) ? " AND (@p2=1 OR anchor_id=@p3)" : " AND organization_code=@p2";
-
-        pool.preparedQuery("SELECT id FROM payment_cycles WHERE cycle_code=@p1 AND status IN ('DRAFT','PENDING_APPROVAL')" + scopeClause)
-                .execute(isAnchor(payload) ? Tuple.of(cycleCode, isSystemAdmin(payload), TenantScope.anchorId(payload)) : Tuple.of(cycleCode, payload.getString("partnerCode", "")))
-                .onFailure(err -> onDbError(message, err))
-                .onSuccess(rows -> {
-                    if (rows.size() == 0) {
-                        replyError(message, "Only a draft or pending-approval cycle in your organisation can be deleted");
-                        return;
-                    }
-                    int cycleId = Rows.intVal(rows.iterator().next(), "id");
-                    pool.preparedQuery("DELETE FROM payments WHERE payment_cycle_id=@p1")
-                            .execute(Tuple.of(cycleId))
-                            .compose(d -> pool.preparedQuery("DELETE FROM payment_cycles WHERE id=@p1").execute(Tuple.of(cycleId)))
-                            .onFailure(err -> onDbError(message, err))
-                            .onSuccess(d -> reply(message, new JsonObject()
-                                    .put("responseCode", "000")
-                                    .put("responseMessage", "Payroll cycle deleted")));
-                });
-    }
 
     // ---- GET_PAYROLL / GET_PAYROLLS -------------------------------------------------
 

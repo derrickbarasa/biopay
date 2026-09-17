@@ -10,6 +10,7 @@ import androidx.core.content.ContextCompat;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.biopay.agent.R;
+import com.biopay.agent.data.DatabaseHelper;
 import com.biopay.agent.data.VoucherDao;
 
 import java.text.NumberFormat;
@@ -60,12 +61,22 @@ public class VoucherListAdapter extends RecyclerView.Adapter<VoucherListAdapter.
 
         boolean issued = "ISSUED".equalsIgnoreCase(voucher.status);
         boolean redeemed = "REDEEMED".equalsIgnoreCase(voucher.status);
-        holder.status.setText(issued ? R.string.voucher_status_not_redeemed
+        // A queued redemption the server explicitly rejected on sync (voucher voided/expired/
+        // already redeemed by the time this device caught up) always overrides the normal
+        // issued/redeemed/voided read -- this device optimistically showed "Redeemed" the moment
+        // it was scanned, so the agent needs a clear signal that outcome didn't actually stick.
+        boolean rejected = voucher.redemptionSyncStatus == DatabaseHelper.SYNC_FAILED;
+        holder.status.setText(rejected ? R.string.voucher_status_redemption_rejected
+                : issued ? R.string.voucher_status_not_redeemed
                 : redeemed ? R.string.voucher_status_redeemed : R.string.voucher_status_voided);
-        holder.status.setBackgroundResource(issued ? R.drawable.bg_status_warning
+        holder.status.setBackgroundResource(rejected ? R.drawable.bg_status_error
+                : issued ? R.drawable.bg_status_warning
                 : redeemed ? R.drawable.bg_status_success : R.drawable.bg_status_neutral);
-        holder.status.setTextColor(ContextCompat.getColor(holder.itemView.getContext(), issued
-                ? R.color.bp_warning : redeemed ? R.color.bp_success : R.color.bp_text_secondary));
+        holder.status.setTextColor(ContextCompat.getColor(holder.itemView.getContext(), rejected ? R.color.bp_error
+                : issued ? R.color.bp_warning : redeemed ? R.color.bp_success : R.color.bp_text_secondary));
+        boolean hasError = rejected && voucher.redemptionSyncError != null && !voucher.redemptionSyncError.trim().isEmpty();
+        holder.purpose.setVisibility(hasError || hasPurpose ? View.VISIBLE : View.GONE);
+        if (hasError) holder.purpose.setText(voucher.redemptionSyncError);
         holder.redeem.setVisibility(issued ? View.VISIBLE : View.GONE);
         holder.redeem.setOnClickListener(issued ? view -> listener.onRedeem(voucher) : null);
     }

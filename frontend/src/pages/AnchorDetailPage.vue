@@ -199,22 +199,6 @@ async function toggleOrganizationStatus(org: Organization) {
   }
 }
 
-async function deleteOrganization(org: Organization) {
-  if (!await confirmAction({
-    title: 'Delete organization?',
-    message: `${org.name} and its dashboard access will be removed. This action cannot be undone.`,
-    confirmLabel: 'Delete organization',
-    color: 'error',
-  })) return
-  try {
-    await dispatch('DELETE_ORGANIZATION', { organisationCode: org.organisationCode, targetAnchorId: anchorId.value })
-    toast.success('Organization deleted')
-    await load()
-  } catch (err) {
-    toast.error(err instanceof Error ? err.message : 'Delete failed')
-  }
-}
-
 // ---- Anchor users tab actions ----
 const userDialog = ref(false)
 const userSaving = ref(false)
@@ -327,7 +311,7 @@ onMounted(load)
           <div class="title-line">
             <h1 class="page-title">{{ anchor.name }}</h1>
             <v-chip size="small" variant="tonal" :color="anchor.status === 1 ? 'success' : 'error'">
-              {{ anchor.status === 1 ? 'Active' : 'Deleted' }}
+              {{ anchor.status === 1 ? 'Active' : 'Inactive' }}
             </v-chip>
           </div>
           <p>{{ anchor.anchorCode }} · Anchor account and the organizations it oversees.</p>
@@ -375,7 +359,6 @@ onMounted(load)
               no-data-text="No organizations are registered under this anchor yet."
               @edit="openEditOrganization"
               @toggle-status="toggleOrganizationStatus"
-              @delete="deleteOrganization"
             />
           </section>
         </v-window-item>

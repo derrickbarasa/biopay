@@ -84,25 +84,6 @@ async function toggleStatus(item: Anchor) {
   }
 }
 
-// Only a deactivated anchor with no organizations left under it can be permanently
-// deleted (see Administration#deleteAnchor) -- delete every organization first.
-async function removeAnchor(item: Anchor) {
-  if (!await confirmAction({
-    title: 'Delete anchor?',
-    message: `${item.name} will be permanently removed. This cannot be undone. The anchor must already be deactivated, with every organization under it already deleted.`,
-    confirmLabel: 'Delete anchor',
-    color: 'error',
-    requireTypedText: 'DELETE',
-  })) return
-  try {
-    await dispatch('DELETE_ANCHOR', { targetAnchorId: item.id })
-    toast.success('Anchor deleted')
-    await load()
-  } catch (e) {
-    toast.error(e instanceof Error ? e.message : 'Delete failed')
-  }
-}
-
 // Auto-fills the capital when a country is picked; still editable afterwards.
 watch(() => anchor.country, (country, previous) => {
   if (country && country !== previous) anchor.city = capitalFor(country) || anchor.city
@@ -147,7 +128,6 @@ onMounted(load)
           <v-btn :to="{ name: 'anchor-detail', params: { anchorId: item.id } }" icon="mdi-eye-outline" variant="text" size="small" :aria-label="`View ${item.name}`" />
           <v-btn icon="mdi-pencil" variant="text" size="small" :aria-label="`Edit ${item.name}`" @click="openEdit(item)" />
           <v-btn :icon="item.status === 1 ? 'mdi-account-cancel-outline' : 'mdi-account-check-outline'" variant="text" size="small" :color="item.status === 1 ? 'error' : 'secondary'" :aria-label="`${item.status === 1 ? 'Deactivate' : 'Activate'} ${item.name}`" @click="toggleStatus(item)" />
-          <v-btn v-if="item.status !== 1" icon="mdi-delete-outline" variant="text" size="small" color="error" :aria-label="`Delete ${item.name}`" @click="removeAnchor(item)" />
         </template>
       </v-data-table>
     </v-card>

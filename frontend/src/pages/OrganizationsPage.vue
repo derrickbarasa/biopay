@@ -115,23 +115,6 @@ async function openEdit(org: Organization) {
   }
 }
 
-async function remove(org: Organization) {
-  if (!await confirmAction({
-    title: 'Delete organization?',
-    message: `${org.name} will be permanently removed. This cannot be undone. It must already be deactivated, with no active households, field officers or users left under it -- deactivate or reassign those first.`,
-    confirmLabel: 'Delete organization',
-    color: 'error',
-    requireTypedText: 'DELETE',
-  })) return
-  try {
-    await dispatch('DELETE_ORGANIZATION', { organisationCode: org.organisationCode, targetAnchorId: auth.isSystemAdmin ? org.anchorId : undefined })
-    toast.success('Organization deleted')
-    await load()
-  } catch (err) {
-    toast.error(err instanceof Error ? err.message : 'Delete failed')
-  }
-}
-
 async function save() {
   if (!form.value.name.trim() || !form.value.country || !form.value.verificationMethod) {
     toast.error('Complete the organization name, country and verification method')
@@ -278,7 +261,6 @@ async function toggleStatus(org: Organization) {
         :can-manage="auth.can('ACCESS_ORGANISATIONS')"
         @edit="openEdit"
         @toggle-status="toggleStatus"
-        @delete="remove"
       />
     </v-card>
   </div>

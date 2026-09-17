@@ -18,11 +18,16 @@ import android.database.sqlite.SQLiteOpenHelper;
 public class DatabaseHelper extends SQLiteOpenHelper {
 
     private static final String DB_NAME = "biopay_agent.db";
-    private static final int DB_VERSION = 14;
+    private static final int DB_VERSION = 15;
 
-    /** Every offline-captured row starts PENDING and flips to SYNCED once the server accepts it. */
+    /** Every offline-captured row starts PENDING and flips to SYNCED once the server accepts it.
+     *  FAILED is voucher-redemption-only: the server explicitly rejected a queued redemption (for
+     *  example, the voucher was voided/expired/already redeemed by the time this device synced) --
+     *  it stops the row from being silently retried forever and marks it for the agent to review,
+     *  see VoucherDao#markRedemptionFailed and SyncManager#syncVoucherRedemptions. */
     public static final int SYNC_PENDING = 0;
     public static final int SYNC_SYNCED = 1;
+    public static final int SYNC_FAILED = 2;
 
     private static DatabaseHelper instance;
 
@@ -294,6 +299,11 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             // organisation, matching every other org-owned table -- see ActivityDao#listAll.
             db.execSQL("ALTER TABLE verification_events ADD COLUMN partner_code VARCHAR");
         }
+        if (oldVersion < 15) {
+            // Holds the server's rejection reason once a queued redemption comes back FAILED
+            // (see SYNC_FAILED) so the agent can see why, not just that it happened.
+            db.execSQL("ALTER TABLE vouchers ADD COLUMN redemption_sync_error VARCHAR");
+        }
     }
 
     /** Removes household codes and incomplete manual entries that older sync builds could insert
@@ -366,6 +376,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
                 "latitude VARCHAR," +
                 "longitude VARCHAR," +
                 "redemption_sync_status INTEGER DEFAULT 1," +
+                "redemption_sync_error VARCHAR," +
                 "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);");
         db.execSQL("CREATE INDEX IF NOT EXISTS idx_vouchers_household ON vouchers(household_number,status)");
     }

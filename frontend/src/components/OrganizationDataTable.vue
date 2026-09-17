@@ -30,7 +30,6 @@ const props = withDefaults(defineProps<{
 const emit = defineEmits<{
   edit: [organization: OrganizationRow]
   'toggle-status': [organization: OrganizationRow]
-  delete: [organization: OrganizationRow]
 }>()
 
 const headers = computed(() => [
@@ -96,7 +95,6 @@ function verificationMethodLabel(method?: string) {
         :aria-label="`${item.status === 1 ? 'Deactivate' : 'Activate'} ${item.name}`"
         @click="emit('toggle-status', item)"
       />
-      <v-btn v-if="canManage" icon="mdi-delete" variant="text" size="small" color="error" :aria-label="`Delete ${item.name}`" @click="emit('delete', item)" />
     </template>
     <template #no-data>
       <div class="empty-state">{{ noDataText }}</div>

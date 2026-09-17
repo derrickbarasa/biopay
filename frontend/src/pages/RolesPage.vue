@@ -45,7 +45,7 @@ const ROLE_TEMPLATES: RoleTemplate[] = [
     permissionCodes: ['ACCESS_PAYMENTS', 'ACCESS_PAYMENT_CYCLES', 'ACCESS_SUBSCRIPTION', 'VIEW_REPORTS', 'DOWNLOAD_REPORTS'],
   },
   {
-    key: 'COMPLIANCE_AUDITOR', name: 'Compliance / Auditor', icon: 'mdi-shield-search-outline',
+    key: 'COMPLIANCE_AUDITOR', name: 'Compliance / Auditor', icon: 'mdi-shield-search',
     description: 'Read-only oversight: views and downloads reports, no operational access.',
     permissionCodes: ['VIEW_REPORTS', 'DOWNLOAD_REPORTS'],
   },

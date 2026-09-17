@@ -330,8 +330,8 @@ public class Voucher extends AbstractVerticle {
             replyError(message, "voucherCode is required");
             return;
         }
-        if ("SUPERVISOR".equalsIgnoreCase(payload.getString("actorRole", ""))
-                && payload.getString("matchedFingerprint", "").isBlank()) {
+        boolean fieldOfficer = "SUPERVISOR".equalsIgnoreCase(payload.getString("actorRole", ""));
+        if (fieldOfficer && payload.getString("matchedFingerprint", "").isBlank()) {
             replyError(message, "A successful fingerprint verification is required for mobile redemption");
             return;
         }
@@ -354,12 +354,31 @@ public class Voucher extends AbstractVerticle {
                 .execute(params)
                 .onFailure(err -> onDbError(message, err))
                 .onSuccess(rows -> {
-                    if (rows.rowCount() > 0) {
+                    boolean redeemed = rows.rowCount() > 0;
+                    // EntryPoint#auditAuthenticatedActivity skips every SUPERVISOR-role request
+                    // (field-app events are expected to log themselves), but nothing previously
+                    // did for voucher redemption -- so a field officer scanning a voucher HQ
+                    // already voided (a stale offline cache, for instance) left no trace for HQ
+                    // to see. Log both outcomes here in the same shape so they show up in the
+                    // existing Audit Logs screen without any new UI.
+                    if (fieldOfficer) auditFieldRedemption(payload, voucherCode, actorId, redeemed);
+                    if (redeemed) {
                         reply(message, new JsonObject().put("responseCode", "000").put("responseMessage", "Voucher redeemed successfully"));
                     } else {
                         replyError(message, "Voucher not found, not issued, expired, or not in your organisation");
                     }
                 });
+    }
+
+    private void auditFieldRedemption(JsonObject payload, String voucherCode, Object actorId, boolean redeemed) {
+        if (actorId == null) return;
+        JsonObject details = new JsonObject().put("outcome", redeemed ? "SUCCESS" : "FAILED").put("voucherCode", voucherCode);
+        String sql = "INSERT INTO audit_logs (actor_type,actor_id,anchor_id,organization_code,action,entity_type,entity_id,details,channel,created_at) "
+                + "VALUES ('SUPERVISOR',@p1,@p2,@p3,'REDEEM_VOUCHER','VOUCHER',@p4,@p5,'FIELD',GETDATE())";
+        pool.preparedQuery(sql)
+                .execute(Tuple.of(actorId, anchorIdOf(payload), payload.getString("partnerCode"), voucherCode, details.encode()))
+                .onFailure(err -> Logging.applicationLog(Logging.logPreString()
+                        + "Voucher redemption audit write failed: " + err.getMessage() + "\n\n", "", 3));
     }
 
     // ---- SYNC_VOUCHERS (offline field app bundle) ---------------------------------

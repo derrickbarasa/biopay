@@ -169,3 +169,25 @@
 /* Added 2026-09-11 -- the sidebar Billing nav item's icon was missing from
    this subset entirely, so it silently rendered no glyph at all. */
 .mdi-cash-check::before { content: "\F14EE"; }
+
+/* Added 2026-09-17 -- found via a full audit of every mdi-* icon name referenced
+   in src/ against this file: the Locations page's per-row Deactivate button
+   (mdi-cancel) rendered as a blank, invisible-but-clickable icon for every
+   Active state/county/location/village, plus several other icons used for role
+   templates, permission group headers, subscription payment methods, and a
+   few detail-page icons were missing the same way. */
+.mdi-account-cog-outline::before { content: "\F1371"; }
+.mdi-account-hard-hat-outline::before { content: "\F1A1F"; }
+.mdi-account-tie-outline::before { content: "\F10CA"; }
+.mdi-cancel::before { content: "\F073A"; }
+.mdi-cellphone-check::before { content: "\F17FD"; }
+.mdi-clock-check-outline::before { content: "\F0FA9"; }
+.mdi-file-document-outline::before { content: "\F09EE"; }
+.mdi-finance::before { content: "\F081F"; }
+.mdi-information-outline::before { content: "\F02FD"; }
+.mdi-link-variant::before { content: "\F0339"; }
+.mdi-open-in-new::before { content: "\F03CC"; }
+.mdi-shield-lock-outline::before { content: "\F0CCC"; }
+.mdi-shield-plus-outline::before { content: "\F0ADB"; }
+.mdi-shield-search::before { content: "\F0D9A"; }
+.mdi-tune-variant::before { content: "\F1542"; }

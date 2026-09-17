@@ -24,10 +24,12 @@ public class SyncWorker extends Worker {
     @NonNull
     @Override
     public Result doWork() {
-        boolean allSucceeded = new SyncManager(getApplicationContext()).syncAll();
+        SyncManager syncManager = new SyncManager(getApplicationContext());
+        boolean allSucceeded = syncManager.syncAll();
         int pendingCount = DatabaseHelper.get(getApplicationContext())
                 .countPendingSyncWork(new SessionManager(getApplicationContext()).getPartnerCode());
         NotificationHelper.reportSyncResult(getApplicationContext(), allSucceeded, pendingCount, getRunAttemptCount());
+        NotificationHelper.reportVoucherRedemptionRejections(getApplicationContext(), syncManager.getNewlyFailedRedemptionCount());
         Data output = new Data.Builder().putInt(OUTPUT_PENDING_COUNT, pendingCount).build();
         if (allSucceeded) {
             return Result.success(output);

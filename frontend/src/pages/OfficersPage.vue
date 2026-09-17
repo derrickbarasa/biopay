@@ -156,23 +156,6 @@ async function setOfficerActive(officer: Officer, active: boolean) {
   }
 }
 
-async function removeOfficer(officer: Officer) {
-  if (!await confirmAction({
-    title: 'Delete officer?',
-    message: `${officer.firstName} ${officer.lastName} will be permanently removed. This cannot be undone. The officer must already be deactivated first.`,
-    confirmLabel: 'Delete officer',
-    color: 'error',
-    requireTypedText: 'DELETE',
-  })) return
-  try {
-    await dispatch('DELETE_OFFICER', { email: officer.email })
-    toast.success('Officer deleted')
-    await load()
-  } catch (err) {
-    toast.error(err instanceof Error ? err.message : 'Delete failed')
-  }
-}
-
 // ---- Assign locations ----
 const locationDialog = ref(false)
 const locationTarget = ref<Officer | null>(null)
@@ -222,7 +205,6 @@ function openAssignLocations(officer: Officer) {
         @edit="openEdit"
         @toggle-status="setOfficerActive"
         @assign-location="openAssignLocations"
-        @delete="removeOfficer"
       />
     </v-card>
     </template>

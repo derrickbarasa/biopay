@@ -6,6 +6,8 @@
     <string name="notification_channel_sync_description">Notifies you when offline records can\'t reach the BioPay server.</string>
     <string name="notification_sync_title">Records waiting to sync</string>
     <string name="notification_sync_body">%1$d record(s) captured on this device haven\'t reached the server yet. Open BioPay on a connection to retry.</string>
+    <string name="notification_voucher_rejected_title">Voucher redemption rejected</string>
+    <string name="notification_voucher_rejected_body">%1$d voucher redemption(s) were rejected by the server -- review before releasing goods or cash.</string>
 
     <string name="login_title">Field officer sign in</string>
     <string name="login_subtitle">Use your BioPay field account to continue to your organisation workspace.</string>
@@ -425,6 +427,7 @@
     <string name="voucher_status_not_redeemed">Not redeemed</string>
     <string name="voucher_status_redeemed">Redeemed</string>
     <string name="voucher_status_voided">Voided</string>
+    <string name="voucher_status_redemption_rejected">Redemption rejected</string>
     <plurals name="voucher_list_summary">
         <item quantity="one">%1$d voucher</item>
         <item quantity="other">%1$d vouchers</item>

@@ -282,25 +282,6 @@ async function toggleStatus(row: HouseholdRow) {
   }
 }
 
-// Only a deactivated household with no recorded activity (payments, attendance, vouchers,
-// alternates, enrolled biometrics/photos) can be permanently deleted (see Household#delete).
-async function remove(row: HouseholdRow) {
-  if (!await confirmAction({
-    title: 'Delete household?',
-    message: `${row.householdName} (${row.householdNumber}) will be permanently removed. This cannot be undone. It must already be deactivated and have no recorded activity.`,
-    confirmLabel: 'Delete household',
-    color: 'error',
-    requireTypedText: 'DELETE',
-  })) return
-  try {
-    await dispatch('DELETE_HOUSEHOLD', { householdNumber: row.householdNumber })
-    toast.success('Household deleted')
-    await load()
-  } catch (err) {
-    toast.error(err instanceof Error ? err.message : 'Delete failed')
-  }
-}
-
 // Import CSV: one template upload is scoped to one village's batch.
 const bulkDialog = ref(false)
 const bulkOrganisationCode = ref<string | null>(null)
@@ -580,7 +561,6 @@ async function submitBulk() {
               :aria-label="`${item.status === 1 ? 'Deactivate' : 'Activate'} household ${item.householdName}`"
               @click="toggleStatus(item)"
             />
-            <v-btn v-if="auth.can('ACCESS_HOUSEHOLDS') && item.status !== 1" icon="mdi-delete" variant="text" size="small" color="error" :aria-label="`Delete household ${item.householdName}`" @click="remove(item)" />
           </div>
         </template>
       </v-data-table>

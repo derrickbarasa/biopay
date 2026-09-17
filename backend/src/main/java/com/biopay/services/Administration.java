@@ -30,13 +30,11 @@ public class Administration extends AbstractVerticle {
         vertx.eventBus().consumer("CREATE_ANCHOR", this::createAnchor);
         vertx.eventBus().consumer("UPDATE_ANCHOR", this::updateAnchor);
         vertx.eventBus().consumer("TOGGLE_ANCHOR_STATUS", this::toggleAnchorStatus);
-        vertx.eventBus().consumer("DELETE_ANCHOR", this::deleteAnchor);
         vertx.eventBus().consumer("GET_USERS", this::getUsers);
         vertx.eventBus().consumer("GET_USER", this::getUser);
         vertx.eventBus().consumer("CREATE_USER", this::createUser);
         vertx.eventBus().consumer("UPDATE_USER", this::updateUser);
         vertx.eventBus().consumer("TOGGLE_USER_STATUS", this::toggleUserStatus);
-        vertx.eventBus().consumer("DELETE_USER", this::deleteUser);
         vertx.eventBus().consumer("GET_API_CLIENTS", this::getApiClients);
         vertx.eventBus().consumer("CREATE_API_CLIENT", this::createApiClient);
         vertx.eventBus().consumer("TOGGLE_API_CLIENT_STATUS", this::toggleApiClientStatus);
@@ -67,22 +65,28 @@ public class Administration extends AbstractVerticle {
         JsonObject p = data(message);
         if (!anchor(p)) { fail(message, "Only the platform owner or an anchor administrator can view anchor settings"); return; }
         // An anchor is a row in `anchors`; each has exactly one administrator, resolved here
-        // via OUTER APPLY (TOP 1, oldest first) rather than a plain JOIN so a data anomaly that
-        // ever left more than one anchor-wide "Anchor Administrator"-role user under the same
-        // anchor can't silently duplicate that anchor in the list -- see saveRole/createUser
-        // for how that role gets assigned. The system admin can browse every anchor (for the
-        // anchor-picker on admin@biopay.com's sessions); a plain anchor admin only ever sees
-        // their own row. `status` is an opt-in filter: the Anchors management list omits it
-        // deliberately (a deactivated anchor must still show there to be restored), while a
-        // picker used to scope a new record (create household/org/user/API client) passes
-        // status=1 so a deactivated anchor can't be picked for new work.
+        // via OUTER APPLY (TOP 1) rather than a plain JOIN so a data anomaly that ever left more
+        // than one anchor-wide "Anchor Administrator"-role user under the same anchor can't
+        // silently duplicate that anchor in the list -- see saveRole/createUser for how that role
+        // gets assigned. Since accounts are deactivate-only now (no hard delete -- see
+        // Administration#toggleUserStatus), a deactivated former administrator's row is never
+        // removed, so a second, newer administrator can end up coexisting under the same anchor;
+        // picking active (status=1) first, oldest active as the tiebreaker, and only falling back
+        // to an inactive row when no active one exists keeps the list showing today's real
+        // administrator instead of a stale/deactivated one that merely happens to be older.
+        // The system admin can browse every anchor (for the anchor-picker on admin@biopay.com's
+        // sessions); a plain anchor admin only ever sees their own row. `status` is an opt-in
+        // filter: the Anchors management list omits it deliberately (a deactivated anchor must
+        // still show there to be restored), while a picker used to scope a new record (create
+        // household/org/user/API client) passes status=1 so a deactivated anchor can't be picked
+        // for new work.
         Integer status = systemAdmin(p) ? p.getInteger("status") : null;
         String base = "SELECT a.id, a.anchor_code, a.anchor_name, a.phone, a.address, a.country, a.city, a.status, "
                 + "admin.first_name, admin.surname, admin.email FROM anchors a OUTER APPLY ("
                 + "SELECT TOP 1 first_name, surname, email FROM users "
                 + "WHERE anchor_id=a.id AND user_scope='ANCHOR' "
                 + "AND role_id IN (SELECT id FROM roles WHERE role_name='Anchor Administrator' AND anchor_id IS NULL) "
-                + "ORDER BY created_at ASC) admin ";
+                + "ORDER BY CASE WHEN status=1 THEN 0 ELSE 1 END, created_at ASC) admin ";
         String sql = systemAdmin(p)
                 ? base + "WHERE (@p1 IS NULL OR a.status=@p1) ORDER BY a.anchor_name"
                 : base + "WHERE a.id=@p1";
@@ -214,55 +218,6 @@ public class Administration extends AbstractVerticle {
                 .onSuccess(v -> ok(message, status == 1 ? "Anchor restored" : "Anchor deactivated", null));
     }
 
-    /**
-     * A genuine, irreversible delete -- distinct from {@link #toggleAnchorStatus}, which stays
-     * the reversible deactivate/activate action. Gated so it can never destroy live data: the
-     * anchor must already be deactivated, and every organisation under it must already be
-     * deleted first (not just deactivated -- an organisation still carries its own households,
-     * staff and history, so it goes through {@link Organization#delete}'s own guard one at a
-     * time rather than being cascade-removed here). Once that's true, everything left is either
-     * this anchor's own leaf config with no meaning without it (its geography catalogue, its
-     * anchor-scoped custom roles, its subscription row, its remaining dashboard users/field
-     * officers -- which can only be the administrator and any anchor-wide staff, since every
-     * organisation-scoped account was already removed along with its organisation) or historical
-     * billing/audit data that stays as a point-in-time record the same way a deleted
-     * organisation's payment history does (see {@link Organization#delete}). Runs as a single
-     * transaction so the dependents count can't go stale between the check and the deletes.
-     */
-    private void deleteAnchor(Message<Object> message) {
-        JsonObject p = data(message);
-        if (!systemAdmin(p)) { fail(message, "Only the platform owner can delete an anchor"); return; }
-        Integer targetAnchorId = p.getInteger("targetAnchorId");
-        if (targetAnchorId == null) { fail(message, "targetAnchorId is required"); return; }
-        pool.withTransaction(connection -> connection.preparedQuery("SELECT status FROM anchors WHERE id=@p1")
-                        .execute(Tuple.of(targetAnchorId))
-                        .compose(rows -> {
-                            if (rows.size() == 0) return Future.failedFuture("Anchor not found");
-                            if (Rows.intVal(rows.iterator().next(), "status") != 0) {
-                                return Future.failedFuture("Deactivate the anchor before deleting it");
-                            }
-                            return connection.preparedQuery("SELECT COUNT(*) AS cnt FROM organizations WHERE anchor_id=@p1")
-                                    .execute(Tuple.of(targetAnchorId));
-                        })
-                        .compose(rows -> {
-                            int orgCount = Rows.intVal(rows.iterator().next(), "cnt");
-                            if (orgCount > 0) {
-                                return Future.failedFuture("This anchor still has " + orgCount
-                                        + " organisation(s) -- delete every organisation under it first");
-                            }
-                            return connection.preparedQuery("DELETE FROM users WHERE anchor_id=@p1").execute(Tuple.of(targetAnchorId))
-                                    .compose(v -> connection.preparedQuery("DELETE FROM field_officers WHERE anchor_id=@p1").execute(Tuple.of(targetAnchorId)))
-                                    .compose(v -> connection.preparedQuery("DELETE FROM geo_villages WHERE anchor_id=@p1").execute(Tuple.of(targetAnchorId)))
-                                    .compose(v -> connection.preparedQuery("DELETE FROM geo_locations WHERE anchor_id=@p1").execute(Tuple.of(targetAnchorId)))
-                                    .compose(v -> connection.preparedQuery("DELETE FROM geo_counties WHERE anchor_id=@p1").execute(Tuple.of(targetAnchorId)))
-                                    .compose(v -> connection.preparedQuery("DELETE FROM geo_states WHERE anchor_id=@p1").execute(Tuple.of(targetAnchorId)))
-                                    .compose(v -> connection.preparedQuery("DELETE FROM roles WHERE anchor_id=@p1").execute(Tuple.of(targetAnchorId)))
-                                    .compose(v -> connection.preparedQuery("DELETE FROM subscriptions WHERE anchor_id=@p1").execute(Tuple.of(targetAnchorId)))
-                                    .compose(v -> connection.preparedQuery("DELETE FROM anchors WHERE id=@p1").execute(Tuple.of(targetAnchorId)));
-                        }))
-                .onFailure(e -> fail(message, e.getMessage() != null && !e.getMessage().startsWith("com.") ? e.getMessage() : "Failed to delete anchor"))
-                .onSuccess(v -> ok(message, "Anchor permanently deleted", null));
-    }
 
     private void getUsers(Message<Object> message) {
         JsonObject p = data(message);
@@ -513,35 +468,6 @@ public class Administration extends AbstractVerticle {
                 :Tuple.of(status,userId,p.getString("partnerCode",""));
         pool.preparedQuery(sql).execute(params).onFailure(e->dbFail(message,e))
                 .onSuccess(r->{if(r.rowCount()==0)fail(message,"User not found");else ok(message,"User status updated",null);});
-    }
-
-    /** A genuine, irreversible delete -- distinct from {@link #toggleUserStatus}, which stays the
-     *  reversible deactivate/activate action. Gated so it can never remove a still-signed-in-capable
-     *  account: the user must already be deactivated (status=0) before their users row can be hard
-     *  deleted. Users are a leaf entity here -- nothing else in this schema treats a user id as a
-     *  live parent; every created_by column that references one (organizations.created_by,
-     *  field_officers.created_by, users.created_by, etc.) is just a point-in-time "who did this"
-     *  audit trail, not a live foreign key, matching this codebase's no-FK convention -- so no
-     *  dependents check is needed beyond requiring the user already be inactive. Runs as a single
-     *  transaction so the status check can't go stale before the delete (see
-     *  Administration#toggleAnchorStatus for the same withTransaction pattern). */
-    private void deleteUser(Message<Object> message) {
-        JsonObject p = data(message);
-        int userId = p.getInteger("userId", 0);
-        if (userId == Integer.parseInt(p.getValue("actorId").toString())) { fail(message, "You cannot delete your own account"); return; }
-        String findSql = "SELECT status FROM users WHERE id=@p1"
-                + (systemAdmin(p) ? "" : anchor(p) ? " AND anchor_id=@p2" : " AND organization_code=@p2");
-        Tuple findParams = systemAdmin(p) ? Tuple.of(userId)
-                : anchor(p) ? Tuple.of(userId, Integer.parseInt(p.getValue("anchorId").toString()))
-                : Tuple.of(userId, p.getString("partnerCode", ""));
-        pool.withTransaction(connection -> connection.preparedQuery(findSql).execute(findParams)
-                        .compose(rows -> {
-                            if (rows.size() == 0) { return Future.failedFuture("User not found"); }
-                            if (Rows.intVal(rows.iterator().next(), "status") != 0) { return Future.failedFuture("Deactivate the user before deleting them"); }
-                            return connection.preparedQuery("DELETE FROM users WHERE id=@p1").execute(Tuple.of(userId));
-                        }))
-                .onFailure(e -> fail(message, e.getMessage() != null && !e.getMessage().startsWith("com.") ? e.getMessage() : "Failed to delete user"))
-                .onSuccess(r -> ok(message, "User permanently deleted", null));
     }
 
     private void getPermissions(Message<Object> message) {

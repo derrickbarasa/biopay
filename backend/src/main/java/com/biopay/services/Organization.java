@@ -38,7 +38,6 @@ public class Organization extends AbstractVerticle {
 
         eventBus.consumer("CREATE_ORGANIZATION", this::create);
         eventBus.consumer("UPDATE_ORGANIZATION", this::update);
-        eventBus.consumer("DELETE_ORGANIZATION", this::delete);
         eventBus.consumer("TOGGLE_ORGANIZATION_STATUS", this::toggleStatus);
         eventBus.consumer("GET_ORGANIZATION", this::getOne);
         eventBus.consumer("GET_ORGANIZATIONS", this::retrieveAll);
@@ -315,77 +314,6 @@ public class Organization extends AbstractVerticle {
                         replyError(message, "Organisation not found");
                     }
                 });
-    }
-
-    // ---- DELETE_ORGANIZATION (anchor only, permanent hard delete) ---------------
-
-    /**
-     * A genuine, irreversible delete -- distinct from {@link #toggleStatus}, which stays the
-     * reversible deactivate/activate action. Gated so it can never destroy live data: the
-     * organisation must already be deactivated (status=0) and must have no active households,
-     * field officers, or users left under its organization_code -- those have to be
-     * individually deactivated/reassigned first. This never cascades the delete to that child
-     * data itself, only blocks with a descriptive message (this schema declares no foreign keys
-     * -- see 006_geo_hierarchy.sql's own note on that convention). organisation_modules is the
-     * exception: it's just this organisation's own enabled-module list, with no meaning once the
-     * organisation is gone, so it's cleaned up alongside the organisations row rather than
-     * treated as a blocking dependent. Runs as a single transaction (see
-     * Administration#toggleAnchorStatus for the same withTransaction pattern) so the dependents
-     * count can't go stale between the check and the DELETE.
-     */
-    private void delete(Message<Object> message) {
-        JsonObject payload = new JsonObject(message.body().toString());
-        if (!isAnchor(payload)) {
-            replyError(message, "Only an anchor administrator can delete organisations");
-            return;
-        }
-        String partnerId = payload.getString("organisationCode", "").trim();
-        if (partnerId.isEmpty()) {
-            replyError(message, "organisationCode is required");
-            return;
-        }
-        boolean systemAdmin = isSystemAdmin(payload);
-        Integer scopedAnchorId = TenantScope.anchorId(payload);
-
-        pool.withTransaction(connection -> connection.preparedQuery(
-                        "SELECT status FROM organizations WHERE organization_code=@p1 AND (@p2=1 OR anchor_id=@p3)")
-                        .execute(Tuple.of(partnerId, systemAdmin, scopedAnchorId))
-                        .compose(rows -> {
-                            if (rows.size() == 0) {
-                                return Future.failedFuture("Organisation not found");
-                            }
-                            if (Rows.intVal(rows.iterator().next(), "status") != 0) {
-                                return Future.failedFuture("Deactivate the organisation before deleting it");
-                            }
-                            return connection.preparedQuery(
-                                            "SELECT "
-                                                    + "(SELECT COUNT(*) FROM households WHERE organization_code=@p1 AND status=1) AS households_cnt, "
-                                                    + "(SELECT COUNT(*) FROM field_officers WHERE organization_code=@p1 AND active='1') AS officers_cnt, "
-                                                    + "(SELECT COUNT(*) FROM users WHERE organization_code=@p1 AND status=1) AS users_cnt")
-                                    .execute(Tuple.of(partnerId));
-                        })
-                        .compose(rows -> {
-                            Row counts = rows.iterator().next();
-                            int households = Rows.intVal(counts, "households_cnt");
-                            int officers = Rows.intVal(counts, "officers_cnt");
-                            int users = Rows.intVal(counts, "users_cnt");
-                            if (households > 0 || officers > 0 || users > 0) {
-                                StringBuilder blockers = new StringBuilder();
-                                if (households > 0) blockers.append(households).append(" active household(s)");
-                                if (officers > 0) blockers.append(blockers.length() > 0 ? ", " : "").append(officers).append(" active field officer(s)");
-                                if (users > 0) blockers.append(blockers.length() > 0 ? ", " : "").append(users).append(" active user(s)");
-                                return Future.<io.vertx.sqlclient.RowSet<Row>>failedFuture("Cannot delete this organisation: it still has "
-                                        + blockers + ". Deactivate or reassign them first.");
-                            }
-                            return connection.preparedQuery("DELETE FROM organisation_modules WHERE organization_code=@p1")
-                                    .execute(Tuple.of(partnerId))
-                                    .compose(v -> connection.preparedQuery("DELETE FROM organizations WHERE organization_code=@p1")
-                                            .execute(Tuple.of(partnerId)));
-                        }))
-                .onFailure(err -> replyError(message, err.getMessage() != null && !err.getMessage().startsWith("com.")
-                        ? err.getMessage() : "Failed to delete organisation"))
-                .onSuccess(rows -> reply(message, new JsonObject().put("responseCode", "000")
-                        .put("responseMessage", "Organisation permanently deleted")));
     }
 
     // ---- TOGGLE_ORGANIZATION_STATUS (anchor only, activate/deactivate) ----------

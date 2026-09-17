@@ -131,8 +131,44 @@ public class SyncManager {
         }
     }
 
+    private static final String REDEEM_FAILURE_PREFIX = "REDEEM_VOUCHER failed:";
+
+    private int newlyFailedRedemptions;
+
+    /** How many queued redemptions the server explicitly rejected during the most recent
+     *  {@link #syncAll()} pass -- as opposed to {@link com.biopay.agent.data.VoucherDao#listFailedRedemptions()},
+     *  which is every rejection ever recorded. Callers use this to notify only once per new
+     *  rejection instead of re-alerting on every later sync pass. */
+    public int getNewlyFailedRedemptionCount() {
+        return newlyFailedRedemptions;
+    }
+
     private boolean syncVoucherRedemptions() {
-        boolean ok=true;for(VoucherDao.Voucher v:voucherDao.listPendingRedemptions())try{Map<String,Object> p=new HashMap<>();p.put("voucherCode",v.code);p.put("matchedFingerprint",v.matchedFingerprintUuid);p.put("latitude",v.latitude);p.put("longitude",v.longitude);ApiClient.get(context).dispatchSync("REDEEM_VOUCHER",p);voucherDao.markRedemptionSynced(v.code);}catch(Exception ex){Log.w(TAG,"Voucher redemption sync failed for "+v.code+": "+ex.getMessage());ok=false;}return ok;
+        boolean ok=true;
+        newlyFailedRedemptions=0;
+        for(VoucherDao.Voucher v:voucherDao.listPendingRedemptions()){
+            try{
+                Map<String,Object> p=new HashMap<>();p.put("voucherCode",v.code);p.put("matchedFingerprint",v.matchedFingerprintUuid);p.put("latitude",v.latitude);p.put("longitude",v.longitude);
+                ApiClient.get(context).dispatchSync("REDEEM_VOUCHER",p);
+                voucherDao.markRedemptionSynced(v.code);
+            }catch(Exception ex){
+                String message=ex.getMessage();
+                // ApiClient#dispatchSync throws with exactly this prefix only when the server
+                // actually processed the request and rejected it (e.g. the voucher was
+                // voided/expired/already redeemed by the time this device caught up) -- every
+                // other exception here is a connectivity failure and must stay PENDING so the
+                // next sync pass retries it, not get treated as a final rejection.
+                if(message!=null && message.startsWith(REDEEM_FAILURE_PREFIX)){
+                    voucherDao.markRedemptionFailed(v.code,message.substring(REDEEM_FAILURE_PREFIX.length()).trim());
+                    newlyFailedRedemptions++;
+                    Log.w(TAG,"Voucher redemption rejected by server for "+v.code+": "+message);
+                }else{
+                    Log.w(TAG,"Voucher redemption sync failed for "+v.code+": "+message);
+                    ok=false;
+                }
+            }
+        }
+        return ok;
     }
 
     /**
