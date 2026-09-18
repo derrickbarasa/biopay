@@ -144,6 +144,7 @@ export type ProcessingCode =
   | 'DISBURSE_PAYROLL'
   | 'GET_PAYROLL'
   | 'GET_PAYROLLS'
+  | 'SET_PAYMENT_APPROVAL_POLICY'
   // payments
   | 'GET_PAYMENTS'
   | 'GET_PAYMENT'

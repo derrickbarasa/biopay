@@ -12,26 +12,33 @@ import io.vertx.sqlclient.Row;
 import io.vertx.sqlclient.Tuple;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import com.biopay.databases.Datasource;
+import com.biopay.utilities.EligibleApprovers;
 import com.biopay.utilities.Logging;
+import com.biopay.utilities.PaymentCycleApprovals;
 import com.biopay.utilities.Rows;
 import com.biopay.utilities.TenantScope;
 import com.biopay.utilities.Utilities;
 
 /**
- * Payroll cycles: generate (maker) -> approve (checker, anchor-only per the
- * frontend spec's "approve/disburse buttons (anchor only)") -> disburse.
- * Both generation and approval require a fresh EMAIL OTP (see
- * {@link OtpService}).
+ * Payroll cycles: generate (maker, anyone with ACCESS_PAYMENT_CYCLES -- an organisation's own
+ * user, or an anchor generating on that organisation's behalf) -> approve (checker) -> disburse.
+ * The organisation is always the approving and disbursing authority for its own cycles -- the
+ * anchor never approves or disburses, even for a cycle it generated itself. {@link #approve},
+ * {@link #reject} and {@link #disburse} are gated on both {@link TenantScope#isOrganisationAdministrator}
+ * (organisation scope) and the dedicated {@code CHECK_PAYMENT_CYCLES} permission (see
+ * PermissionPolicy.java) -- deliberately separate from the general {@code ACCESS_PAYMENT_CYCLES}
+ * a maker only needs, so an organisation can grant "generate/view" to some users and
+ * "approve/disburse" to a distinct, smaller set. Both generation and approval require a fresh
+ * EMAIL OTP (see {@link OtpService}).
  *
- * <p>The maker-checker separation only applies when the maker is <em>not</em>
- * the ultimate approving authority for that organisation: a System Admin
- * generating on an organisation's behalf still needs that organisation's own
- * Anchor Administrator to approve it. But when an Anchor Administrator
- * generates a cycle for an organisation under their own anchor, they already
- * are that approving authority -- see {@link #generate}, which skips
- * PENDING_APPROVAL and inserts the cycle already APPROVED (self-checked) for
- * that case, rather than making them approve their own cycle a second time.
+ * <p>An organisation may require more than one of its own approvers to sign off on a cycle --
+ * {@code required_approvals}, its own policy (set only by itself, see
+ * {@link com.biopay.services.Organization#setApprovalPolicy}), is snapshotted onto the cycle at
+ * generation time and enforced by {@link com.biopay.utilities.PaymentCycleApprovals}, shared with
+ * the email-link approval path in {@link Approval#confirmRequest}. Any organisation user with
+ * the approval permission, including the cycle's maker, may contribute an approval.
  */
 public class Payroll extends AbstractVerticle {
 
@@ -40,6 +47,19 @@ public class Payroll extends AbstractVerticle {
     EventBus eventBus;
     MSSQLPool pool;
     OtpService otpService;
+
+    private static final String APPROVALS_RECORDED_SUBQUERY =
+            "(SELECT COUNT(*) FROM payment_cycle_approvals pca WHERE pca.payment_cycle_id=payment_cycles.id) AS approvals_recorded";
+
+    /** The most approvals a cycle could ever collect: its organisation's own active users who
+     *  hold CHECK_PAYMENT_CYCLES. If this ever falls below required_approvals, the cycle can never clear approval no matter how
+     *  long it waits -- see #generate's own warning at creation time. */
+    private static final String ELIGIBLE_APPROVERS_SUBQUERY =
+            "(SELECT COUNT(DISTINCT u.id) FROM users u "
+                    + "JOIN role_permissions rp ON rp.role_id=u.role_id AND rp.status=1 "
+                    + "JOIN permissions p ON p.id=rp.permission_id AND p.permission_name='CHECK_PAYMENT_CYCLES' "
+                    + "WHERE u.active=1 AND u.status=1 AND u.user_scope='ORGANISATION' "
+                    + "AND u.organization_code=payment_cycles.organization_code) AS eligible_approvers";
 
     @Override
     public void start(Promise<Void> startPromise) throws Exception {
@@ -90,24 +110,34 @@ public class Payroll extends AbstractVerticle {
     private void requestOtp(Message<Object> message) {
         JsonObject payload = new JsonObject(message.body().toString());
         String action = payload.getString("action", "").trim().toUpperCase(); // GENERATE | APPROVE
-        String email = payload.getString("actorEmail", payload.getString("email", "")).trim();
         String referenceCode = payload.getString("cycleCode", "");
 
         if (!"GENERATE".equals(action) && !"APPROVE".equals(action)) {
             replyError(message, "action must be GENERATE or APPROVE");
             return;
         }
-        if (email.isEmpty()) {
-            replyError(message, "actorEmail is required to send the verification code");
-            return;
-        }
-
         String referenceType = "APPROVE".equals(action) ? "PAYROLL_APPROVE" : "PAYROLL_GENERATE";
-        otpService.request(referenceType, referenceCode, actorId(payload), payload.getString("actorRole", ""), email)
+        // Do not trust an email supplied by the browser: every OTP must go to the signed-in
+        // user's own account email. This ensures each approver receives their own code.
+        pool.preparedQuery("SELECT email FROM users WHERE id=@p1 AND active=1 AND status=1")
+                .execute(Tuple.of(actorId(payload)))
                 .onFailure(err -> onDbError(message, err))
-                .onSuccess(v -> reply(message, new JsonObject()
-                        .put("responseCode", "000")
-                        .put("responseMessage", "Verification code sent to " + email)));
+                .onSuccess(rows -> {
+                    if (rows.size() == 0) {
+                        replyError(message, "Your active account email could not be found");
+                        return;
+                    }
+                    String email = Rows.str(rows.iterator().next(), "email");
+                    if (email == null || email.trim().isEmpty()) {
+                        replyError(message, "Your account needs an email address before a verification code can be sent");
+                        return;
+                    }
+                    otpService.request(referenceType, referenceCode, actorId(payload), payload.getString("actorRole", ""), email.trim())
+                            .onFailure(err -> onDbError(message, err))
+                            .onSuccess(v -> reply(message, new JsonObject()
+                                    .put("responseCode", "000")
+                                    .put("responseMessage", "Verification code sent to your account email")));
+                });
     }
 
     // ---- GENERATE_PAYROLL (maker) --------------------------------------------------
@@ -180,9 +210,9 @@ public class Payroll extends AbstractVerticle {
                         replyError(message, "Invalid or expired verification code");
                         return;
                     }
-                    resolveOrgAnchorId(payload, partnerCode)
+                    resolveOrgPolicy(payload, partnerCode)
                             .onFailure(err -> replyError(message, err.getMessage()))
-                            .onSuccess(resolvedAnchorId -> countActiveHouseholds(partnerCode, householdNumbers)
+                            .onSuccess(orgPolicy -> countActiveHouseholds(partnerCode, householdNumbers)
                             .onFailure(err -> onDbError(message, err))
                             .onSuccess(householdCount -> {
                                 if (householdCount != beneficiaries.size()) {
@@ -199,42 +229,33 @@ public class Payroll extends AbstractVerticle {
                                         ? firstRate : null;
                                 String cycleCode = Utilities.generateCode("PAYROLL");
 
-                                // An Anchor Administrator generating for one of their own organisations
-                                // already IS the approving authority -- see the class javadoc. Skip
-                                // PENDING_APPROVAL and self-check it at creation instead of forcing a
-                                // second approval step (and tripping the maker-cannot-also-approve
-                                // guard in #approve) for a role that can only ever approve its own work
-                                // anyway. A System Admin making it on an organisation's behalf still
-                                // leaves it PENDING_APPROVAL for that organisation's own anchor.
-                                boolean autoApprove = TenantScope.isAnchorAdministrator(payload);
-                                String checkerColumns = autoApprove ? "checker_id, checker_at, " : "";
-                                String checkerValues = autoApprove ? "@p12, GETDATE(), " : "";
-                                String cycleStatus = autoApprove ? "APPROVED" : "PENDING_APPROVAL";
+                                // Every cycle starts PENDING_APPROVAL and is decided by the organisation's
+                                // own approvers -- see the class javadoc. This is true even when an Anchor
+                                // Administrator generates it on an organisation's behalf: the anchor is
+                                // never the approving authority for a payment cycle. requiredApprovals is
+                                // the organisation's own policy (Organization#setApprovalPolicy), snapshotted
+                                // here so a later policy change never retroactively changes how many
+                                // approvals an already-pending cycle needs.
+                                int requiredApprovals = orgPolicy.requiredApprovals();
 
                                 // Cycle header + its payment line items must land together --
                                 // a mid-way failure here must not leave a cycle with zero (or
                                 // partial) line items sitting in PENDING_APPROVAL.
                                 pool.withTransaction(client -> {
                                     String sql = "INSERT INTO payment_cycles (cycle_code, organization_code, anchor_id, period_start, period_end, "
-                                            + "amount_per_household, household_count, total_amount, total_amount_lcy, currency, exchange_rate, status, maker_id, maker_at, "
-                                            + checkerColumns + "otp_verified, created_by, created_at) "
+                                            + "amount_per_household, household_count, total_amount, total_amount_lcy, currency, exchange_rate, status, "
+                                            + "required_approvals, maker_id, maker_at, otp_verified, created_by, created_at) "
                                             + "OUTPUT INSERTED.id "
-                                            + "VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,'" + cycleStatus + "',@p12,GETDATE(),"
-                                            + checkerValues + "1,@p13,GETDATE())";
+                                            + "VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,'PENDING_APPROVAL',"
+                                            + "@p12,@p13,GETDATE(),1,@p14,GETDATE())";
                                     return client.preparedQuery(sql)
-                                            .execute(Tuple.of(cycleCode, partnerCode, resolvedAnchorId,
+                                            .execute(Tuple.of(cycleCode, partnerCode, orgPolicy.anchorId(),
                                                     periodStart, periodEnd, amountPerHousehold, householdCount, total, totalLcy, currency, cycleExchangeRate,
-                                                    actorId(payload), String.valueOf(actorId(payload))))
+                                                    requiredApprovals, actorId(payload), String.valueOf(actorId(payload))))
                                             .compose(insertRows -> {
                                                 int cycleId = Rows.intVal(insertRows.iterator().next(), "id");
-                                                return createLineItems(client, cycleId, cycleCode, partnerCode, resolvedAnchorId,
-                                                        periodStart, periodEnd, currency, actorId(payload), beneficiaries)
-                                                        .compose(lineCount -> autoApprove
-                                                                ? client.preparedQuery("UPDATE payments SET approved=1, approved_by=@p1, approved_at=GETDATE() "
-                                                                                + "WHERE payment_cycle_id=@p2 AND rejected=0")
-                                                                        .execute(Tuple.of(actorId(payload), cycleId))
-                                                                        .map(u -> lineCount)
-                                                                : Future.succeededFuture(lineCount));
+                                                return createLineItems(client, cycleId, cycleCode, partnerCode, orgPolicy.anchorId(),
+                                                        periodStart, periodEnd, currency, actorId(payload), beneficiaries);
                                             });
                                 }).onFailure(err -> onDbError(message, err))
                                   .onSuccess(lineCount -> {
@@ -247,15 +268,12 @@ public class Payroll extends AbstractVerticle {
                                               .put("currency", currency)
                                               .put("exchangeRate", cycleExchangeRate)
                                               .put("variableAmounts", amountPerHousehold == null)
-                                              .put("autoApproved", autoApprove);
-                                      if (autoApprove) {
-                                          reply(message, response.put("responseMessage", "Payroll cycle generated and approved"));
-                                          return;
-                                      }
+                                              .put("requiredApprovals", requiredApprovals);
                                       JsonObject approvalRequest = new JsonObject()
                                               .put("requestType", "PAYROLL")
                                               .put("referenceCode", cycleCode)
-                                              .put("anchorId", resolvedAnchorId)
+                                              .put("anchorId", orgPolicy.anchorId())
+                                              .put("organisationCode", partnerCode)
                                               .put("makerId", actorId(payload))
                                               .put("title", "Payment cycle approval")
                                               .put("summary", householdCount + " households · " + currency + " "
@@ -263,11 +281,27 @@ public class Payroll extends AbstractVerticle {
                                       eventBus.<Object>request("CREATE_APPROVAL_REQUEST", approvalRequest).onComplete(notification -> {
                                           int recipientCount = approvalRecipientCount(notification.succeeded() ? notification.result().body() : null);
                                           response.put("approvalRecipientCount", recipientCount)
-                                                  .put("approvalEmailSent", recipientCount > 0)
-                                                  .put("responseMessage", recipientCount > 0
-                                                          ? "Payroll cycle generated; the approver has been emailed"
-                                                          : "Payroll cycle generated and pending approval");
-                                          reply(message, response);
+                                                  .put("approvalEmailSent", recipientCount > 0);
+                                          // Warn -- never block -- when the organisation does not currently
+                                          // have enough eligible people to reach this cycle's threshold.
+                                          EligibleApprovers.count(pool, partnerCode, null)
+                                                  .onComplete(eligibleResult -> {
+                                                      int eligible = eligibleResult.succeeded() ? eligibleResult.result() : requiredApprovals;
+                                                      boolean insufficientApprovers = eligible < requiredApprovals;
+                                                      response.put("eligibleApprovers", eligible)
+                                                              .put("insufficientApprovers", insufficientApprovers);
+                                                      if (insufficientApprovers) {
+                                                          response.put("responseMessage", "Payroll cycle generated, but only " + eligible
+                                                                  + " of your organisation's other users can approve it -- this cycle needs "
+                                                                  + requiredApprovals + " and may get stuck until more people are granted "
+                                                                  + "payment-cycle access.");
+                                                      } else {
+                                                          response.put("responseMessage", recipientCount > 0
+                                                                  ? "Payroll cycle generated; the approver has been emailed"
+                                                                  : "Payroll cycle generated and pending approval");
+                                                      }
+                                                      reply(message, response);
+                                                  });
                                       });
                                   });
                             }));
@@ -288,17 +322,27 @@ public class Payroll extends AbstractVerticle {
         }
     }
 
-    /** Resolves organisationCode's real anchor server-side rather than trusting whatever
-     *  anchorId the client sent -- fails if the organisation doesn't exist or (for an Anchor
-     *  Administrator) isn't inside their own anchor. The Super Admin may target any anchor. */
+    /** Resolves organisationCode's real anchor and its own payment-cycle approval policy
+     *  server-side rather than trusting whatever the client sent -- fails if the organisation
+     *  doesn't exist or (for an Anchor Administrator) isn't inside their own anchor. The Super
+     *  Admin may target any anchor. */
     private static final String ORG_OUTSIDE_ANCHOR = "Organisation is outside your anchor";
 
-    private Future<Integer> resolveOrgAnchorId(JsonObject payload, String organisationCode) {
-        return pool.preparedQuery("SELECT anchor_id FROM organizations WHERE organization_code=@p1 AND (@p2=1 OR anchor_id=@p3)")
+    private record OrgPolicy(Integer anchorId, int requiredApprovals) {}
+
+    private Future<OrgPolicy> resolveOrgPolicy(JsonObject payload, String organisationCode) {
+        return pool.preparedQuery("SELECT anchor_id, required_approvals FROM organizations "
+                        + "WHERE organization_code=@p1 AND (@p2=1 OR anchor_id=@p3)")
                 .execute(Tuple.of(organisationCode, isSystemAdmin(payload), TenantScope.anchorId(payload)))
-                .compose(rows -> rows.size() == 0
-                        ? Future.<Integer>failedFuture(ORG_OUTSIDE_ANCHOR)
-                        : Future.succeededFuture(Rows.intVal(rows.iterator().next(), "anchor_id")))
+                .compose(rows -> {
+                    if (rows.size() == 0) {
+                        return Future.<OrgPolicy>failedFuture(ORG_OUTSIDE_ANCHOR);
+                    }
+                    Row org = rows.iterator().next();
+                    Integer required = Rows.intVal(org, "required_approvals");
+                    return Future.succeededFuture(new OrgPolicy(Rows.intVal(org, "anchor_id"),
+                            required == null ? 1 : required));
+                })
                 // A DB-level failure here (timeout, connection drop, ...) must not reach the
                 // client as raw driver text the way the deliberate ORG_OUTSIDE_ANCHOR message does.
                 .recover(err -> ORG_OUTSIDE_ANCHOR.equals(err.getMessage())
@@ -360,12 +404,26 @@ public class Payroll extends AbstractVerticle {
                 .map(rows -> beneficiaries.size());
     }
 
-    // ---- APPROVE_PAYROLL (checker, anchor only) ------------------------------------
+    // ---- APPROVE_PAYROLL (checker -- the organisation's own approvers only) --------
+
+    /** Business errors from the approval path that are safe to show the caller verbatim,
+     *  as opposed to a raw DB failure that must be logged and masked (see #onApprovalFailure). */
+    private static final Set<String> KNOWN_APPROVAL_ERRORS = Set.of(
+            "Only a cycle pending approval can be approved",
+            "You have already approved this payment cycle");
+
+    private void onApprovalFailure(Message<Object> message, Throwable err) {
+        if (KNOWN_APPROVAL_ERRORS.contains(err.getMessage())) {
+            replyError(message, err.getMessage());
+        } else {
+            onDbError(message, err);
+        }
+    }
 
     private void approve(Message<Object> message) {
         JsonObject payload = new JsonObject(message.body().toString());
-        if (!isAnchor(payload)) {
-            replyError(message, "Only an anchor administrator can approve payroll");
+        if (!TenantScope.isOrganisationAdministrator(payload)) {
+            replyError(message, "Only the organisation can approve its own payment cycles");
             return;
         }
         String cycleCode = payload.getString("cycleCode", "").trim();
@@ -375,8 +433,9 @@ public class Payroll extends AbstractVerticle {
             return;
         }
 
-        pool.preparedQuery("SELECT * FROM payment_cycles WHERE cycle_code=@p1 AND (@p2=1 OR anchor_id=@p3)")
-                .execute(Tuple.of(cycleCode, isSystemAdmin(payload), TenantScope.anchorId(payload)))
+        pool.preparedQuery("SELECT id, status, required_approvals FROM payment_cycles "
+                        + "WHERE cycle_code=@p1 AND organization_code=@p2")
+                .execute(Tuple.of(cycleCode, payload.getString("partnerCode", "")))
                 .onFailure(err -> onDbError(message, err))
                 .onSuccess(rows -> {
                     if (rows.size() == 0) {
@@ -388,11 +447,9 @@ public class Payroll extends AbstractVerticle {
                         replyError(message, "Only a cycle pending approval can be approved");
                         return;
                     }
-                    Integer makerId = Rows.intVal(r, "maker_id");
-                    if (makerId != null && makerId == actorId(payload)) {
-                        replyError(message, "The maker of a payroll cycle cannot also approve it");
-                        return;
-                    }
+                    int cycleId = Rows.intVal(r, "id");
+                    Integer requiredVal = Rows.intVal(r, "required_approvals");
+                    int required = requiredVal == null ? 1 : requiredVal;
 
                     otpService.verify("PAYROLL_APPROVE", cycleCode, actorId(payload), otpCode)
                             .onFailure(err -> onDbError(message, err))
@@ -401,37 +458,41 @@ public class Payroll extends AbstractVerticle {
                                     replyError(message, "Invalid or expired verification code");
                                     return;
                                 }
-                                pool.preparedQuery("UPDATE payment_cycles SET status='APPROVED', checker_id=@p1, checker_at=GETDATE(), "
-                                                + "updated_at=GETDATE() WHERE cycle_code=@p2")
-                                        .execute(Tuple.of(actorId(payload), cycleCode))
-                                        .compose(u -> pool.preparedQuery(
-                                                        "UPDATE payments SET approved=1, approved_by=@p1, approved_at=GETDATE() "
-                                                                + "WHERE payment_cycle_id=@p2 AND rejected=0")
-                                                .execute(Tuple.of(actorId(payload), Rows.intVal(r, "id"))))
-                                        .onFailure(err -> onDbError(message, err))
-                                        .onSuccess(u -> reply(message, new JsonObject()
+                                pool.withTransaction(connection -> connection.preparedQuery(
+                                                "SELECT 1 FROM payment_cycles WITH (UPDLOCK, ROWLOCK) WHERE id=@p1 AND status='PENDING_APPROVAL'")
+                                        .execute(Tuple.of(cycleId))
+                                        .compose(lockRows -> lockRows.size() == 0
+                                                ? Future.<PaymentCycleApprovals.Outcome>failedFuture("Only a cycle pending approval can be approved")
+                                                : PaymentCycleApprovals.recordApproval(connection, cycleId, required, actorId(payload))))
+                                        .onFailure(err -> onApprovalFailure(message, err))
+                                        .onSuccess(outcome -> reply(message, new JsonObject()
                                                 .put("responseCode", "000")
-                                                .put("responseMessage", "Payroll cycle approved")));
+                                                .put("responseMessage", outcome.approved
+                                                        ? "Payroll cycle approved"
+                                                        : outcome.approvalCount + " of " + outcome.requiredApprovals + " approvals recorded")
+                                                .put("approvalsRecorded", outcome.approvalCount)
+                                                .put("approvalsRequired", outcome.requiredApprovals)
+                                                .put("fullyApproved", outcome.approved)));
                             });
                 });
     }
 
-    // ---- REJECT_PAYROLL (checker, anchor only) -------------------------------------
+    // ---- REJECT_PAYROLL (checker -- the organisation's own approvers only) ---------
 
     private void reject(Message<Object> message) {
         JsonObject payload = new JsonObject(message.body().toString());
-        if (!isAnchor(payload)) {
-            replyError(message, "Only an anchor administrator can reject payroll");
+        if (!TenantScope.isOrganisationAdministrator(payload)) {
+            replyError(message, "Only the organisation can reject its own payment cycles");
             return;
         }
         String cycleCode = payload.getString("cycleCode", "").trim();
         String reason = payload.getString("reason", "").trim();
 
-        Tuple params = Tuple.of(actorId(payload), reason, cycleCode, isSystemAdmin(payload), TenantScope.anchorId(payload));
+        Tuple params = Tuple.of(actorId(payload), reason, cycleCode, payload.getString("partnerCode", ""));
         pool.withTransaction(connection -> connection.preparedQuery(
                         "UPDATE payment_cycles SET status='REJECTED', checker_id=@p1, checker_at=GETDATE(), "
                                 + "rejection_reason=@p2, updated_at=GETDATE() WHERE cycle_code=@p3 "
-                                + "AND status='PENDING_APPROVAL' AND (@p4=1 OR anchor_id=@p5)")
+                                + "AND status='PENDING_APPROVAL' AND organization_code=@p4")
                 .execute(params)
                 .compose(rows -> {
                     if (rows.rowCount() == 0) {
@@ -458,8 +519,8 @@ public class Payroll extends AbstractVerticle {
                         .put("responseMessage", "Payroll cycle rejected")));
     }
 
-    // ---- REJECT_PAYROLL_ITEMS (the cycle's own maker, or any anchor-admin checker;
-    //      pending-approval cycles only) ----------------------------------------------
+    // ---- REJECT_PAYROLL_ITEMS (the cycle's own maker, or any of the organisation's own
+    //      checkers; pending-approval cycles only) --------------------------------------
 
     private void rejectItems(Message<Object> message) {
         JsonObject payload = new JsonObject(message.body().toString());
@@ -476,10 +537,9 @@ public class Payroll extends AbstractVerticle {
             return;
         }
 
-        pool.preparedQuery("SELECT id, maker_id FROM payment_cycles WHERE cycle_code=@p1 AND status='PENDING_APPROVAL' "
-                        + "AND (@p2=1 OR (@p3=1 AND anchor_id=@p4) OR organization_code=@p5)")
-                .execute(Tuple.of(cycleCode, isSystemAdmin(payload), TenantScope.isAnchorAdministrator(payload),
-                        TenantScope.anchorId(payload), payload.getString("partnerCode", "")))
+        pool.preparedQuery("SELECT id, maker_id, organization_code FROM payment_cycles WHERE cycle_code=@p1 AND status='PENDING_APPROVAL' "
+                        + "AND (@p2=1 OR organization_code=@p3 OR maker_id=@p4)")
+                .execute(Tuple.of(cycleCode, isSystemAdmin(payload), payload.getString("partnerCode", ""), actorId(payload)))
                 .onFailure(err -> onDbError(message, err))
                 .onSuccess(rows -> {
                     if (rows.size() == 0) {
@@ -487,13 +547,17 @@ public class Payroll extends AbstractVerticle {
                         return;
                     }
                     Row cycleRow = rows.iterator().next();
-                    // Either the checker (any anchor admin) or the cycle's own maker/generator can
-                    // reject line items pre-approval -- the maker picks who's in a cycle up front,
-                    // then can still trim it down before it goes to approval.
+                    // Either a checker from the cycle's own organisation, or the cycle's own
+                    // maker/generator (who may belong to the anchor that generated it on the
+                    // organisation's behalf), can reject line items pre-approval -- the maker
+                    // picks who's in a cycle up front, then can still trim it down before it
+                    // goes to approval.
                     Integer makerId = Rows.intVal(cycleRow, "maker_id");
                     boolean isMaker = makerId != null && makerId == actorId(payload);
-                    if (!isAnchor(payload) && !isMaker) {
-                        replyError(message, "Only the cycle's generator or an anchor administrator can reject payroll line items");
+                    boolean isOrgChecker = TenantScope.isOrganisationAdministrator(payload)
+                            && Rows.str(cycleRow, "organization_code").equals(payload.getString("partnerCode", ""));
+                    if (!isSystemAdmin(payload) && !isOrgChecker && !isMaker) {
+                        replyError(message, "Only the cycle's generator or the organisation can reject payroll line items");
                         return;
                     }
                     int cycleId = Rows.intVal(cycleRow, "id");
@@ -514,18 +578,18 @@ public class Payroll extends AbstractVerticle {
                 });
     }
 
-    // ---- DISBURSE_PAYROLL (anchor only) --------------------------------------------
+    // ---- DISBURSE_PAYROLL (the organisation's own administrator only) --------------
 
     private void disburse(Message<Object> message) {
         JsonObject payload = new JsonObject(message.body().toString());
-        if (!isAnchor(payload)) {
-            replyError(message, "Only an anchor administrator can disburse payroll");
+        if (!TenantScope.isOrganisationAdministrator(payload)) {
+            replyError(message, "Only the organisation can disburse its own payment cycles");
             return;
         }
         String cycleCode = payload.getString("cycleCode", "").trim();
 
-        pool.preparedQuery("SELECT id FROM payment_cycles WHERE cycle_code=@p1 AND status='APPROVED' AND (@p2=1 OR anchor_id=@p3)")
-                .execute(Tuple.of(cycleCode, isSystemAdmin(payload), TenantScope.anchorId(payload)))
+        pool.preparedQuery("SELECT id FROM payment_cycles WHERE cycle_code=@p1 AND status='APPROVED' AND organization_code=@p2")
+                .execute(Tuple.of(cycleCode, payload.getString("partnerCode", "")))
                 .onFailure(err -> onDbError(message, err))
                 .onSuccess(rows -> {
                     if (rows.size() == 0) {
@@ -554,7 +618,8 @@ public class Payroll extends AbstractVerticle {
         String cycleCode = payload.getString("cycleCode", "").trim();
         String scopeClause = isAnchor(payload) ? " AND (@p2=1 OR anchor_id=@p3)" : " AND organization_code=@p2";
 
-        pool.preparedQuery("SELECT * FROM payment_cycles WHERE cycle_code=@p1" + scopeClause)
+        pool.preparedQuery("SELECT *, " + APPROVALS_RECORDED_SUBQUERY + ", " + ELIGIBLE_APPROVERS_SUBQUERY
+                        + " FROM payment_cycles WHERE cycle_code=@p1" + scopeClause)
                 .execute(isAnchor(payload) ? Tuple.of(cycleCode, isSystemAdmin(payload), TenantScope.anchorId(payload)) : Tuple.of(cycleCode, payload.getString("partnerCode", "")))
                 .onFailure(err -> onDbError(message, err))
                 .onSuccess(rows -> {
@@ -594,7 +659,8 @@ public class Payroll extends AbstractVerticle {
         // scoped to it with no join needed. @p4 is NULL for a system admin with no target
         // anchor chosen (browse everything), the requested target anchor once chosen, or
         // the caller's own anchor for an anchor admin.
-        String sql = "SELECT * FROM payment_cycles WHERE (@p1 IS NULL OR organization_code=@p1) AND (@p2 IS NULL OR status=@p2) "
+        String sql = "SELECT *, " + APPROVALS_RECORDED_SUBQUERY + ", " + ELIGIBLE_APPROVERS_SUBQUERY
+                + " FROM payment_cycles WHERE (@p1 IS NULL OR organization_code=@p1) AND (@p2 IS NULL OR status=@p2) "
                 + "AND (@p4 IS NULL OR anchor_id=@p4) ORDER BY created_at DESC";
         String partnerCode = isAnchor(payload) ? payload.getString("organisationCode", null) : payload.getString("partnerCode", "");
 
@@ -640,7 +706,12 @@ public class Payroll extends AbstractVerticle {
                 .put("checkerAt", Rows.str(r, "checker_at"))
                 .put("rejectionReason", Rows.str(r, "rejection_reason"))
                 .put("disbursedAt", Rows.str(r, "disbursed_at"))
-                .put("createdAt", Rows.str(r, "created_at"));
+                .put("createdAt", Rows.str(r, "created_at"))
+                // required_approvals/approvals_recorded arrive with migration 060; guard the
+                // read the same way as the migration-021 columns above.
+                .put("requiredApprovals", intSafe(r, "required_approvals") == null ? 1 : intSafe(r, "required_approvals"))
+                .put("approvalsRecorded", intSafe(r, "approvals_recorded") == null ? 0 : intSafe(r, "approvals_recorded"))
+                .put("eligibleApprovers", intSafe(r, "eligible_approvers"));
     }
 
     private static JsonObject paymentSummary(Row r) {

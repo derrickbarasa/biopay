@@ -27,6 +27,9 @@ interface Cycle {
   checkerAt?: string
   disbursedAt?: string
   createdAt?: string
+  requiredApprovals?: number
+  approvalsRecorded?: number
+  eligibleApprovers?: number
 }
 
 interface PaymentLine {
@@ -176,8 +179,8 @@ async function sendApproveOtp() {
   if (!approveTarget.value) return
   sendingApproveOtp.value = true
   try {
-    await dispatch('REQUEST_PAYROLL_OTP', { action: 'APPROVE', cycleCode: approveTarget.value.cycleCode, actorEmail: auth.user?.email })
-    toast.success('Verification code sent to ' + auth.user?.email)
+    await dispatch('REQUEST_PAYROLL_OTP', { action: 'APPROVE', cycleCode: approveTarget.value.cycleCode })
+    toast.success('Verification code sent to your account email')
   } catch (err) {
     toast.error(err instanceof Error ? err.message : 'Failed to send code')
   } finally {
@@ -196,8 +199,12 @@ async function confirmApprove() {
         reason: approveRejectReason.value,
       })
     }
-    await dispatch('APPROVE_PAYROLL', { cycleCode: approveTarget.value.cycleCode, otpCode: approveOtp.value })
-    toast.success('Payroll cycle approved')
+    const result = await dispatch<{ fullyApproved?: boolean; approvalsRecorded?: number; approvalsRequired?: number }>(
+      'APPROVE_PAYROLL', { cycleCode: approveTarget.value.cycleCode, otpCode: approveOtp.value },
+    )
+    toast.success(result.fullyApproved === false
+      ? `Approval recorded (${result.approvalsRecorded} of ${result.approvalsRequired})`
+      : 'Payroll cycle approved')
     approveDialog.value = false
     await load()
   } catch (err) {
@@ -210,6 +217,26 @@ async function confirmApprove() {
 // The cycle's own maker can reject individual households any time before a checker approves it.
 function isMakerOf(cycle: Cycle) {
   return !!auth.user?.id && cycle.makerId === auth.user.id
+}
+
+// Payment cycles are approved and disbursed by the organisation itself, never the anchor.
+// Any organisation user with the approval permission can approve, including the maker.
+function isApproverEligible(cycle: Cycle) {
+  return auth.isOrganisation && auth.can('CHECK_PAYMENT_CYCLES')
+}
+
+function approvalsLabel(cycle: Cycle) {
+  const required = cycle.requiredApprovals ?? 1
+  if (required <= 1) return null
+  return `${cycle.approvalsRecorded ?? 0} of ${required} approved`
+}
+
+// If eligible approvers are below the threshold, someone needs the approval permission or the
+// policy needs changing for future cycles.
+function isStuck(cycle: Cycle) {
+  return cycle.status === 'PENDING_APPROVAL'
+    && cycle.eligibleApprovers !== undefined
+    && cycle.eligibleApprovers < (cycle.requiredApprovals ?? 1)
 }
 
 async function saveRejections() {
@@ -332,6 +359,16 @@ function openView(cycle: Cycle) {
             </template>
           </v-tooltip>
           <v-chip v-else size="small" :color="statusColor[item.status] ?? 'grey'" variant="tonal">{{ item.status }}</v-chip>
+          <div v-if="item.status === 'PENDING_APPROVAL' && approvalsLabel(item)" class="approvals-note">{{ approvalsLabel(item) }}</div>
+          <v-tooltip
+            v-if="isStuck(item)"
+            text="This cycle needs more approvals than the organisation currently has eligible approvers for. Grant the payment-cycle approval permission to another user, or lower the required-approvals policy for future cycles."
+            location="top"
+          >
+            <template #activator="{ props: tip }">
+              <v-chip v-bind="tip" size="small" color="error" variant="tonal" prepend-icon="mdi-alert-outline" class="mt-1">Stuck</v-chip>
+            </template>
+          </v-tooltip>
         </template>
         <!-- Icon-only actions (tooltip-labeled) keep this cell from overflowing at up to four buttons wide. -->
         <template #item.actions="{ item }">
@@ -341,7 +378,7 @@ function openView(cycle: Cycle) {
                 <v-btn v-bind="tip" icon="mdi-eye-outline" variant="text" density="comfortable" size="small" :aria-label="`View ${item.cycleCode}`" @click="openView(item)" />
               </template>
             </v-tooltip>
-            <template v-if="auth.isAnchor && item.status === 'PENDING_APPROVAL' && auth.can('ACCESS_PAYMENT_CYCLES')">
+            <template v-if="isApproverEligible(item) && item.status === 'PENDING_APPROVAL'">
               <v-tooltip text="Approve" location="top">
                 <template #activator="{ props: tip }">
                   <v-btn v-bind="tip" icon="mdi-check-circle-outline" variant="tonal" color="success" density="comfortable" size="small" :aria-label="`Approve ${item.cycleCode}`" @click="openApprove(item)" />
@@ -353,12 +390,12 @@ function openView(cycle: Cycle) {
                 </template>
               </v-tooltip>
             </template>
-            <v-tooltip v-if="!auth.isAnchor && item.status === 'PENDING_APPROVAL' && isMakerOf(item)" text="Review" location="top">
+            <v-tooltip v-if="isMakerOf(item) && !isApproverEligible(item) && item.status === 'PENDING_APPROVAL'" text="Review" location="top">
               <template #activator="{ props: tip }">
                 <v-btn v-bind="tip" icon="mdi-clipboard-text-search-outline" variant="tonal" density="comfortable" size="small" :aria-label="`Review ${item.cycleCode}`" @click="openApprove(item)" />
               </template>
             </v-tooltip>
-            <v-tooltip v-if="auth.isAnchor && auth.can('ACCESS_PAYMENT_CYCLES') && item.status === 'APPROVED'" text="Disburse" location="top">
+            <v-tooltip v-if="isApproverEligible(item) && item.status === 'APPROVED'" text="Disburse" location="top">
               <template #activator="{ props: tip }">
                 <v-btn v-bind="tip" icon="mdi-cash-fast" variant="tonal" color="secondary" density="comfortable" size="small" :aria-label="`Disburse ${item.cycleCode}`" @click="disburse(item)" />
               </template>
@@ -373,14 +410,20 @@ function openView(cycle: Cycle) {
     <v-dialog v-model="approveDialog" max-width="640">
       <v-card v-if="approveTarget">
         <dialog-close-button @close="approveDialog = false" />
-        <v-card-title>{{ auth.isAnchor ? 'Approve' : 'Review' }} {{ approveTarget.cycleCode }}</v-card-title>
+        <v-card-title>{{ isApproverEligible(approveTarget) ? 'Approve' : 'Review' }} {{ approveTarget.cycleCode }}</v-card-title>
         <v-card-text>
-          <div v-if="!auth.isAnchor" class="text-body-2 text-medium-emphasis mb-3">
-            Uncheck any households you no longer want in this cycle before it goes to your anchor for approval.
+          <div v-if="!isApproverEligible(approveTarget)" class="text-body-2 text-medium-emphasis mb-3">
+            Uncheck any households you no longer want in this cycle before it goes to the organisation's approvers.
           </div>
           <div class="mb-3">
             {{ approveTarget.householdCount }} beneficiaries · Total FCY {{ approveTarget.currency ?? 'USD' }} {{ fmtAmount(approveTarget.totalAmount) }}
+            <span v-if="approvalsLabel(approveTarget)"> · {{ approvalsLabel(approveTarget) }}</span>
           </div>
+          <v-alert v-if="isStuck(approveTarget)" type="error" variant="tonal" density="compact" class="mb-3">
+            This cycle needs {{ approveTarget.requiredApprovals }} approvals, but only {{ approveTarget.eligibleApprovers }}
+            of your organisation's users currently hold payment-cycle approval permission. Grant that permission to
+            another user, or lower the required-approvals policy for future cycles, or it will never clear.
+          </v-alert>
 
           <div v-if="approveItemsLoading" class="d-flex justify-center my-4"><v-progress-circular indeterminate color="secondary" /></div>
           <v-table v-else density="compact" class="mb-3" style="max-height: 280px; overflow-y: auto">
@@ -408,7 +451,7 @@ function openView(cycle: Cycle) {
             v-model="approveRejectReason" label="Reason for rejecting the checked households" class="mb-2"
           />
 
-          <template v-if="auth.isAnchor">
+          <template v-if="isApproverEligible(approveTarget)">
             <v-alert type="info" variant="tonal" density="compact" class="mb-3">
               An approval link was emailed when this cycle was submitted. To approve here, request an OTP and enter it below.
             </v-alert>
@@ -421,7 +464,7 @@ function openView(cycle: Cycle) {
         <v-card-actions>
           <v-spacer />
           <v-btn variant="flat" color="error" @click="approveDialog = false">Cancel</v-btn>
-          <v-btn v-if="auth.isAnchor" variant="flat" color="secondary" :loading="approving" :disabled="!approveOtp" @click="confirmApprove">Approve</v-btn>
+          <v-btn v-if="isApproverEligible(approveTarget)" variant="flat" color="secondary" :loading="approving" :disabled="!approveOtp" @click="confirmApprove">Approve</v-btn>
           <v-btn v-else variant="flat" color="secondary" :loading="approving" :disabled="!approveRejectedIds.size" @click="saveRejections">Save changes</v-btn>
         </v-card-actions>
       </v-card>
@@ -469,6 +512,12 @@ function openView(cycle: Cycle) {
   align-items: center;
   gap: 2px;
   white-space: nowrap;
+}
+
+.approvals-note {
+  color: #64748b;
+  font-size: .72rem;
+  margin-top: 2px;
 }
 
 /* Amounts, counts and rates line up under a stable width as their digits change --

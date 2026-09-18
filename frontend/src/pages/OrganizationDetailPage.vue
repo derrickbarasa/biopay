@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { dispatch } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
@@ -23,6 +23,7 @@ interface Organization {
   anchorName?: string
   status: number
   createdAt?: string
+  requiredApprovals?: number
 }
 
 interface Anchor { id: number; name: string; anchorCode: string }
@@ -277,6 +278,32 @@ function openOfficerLocations(officer: Officer) {
   officerLocationDialog.value = true
 }
 
+// ---- Payment cycle approval policy (the organisation's own admin only) ----
+const approvalsPolicy = ref(1)
+const savingApprovalsPolicy = ref(false)
+
+watch(organization, (org) => { approvalsPolicy.value = org?.requiredApprovals ?? 1 })
+
+const canEditApprovalsPolicy = computed(() => auth.isOrganisation && auth.can('CHECK_PAYMENT_CYCLES'))
+const approvalsPolicyDirty = computed(() => approvalsPolicy.value !== (organization.value?.requiredApprovals ?? 1))
+
+async function saveApprovalsPolicy() {
+  savingApprovalsPolicy.value = true
+  try {
+    const result = await dispatch<{ warning?: string }>('SET_PAYMENT_APPROVAL_POLICY', { requiredApprovals: approvalsPolicy.value })
+    if (organization.value) organization.value.requiredApprovals = approvalsPolicy.value
+    if (result.warning) {
+      toast.warning(result.warning)
+    } else {
+      toast.success('Payment cycle approval policy updated')
+    }
+  } catch (err) {
+    toast.error(err instanceof Error ? err.message : 'Failed to update approval policy')
+  } finally {
+    savingApprovalsPolicy.value = false
+  }
+}
+
 onMounted(load)
 </script>
 
@@ -335,6 +362,25 @@ onMounted(load)
               <div><dt>Location</dt><dd>{{ [organization.capitalCity, organization.country].filter(Boolean).join(', ') || 'Not recorded' }}</dd></div>
               <div><dt>Created</dt><dd>{{ formatDate(organization.createdAt) }}</dd></div>
               <div class="wide"><dt>Address</dt><dd>{{ organization.address || 'Not recorded' }}</dd></div>
+              <div class="wide">
+                <dt>Payment cycle approvals</dt>
+                <dd v-if="!canEditApprovalsPolicy">
+                  {{ organization.requiredApprovals ?? 1 }} approver{{ (organization.requiredApprovals ?? 1) > 1 ? 's' : '' }} required
+                </dd>
+                <dd v-else class="approvals-editor">
+                  <v-select
+                    v-model="approvalsPolicy" :items="[1, 2, 3, 4, 5]" density="compact" hide-details
+                    variant="outlined" style="max-width: 100px" aria-label="Required approvers"
+                  />
+                  <v-btn
+                    size="small" variant="tonal" color="secondary" :loading="savingApprovalsPolicy"
+                    :disabled="!approvalsPolicyDirty" @click="saveApprovalsPolicy"
+                  >Save</v-btn>
+                  <span class="text-body-2 text-medium-emphasis">
+                    How many of your own organisation's approvers a payment cycle needs before it's approved.
+                  </span>
+                </dd>
+              </div>
             </dl>
           </section>
         </v-window-item>
@@ -491,6 +537,7 @@ onMounted(load)
 .detail-grid .wide { grid-column: span 2; }
 .detail-grid dt { color: #64748b; font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
 .detail-grid dd { color: #0f172a; font-size: .9rem; margin: 5px 0 0; overflow-wrap: anywhere; }
+.approvals-editor { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .detail-table { border-top: 1px solid #e2e8f0; }
 .empty-state, .permission-state { color: #64748b; padding: 28px 16px; text-align: center; border-top: 1px solid #e2e8f0; }
 .not-found { margin-top: 8px; }

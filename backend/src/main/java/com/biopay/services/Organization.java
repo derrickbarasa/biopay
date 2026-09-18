@@ -11,6 +11,7 @@ import io.vertx.mssqlclient.MSSQLPool;
 import io.vertx.sqlclient.Row;
 import io.vertx.sqlclient.Tuple;
 import com.biopay.databases.Datasource;
+import com.biopay.utilities.EligibleApprovers;
 import com.biopay.utilities.Logging;
 import com.biopay.utilities.OrgModules;
 import com.biopay.utilities.Passwords;
@@ -43,6 +44,7 @@ public class Organization extends AbstractVerticle {
         eventBus.consumer("GET_ORGANIZATIONS", this::retrieveAll);
         eventBus.consumer("GET_ORGANIZATION_MODULES", this::getModules);
         eventBus.consumer("UPDATE_ORGANIZATION_MODULES", this::updateModules);
+        eventBus.consumer("SET_PAYMENT_APPROVAL_POLICY", this::setApprovalPolicy);
         startPromise.complete();
     }
 
@@ -351,6 +353,74 @@ public class Organization extends AbstractVerticle {
                 });
     }
 
+    // ---- SET_PAYMENT_APPROVAL_POLICY (an organisation's own administrator only) ----
+
+    /** How many of its own organisation's approvers a payment cycle needs before it's
+     *  APPROVED -- the anchor has no say in this, see Payroll.java's class javadoc. Kept small:
+     *  a maker-checker scheme with more "required" approvers than an organisation is ever
+     *  likely to staff for this just locks cycles out permanently. */
+    private static final int MAX_REQUIRED_APPROVALS = 5;
+
+    private void setApprovalPolicy(Message<Object> message) {
+        JsonObject payload = new JsonObject(message.body().toString());
+        if (!TenantScope.isOrganisationAdministrator(payload)) {
+            replyError(message, "Only the organisation itself can set its payment cycle approval policy");
+            return;
+        }
+        // Deliberately the caller's own JWT-derived organisation, not a client-supplied
+        // organisationCode -- this endpoint only ever changes the caller's own policy.
+        String partnerId = payload.getString("partnerCode", "").trim();
+        if (partnerId.isEmpty()) {
+            replyError(message, "Your account is not linked to an organisation");
+            return;
+        }
+        Integer requiredApprovals = payload.getInteger("requiredApprovals");
+        if (requiredApprovals != null && (requiredApprovals < 1 || requiredApprovals > MAX_REQUIRED_APPROVALS)) {
+            replyError(message, "requiredApprovals must be between 1 and " + MAX_REQUIRED_APPROVALS);
+            return;
+        }
+        if (requiredApprovals == null) {
+            replyError(message, "requiredApprovals is required");
+            return;
+        }
+
+        pool.preparedQuery("UPDATE organizations SET required_approvals=@p1, updated_at=GETDATE() "
+                        + "OUTPUT INSERTED.required_approvals WHERE organization_code=@p2")
+                .execute(Tuple.of(requiredApprovals, partnerId))
+                .onFailure(err -> onDbError(message, err))
+                .onSuccess(updatedRows -> {
+                    if (updatedRows.size() == 0) {
+                        replyError(message, "Organisation not found");
+                        return;
+                    }
+                    Row updated = updatedRows.iterator().next();
+                    int finalRequired = Rows.intVal(updated, "required_approvals");
+                    EligibleApprovers.count(pool, partnerId, null)
+                            .onFailure(err -> onDbError(message, err))
+                            .onSuccess(eligible -> {
+                                // The policy threshold is the number of approvals required, not
+                                // the number of users the organisation must employ. With one
+                                // required approval, one eligible org administrator/checker is
+                                // enough. At generation time we separately check the concrete
+                                // cycle against the actual users who hold the approval permission.
+                                int neededApprovers = finalRequired;
+                                boolean insufficientApprovers = eligible < neededApprovers;
+                                JsonObject response = new JsonObject()
+                                        .put("responseCode", "000")
+                                        .put("responseMessage", "Payment cycle approval policy updated")
+                                        .put("requiredApprovals", finalRequired)
+                                        .put("eligibleApprovers", eligible);
+                                if (insufficientApprovers) {
+                                    response.put("warning", "Only " + eligible + " of your organisation's users can approve payment cycles"
+                                            + " -- you need at least " + neededApprovers
+                                            + " people with payment-cycle access for this to reliably clear "
+                                            + finalRequired + " approval" + (finalRequired == 1 ? "" : "s") + ".");
+                                }
+                                reply(message, response);
+                            });
+                });
+    }
+
     // ---- GET_ORGANIZATION --------------------------------------------------------
 
     private void getOne(Message<Object> message) {
@@ -436,6 +506,7 @@ public class Organization extends AbstractVerticle {
                 .put("anchorName", Rows.str(r, "anchor_name"))
                 .put("anchorStatus", Rows.intVal(r, "anchor_status"))
                 .put("status", Rows.intVal(r, "status"))
+                .put("requiredApprovals", Rows.intVal(r, "required_approvals") == null ? 1 : Rows.intVal(r, "required_approvals"))
                 .put("createdAt", Rows.str(r, "created_at"))
                 .put("updatedAt", Rows.str(r, "updated_at"));
     }

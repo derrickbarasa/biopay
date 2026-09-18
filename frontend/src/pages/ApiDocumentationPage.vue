@@ -115,8 +115,7 @@ const createAlternateExample = `{
 
 const requestOtpExample = `{
   "processingCode": "REQUEST_PAYROLL_OTP",
-  "action": "GENERATE",
-  "actorEmail": "you@yourorganisation.org"
+  "action": "GENERATE"
 }`
 
 const generatePayrollExample = `{

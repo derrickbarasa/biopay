@@ -336,11 +336,11 @@ const generating = ref(false)
 async function sendGenerateOtp() {
   sendingOtp.value = true
   try {
-    await dispatch('REQUEST_PAYROLL_OTP', { action: 'GENERATE', actorEmail: auth.user?.email })
+    await dispatch('REQUEST_PAYROLL_OTP', { action: 'GENERATE' })
     genForm.value.otpCode = ''
     const wasResend = otpSent.value
     otpSent.value = true
-    toast.success((wasResend ? 'New verification code sent to ' : 'Verification code sent to ') + auth.user?.email)
+    toast.success(wasResend ? 'New verification code sent to your account email' : 'Verification code sent to your account email')
   } catch (err) {
     toast.error(err instanceof Error ? err.message : 'Failed to send code')
   } finally {
@@ -355,16 +355,21 @@ async function confirmGenerate() {
   }
   generating.value = true
   try {
-    // An Anchor Administrator generating for their own organisation is already the
-    // approving authority, so the backend auto-approves (see Payroll.java's `generate()`).
-    const result = await dispatch<{ autoApproved?: boolean }>('GENERATE_PAYROLL', {
+    // Every cycle is generated PENDING_APPROVAL now -- the organisation itself always
+    // approves it, even one an Anchor Administrator generated on its behalf (see
+    // Payroll.java's `generate()`).
+    const result = await dispatch<{ insufficientApprovers?: boolean; responseMessage?: string }>('GENERATE_PAYROLL', {
       ...genForm.value,
       beneficiaries: paymentRows.value,
       otpCode: genForm.value.otpCode.trim(),
       organisationCode: genForm.value.organisationCode || undefined,
       targetAnchorId: auth.isSystemAdmin ? dialogAnchorId.value ?? undefined : undefined,
     })
-    toast.success(result.autoApproved ? 'Payroll cycle generated and approved' : 'Payroll cycle generated and pending approval')
+    if (result.insufficientApprovers) {
+      toast.warning(result.responseMessage || 'Payroll cycle generated, but the organisation may not have enough approvers for it')
+    } else {
+      toast.success('Payroll cycle generated and pending approval')
+    }
     goToList()
   } catch (err) {
     toast.error(err instanceof Error ? err.message : 'Failed to generate payroll')

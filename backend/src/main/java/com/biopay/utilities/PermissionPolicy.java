@@ -50,10 +50,14 @@ public final class PermissionPolicy {
             // 038_payment_online_recovery.sql: only the System Owner has it by default.
             Map.entry("PAY_PAYMENT_ONLINE", "PAY_ONLINE"),
             Map.entry("GET_PAYROLLS", "ACCESS_PAYMENT_CYCLES"), Map.entry("GET_PAYROLL", "ACCESS_PAYMENT_CYCLES"),
-            Map.entry("REQUEST_PAYROLL_OTP", "ACCESS_PAYMENT_CYCLES"), Map.entry("GENERATE_PAYROLL", "ACCESS_PAYMENT_CYCLES"),
-            Map.entry("APPROVE_PAYROLL", "ACCESS_PAYMENT_CYCLES"), Map.entry("REJECT_PAYROLL", "ACCESS_PAYMENT_CYCLES"),
-            Map.entry("REJECT_PAYROLL_ITEMS", "ACCESS_PAYMENT_CYCLES"), Map.entry("DISBURSE_PAYROLL", "ACCESS_PAYMENT_CYCLES"),
-            Map.entry("DELETE_PAYROLL", "ACCESS_PAYMENT_CYCLES"),
+            Map.entry("GENERATE_PAYROLL", "ACCESS_PAYMENT_CYCLES"),
+            Map.entry("REJECT_PAYROLL_ITEMS", "ACCESS_PAYMENT_CYCLES"), Map.entry("DELETE_PAYROLL", "ACCESS_PAYMENT_CYCLES"),
+            // The "checker" side of a payment cycle (approve/reject/disburse/policy) is
+            // deliberately its own permission, not folded into ACCESS_PAYMENT_CYCLES -- same
+            // precedent as PAY_ONLINE above -- so an organisation can grant the "maker" actions
+            // above to some users and the checker actions below to a separate, smaller set.
+            Map.entry("APPROVE_PAYROLL", "CHECK_PAYMENT_CYCLES"), Map.entry("REJECT_PAYROLL", "CHECK_PAYMENT_CYCLES"),
+            Map.entry("DISBURSE_PAYROLL", "CHECK_PAYMENT_CYCLES"), Map.entry("SET_PAYMENT_APPROVAL_POLICY", "CHECK_PAYMENT_CYCLES"),
             Map.entry("GET_VOUCHERS", "ACCESS_VOUCHERS"), Map.entry("GET_VOUCHER", "ACCESS_VOUCHERS"),
             Map.entry("GET_HOUSEHOLD_VOUCHER", "ACCESS_VOUCHERS"), Map.entry("VOUCHER_SUMMARY", "ACCESS_VOUCHERS"),
             Map.entry("CREATE_VOUCHER", "ACCESS_VOUCHERS"), Map.entry("BULK_ISSUE_VOUCHERS", "ACCESS_VOUCHERS"),
@@ -67,6 +71,13 @@ public final class PermissionPolicy {
     private PermissionPolicy() {}
 
     public static Set<String> requiredPermissions(String processingCode, JsonObject data) {
+        // Generating and approving use the same OTP endpoint, but they are separate duties.
+        // An approver must be able to request a code for their own email even if their role
+        // intentionally lacks the maker-side ACCESS_PAYMENT_CYCLES permission.
+        if ("REQUEST_PAYROLL_OTP".equals(processingCode)) {
+            return "APPROVE".equalsIgnoreCase(data.getString("action", ""))
+                    ? Set.of("CHECK_PAYMENT_CYCLES") : Set.of("ACCESS_PAYMENT_CYCLES");
+        }
         if ("GET_AUDIT_LOGS".equals(processingCode)) return Set.of("ACCESS_USERS", "ACCESS_SUPERVISORS");
         // An organisation account may always read its own organisation profile. The HTTP
         // tenant gate first verifies that organisationCode matches the signed-in account,

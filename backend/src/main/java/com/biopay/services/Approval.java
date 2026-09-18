@@ -5,6 +5,7 @@ import com.biopay.utilities.EmailTemplates;
 import com.biopay.utilities.Env;
 import com.biopay.utilities.Hashing;
 import com.biopay.utilities.Logging;
+import com.biopay.utilities.PaymentCycleApprovals;
 import com.biopay.utilities.Rows;
 import com.biopay.utilities.Utilities;
 import io.vertx.core.AbstractVerticle;
@@ -89,16 +90,12 @@ public class Approval extends AbstractVerticle {
             replyError(message, "A valid approval request type and reference are required");
             return;
         }
-        if ("PAYROLL".equals(type) && anchorId == null) {
-            replyError(message, "anchorId is required for payroll approval");
-            return;
-        }
-        if ("HOUSEHOLD".equals(type) && organizationCode.isEmpty()) {
-            replyError(message, "organisationCode is required for household approval");
+        if (organizationCode.isEmpty()) {
+            replyError(message, "organisationCode is required for approval");
             return;
         }
 
-        findApprovers(type, anchorId, organizationCode, makerId)
+        findApprovers(type, organizationCode, makerId)
                 .compose(approvers -> supersedeExisting(type, reference)
                         .compose(v -> createTokens(type, reference, anchorId, organizationCode, request, approvers)))
                 .onFailure(error -> {
@@ -114,24 +111,30 @@ public class Approval extends AbstractVerticle {
                         .put("recipientCount", count)));
     }
 
-    private Future<RowSet<Row>> findApprovers(String type, Integer anchorId, String organizationCode, Integer makerId) {
-        String permission = "PAYROLL".equals(type) ? "ACCESS_PAYMENT_CYCLES" : "ACCESS_HOUSEHOLDS";
+    /** A payment cycle's approvers are always its own organisation's own users -- the anchor
+     *  is never in the decisioning chain for a payment cycle (see Payroll.java's class
+     *  javadoc), even when the anchor generated the cycle on the organisation's behalf. A
+     *  household's approvers may still be either the organisation itself or its anchor. */
+    private Future<RowSet<Row>> findApprovers(String type, String organizationCode, Integer makerId) {
+        // A payment cycle's approvers need the dedicated checker permission (see
+        // PermissionPolicy.java), not just the general ACCESS_PAYMENT_CYCLES every maker also holds.
+        String permission = "PAYROLL".equals(type) ? "CHECK_PAYMENT_CYCLES" : "ACCESS_HOUSEHOLDS";
         String scope = "PAYROLL".equals(type)
-                ? "u.user_scope='ANCHOR' AND (u.id=@p2 OR u.anchor_id=@p2)"
+                ? "u.user_scope='ORGANISATION' AND u.organization_code=@p2"
                 : "((u.user_scope='ORGANISATION' AND u.organization_code=@p2) "
                         + "OR (u.user_scope='ANCHOR' AND (u.id=o.anchor_id OR u.anchor_id=o.anchor_id)))";
-        String organizationJoin = "PAYROLL".equals(type)
-                ? ""
-                : "JOIN organizations o ON o.organization_code=@p2 AND o.status=1 ";
+        // Household makers remain excluded from their own review. Payment-cycle makers are
+        // ordinary eligible approvers when they hold CHECK_PAYMENT_CYCLES.
+        boolean excludeMaker = "HOUSEHOLD".equals(type);
         String sql = "SELECT DISTINCT u.id, u.email, u.first_name, u.surname FROM users u "
-                + organizationJoin
+                + "JOIN organizations o ON o.organization_code=@p2 AND o.status=1 "
                 + "JOIN role_permissions rp ON rp.role_id=u.role_id AND rp.status=1 "
                 + "JOIN permissions p ON p.id=rp.permission_id AND p.permission_name=@p1 "
                 + "WHERE u.active=1 AND u.status=1 AND " + scope
-                + ("PAYROLL".equals(type) ? " AND (@p3 IS NULL OR u.id<>@p3)" : "")
+                + (excludeMaker ? " AND (@p3 IS NULL OR u.id<>@p3)" : "")
                 + " AND NULLIF(LTRIM(RTRIM(u.email)),'') IS NOT NULL";
-        Tuple params = Tuple.of(permission, "PAYROLL".equals(type) ? anchorId : organizationCode);
-        if ("PAYROLL".equals(type)) {
+        Tuple params = Tuple.of(permission, organizationCode);
+        if (excludeMaker) {
             params = params.addInteger(makerId);
         }
         return pool.preparedQuery(sql).execute(params);
@@ -255,11 +258,11 @@ public class Approval extends AbstractVerticle {
                                 + "AND EXISTS (SELECT 1 FROM users u "
                                 + "JOIN role_permissions rp ON rp.role_id=u.role_id AND rp.status=1 "
                                 + "JOIN permissions p ON p.id=rp.permission_id AND p.permission_name="
-                                + "CASE WHEN ear.request_type='PAYROLL' THEN 'ACCESS_PAYMENT_CYCLES' ELSE 'ACCESS_HOUSEHOLDS' END "
+                                + "CASE WHEN ear.request_type='PAYROLL' THEN 'CHECK_PAYMENT_CYCLES' ELSE 'ACCESS_HOUSEHOLDS' END "
                                 + "LEFT JOIN organizations o ON o.organization_code=ear.organization_code AND o.status=1 "
                                 + "WHERE u.id=ear.approver_id AND u.active=1 AND u.status=1 AND "
-                                + "((ear.request_type='PAYROLL' AND u.user_scope='ANCHOR' "
-                                + "AND (u.id=ear.anchor_id OR u.anchor_id=ear.anchor_id)) OR "
+                                + "((ear.request_type='PAYROLL' AND u.user_scope='ORGANISATION' "
+                                + "AND u.organization_code=ear.organization_code) OR "
                                 + "(ear.request_type='HOUSEHOLD' AND ((u.user_scope='ORGANISATION' "
                                 + "AND u.organization_code=ear.organization_code) OR (u.user_scope='ANCHOR' "
                                 + "AND (u.id=o.anchor_id OR u.anchor_id=o.anchor_id))))))")
@@ -278,43 +281,81 @@ public class Approval extends AbstractVerticle {
         String type = Rows.str(requestRow, "request_type");
         String reference = Rows.str(requestRow, "reference_code");
         int approverId = Rows.intVal(requestRow, "approver_id");
-        Future<RowSet<Row>> targetUpdate;
 
         if ("PAYROLL".equals(type)) {
-            targetUpdate = connection.preparedQuery("UPDATE payment_cycles SET status='APPROVED', checker_id=@p1, "
-                            + "checker_at=GETDATE(), otp_verified=1, updated_at=GETDATE() "
-                            + "WHERE cycle_code=@p2 AND status='PENDING_APPROVAL' AND (maker_id IS NULL OR maker_id<>@p1)")
-                    .execute(Tuple.of(approverId, reference));
-        } else {
-            targetUpdate = connection.preparedQuery("UPDATE households SET review_status='APPROVED', status=1, rejection_reason=NULL, "
-                            + "updated_by=@p1, updated_at=GETDATE() WHERE household_number=@p2 "
-                            + "AND (review_status IS NULL OR review_status IN ('PENDING','CHECKED'))")
-                    .execute(Tuple.of(String.valueOf(approverId), reference));
+            // Only this approver's own token is consumed -- a payment cycle can need several
+            // distinct approvers now, so the other outstanding approvers' links must stay live
+            // (and keep showing PENDING) until the cycle actually clears its threshold.
+            int requestId = Rows.intVal(requestRow, "id");
+            return approvePaymentCycle(connection, reference, approverId)
+                    .compose(outcome -> markSingleRequestUsed(connection, requestId)
+                            .map(v -> new JsonObject()
+                                    .put("requestType", type)
+                                    .put("referenceCode", reference)
+                                    .put("title", requestData(requestRow).getString("title", "Approval request"))
+                                    .put("summary", requestData(requestRow).getString("summary", ""))
+                                    .put("state", outcome.approved ? "APPROVED" : "PENDING")
+                                    .put("approvalsRecorded", outcome.approvalCount)
+                                    .put("approvalsRequired", outcome.requiredApprovals)
+                                    .put("canApprove", false)));
         }
 
-        return targetUpdate.compose(updated -> {
-            if (updated.rowCount() == 0) {
-                return Future.failedFuture("This request has already been decided and cannot be approved again");
-            }
-            Future<RowSet<Row>> children = "PAYROLL".equals(type)
-                    ? connection.preparedQuery("UPDATE payments SET approved=1, approved_by=@p1, approved_at=GETDATE() "
-                                    + "WHERE payment_cycle_id=(SELECT id FROM payment_cycles WHERE cycle_code=@p2) AND rejected=0")
-                            .execute(Tuple.of(approverId, reference))
-                    : Future.succeededFuture(updated);
-            return children.compose(v -> connection.preparedQuery(
-                            "UPDATE email_approval_requests SET used_at=GETDATE(), decision='APPROVED' "
-                                    + "WHERE request_type=@p1 AND reference_code=@p2 AND used_at IS NULL")
-                    .execute(Tuple.of(type, reference)));
-        }).map(v -> {
-            JsonObject data = requestData(requestRow);
-            return new JsonObject()
-                    .put("requestType", type)
-                    .put("referenceCode", reference)
-                    .put("title", data.getString("title", "Approval request"))
-                    .put("summary", data.getString("summary", ""))
-                    .put("state", "APPROVED")
-                    .put("canApprove", false);
-        });
+        return connection.preparedQuery("UPDATE households SET review_status='APPROVED', status=1, rejection_reason=NULL, "
+                        + "updated_by=@p1, updated_at=GETDATE() WHERE household_number=@p2 "
+                        + "AND (review_status IS NULL OR review_status IN ('PENDING','CHECKED'))")
+                .execute(Tuple.of(String.valueOf(approverId), reference))
+                .compose(updated -> {
+                    if (updated.rowCount() == 0) {
+                        return Future.failedFuture("This request has already been decided and cannot be approved again");
+                    }
+                    return markRequestUsed(connection, type, reference);
+                }).map(v -> {
+                    JsonObject data = requestData(requestRow);
+                    return new JsonObject()
+                            .put("requestType", type)
+                            .put("referenceCode", reference)
+                            .put("title", data.getString("title", "Approval request"))
+                            .put("summary", data.getString("summary", ""))
+                            .put("state", "APPROVED")
+                            .put("canApprove", false);
+                });
+    }
+
+    /** The cycle row is locked (see confirmRequest's own UPDLOCK on email_approval_requests --
+     *  distinct approvers hold distinct token rows, so that alone doesn't serialize concurrent
+     *  approvers of the *same* cycle) so two approvers submitting at once can't both cross the
+     *  required-approvals threshold. */
+    private Future<PaymentCycleApprovals.Outcome> approvePaymentCycle(SqlClient connection, String cycleCode, int approverId) {
+        return connection.preparedQuery(
+                        "SELECT id, required_approvals FROM payment_cycles WITH (UPDLOCK, ROWLOCK) WHERE cycle_code=@p1 "
+                                + "AND status='PENDING_APPROVAL'")
+                .execute(Tuple.of(cycleCode, approverId))
+                .compose(rows -> {
+                    if (rows.size() == 0) {
+                        return Future.failedFuture("This request has already been decided and cannot be approved again");
+                    }
+                    Row cycleRow = rows.iterator().next();
+                    int cycleId = Rows.intVal(cycleRow, "id");
+                    Integer requiredVal = Rows.intVal(cycleRow, "required_approvals");
+                    int required = requiredVal == null ? 1 : requiredVal;
+                    return PaymentCycleApprovals.recordApproval(connection, cycleId, required, approverId);
+                });
+    }
+
+    private Future<Void> markRequestUsed(SqlClient connection, String type, String reference) {
+        return connection.preparedQuery(
+                        "UPDATE email_approval_requests SET used_at=GETDATE(), decision='APPROVED' "
+                                + "WHERE request_type=@p1 AND reference_code=@p2 AND used_at IS NULL")
+                .execute(Tuple.of(type, reference))
+                .mapEmpty();
+    }
+
+    private Future<Void> markSingleRequestUsed(SqlClient connection, int requestId) {
+        return connection.preparedQuery(
+                        "UPDATE email_approval_requests SET used_at=GETDATE(), decision='APPROVED' "
+                                + "WHERE id=@p1 AND used_at IS NULL")
+                .execute(Tuple.of(requestId))
+                .mapEmpty();
     }
 
     private static JsonObject requestData(Row row) {
@@ -329,7 +370,8 @@ public class Approval extends AbstractVerticle {
 
     private static String safeMessage(Throwable error) {
         String message = error.getMessage();
-        if (LINK_UNAVAILABLE.equals(message) || (message != null && message.startsWith("This request"))) {
+        if (LINK_UNAVAILABLE.equals(message) || (message != null && message.startsWith("This request"))
+                || "You have already approved this payment cycle".equals(message)) {
             return message;
         }
         Logging.applicationLog(Logging.logPreString() + "Email approval failed: " + message + "\n\n", "", 3);

@@ -15,7 +15,7 @@ const toast = useToast()
 const auth = useAuthStore()
 const { confirmAction } = useConfirm()
 
-const SENSITIVE_CODES = new Set(['PAY_ONLINE', 'ACCESS_PAYMENTS', 'ACCESS_PAYMENT_CYCLES', 'ACCESS_VOUCHERS'])
+const SENSITIVE_CODES = new Set(['PAY_ONLINE', 'ACCESS_PAYMENTS', 'ACCESS_PAYMENT_CYCLES', 'CHECK_PAYMENT_CYCLES', 'ACCESS_VOUCHERS'])
 
 // Starting points for common BioPay roles. "Use template" opens the create-role editor with
 // these permissions pre-selected -- an anchor/org still reviews and adjusts before saving, it
