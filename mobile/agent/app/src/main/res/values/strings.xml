@@ -17,6 +17,7 @@
     <string name="login_signing_in">Signing in</string>
     <string name="login_error_required">Enter your email address and password.</string>
     <string name="login_offline_credentials_unavailable">Offline sign-in is unavailable for these credentials. Connect to the internet and sign in once to enable it on this device.</string>
+    <string name="login_server_unreachable">Can\'t reach the BioPay server right now. Check your connection and try again, or contact support if this continues.</string>
     <string name="login_online_required">This device must connect to BioPay now. Offline access lasts %1$d days after the last successful online sign-in and subscription check.</string>
     <string name="login_security_note">Secure access for authorised field officers</string>
 

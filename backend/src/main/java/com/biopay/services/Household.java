@@ -49,6 +49,7 @@ public class Household extends AbstractVerticle {
         eventBus.consumer("CHECK_HOUSEHOLD_DUPLICATE", this::checkDuplicate);
         eventBus.consumer("BULK_UPLOAD_HOUSEHOLDS", this::bulkUpload);
         eventBus.consumer("SET_HOUSEHOLD_REVIEW_STATUS", this::setReviewStatus);
+        eventBus.consumer("BULK_SET_HOUSEHOLD_REVIEW_STATUS", this::bulkSetReviewStatus);
 
         eventBus.consumer("CREATE_ALTERNATE", this::createAlternate);
         eventBus.consumer("UPDATE_ALTERNATE", this::updateAlternate);
@@ -374,6 +375,85 @@ public class Household extends AbstractVerticle {
                         replyError(message, "Household not found, outside your organisation, or already reviewed");
                     }
                 });
+    }
+
+    // ---- BULK_SET_HOUSEHOLD_REVIEW_STATUS (mass approve/reject) ------------------
+    // For a batch upload of thousands of households, reviewing them one at a time is
+    // impractical. This applies one decision to every still-pending household matching
+    // the same filters as GET_HOUSEHOLDS (village, organisation, date range, ...) rather
+    // than requiring the caller to select rows individually. Already-decided households
+    // (APPROVED/REJECTED) are never touched, so running this twice is harmless.
+
+    private void bulkSetReviewStatus(Message<Object> message) {
+        JsonObject payload = new JsonObject(message.body().toString());
+        String reviewStatus = strOrEmpty(payload.getString("reviewStatus")).trim().toUpperCase();
+        String rejectionReason = strOrEmpty(payload.getString("rejectionReason")).trim();
+
+        if (!isReviewDecision(reviewStatus)) {
+            replyError(message, "A review decision (APPROVED or REJECTED) is required");
+            return;
+        }
+        if ("REJECTED".equals(reviewStatus) && rejectionReason.isEmpty()) {
+            replyError(message, "A reason is required when rejecting households");
+            return;
+        }
+
+        String organisationCode = scopedPartnerCode(payload);
+        String searchRaw = strOrEmpty(payload.getString("search")).trim();
+        String search = searchRaw.isEmpty() ? null : "%" + searchRaw + "%";
+        String stateCode = payload.getString("stateCode", null);
+        String countyCode = payload.getString("countyCode", null);
+        String locationCode = payload.getString("locationCode", null);
+        String villageCode = payload.getString("villageCode", null);
+        String gender = payload.getString("gender", null);
+        final String vulnerabilityStatus;
+        final String legalStatus;
+        try {
+            vulnerabilityStatus = HouseholdClassification.filterCode(payload.getValue("vulnerabilityStatus"), true);
+            legalStatus = HouseholdClassification.filterCode(payload.getValue("legalStatus"), false);
+        } catch (IllegalArgumentException err) {
+            replyError(message, err.getMessage());
+            return;
+        }
+        String dateFrom = payload.getString("dateFrom", null);
+        String dateTo = payload.getString("dateTo", null);
+
+        // p1-p11 are the same filter set GET_HOUSEHOLDS uses; p12-p14 are the SET values;
+        // p15/p16 (anchor scope) are only appended, and only referenced in the WHERE clause,
+        // for an anchor actor -- an organisation actor is already fully scoped by p1.
+        String scopeClause = isAnchor(payload)
+                ? " AND (@p15=1 OR organization_code IN (SELECT organization_code FROM organizations WHERE anchor_id=@p16))"
+                : "";
+        String sql = "UPDATE households SET review_status=@p12, status=CASE WHEN @p12='APPROVED' THEN 1 ELSE 0 END, "
+                + "rejection_reason=@p13, updated_by=@p14, updated_at=GETDATE() "
+                + "WHERE (review_status IS NULL OR review_status IN ('PENDING','CHECKED')) "
+                + "AND (@p1 IS NULL OR organization_code=@p1) "
+                + "AND (@p2 IS NULL OR household_name LIKE @p2 OR household_number LIKE @p2 OR id_number LIKE @p2) "
+                + "AND (@p3 IS NULL OR state_code=@p3) AND (@p4 IS NULL OR county_code=@p4) "
+                + "AND (@p5 IS NULL OR payam_code=@p5) AND (@p6 IS NULL OR boma_code=@p6) "
+                + "AND (@p7 IS NULL OR gender=@p7) "
+                + "AND (@p8 IS NULL OR (@p8='NOT_RECORDED' AND NULLIF(LTRIM(RTRIM(vulnerability_status)),'') IS NULL) "
+                + "OR (@p8<>'NOT_RECORDED' AND CHARINDEX(','+@p8+',', ','+COALESCE(vulnerability_status,'')+',')>0)) "
+                + "AND (@p9 IS NULL OR (@p9='NOT_RECORDED' AND NULLIF(LTRIM(RTRIM(legal_status)),'') IS NULL) "
+                + "OR (@p9<>'NOT_RECORDED' AND legal_status=@p9)) "
+                + "AND (@p10 IS NULL OR created_at >= @p10) AND (@p11 IS NULL OR created_at <= @p11)"
+                + scopeClause;
+
+        Tuple params = Tuple.of(organisationCode, search, stateCode, countyCode, locationCode, villageCode,
+                gender, vulnerabilityStatus, legalStatus, dateFrom, dateTo,
+                reviewStatus, "REJECTED".equals(reviewStatus) ? rejectionReason : null,
+                String.valueOf(payload.getValue("actorId")));
+        if (isAnchor(payload)) {
+            params = params.addBoolean(isSystemAdmin(payload)).addInteger(TenantScope.anchorId(payload));
+        }
+
+        pool.preparedQuery(sql)
+                .execute(params)
+                .onFailure(err -> onDbError(message, err))
+                .onSuccess(rows -> reply(message, new JsonObject()
+                        .put("responseCode", "000")
+                        .put("responseMessage", rows.rowCount() + " household(s) updated")
+                        .put("updated", rows.rowCount())));
     }
 
     // ---- GET_HOUSEHOLD (with alternate/fingerprint/image status) ----------------

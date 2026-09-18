@@ -14,6 +14,7 @@ import com.biopay.agent.R;
 import com.biopay.agent.home.HomeActivity;
 import com.biopay.agent.network.ApiCallback;
 import com.biopay.agent.network.ApiClient;
+import com.biopay.agent.network.NetworkStatus;
 import com.biopay.agent.security.SecurityActivity;
 import com.biopay.agent.session.OfflineAccessManager;
 import com.biopay.agent.session.SessionManager;
@@ -67,6 +68,13 @@ public class LoginActivity extends BaseActivity {
         String password = etPassword.getText().toString();
         if (email.isEmpty() || password.isEmpty()) {
             showError(getString(R.string.login_error_required));
+            return;
+        }
+        // Skip the round trip (and its 20s timeout) entirely when the device has no real
+        // connectivity -- go straight to the same offline path a transport failure would reach,
+        // just without the wait.
+        if (!NetworkStatus.isOnline(this)) {
+            attemptOfflineLogin(email, password, false);
             return;
         }
         setLoading(true);
@@ -148,7 +156,11 @@ public class LoginActivity extends BaseActivity {
                 // Only transport failures may fall back to the local verifier. A server-side
                 // rejection (wrong password, inactive account, etc.) is always authoritative.
                 if (responseCode == null) {
-                    attemptOfflineLogin(email, password);
+                    // The device itself may still be online even though this specific call
+                    // failed (wrong/unreachable server config, backend down, DNS) -- that's not
+                    // the same situation as a genuinely offline device, so it gets a different
+                    // message when there's no cached profile to fall back on.
+                    attemptOfflineLogin(email, password, NetworkStatus.isOnline(LoginActivity.this));
                 } else {
                     showError(message);
                 }
@@ -156,11 +168,13 @@ public class LoginActivity extends BaseActivity {
         });
     }
 
-    private void attemptOfflineLogin(String email, String password) {
+    private void attemptOfflineLogin(String email, String password, boolean deviceOnline) {
         OfflineAccessManager.Decision decision =
                 offlineAccessManager.evaluateOfflineLogin(email, password);
         if (decision == OfflineAccessManager.Decision.INVALID_CREDENTIALS) {
-            showError(getString(R.string.login_offline_credentials_unavailable));
+            showError(getString(deviceOnline
+                    ? R.string.login_server_unreachable
+                    : R.string.login_offline_credentials_unavailable));
             return;
         }
         if (decision == OfflineAccessManager.Decision.ONLINE_REQUIRED) {
@@ -171,7 +185,9 @@ public class LoginActivity extends BaseActivity {
 
         OfflineAccessManager.CachedProfile profile = offlineAccessManager.getCachedProfile();
         if (profile == null) {
-            showError(getString(R.string.login_offline_credentials_unavailable));
+            showError(getString(deviceOnline
+                    ? R.string.login_server_unreachable
+                    : R.string.login_offline_credentials_unavailable));
             return;
         }
         sessionManager.saveOfflineSession(profile);

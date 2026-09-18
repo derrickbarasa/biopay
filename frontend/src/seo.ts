@@ -4,7 +4,7 @@ const PRODUCT_NAME = 'BioPay'
 const DEFAULT_TITLE = 'BioPay | Biometric Payment Infrastructure'
 const DEFAULT_DESCRIPTION = 'BioPay provides offline-first biometric registration, payment and voucher infrastructure for humanitarian programmes.'
 const DEFAULT_IMAGE_PATH = '/og-image.jpg'
-const PRODUCTION_SITE_URL = 'https://biopay.app'
+const PRODUCTION_SITE_URL = 'https://biopay.africa'
 
 function productionOrigin() {
   const configured = import.meta.env.VITE_PUBLIC_SITE_URL?.trim()

@@ -322,7 +322,7 @@ public class SettingsActivity extends BaseActivity {
 
     private void sendFeedback() {
         Intent intent = new Intent(Intent.ACTION_SENDTO);
-        intent.setData(Uri.parse("mailto:support@biopay.app"));
+        intent.setData(Uri.parse("mailto:support@biopay.africa"));
         intent.putExtra(Intent.EXTRA_SUBJECT, getString(R.string.settings_feedback_subject, BuildConfig.VERSION_NAME));
         try {
             startActivity(intent);

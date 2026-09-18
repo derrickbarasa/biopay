@@ -126,7 +126,7 @@ public class EntryPoint extends AbstractVerticle {
         final String allowedOriginRegex =
                 "https?://localhost(:[0-9]+)?"
               + "|https?://127\\.0\\.0\\.1(:[0-9]+)?"
-              + "|https://([a-z0-9-]+\\.)*biopay\\.app";
+              + "|https://([a-z0-9-]+\\.)*biopay\\.africa";
 
         // ---- /biopay/authentication (public: login + refresh) -------------
 

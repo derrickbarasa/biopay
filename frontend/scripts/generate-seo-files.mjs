@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 
 const frontendRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const fallbackSiteUrl = 'https://biopay.app'
+const fallbackSiteUrl = 'https://biopay.africa'
 const privateRoutePrefixes = ['/app', '/login', '/signup', '/forgot-password', '/reset-password', '/verify-otp', '/approval', '/change-password']
 
 async function readEnvValue(fileName, key) {

@@ -42,6 +42,7 @@ interface PaymentLine {
 }
 
 interface Organization { organisationCode: string; name: string }
+interface Village { code: string; name: string }
 
 const route = useRoute()
 const router = useRouter()
@@ -51,6 +52,7 @@ const cycleCode = computed(() => String(route.params.cycleCode ?? ''))
 const cycle = ref<Cycle | null>(null)
 const items = ref<PaymentLine[]>([])
 const organizations = ref<Organization[]>([])
+const villages = ref<Village[]>([])
 const loading = ref(true)
 // Kept separate from "loaded fine, zero rows" -- a fetch failure must not read as an empty cycle.
 const loadError = ref(false)
@@ -84,10 +86,21 @@ async function loadOrganizations() {
   }
 }
 
-onMounted(() => { load(); loadOrganizations() })
+async function loadVillages() {
+  try {
+    const res = await dispatch<{ results: Village[] }>('GET_VILLAGES')
+    villages.value = res.results
+  } catch {
+    // Village column just falls back to showing the raw code.
+  }
+}
+
+onMounted(() => { load(); loadOrganizations(); loadVillages() })
 
 const orgNameByCode = computed(() => new Map(organizations.value.map((o) => [o.organisationCode, o.name])))
 function orgName(code?: string) { return (code && orgNameByCode.value.get(code)) || code || '—' }
+const villageNameByCode = computed(() => new Map(villages.value.map((v) => [v.code, v.name])))
+function villageName(code?: string | null) { return (code && villageNameByCode.value.get(code)) || code || '—' }
 function fmtAmount(v?: number | null) { return (v ?? 0).toLocaleString() }
 function fmtDate(v?: string | null) {
   if (!v) return '—'
@@ -201,7 +214,7 @@ function goToList() {
                   <button type="button" class="household-link" @click="viewHousehold(line)">{{ line.householdName }}</button>
                   <div class="view-summary-muted">Household code: {{ line.householdNumber }}</div>
                 </td>
-                <td>{{ line.bomaCode || '—' }}</td>
+                <td>{{ villageName(line.bomaCode) }}</td>
                 <td>{{ genderLabel(line.gender) }}</td>
                 <td class="text-right num-cell">{{ fmtAmount(line.amountOut ?? line.amount) }}</td>
                 <td class="text-right num-cell">{{ line.exchangeRate ?? 1 }}</td>

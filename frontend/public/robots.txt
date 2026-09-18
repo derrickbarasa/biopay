@@ -9,4 +9,4 @@ Disallow: /verify-otp
 Disallow: /approval
 Disallow: /change-password
 
-Sitemap: https://biopay.app/sitemap.xml
+Sitemap: https://biopay.africa/sitemap.xml

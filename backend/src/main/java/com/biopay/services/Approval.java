@@ -286,7 +286,7 @@ public class Approval extends AbstractVerticle {
                             + "WHERE cycle_code=@p2 AND status='PENDING_APPROVAL' AND (maker_id IS NULL OR maker_id<>@p1)")
                     .execute(Tuple.of(approverId, reference));
         } else {
-            targetUpdate = connection.preparedQuery("UPDATE households SET review_status='APPROVED', rejection_reason=NULL, "
+            targetUpdate = connection.preparedQuery("UPDATE households SET review_status='APPROVED', status=1, rejection_reason=NULL, "
                             + "updated_by=@p1, updated_at=GETDATE() WHERE household_number=@p2 "
                             + "AND (review_status IS NULL OR review_status IN ('PENDING','CHECKED'))")
                     .execute(Tuple.of(String.valueOf(approverId), reference));

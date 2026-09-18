@@ -263,6 +263,80 @@ function viewDetail(row: HouseholdRow) {
   router.push({ name: 'household-detail', params: { householdNumber: row.householdNumber } })
 }
 
+// Mass approve/reject: applies to every still-Pending household matching the filters
+// currently applied above (not just the rows loaded on this page) -- for a batch
+// upload of thousands of households, reviewing them one at a time isn't practical.
+const massActionLoading = ref(false)
+const massRejectDialog = ref(false)
+const massRejectionReason = ref('')
+
+function bulkFilterPayload() {
+  return {
+    targetAnchorId: auth.isSystemAdmin ? selectedAnchorId.value : undefined,
+    organisationCode: filters.value.organisationCode ?? undefined,
+    stateCode: filters.value.stateCode ?? undefined,
+    countyCode: filters.value.countyCode ?? undefined,
+    locationCode: filters.value.locationCode ?? undefined,
+    villageCode: filters.value.villageCode ?? undefined,
+    gender: filters.value.gender ?? undefined,
+    vulnerabilityStatus: filters.value.vulnerabilityStatus || undefined,
+    legalStatus: filters.value.legalStatus || undefined,
+    dateFrom: filters.value.dateFrom || undefined,
+    dateTo: filters.value.dateTo || undefined,
+    search: filters.value.search || undefined,
+  }
+}
+
+async function massApprove() {
+  if (!await confirmAction({
+    title: 'Approve all pending households?',
+    message: 'Every household matching the filters above that is still Pending will be approved and marked Active. This cannot be undone in bulk.',
+    confirmLabel: 'Approve all',
+    color: 'success',
+  })) return
+  massActionLoading.value = true
+  try {
+    const res = await dispatch<{ updated: number }>('BULK_SET_HOUSEHOLD_REVIEW_STATUS', {
+      ...bulkFilterPayload(),
+      reviewStatus: 'APPROVED',
+    })
+    toast.success(`${res.updated} household(s) approved`)
+    await load()
+  } catch (err) {
+    toast.error(err instanceof Error ? err.message : 'Mass approval failed')
+  } finally {
+    massActionLoading.value = false
+  }
+}
+
+function openMassReject() {
+  massRejectionReason.value = ''
+  massRejectDialog.value = true
+}
+
+async function massReject() {
+  const reason = massRejectionReason.value.trim()
+  if (!reason) {
+    toast.error('Enter a reason for rejecting these households')
+    return
+  }
+  massActionLoading.value = true
+  try {
+    const res = await dispatch<{ updated: number }>('BULK_SET_HOUSEHOLD_REVIEW_STATUS', {
+      ...bulkFilterPayload(),
+      reviewStatus: 'REJECTED',
+      rejectionReason: reason,
+    })
+    toast.success(`${res.updated} household(s) rejected`)
+    massRejectDialog.value = false
+    await load()
+  } catch (err) {
+    toast.error(err instanceof Error ? err.message : 'Mass rejection failed')
+  } finally {
+    massActionLoading.value = false
+  }
+}
+
 async function toggleStatus(row: HouseholdRow) {
   const deactivating = row.status === 1
   if (!await confirmAction({
@@ -513,6 +587,20 @@ async function submitBulk() {
           </v-col>
         </v-row>
       </v-card-text>
+      <div v-if="auth.can('ACCESS_HOUSEHOLDS')" class="mass-review-bar">
+        <span class="mass-review-label">
+          <v-icon icon="mdi-checkbox-multiple-marked-outline" size="18" />
+          Bulk review: applies to every Pending household matching the filters above
+        </span>
+        <div class="mass-review-actions">
+          <v-btn color="success" variant="tonal" size="small" prepend-icon="mdi-check-circle-outline" :loading="massActionLoading" @click="massApprove">
+            Approve all pending
+          </v-btn>
+          <v-btn color="error" variant="tonal" size="small" prepend-icon="mdi-close-circle-outline" :disabled="massActionLoading" @click="openMassReject">
+            Reject all pending
+          </v-btn>
+        </div>
+      </div>
       <v-data-table :headers="headers" :items="households" :loading="loading">
         <template #item.voucherCount="{ item }">
           <v-chip size="small" :color="item.voucherCount ? 'primary' : undefined" variant="tonal">
@@ -623,11 +711,65 @@ async function submitBulk() {
       </v-card>
     </v-dialog>
 
+    <v-dialog v-model="massRejectDialog" max-width="440">
+      <v-card>
+        <dialog-close-button @close="massRejectDialog = false" />
+        <v-card-title>Reject all pending households?</v-card-title>
+        <v-card-text class="pt-3">
+          <v-alert type="warning" variant="tonal" density="compact" class="mb-3">
+            This rejects every household matching the filters above that is still Pending.
+          </v-alert>
+          <v-textarea
+            v-model="massRejectionReason"
+            label="Reason for rejection"
+            placeholder="Explain what needs to be corrected"
+            rows="3"
+            required
+            autofocus
+            hint="The same reason is recorded against each rejected household."
+            persistent-hint
+            @keydown.ctrl.enter="massReject"
+          />
+        </v-card-text>
+        <v-card-actions class="pa-4 pt-0">
+          <v-spacer />
+          <v-btn variant="text" @click="massRejectDialog = false">Cancel</v-btn>
+          <v-btn variant="flat" color="error" :loading="massActionLoading" :disabled="!massRejectionReason.trim()" @click="massReject">
+            Reject all pending
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
   </div>
 </template>
 
 <style scoped>
 .section-heading { font-size: .95rem; font-weight: 700; color: #0f172a; }
+.mass-review-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px 16px;
+  border-top: 1px solid #e2e8f0;
+  border-bottom: 1px solid #e2e8f0;
+  background: #f8fafc;
+}
+.mass-review-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #475569;
+  font-size: .82rem;
+  font-weight: 600;
+}
+.mass-review-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
 .filter-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .households-page-header {
   display: flex;

@@ -43,8 +43,8 @@ android {
         applicationId = "com.biopay.agent"
         minSdk = 24
         targetSdk = 35
-        versionCode = 2
-        versionName = "1.1"
+        versionCode = 4
+        versionName = "1.3"
 
         buildConfigField("String", "BIOPAY_API_BASE_URL", "\"${configuredApiBaseUrl.replace("\\", "\\\\").replace("\"", "\\\"")}\"")
         buildConfigField("int", "BIOPAY_OFFLINE_ACCESS_DAYS", configuredOfflineAccessDays.toString())
