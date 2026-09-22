@@ -724,13 +724,14 @@ public class EntryPoint extends AbstractVerticle {
         JsonObject details = new JsonObject()
                 .put("outcome", "000".equals(result.getString("responseCode")) ? "SUCCESS" : "FAILED")
                 .put("responseMessage", result.getString("responseMessage"));
-        for (String key : new String[] { "userId", "email", "organisationCode", "householdNumber",
+        for (String key : new String[] { "userId", "officerId", "email", "organisationCode", "householdNumber",
                 "cycleCode", "invoiceNumber", "type", "code", "status" }) {
             if (data.getValue(key) != null) details.put(key, data.getValue(key));
         }
-        String entityId = firstNonBlank(data, "userId", "organisationCode", "householdNumber",
+        String entityId = firstNonBlank(data, "userId", "officerId", "organisationCode", "householdNumber",
                 "cycleCode", "invoiceNumber", "email", "code");
         String entityType = data.getValue("userId") != null ? "USER"
+                : data.getValue("officerId") != null ? "SUPERVISOR"
                 : data.getValue("organisationCode") != null ? "ORGANIZATION"
                 : data.getValue("householdNumber") != null ? "HOUSEHOLD"
                 : data.getValue("cycleCode") != null ? "PAYMENT_CYCLE" : null;
@@ -752,7 +753,8 @@ public class EntryPoint extends AbstractVerticle {
                 || code.startsWith("APPROVE_") || code.startsWith("REJECT_") || code.startsWith("DISBURSE_")
                 || code.startsWith("VOID_") || code.startsWith("REDEEM_") || code.startsWith("BULK_")
                 || Set.of("CHANGE_PASSWORD", "UPDATE_PROFILE", "TOTP_SETUP_CONFIRM", "TOTP_DISABLE",
-                        "EMAIL_OTP_ENABLE", "EMAIL_OTP_DISABLE", "PAY_PAYMENT_ONLINE", "LOGOUT").contains(code);
+                        "EMAIL_OTP_ENABLE", "EMAIL_OTP_DISABLE", "PAY_PAYMENT_ONLINE", "LOGOUT",
+                        "UNBLOCK_USER", "RESET_USER_PASSWORD", "UNBLOCK_OFFICER", "RESET_OFFICER_PASSWORD").contains(code);
     }
 
     private static String firstNonBlank(JsonObject data, String... keys) {

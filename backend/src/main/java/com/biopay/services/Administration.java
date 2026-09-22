@@ -35,6 +35,8 @@ public class Administration extends AbstractVerticle {
         vertx.eventBus().consumer("CREATE_USER", this::createUser);
         vertx.eventBus().consumer("UPDATE_USER", this::updateUser);
         vertx.eventBus().consumer("TOGGLE_USER_STATUS", this::toggleUserStatus);
+        vertx.eventBus().consumer("UNBLOCK_USER", this::unblockUser);
+        vertx.eventBus().consumer("RESET_USER_PASSWORD", this::resetUserPassword);
         vertx.eventBus().consumer("GET_API_CLIENTS", this::getApiClients);
         vertx.eventBus().consumer("CREATE_API_CLIENT", this::createApiClient);
         vertx.eventBus().consumer("TOGGLE_API_CLIENT_STATUS", this::toggleApiClientStatus);
@@ -251,6 +253,7 @@ public class Administration extends AbstractVerticle {
                     .put("userScope",Rows.str(r,"user_scope")).put("roleId",Rows.intVal(r,"role_id"))
                     .put("roleName",Rows.str(r,"role_name")).put("status",Rows.intVal(r,"status"))
                     .put("systemAdmin",Boolean.TRUE.equals(r.getBoolean("is_system_admin")))
+                    .put("locked",r.getLocalDateTime("locked_at")!=null)
                     .put("createdAt",Rows.str(r,"created_at")));
             ok(message,"Users found",out);
         });
@@ -411,6 +414,8 @@ public class Administration extends AbstractVerticle {
                     .put("userScope",Rows.str(r,"user_scope")).put("roleId",Rows.intVal(r,"role_id"))
                     .put("roleName",Rows.str(r,"role_name")).put("status",Rows.intVal(r,"status"))
                     .put("systemAdmin",Boolean.TRUE.equals(r.getBoolean("is_system_admin")))
+                    .put("locked",r.getLocalDateTime("locked_at")!=null)
+                    .put("failedLoginAttempts",Rows.intVal(r,"failed_login_attempts"))
                     .put("createdAt",Rows.str(r,"created_at")));
         });
     }
@@ -475,6 +480,63 @@ public class Administration extends AbstractVerticle {
                 :Tuple.of(status,userId,p.getString("partnerCode",""));
         pool.preparedQuery(sql).execute(params).onFailure(e->dbFail(message,e))
                 .onSuccess(r->{if(r.rowCount()==0)fail(message,"User not found");else ok(message,"User status updated",null);});
+    }
+
+    /** Clears a lockout raised by too many consecutive failed passwords (see Auth#recordFailedLogin) --
+     *  platform-owner only, same as every other cross-tenant account action on this page. Deliberately
+     *  not folded into toggleUserStatus: deactivation and a failed-login lockout are different states
+     *  with different causes, and an anchor/organisation administrator who can deactivate their own
+     *  users still can't clear a lockout, only the platform owner can. */
+    private void unblockUser(Message<Object> message) {
+        JsonObject p = data(message);
+        if (!systemAdmin(p)) { fail(message, "Only the platform owner can unblock a user"); return; }
+        Integer userId = p.getInteger("userId");
+        if (userId == null) { fail(message, "userId is required"); return; }
+        pool.preparedQuery("UPDATE users SET locked_at=NULL, failed_login_attempts=0 WHERE id=@p1")
+                .execute(Tuple.of(userId))
+                .onFailure(e -> dbFail(message, e))
+                .onSuccess(r -> { if (r.rowCount()==0) fail(message,"User not found"); else ok(message,"User unblocked",null); });
+    }
+
+    /** Platform-owner-only "forgot password" path: mints a fresh temporary password, emails it (the
+     *  same first-time-password template used on account creation -- the recipient already proves
+     *  ownership of the inbox just by receiving it, so this sign-in also skips the OTP step, same as
+     *  createUser/createAnchor), and forces a change on next login via must_change_password. Also
+     *  clears any lockout and revokes outstanding sessions, since a reset password should never leave
+     *  the account locked or an old session still valid. */
+    private void resetUserPassword(Message<Object> message) {
+        JsonObject p = data(message);
+        if (!systemAdmin(p)) { fail(message, "Only the platform owner can reset a user's password"); return; }
+        Integer userId = p.getInteger("userId");
+        if (userId == null) { fail(message, "userId is required"); return; }
+        String tempPassword = Utilities.generateRandomPassword(10);
+        String passwordHash = Passwords.hash(tempPassword);
+        pool.preparedQuery("SELECT email, first_name FROM users WHERE id=@p1 AND account_type='HUMAN'")
+                .execute(Tuple.of(userId))
+                .compose(rows -> {
+                    if (rows.size() == 0) return Future.<JsonObject>failedFuture("User not found");
+                    Row r = rows.iterator().next();
+                    String email = Rows.str(r, "email");
+                    String firstName = Rows.str(r, "first_name");
+                    return pool.preparedQuery(
+                                    "UPDATE users SET password=@p1, must_change_password=1, failed_login_attempts=0, "
+                                            + "locked_at=NULL, updated_at=GETDATE() WHERE id=@p2")
+                            .execute(Tuple.of(passwordHash, userId))
+                            .compose(v -> pool.preparedQuery(
+                                            "UPDATE refresh_tokens SET revoked=1 WHERE subject_type='USER' AND subject_id=@p1")
+                                    .execute(Tuple.of(userId)))
+                            .map(v -> new JsonObject().put("email", email).put("firstName", firstName));
+                })
+                .onFailure(e -> fail(message, e.getMessage()!=null && !e.getMessage().startsWith("com.") ? e.getMessage() : "Database operation failed"))
+                .onSuccess(info -> {
+                    eventBus.send("EMAIL", new JsonObject()
+                            .put("mailTo", info.getString("email"))
+                            .put("subject", "Your BioPay password has been reset")
+                            .put("msg", EmailTemplates.firstTimePasswordEmail(
+                                    info.getString("firstName"), "Your BioPay password", tempPassword))
+                            .put("inlineImages", EmailTemplates.logoInlineImages()));
+                    ok(message, "Temporary password emailed to the user", null);
+                });
     }
 
     private void getPermissions(Message<Object> message) {

@@ -47,6 +47,12 @@ public class Auth extends AbstractVerticle {
     private static final int OTP_PENDING_MINUTES = 5;
     private static final int RESET_TOKEN_MINUTES = 60;
     private static final int DEFAULT_OFFLINE_ACCESS_DAYS = 60;
+    /** Consecutive bad passwords (users table only) before the account locks itself --
+     *  cleared back to 0 the moment a password check succeeds, so it only ever counts an
+     *  unbroken run of failures, never a lifetime total. A locked account stays locked --
+     *  no auto-expiry -- until a platform owner clears it via UNBLOCK_USER (see
+     *  Administration#unblockUser). */
+    private static final int MAX_FAILED_LOGIN_ATTEMPTS = 5;
 
     EventBus eventBus;
     MSSQLPool pool;
@@ -209,11 +215,16 @@ public class Auth extends AbstractVerticle {
                         replyError(message, "Account is inactive. Contact your administrator");
                         return;
                     }
-                    if (!Passwords.verify(password, storedHash)) {
-                        audit(id, anchorId, "USER", partnerCode, "LOGIN_FAILED", ip, new JsonObject().put("reason", "bad_password"));
-                        replyError(message, "Invalid email or password");
+                    if (r.getLocalDateTime("locked_at") != null) {
+                        audit(id, anchorId, "USER", partnerCode, "LOGIN_FAILED", ip, new JsonObject().put("reason", "locked"));
+                        replyError(message, "This account has been locked after too many failed sign-in attempts. Contact your platform owner to unblock it");
                         return;
                     }
+                    if (!Passwords.verify(password, storedHash)) {
+                        recordFailedLogin(message, "users", "USER", id, anchorId, partnerCode, ip, intOr(r, "failed_login_attempts", 0));
+                        return;
+                    }
+                    clearFailedLogins("users", id, intOr(r, "failed_login_attempts", 0));
 
                     boolean totpEnabled = Boolean.TRUE.equals(r.getBoolean("totp_enabled"));
                     boolean emailOtpEnabled = !Boolean.FALSE.equals(r.getBoolean("email_otp_enabled"));
@@ -232,6 +243,39 @@ public class Auth extends AbstractVerticle {
                         finishLogin(message, r, ip);
                     }
                 });
+    }
+
+    /** Bumps the consecutive-failure counter and, once it crosses {@link #MAX_FAILED_LOGIN_ATTEMPTS},
+     *  locks the account (locked_at) -- fire-and-forget like every other audit-adjacent write in
+     *  this class, so a slow write never holds up the (already-decided) error reply. Shared by both
+     *  {@code loginUser} (users table, actorType USER) and {@code loginSupervisor} (field_officers,
+     *  actorType SUPERVISOR) -- {@code table} is always one of those two fixed literals, never
+     *  request-derived, so it's safe to splice into the SQL text. */
+    private void recordFailedLogin(Message<Object> message, String table, String actorType, int id,
+            Integer anchorId, String partnerCode, String ip, int currentAttempts) {
+        int newAttempts = currentAttempts + 1;
+        boolean nowLocked = newAttempts >= MAX_FAILED_LOGIN_ATTEMPTS;
+        String sql = nowLocked
+                ? "UPDATE " + table + " SET failed_login_attempts=@p1, locked_at=GETDATE() WHERE id=@p2"
+                : "UPDATE " + table + " SET failed_login_attempts=@p1 WHERE id=@p2";
+        pool.preparedQuery(sql).execute(Tuple.of(newAttempts, id))
+                .onFailure(err -> Logging.applicationLog(Logging.logPreString() + "Fail. " + err.getMessage() + "\n\n", "", 3));
+        audit(id, anchorId, actorType, partnerCode, "LOGIN_FAILED", ip,
+                new JsonObject().put("reason", nowLocked ? "locked_now" : "bad_password"));
+        replyError(message, nowLocked
+                ? "This account has been locked after too many failed sign-in attempts. Contact your platform owner to unblock it"
+                : "Invalid email or password");
+    }
+
+    /** A successful password check breaks any run of failures in progress -- skips the write
+     *  entirely when the counter is already 0, the common case on every ordinary login. */
+    private void clearFailedLogins(String table, int id, int currentAttempts) {
+        if (currentAttempts == 0) {
+            return;
+        }
+        pool.preparedQuery("UPDATE " + table + " SET failed_login_attempts=0 WHERE id=@p1")
+                .execute(Tuple.of(id))
+                .onFailure(err -> Logging.applicationLog(Logging.logPreString() + "Fail. " + err.getMessage() + "\n\n", "", 3));
     }
 
     /** Password verified -- mint the short-lived pending token and tell the caller which
@@ -721,11 +765,16 @@ public class Auth extends AbstractVerticle {
                         replyError(message, "Account is inactive. Contact your organisation administrator");
                         return;
                     }
-                    if (!Passwords.verify(password, storedHash)) {
-                        audit(id, anchorId, "SUPERVISOR", partnerCode, "LOGIN_FAILED", ip, new JsonObject().put("reason", "bad_password"));
-                        replyError(message, "Invalid email or password");
+                    if (r.getLocalDateTime("locked_at") != null) {
+                        audit(id, anchorId, "SUPERVISOR", partnerCode, "LOGIN_FAILED", ip, new JsonObject().put("reason", "locked"));
+                        replyError(message, "This account has been locked after too many failed sign-in attempts. Contact your platform owner to unblock it");
                         return;
                     }
+                    if (!Passwords.verify(password, storedHash)) {
+                        recordFailedLogin(message, "field_officers", "SUPERVISOR", id, anchorId, partnerCode, ip, intOr(r, "failed_login_attempts", 0));
+                        return;
+                    }
+                    clearFailedLogins("field_officers", id, intOr(r, "failed_login_attempts", 0));
 
                     JsonObject claims = new JsonObject()
                             .put("sub", id)

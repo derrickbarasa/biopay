@@ -17,6 +17,10 @@ public final class PermissionPolicy {
             Map.entry("GET_USERS", "ACCESS_USERS"), Map.entry("GET_USER", "ACCESS_USERS"),
             Map.entry("CREATE_USER", "ACCESS_USERS"), Map.entry("UPDATE_USER", "ACCESS_USERS"),
             Map.entry("TOGGLE_USER_STATUS", "ACCESS_USERS"), Map.entry("DELETE_USER", "ACCESS_USERS"),
+            // Both further restricted to the platform owner inside Administration#unblockUser/
+            // resetUserPassword itself (like createSuperAdmin/toggleAnchorStatus) -- ACCESS_USERS
+            // here only keeps them off a session that can't reach the Users page at all.
+            Map.entry("UNBLOCK_USER", "ACCESS_USERS"), Map.entry("RESET_USER_PASSWORD", "ACCESS_USERS"),
             Map.entry("GET_API_CLIENTS", "ACCESS_USERS"), Map.entry("CREATE_API_CLIENT", "ACCESS_USERS"),
             Map.entry("TOGGLE_API_CLIENT_STATUS", "ACCESS_USERS"),
             Map.entry("GET_ROLES", "ACCESS_ROLES"), Map.entry("SAVE_ROLE", "ACCESS_ROLES"), Map.entry("DELETE_ROLE", "ACCESS_ROLES"),
@@ -26,6 +30,10 @@ public final class PermissionPolicy {
             Map.entry("CREATE_OFFICER", "ACCESS_SUPERVISORS"), Map.entry("UPDATE_OFFICER", "ACCESS_SUPERVISORS"),
             Map.entry("DELETE_OFFICER", "ACCESS_SUPERVISORS"), Map.entry("TOGGLE_OFFICER_STATUS", "ACCESS_SUPERVISORS"),
             Map.entry("ASSIGN_OFFICER_LOCATION", "ACCESS_SUPERVISORS"),
+            // Both further restricted to the platform owner inside Officer#unblock/resetPassword
+            // itself (same pattern as UNBLOCK_USER/RESET_USER_PASSWORD) -- ACCESS_SUPERVISORS here
+            // only keeps them off a session that can't reach the Officers page at all.
+            Map.entry("UNBLOCK_OFFICER", "ACCESS_SUPERVISORS"), Map.entry("RESET_OFFICER_PASSWORD", "ACCESS_SUPERVISORS"),
             Map.entry("GET_STATES", "ACCESS_LOCATIONS"), Map.entry("GET_COUNTIES", "ACCESS_LOCATIONS"),
             Map.entry("GET_LOCATIONS", "ACCESS_LOCATIONS"), Map.entry("GET_VILLAGES", "ACCESS_LOCATIONS"),
             Map.entry("CREATE_STATE", "ACCESS_LOCATIONS"), Map.entry("CREATE_COUNTY", "ACCESS_LOCATIONS"),

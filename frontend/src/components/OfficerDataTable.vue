@@ -8,6 +8,7 @@ interface OfficerRow {
   lastName: string
   organisationCode: string
   active: string
+  locked?: boolean
 }
 
 interface OrganizationOption {
@@ -23,6 +24,7 @@ const props = withDefaults(defineProps<{
   canManage?: boolean
   canViewHistory?: boolean
   canAssignLocations?: boolean
+  canUnblock?: boolean
   noDataText?: string
 }>(), {
   organizations: () => [],
@@ -31,6 +33,7 @@ const props = withDefaults(defineProps<{
   canManage: false,
   canViewHistory: false,
   canAssignLocations: false,
+  canUnblock: false,
   noDataText: 'No field officers found.',
 })
 
@@ -39,6 +42,8 @@ const emit = defineEmits<{
   edit: [officer: OfficerRow]
   'toggle-status': [officer: OfficerRow, active: boolean]
   'assign-location': [officer: OfficerRow]
+  unblock: [officer: OfficerRow]
+  'reset-password': [officer: OfficerRow]
 }>()
 
 const headers = [
@@ -79,7 +84,8 @@ const displayItems = computed(() => props.items.map((item) => ({
     class="detail-table"
   >
     <template #item.active="{ item }">
-      <v-chip size="small" :color="isActive(item.active) ? 'success' : 'error'" variant="tonal">
+      <v-chip v-if="isActive(item.active) && item.locked" size="small" color="warning" variant="tonal">Blocked</v-chip>
+      <v-chip v-else size="small" :color="isActive(item.active) ? 'success' : 'error'" variant="tonal">
         {{ isActive(item.active) ? 'Active' : 'Inactive' }}
       </v-chip>
     </template>
@@ -112,6 +118,24 @@ const displayItems = computed(() => props.items.map((item) => ({
         size="small"
         :aria-label="`Edit ${item.firstName || ''} ${item.lastName || ''}`"
         @click="emit('edit', item)"
+      />
+      <v-btn
+        v-if="canUnblock && item.locked"
+        icon="mdi-lock-open-variant-outline"
+        variant="text"
+        size="small"
+        color="warning"
+        :aria-label="`Unblock ${item.firstName || ''} ${item.lastName || ''}`"
+        @click="emit('unblock', item)"
+      />
+      <v-btn
+        v-if="canUnblock"
+        icon="mdi-email-lock-outline"
+        variant="text"
+        size="small"
+        color="warning"
+        :aria-label="`Reset password for ${item.firstName || ''} ${item.lastName || ''}`"
+        @click="emit('reset-password', item)"
       />
       <v-btn
         v-if="canManage"

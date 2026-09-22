@@ -39,6 +39,8 @@ public class Officer extends AbstractVerticle {
         eventBus.consumer("ASSIGN_OFFICER_LOCATION", this::assignLocation);
         eventBus.consumer("GET_OFFICER", this::getOne);
         eventBus.consumer("GET_OFFICERS", this::retrieveAll);
+        eventBus.consumer("UNBLOCK_OFFICER", this::unblock);
+        eventBus.consumer("RESET_OFFICER_PASSWORD", this::resetPassword);
         startPromise.complete();
     }
 
@@ -168,6 +170,68 @@ public class Officer extends AbstractVerticle {
                 });
     }
 
+    /** Clears a lockout raised by too many consecutive failed passwords on the field app (see
+     *  Auth#recordFailedLogin) -- platform-owner only, same restriction as Administration#
+     *  unblockUser for dashboard users. An anchor/organisation administrator can deactivate
+     *  their own officers but can't clear this. */
+    private void unblock(Message<Object> message) {
+        JsonObject payload = new JsonObject(message.body().toString());
+        if (!isSystemAdmin(payload)) { replyError(message, "Only the platform owner can unblock an officer"); return; }
+        Integer officerId = payload.getInteger("officerId");
+        if (officerId == null) { replyError(message, "officerId is required"); return; }
+        pool.preparedQuery("UPDATE field_officers SET locked_at=NULL, failed_login_attempts=0 WHERE id=@p1")
+                .execute(Tuple.of(officerId))
+                .onFailure(err -> onDbError(message, err))
+                .onSuccess(rows -> {
+                    if (rows.rowCount() == 0) replyError(message, "Officer not found");
+                    else reply(message, new JsonObject().put("responseCode", "000").put("responseMessage", "Officer unblocked"));
+                });
+    }
+
+    /** Platform-owner-only "forgot password" path for a field officer, mirroring Administration#
+     *  resetUserPassword: mints a fresh temporary password, emails it (same first-time-password
+     *  template used at registration -- receiving it proves inbox ownership, so this sign-in also
+     *  skips straight in), forces a change on next login, and clears any lockout plus outstanding
+     *  offline-capable sessions. */
+    private void resetPassword(Message<Object> message) {
+        JsonObject payload = new JsonObject(message.body().toString());
+        if (!isSystemAdmin(payload)) { replyError(message, "Only the platform owner can reset an officer's password"); return; }
+        Integer officerId = payload.getInteger("officerId");
+        if (officerId == null) { replyError(message, "officerId is required"); return; }
+        String tempPassword = Utilities.generateRandomPassword(10);
+        String hash = Passwords.hash(tempPassword);
+        pool.preparedQuery("SELECT email, firstname FROM field_officers WHERE id=@p1")
+                .execute(Tuple.of(officerId))
+                .compose(rows -> {
+                    if (rows.size() == 0) return io.vertx.core.Future.<JsonObject>failedFuture("Officer not found");
+                    Row r = rows.iterator().next();
+                    String email = Rows.str(r, "email");
+                    String firstName = Rows.str(r, "firstname");
+                    return pool.preparedQuery(
+                                    "UPDATE field_officers SET password=@p1, must_change_password=1, failed_login_attempts=0, "
+                                            + "locked_at=NULL, updated_at=GETDATE() WHERE id=@p2")
+                            .execute(Tuple.of(hash, officerId))
+                            .compose(v -> pool.preparedQuery(
+                                            "UPDATE refresh_tokens SET revoked=1 WHERE subject_type='SUPERVISOR' AND subject_id=@p1")
+                                    .execute(Tuple.of(officerId)))
+                            .map(v -> new JsonObject().put("email", email).put("firstName", firstName));
+                })
+                .onFailure(err -> {
+                    String msg = err.getMessage();
+                    replyError(message, msg != null && !msg.startsWith("com.") ? msg : "Database operation failed");
+                })
+                .onSuccess(info -> {
+                    eventBus.send("EMAIL", new JsonObject()
+                            .put("mailTo", info.getString("email"))
+                            .put("subject", "Your BioPay Field Agent password has been reset")
+                            .put("msg", com.biopay.utilities.EmailTemplates.firstTimePasswordEmail(
+                                    info.getString("firstName"), "Your BioPay Field Agent account", tempPassword))
+                            .put("inlineImages", com.biopay.utilities.EmailTemplates.logoInlineImages()));
+                    reply(message, new JsonObject().put("responseCode", "000")
+                            .put("responseMessage", "Temporary password emailed to the officer"));
+                });
+    }
+
     // ---- ASSIGN_OFFICER_LOCATION -----------------------------------------------------
 
     private void assignLocation(Message<Object> message) {
@@ -286,6 +350,7 @@ public class Officer extends AbstractVerticle {
                 .put("organisationCode", Rows.str(r, "organization_code"))
                 .put("anchorId", Rows.intVal(r, "anchor_id"))
                 .put("active", Rows.str(r, "active"))
+                .put("locked", r.getLocalDateTime("locked_at") != null)
                 .put("createdAt", Rows.str(r, "created_at"))
                 .put("updatedAt", Rows.str(r, "updated_at"));
     }

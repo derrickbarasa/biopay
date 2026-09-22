@@ -51,6 +51,8 @@ export type ProcessingCode =
   | 'CREATE_USER'
   | 'UPDATE_USER'
   | 'TOGGLE_USER_STATUS'
+  | 'UNBLOCK_USER'
+  | 'RESET_USER_PASSWORD'
   | 'GET_AUDIT_LOGS'
   | 'GET_API_CLIENTS'
   | 'CREATE_API_CLIENT'
@@ -74,6 +76,8 @@ export type ProcessingCode =
   | 'ASSIGN_OFFICER_LOCATION'
   | 'GET_OFFICER'
   | 'GET_OFFICERS'
+  | 'UNBLOCK_OFFICER'
+  | 'RESET_OFFICER_PASSWORD'
   // households / alternates
   | 'CREATE_HOUSEHOLD'
   | 'UPDATE_HOUSEHOLD'

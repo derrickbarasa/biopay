@@ -18,6 +18,7 @@ interface Officer {
   organisationCode: string
   active: string
   createdAt?: string
+  locked?: boolean
 }
 
 const auth = useAuthStore()
@@ -156,6 +157,37 @@ async function setOfficerActive(officer: Officer, active: boolean) {
   }
 }
 
+async function unblockOfficer(officer: Officer) {
+  if (!await confirmAction({
+    title: 'Unblock officer?',
+    message: `${officer.firstName} ${officer.lastName} was locked out of the field app after too many failed sign-in attempts. They will be able to try signing in again.`,
+    confirmLabel: 'Unblock',
+    color: 'success',
+  })) return
+  try {
+    await dispatch('UNBLOCK_OFFICER', { officerId: officer.id })
+    toast.success('Officer unblocked')
+    await load()
+  } catch (err) {
+    toast.error(err instanceof Error ? err.message : 'Unblock failed')
+  }
+}
+
+async function resetOfficerPassword(officer: Officer) {
+  if (!await confirmAction({
+    title: 'Reset password?',
+    message: `${officer.firstName} ${officer.lastName} will receive a temporary password by email and must change it on their next sign-in.`,
+    confirmLabel: 'Send temporary password',
+    color: 'warning',
+  })) return
+  try {
+    await dispatch('RESET_OFFICER_PASSWORD', { officerId: officer.id })
+    toast.success('A temporary password was emailed to the officer')
+  } catch (err) {
+    toast.error(err instanceof Error ? err.message : 'Password reset failed')
+  }
+}
+
 // ---- Assign locations ----
 const locationDialog = ref(false)
 const locationTarget = ref<Officer | null>(null)
@@ -201,10 +233,13 @@ function openAssignLocations(officer: Officer) {
         :can-manage="auth.can('ACCESS_SUPERVISORS')"
         :can-view-history="auth.can('ACCESS_USERS') || auth.can('ACCESS_SUPERVISORS')"
         :can-assign-locations="auth.can('ACCESS_SUPERVISORS')"
+        :can-unblock="auth.isSystemAdmin"
         @history="openHistory"
         @edit="openEdit"
         @toggle-status="setOfficerActive"
         @assign-location="openAssignLocations"
+        @unblock="unblockOfficer"
+        @reset-password="resetOfficerPassword"
       />
     </v-card>
     </template>
