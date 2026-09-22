@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
+import ChatWidget from '@/components/ChatWidget.vue'
 
 // Illustrative month-to-date values; the preview follows the live dashboard layout.
 const previewCharts = [
@@ -939,6 +940,8 @@ onBeforeUnmount(() => {
         </div>
       </div>
     </footer>
+
+    <ChatWidget mode="site" />
   </div>
 </template>
 

@@ -5,6 +5,7 @@ import { useDisplay } from 'vuetify'
 import { useAuthStore } from '@/stores/auth'
 import { dispatch } from '@/api/client'
 import { useIdleLogout } from '@/composables/useIdleLogout'
+import ChatWidget from '@/components/ChatWidget.vue'
 
 const auth = useAuthStore()
 const router = useRouter()
@@ -377,6 +378,8 @@ function onNavClick(event: MouseEvent | KeyboardEvent, to: string) {
       <router-view v-else />
     </v-container>
   </v-main>
+
+  <ChatWidget mode="dashboard" />
 </template>
 
 <style scoped>

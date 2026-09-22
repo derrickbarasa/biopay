@@ -14,7 +14,10 @@ const REFRESH_TOKEN_KEY = 'bp_refresh'
  *  on the way out. Purely a client-side signal; the backend ignores it. */
 const PROCESSING_CODE_HEADER = 'X-Processing-Code'
 
-const baseURL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:7730/biopay'
+// Exported for the chat widget's own fetch() calls -- its streaming responses need a raw
+// ReadableStream reader, which axios's browser adapter doesn't expose, so it can't go through
+// apiClient/dispatch() below.
+export const baseURL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:7730/biopay'
 const REQUEST_TIMEOUT_MS = 20_000
 
 export const apiClient = axios.create({

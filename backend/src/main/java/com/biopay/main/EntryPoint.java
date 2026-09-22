@@ -9,15 +9,18 @@ import io.vertx.core.Vertx;
 import io.vertx.core.VertxOptions;
 import io.vertx.core.eventbus.DeliveryOptions;
 import io.vertx.core.eventbus.EventBus;
+import io.vertx.core.eventbus.MessageConsumer;
 import io.vertx.core.http.HttpServerResponse;
 import io.vertx.core.json.JsonObject;
 import io.vertx.sqlclient.Tuple;
 import io.vertx.ext.auth.jwt.JWTAuth;
 import io.vertx.ext.web.Router;
+import io.vertx.ext.web.RoutingContext;
 import io.vertx.ext.web.handler.CorsHandler;
 import io.vertx.ext.web.handler.JWTAuthHandler;
 import java.util.Arrays;
 import java.util.Set;
+import java.util.UUID;
 import java.util.HashSet;
 import com.biopay.databases.Datasource;
 import com.biopay.services.Auth;
@@ -25,6 +28,7 @@ import com.biopay.services.Audit;
 import com.biopay.services.Approval;
 import com.biopay.services.Administration;
 import com.biopay.services.Biometric;
+import com.biopay.services.Chat;
 import com.biopay.services.Dashboard;
 import com.biopay.services.Geography;
 import com.biopay.services.Household;
@@ -104,6 +108,7 @@ public class EntryPoint extends AbstractVerticle {
         deploy(vertx, Voucher.class.getName(), options);
         deploy(vertx, Subscription.class.getName(), options);
         deploy(vertx, Administration.class.getName(), options);
+        deploy(vertx, Chat.class.getName(), options);
     }
 
     /** {@code deployVerticle} without an {@code onFailure} handler drops the failure entirely --
@@ -238,6 +243,62 @@ public class EntryPoint extends AbstractVerticle {
             }
         });
 
+        // ---- /biopay/site/chat-stream (public: marketing-site chatbot) ----
+        // Unauthenticated on purpose, same reasoning as /downloads -- an anonymous visitor has
+        // no session to protect this with. Streamed as newline-delimited JSON chunks rather than
+        // a single request/reply: a local LLM reply can run well past a normal request timeout,
+        // and streaming keeps the visitor seeing progress instead of a long silent wait.
+
+        router.route("/biopay/site/*").handler(CorsHandler.create()
+                .addOriginWithRegex(allowedOriginRegex)
+                .allowedMethod(io.vertx.core.http.HttpMethod.POST)
+                .allowedMethod(io.vertx.core.http.HttpMethod.OPTIONS)
+                .allowedHeader("Content-Type"));
+
+        router.route("/biopay/site/chat-stream").handler(rtc -> {
+            HttpServerResponse response = rtc.response();
+            response.putHeader("Content-Type", "application/x-ndjson");
+            response.setChunked(true);
+            String remoteAddress = rtc.request().remoteAddress().toString();
+
+            rtc.request().bodyHandler(bodyHandler -> {
+                JsonObject data;
+                try {
+                    String body = bodyHandler.toString().trim();
+                    data = body.isEmpty() ? new JsonObject() : new JsonObject(body);
+                } catch (Exception ex) {
+                    response.end(new JsonObject().put("done", true).put("error", true)
+                            .put("message", "Bad Request").toString() + "\n");
+                    return;
+                }
+                data.put("ipAddress", remoteAddress);
+
+                String replyAddress = "chat.reply." + UUID.randomUUID();
+                data.put("streamReplyAddress", replyAddress);
+
+                MessageConsumer<Object> consumer = eventBus.consumer(replyAddress);
+                consumer.handler(replyMessage -> {
+                    String chunk = replyMessage.body().toString();
+                    response.write(chunk + "\n");
+                    JsonObject parsed;
+                    try {
+                        parsed = new JsonObject(chunk);
+                    } catch (Exception ex) {
+                        parsed = new JsonObject();
+                    }
+                    if (parsed.getBoolean("done", false)) {
+                        consumer.unregister();
+                        response.end();
+                    }
+                });
+                // A visitor closing the tab mid-reply would otherwise leak this consumer forever --
+                // it has no other way to ever receive its {"done": true} unregister trigger.
+                rtc.request().connection().closeHandler(v -> consumer.unregister());
+
+                eventBus.send("SEND_SITE_CHAT_MESSAGE_STREAM", data.toString());
+            });
+        });
+
         // ---- /biopay/api/v1/req (JWT-protected: everything else) ----------
 
         router.route("/biopay/api/v1/*").handler(CorsHandler.create()
@@ -301,6 +362,48 @@ public class EntryPoint extends AbstractVerticle {
                     }
                 } catch (Exception ex) {
                     response.end(badRequest("Error occurred: " + ex.getMessage()).toString());
+                }
+            });
+        });
+
+        // ---- /biopay/api/v1/chat-stream (JWT-protected: dashboard chatbot) ------
+        // Scoped exactly like /api/v1/req above: actorId/actorRole/anchorId/partnerCode/
+        // systemAdmin all come from the verified JWT's own claims, never from anything the
+        // client puts in the request body. Streamed for the same reason as the site chatbot --
+        // a local LLM reply can run well past a normal request timeout. A system owner's
+        // targetAnchorId is re-validated against the anchors table, same as /api/v1/req's
+        // validateTargetAnchorAndDispatch.
+
+        router.route("/biopay/api/v1/chat-stream").handler(rtc -> {
+            HttpServerResponse response = rtc.response();
+            String remoteAddress = rtc.request().remoteAddress().toString();
+            JsonObject principal = rtc.user().principal();
+
+            rtc.request().bodyHandler(bodyHandler -> {
+                JsonObject data;
+                try {
+                    String body = bodyHandler.toString().trim();
+                    data = body.isEmpty() ? new JsonObject() : new JsonObject(body);
+                } catch (Exception ex) {
+                    response.putHeader("Content-Type", "application/json");
+                    response.setStatusCode(400).end(badRequest("Bad Request").toString());
+                    return;
+                }
+                boolean systemOwner = Boolean.TRUE.equals(principal.getValue("systemAdmin"));
+                Object sessionAnchorId = principal.getValue("anchorId");
+                Object requestedAnchorId = data.getValue("targetAnchorId");
+                data.put("ipAddress", remoteAddress);
+                data.put("actorId", principal.getValue("sub"));
+                data.put("actorRole", principal.getString("role"));
+                data.put("partnerCode", principal.getValue("partnerCode"));
+                data.put("systemAdmin", systemOwner);
+                data.put("channel", principal.getString("channel", "PORTAL"));
+
+                if (systemOwner && requestedAnchorId != null) {
+                    validateTargetAnchorAndStartChatStream(eventBus, rtc, response, data, requestedAnchorId);
+                } else {
+                    data.put("anchorId", sessionAnchorId);
+                    startDashboardChatStream(eventBus, rtc, response, data);
                 }
             });
         });
@@ -383,6 +486,69 @@ public class EntryPoint extends AbstractVerticle {
                         authorizeAndDispatch(eventBus, processingCode, data, response);
                     }
                 });
+    }
+
+    /** Same validation as {@link #validateTargetAnchorAndDispatch}, for the dashboard chatbot's
+     *  own streaming route rather than the generic processingCode dispatch path. */
+    private static void validateTargetAnchorAndStartChatStream(EventBus eventBus, RoutingContext rtc,
+            HttpServerResponse response, JsonObject data, Object requestedAnchorId) {
+        final int targetAnchorId;
+        try {
+            targetAnchorId = Integer.parseInt(requestedAnchorId.toString());
+        } catch (NumberFormatException ex) {
+            response.putHeader("Content-Type", "application/json");
+            response.setStatusCode(400).end(badRequest("targetAnchorId must identify an anchor").toString());
+            return;
+        }
+        Datasource.pool().preparedQuery("SELECT 1 AS allowed FROM anchors WHERE id=@p1")
+                .execute(Tuple.of(targetAnchorId))
+                .onFailure(error -> {
+                    response.putHeader("Content-Type", "application/json");
+                    response.setStatusCode(503).end(new JsonObject()
+                            .put("responseCode", "503").put("responseMessage", "Unable to verify the selected anchor").toString());
+                })
+                .onSuccess(rows -> {
+                    if (rows.size() == 0) {
+                        response.putHeader("Content-Type", "application/json");
+                        response.setStatusCode(403).end(new JsonObject()
+                                .put("responseCode", "403")
+                                .put("responseMessage", "The selected account is not an anchor").toString());
+                    } else {
+                        data.put("anchorId", targetAnchorId);
+                        startDashboardChatStream(eventBus, rtc, response, data);
+                    }
+                });
+    }
+
+    /** Shared streaming plumbing for the dashboard chatbot route, once {@code data.anchorId} is
+     *  known-good: registers an ephemeral event-bus consumer for the reply, forwards each chunk
+     *  as one ndjson line, and unregisters on {@code done} or an early client disconnect. */
+    private static void startDashboardChatStream(EventBus eventBus, RoutingContext rtc,
+            HttpServerResponse response, JsonObject data) {
+        response.putHeader("Content-Type", "application/x-ndjson");
+        response.setChunked(true);
+
+        String replyAddress = "chat.reply." + UUID.randomUUID();
+        data.put("streamReplyAddress", replyAddress);
+
+        MessageConsumer<Object> consumer = eventBus.consumer(replyAddress);
+        consumer.handler(replyMessage -> {
+            String chunk = replyMessage.body().toString();
+            response.write(chunk + "\n");
+            JsonObject parsed;
+            try {
+                parsed = new JsonObject(chunk);
+            } catch (Exception ex) {
+                parsed = new JsonObject();
+            }
+            if (parsed.getBoolean("done", false)) {
+                consumer.unregister();
+                response.end();
+            }
+        });
+        rtc.request().connection().closeHandler(v -> consumer.unregister());
+
+        eventBus.send("SEND_DASHBOARD_CHAT_MESSAGE_STREAM", data.toString());
     }
 
     private static void authorizeAndDispatch(EventBus eventBus, String processingCode, JsonObject data,
