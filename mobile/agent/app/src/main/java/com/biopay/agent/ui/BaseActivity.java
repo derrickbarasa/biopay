@@ -1,5 +1,6 @@
 package com.biopay.agent.ui;
 
+import android.net.ConnectivityManager;
 import android.os.Bundle;
 import android.view.View;
 
@@ -13,10 +14,12 @@ import androidx.core.view.WindowInsetsCompat;
 
 import com.google.android.material.appbar.MaterialToolbar;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
+import com.google.android.material.snackbar.Snackbar;
 import com.biopay.agent.R;
 import com.biopay.agent.home.HomeActivity;
 import com.biopay.agent.households.HouseholdListActivity;
 import com.biopay.agent.more.MoreActivity;
+import com.biopay.agent.network.NetworkStatus;
 import com.biopay.agent.payments.PaymentsActivity;
 import com.biopay.agent.vouchers.VoucherRedemptionActivity;
 
@@ -29,6 +32,15 @@ public abstract class BaseActivity extends AppCompatActivity {
     private BottomNavigationView mainNavigation;
     private int mainNavigationSelectedItemId = View.NO_ID;
 
+    // Connectivity is only ever surfaced as a change, never on every screen open -- null means
+    // "haven't heard from NetworkStatus yet on this activity instance," which suppresses the
+    // very first callback (the officer's current state, not a transition) so opening a screen
+    // while already offline doesn't itself pop a Snackbar.
+    @Nullable
+    private Boolean lastKnownOnline;
+    @Nullable
+    private ConnectivityManager.NetworkCallback connectivityCallback;
+
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -37,6 +49,38 @@ public abstract class BaseActivity extends AppCompatActivity {
                 .setAppearanceLightStatusBars(true);
         WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView())
                 .setAppearanceLightNavigationBars(true);
+    }
+
+    @Override
+    protected void onStart() {
+        super.onStart();
+        lastKnownOnline = null;
+        connectivityCallback = NetworkStatus.observe(this, this::onConnectivityChanged);
+    }
+
+    @Override
+    protected void onStop() {
+        super.onStop();
+        NetworkStatus.stopObserving(this, connectivityCallback);
+        connectivityCallback = null;
+    }
+
+    private void onConnectivityChanged(boolean online) {
+        Boolean previous = lastKnownOnline;
+        lastKnownOnline = online;
+        if (previous == null || previous == online) {
+            return;
+        }
+        runOnUiThread(() -> {
+            View root = findViewById(android.R.id.content);
+            if (root == null || isFinishing() || isDestroyed()) {
+                return;
+            }
+            Snackbar.make(root,
+                            online ? R.string.connectivity_back_online : R.string.connectivity_offline,
+                            Snackbar.LENGTH_LONG)
+                    .show();
+        });
     }
 
     @Override

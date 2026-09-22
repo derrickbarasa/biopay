@@ -651,6 +651,11 @@ public class PersonCaptureActivity extends BaseActivity {
                         OutcomeFeedback.error(this, R.string.alternate_gender_required);
                         return;
                     }
+                    String phoneNumber = etPhone.getText().toString().trim();
+                    if (!phoneNumber.isEmpty() && !PhoneValidation.isValid(phoneNumber)) {
+                        etPhone.setError(getString(R.string.phone_country_code_required));
+                        return;
+                    }
                     String alternateNumber = "ALT" + Long.toString(System.currentTimeMillis(), 36).toUpperCase(Locale.US);
                     ContentValues values = new ContentValues();
                     values.put("alternate_number", alternateNumber);
@@ -661,7 +666,7 @@ public class PersonCaptureActivity extends BaseActivity {
                     values.put("relationship", relationship);
                     values.put("gender", gender);
                     values.put("age", parseIntOrNull(etAge.getText().toString()));
-                    values.put("phone_number", etPhone.getText().toString().trim());
+                    values.put("phone_number", phoneNumber);
                     values.put("registration_method", method);
                     alternateDao.insert(values);
 

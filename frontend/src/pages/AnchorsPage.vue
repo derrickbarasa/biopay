@@ -6,6 +6,7 @@ import { useToast } from '@/composables/useToast'
 import { useConfirm } from '@/composables/useConfirm'
 import { COUNTRIES } from '@/types/user'
 import { capitalFor } from '@/utils/countries'
+import { isValidPhone, phoneRule } from '@/utils/phone'
 
 interface Anchor { id:number; anchorCode:string; name:string; authorisedName?:string; authorisedFirstName?:string; authorisedSurname?:string; authorisedEmail?:string; authorisedContact?:string; address?:string; country?:string; city?:string; status:number }
 
@@ -48,6 +49,10 @@ function openEdit(item: Anchor) {
 
 async function save() {
   if (!anchor.name.trim()) { toast.error('Anchor name is required'); return }
+  if (anchor.authorisedContact && !isValidPhone(anchor.authorisedContact)) {
+    toast.error('Include the country code in the phone number, e.g. +254712345678')
+    return
+  }
   saving.value = true
   try {
     await dispatch('UPDATE_ANCHOR', { ...anchor, targetAnchorId: anchor.id })
@@ -107,7 +112,7 @@ onMounted(load)
           <v-text-field v-model="anchor.authorisedFirstName" label="Authorised contact first name" placeholder="e.g. Jane" variant="outlined" />
           <v-text-field v-model="anchor.authorisedSurname" label="Authorised contact surname" placeholder="e.g. Mwangi" variant="outlined" />
           <v-text-field :model-value="anchor.authorisedEmail" label="Sign-in email" type="email" variant="outlined" readonly hint="Change from Settings while signed in as this anchor" persistent-hint />
-          <v-text-field v-model="anchor.authorisedContact" label="Phone" placeholder="e.g. +254 700 000000" variant="outlined" />
+          <v-text-field v-model="anchor.authorisedContact" label="Phone" placeholder="e.g. +254712345678" variant="outlined" :rules="[phoneRule]" />
           <v-autocomplete v-model="anchor.country" :items="COUNTRIES" label="Country" variant="outlined" />
           <v-text-field v-model="anchor.city" label="City" placeholder="e.g. Nairobi" variant="outlined" />
           <v-text-field v-model="anchor.address" label="Address" placeholder="e.g. Karen Road" variant="outlined" />

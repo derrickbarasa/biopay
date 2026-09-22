@@ -6,6 +6,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
 import { ORG_MODULES, COUNTRIES } from '@/types/user'
 import { capitalFor } from '@/utils/countries'
+import { isValidPhone, phoneRule } from '@/utils/phone'
 
 interface Anchor { id: number; name: string; anchorCode: string }
 
@@ -74,6 +75,10 @@ async function save() {
     toast.error('A valid email is required to create the organization\'s sign-in account')
     return
   }
+  if (form.value.authorisedContact && !isValidPhone(form.value.authorisedContact)) {
+    toast.error('Include the country code in the phone number, e.g. +254712345678')
+    return
+  }
   if (!form.value.modules.length) {
     toast.error('Select at least one module')
     return
@@ -132,7 +137,7 @@ async function save() {
               v-model="form.authorisedEmail" label="Email (used to sign in)"
               placeholder="e.g. amina@brightfuture.org" type="email" :rules="[emailRule]" density="compact" hide-details="auto"
             />
-            <v-text-field v-model="form.authorisedContact" label="Phone" placeholder="e.g. +254 700 000000" density="compact" hide-details="auto" />
+            <v-text-field v-model="form.authorisedContact" label="Phone" placeholder="e.g. +254712345678" density="compact" hide-details="auto" :rules="[phoneRule]" />
             <v-select
               v-model="form.verificationMethod" :items="VERIFICATION_METHODS" label="Household verification method"
               :prepend-inner-icon="verificationMethodIcon(form.verificationMethod)" :rules="[required]" density="compact"

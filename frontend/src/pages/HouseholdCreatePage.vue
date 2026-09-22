@@ -8,6 +8,7 @@ import { useAnchorScope } from '@/composables/useAnchorScope'
 import { useOrgCascade } from '@/composables/useOrgCascade'
 import { LEGAL_STATUS_OPTIONS, MARITAL_STATUS_OPTIONS, VULNERABILITY_OPTIONS } from '@/constants/householdClassifications'
 import { dateOfBirthToAge } from '@/utils/dateOfBirth'
+import { isValidPhone, phoneRule } from '@/utils/phone'
 
 const maritalStatusItems: readonly string[] = MARITAL_STATUS_OPTIONS
 
@@ -106,6 +107,10 @@ async function attemptSave() {
   }
   if (auth.isAnchor && !form.value.organisationCode) {
     toast.error('Select the organisation this household belongs to')
+    return
+  }
+  if (form.value.phoneNumber && !isValidPhone(form.value.phoneNumber)) {
+    toast.error('Include the country code in the phone number, e.g. +254712345678')
     return
   }
   checkingDup.value = true
@@ -237,7 +242,7 @@ onMounted(() => {
             <v-select v-model="form.maritalStatus" label="Marital status" :items="maritalStatusItems" clearable />
           </v-col>
           <v-col cols="6" sm="4"><v-text-field v-model="form.spouseName" label="Spouse name" /></v-col>
-          <v-col cols="12" sm="4"><v-text-field v-model="form.phoneNumber" label="Phone number" /></v-col>
+          <v-col cols="12" sm="4"><v-text-field v-model="form.phoneNumber" label="Phone number" placeholder="e.g. +254712345678" :rules="[phoneRule]" /></v-col>
         </v-row>
         <v-row>
           <v-col cols="12" sm="4">

@@ -17,6 +17,7 @@ import {
 } from '@/constants/householdClassifications'
 import { ALTERNATE_RELATIONSHIP_OPTIONS, inferGenderFromRelationship } from '@/constants/alternateRelationship'
 import { ageToDateOfBirth, dateOfBirthToAge } from '@/utils/dateOfBirth'
+import { isValidPhone, phoneRule } from '@/utils/phone'
 import { formatCurrency } from '@/utils/currency'
 
 const maritalStatusItems: readonly string[] = MARITAL_STATUS_OPTIONS
@@ -488,6 +489,10 @@ async function saveEdit() {
     toast.error('Head of household name is required')
     return
   }
+  if (editForm.value.phoneNumber && !isValidPhone(editForm.value.phoneNumber)) {
+    toast.error('Include the country code in the phone number, e.g. +254712345678')
+    return
+  }
   editing.value = true
   try {
     await dispatch('UPDATE_HOUSEHOLD', {
@@ -715,6 +720,10 @@ function fileToDataUrl(file: File): Promise<string> {
 async function saveAlternate() {
   if (!altForm.value.alternateName.trim()) {
     toast.error('Name is required')
+    return
+  }
+  if (altForm.value.phoneNumber && !isValidPhone(altForm.value.phoneNumber)) {
+    toast.error('Include the country code in the phone number, e.g. +254712345678')
     return
   }
   addingAlt.value = true
@@ -1180,7 +1189,7 @@ onMounted(() => { load(); loadNameLookups() })
               <v-select v-model="editForm.maritalStatus" label="Marital status" :items="maritalStatusItems" clearable />
             </v-col>
             <v-col cols="6" sm="4"><v-text-field v-model="editForm.spouseName" label="Spouse name" /></v-col>
-            <v-col cols="12" sm="4"><v-text-field v-model="editForm.phoneNumber" label="Phone number" /></v-col>
+            <v-col cols="12" sm="4"><v-text-field v-model="editForm.phoneNumber" label="Phone number" placeholder="e.g. +254712345678" :rules="[phoneRule]" /></v-col>
           </v-row>
           <v-row>
             <v-col cols="12" sm="4">
@@ -1267,7 +1276,7 @@ onMounted(() => { load(); loadNameLookups() })
               density="compact"
             />
           </div>
-          <v-text-field v-model="altForm.phoneNumber" label="Phone number" hide-details density="compact" />
+          <v-text-field v-model="altForm.phoneNumber" label="Phone number" placeholder="e.g. +254712345678" density="compact" :rules="[phoneRule]" />
           <v-file-input
             label="Attach photo (optional)"
             accept="image/*"

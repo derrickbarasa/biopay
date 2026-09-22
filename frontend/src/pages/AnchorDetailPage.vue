@@ -7,6 +7,7 @@ import { useToast } from '@/composables/useToast'
 import { useConfirm } from '@/composables/useConfirm'
 import { ORG_MODULES, COUNTRIES } from '@/types/user'
 import { capitalFor } from '@/utils/countries'
+import { isValidPhone, phoneRule } from '@/utils/phone'
 import { scopedUserHeaders } from '@/constants/tableHeaders'
 import OrganizationDataTable from '@/components/OrganizationDataTable.vue'
 
@@ -159,6 +160,10 @@ async function saveOrganization() {
   }
   if (!/.+@.+\..+/.test(orgForm.value.authorisedEmail)) {
     toast.error('Enter a valid authorized contact email')
+    return
+  }
+  if (orgForm.value.authorisedContact && !isValidPhone(orgForm.value.authorisedContact)) {
+    toast.error('Include the country code in the phone number, e.g. +254712345678')
     return
   }
   if (!orgForm.value.modules.length) {
@@ -423,7 +428,7 @@ onMounted(load)
                 v-model="orgForm.authorisedEmail" label="Email"
                 placeholder="e.g. amina@brightfuture.org" type="email" :rules="[emailRule]" density="compact" hide-details="auto"
               />
-              <v-text-field v-model="orgForm.authorisedContact" label="Phone" placeholder="e.g. +254 700 000000" density="compact" hide-details="auto" />
+              <v-text-field v-model="orgForm.authorisedContact" label="Phone" placeholder="e.g. +254712345678" density="compact" hide-details="auto" :rules="[phoneRule]" />
               <v-select
                 v-model="orgForm.verificationMethod" :items="VERIFICATION_METHODS" label="Household verification method"
                 :prepend-inner-icon="verificationMethodIcon(orgForm.verificationMethod)" :rules="[required]" density="compact"

@@ -21,6 +21,9 @@
     <string name="login_online_required">This device must connect to BioPay now. Offline access lasts %1$d days after the last successful online sign-in and subscription check.</string>
     <string name="login_security_note">Secure access for authorised field officers</string>
 
+    <string name="connectivity_offline">You\'re offline. BioPay keeps working from local data -- changes will sync once you\'re back online.</string>
+    <string name="connectivity_back_online">Back online. Syncing will resume automatically.</string>
+
     <string name="subscription_locked_title">Subscription expired</string>
     <string name="subscription_locked_message">Your organisation\'s BioPay subscription is not active. Contact your organisation to resolve this with their anchor, then try again.</string>
     <string name="subscription_locked_retry">Try again</string>
@@ -165,6 +168,7 @@
     <string name="field_household_name">Household name</string>
     <string name="field_id_number">ID number</string>
     <string name="field_phone_number">Phone number</string>
+    <string name="phone_country_code_required">Include the country code, e.g. +254712345678</string>
     <string name="field_age">Age</string>
     <string name="field_gender">Gender</string>
     <string name="gender_male">Male</string>

@@ -439,13 +439,18 @@ public class HouseholdFormActivity extends BaseActivity {
             spinnerLegalStatus.setError(getString(R.string.legal_status_required));
             return;
         }
+        String phoneNumber = etPhoneNumber.getText().toString().trim();
+        if (!phoneNumber.isEmpty() && !PhoneValidation.isValid(phoneNumber)) {
+            etPhoneNumber.setError(getString(R.string.phone_country_code_required));
+            return;
+        }
 
         ContentValues values = new ContentValues();
         values.put("supervisor_id", String.valueOf(sessionManager.getUserId()));
         values.put("partner_code", sessionManager.getPartnerCode());
         values.put("household_name", householdName);
         values.put("id_number", etIdNumber.getText().toString().trim());
-        values.put("phone_number", etPhoneNumber.getText().toString().trim());
+        values.put("phone_number", phoneNumber);
         values.put("age", parseIntOrNull(etAge.getText().toString()));
         values.put("gender", gender);
         values.put("marital_status", spinnerMaritalStatus.getText().toString().trim());

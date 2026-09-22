@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
+import { phoneRule } from '@/utils/phone'
 
 const auth = useAuthStore()
 const router = useRouter()
@@ -96,7 +97,7 @@ async function handleSubmit() {
               <v-text-field v-model="form.authorisedFirstName" label="Your first name (authorised contact)" />
               <v-text-field v-model="form.authorisedSurname" label="Your surname" />
               <v-text-field v-model="form.email" label="Email" :rules="[rules.required, rules.email]" autocomplete="username" />
-              <v-text-field v-model="form.phone" label="Phone (optional)" />
+              <v-text-field v-model="form.phone" label="Phone (optional)" placeholder="e.g. +254712345678" :rules="[phoneRule]" />
               <v-text-field v-model="form.address" label="Address (optional)" />
               <v-text-field
                 v-model="form.password" label="Password"

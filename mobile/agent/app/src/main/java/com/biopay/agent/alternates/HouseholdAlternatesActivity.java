@@ -20,6 +20,7 @@ import com.biopay.agent.data.AlternateDao;
 import com.biopay.agent.data.HouseholdDao;
 import com.biopay.agent.households.PersonCaptureActivity;
 import com.biopay.agent.households.PersonDetailActivity;
+import com.biopay.agent.households.PhoneValidation;
 import com.biopay.agent.households.RelationshipGender;
 import com.biopay.agent.ui.BaseActivity;
 import com.biopay.agent.ui.OutcomeFeedback;
@@ -149,12 +150,17 @@ public class HouseholdAlternatesActivity extends BaseActivity {
                 OutcomeFeedback.error(this, R.string.alternate_gender_required);
                 return;
             }
+            String phoneNumber = etPhone.getText().toString().trim();
+            if (!phoneNumber.isEmpty() && !PhoneValidation.isValid(phoneNumber)) {
+                etPhone.setError(getString(R.string.phone_country_code_required));
+                return;
+            }
             ContentValues values = new ContentValues();
             values.put("alternate_name", name);
             values.put("relationship", relationship);
             values.put("gender", gender);
             values.put("age", parseIntOrNull(etAge.getText().toString()));
-            values.put("phone_number", etPhone.getText().toString().trim());
+            values.put("phone_number", phoneNumber);
             alternateDao.update(alternate.alternateNumber, values);
             OutcomeFeedback.success(this, R.string.alternate_updated);
             load();

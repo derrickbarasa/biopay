@@ -5,6 +5,7 @@ import { dispatch } from '@/api/client'
 import { useToast } from '@/composables/useToast'
 import { COUNTRIES } from '@/types/user'
 import { capitalFor } from '@/utils/countries'
+import { isValidPhone, phoneRule } from '@/utils/phone'
 
 const router = useRouter()
 const toast = useToast()
@@ -26,6 +27,10 @@ function goToList() {
 async function createAnchor() {
   if (!newAnchor.name.trim() || !newAnchor.authorisedFirstName.trim() || !/.+@.+\..+/.test(newAnchor.authorisedEmail)) {
     toast.error('Complete the anchor name, administrator name and a valid email')
+    return
+  }
+  if (newAnchor.authorisedContact && !isValidPhone(newAnchor.authorisedContact)) {
+    toast.error('Include the country code in the phone number, e.g. +254712345678')
     return
   }
   creating.value = true
@@ -55,7 +60,7 @@ async function createAnchor() {
         <v-text-field v-model="newAnchor.authorisedFirstName" label="Administrator first name" placeholder="e.g. Jane" variant="outlined" required />
         <v-text-field v-model="newAnchor.authorisedSurname" label="Administrator surname" placeholder="e.g. Mwangi" variant="outlined" />
         <v-text-field v-model="newAnchor.authorisedEmail" label="Administrator email" placeholder="e.g. jane@frontiertrust.bank" type="email" variant="outlined" required />
-        <v-text-field v-model="newAnchor.authorisedContact" label="Phone" placeholder="e.g. +254 700 000000" variant="outlined" />
+        <v-text-field v-model="newAnchor.authorisedContact" label="Phone" placeholder="e.g. +254712345678" variant="outlined" :rules="[phoneRule]" />
         <v-autocomplete v-model="newAnchor.country" :items="COUNTRIES" label="Country" variant="outlined" />
         <v-text-field v-model="newAnchor.city" label="City" placeholder="e.g. Nairobi" variant="outlined" />
         <v-text-field v-model="newAnchor.address" label="Address" placeholder="e.g. Karen Road" variant="outlined" />
