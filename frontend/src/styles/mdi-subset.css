@@ -191,3 +191,10 @@
 .mdi-shield-plus-outline::before { content: "\F0ADB"; }
 .mdi-shield-search::before { content: "\F0D9A"; }
 .mdi-tune-variant::before { content: "\F1542"; }
+
+/* Added 2026-09-22 -- the new AI chatbot widget's floating bubble
+   (mdi-chat-processing-outline) and send button (mdi-send) were both
+   missing from this subset, so the bubble rendered as a plain filled
+   square and the send button as a blank grey square with no glyph. */
+.mdi-chat-processing-outline::before { content: "\F12CA"; }
+.mdi-send::before { content: "\F048A"; }
