@@ -217,7 +217,8 @@ const anchorLabel = computed(() => adminMode.value ? queryAnchorName.value || `A
               <v-icon icon="mdi-clock-check-outline" size="48" color="primary" class="mb-3" />
               <h2 class="text-h6 font-weight-bold mb-2">Payment submitted</h2>
               <p class="text-body-2 text-medium-emphasis mb-1">{{ anchorResult.message }}</p>
-              <p class="text-caption text-medium-emphasis">Reference: {{ anchorResult.reference }}</p>
+              <p class="text-caption text-medium-emphasis mb-3">Reference: {{ anchorResult.reference }}</p>
+              <p class="text-caption text-medium-emphasis">Once the payment is confirmed, log out and log back in to access your account again.</p>
               <v-btn class="mt-4" variant="text" prepend-icon="mdi-arrow-left" @click="router.push('/app/subscription')">Back to Subscription</v-btn>
             </div>
             <p v-else-if="!anchorMethod" class="make-payments-sentence">Make Payments</p>

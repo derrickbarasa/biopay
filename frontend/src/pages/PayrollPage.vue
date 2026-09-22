@@ -221,7 +221,7 @@ function isMakerOf(cycle: Cycle) {
 
 // Payment cycles are approved and disbursed by the organisation itself, never the anchor.
 // Any organisation user with the approval permission can approve, including the maker.
-function isApproverEligible(cycle: Cycle) {
+function isApproverEligible() {
   return auth.isOrganisation && auth.can('CHECK_PAYMENT_CYCLES')
 }
 
@@ -378,7 +378,7 @@ function openView(cycle: Cycle) {
                 <v-btn v-bind="tip" icon="mdi-eye-outline" variant="text" density="comfortable" size="small" :aria-label="`View ${item.cycleCode}`" @click="openView(item)" />
               </template>
             </v-tooltip>
-            <template v-if="isApproverEligible(item) && item.status === 'PENDING_APPROVAL'">
+            <template v-if="isApproverEligible() && item.status === 'PENDING_APPROVAL'">
               <v-tooltip text="Approve" location="top">
                 <template #activator="{ props: tip }">
                   <v-btn v-bind="tip" icon="mdi-check-circle-outline" variant="tonal" color="success" density="comfortable" size="small" :aria-label="`Approve ${item.cycleCode}`" @click="openApprove(item)" />
@@ -390,12 +390,12 @@ function openView(cycle: Cycle) {
                 </template>
               </v-tooltip>
             </template>
-            <v-tooltip v-if="isMakerOf(item) && !isApproverEligible(item) && item.status === 'PENDING_APPROVAL'" text="Review" location="top">
+            <v-tooltip v-if="isMakerOf(item) && !isApproverEligible() && item.status === 'PENDING_APPROVAL'" text="Review" location="top">
               <template #activator="{ props: tip }">
                 <v-btn v-bind="tip" icon="mdi-clipboard-text-search-outline" variant="tonal" density="comfortable" size="small" :aria-label="`Review ${item.cycleCode}`" @click="openApprove(item)" />
               </template>
             </v-tooltip>
-            <v-tooltip v-if="isApproverEligible(item) && item.status === 'APPROVED'" text="Disburse" location="top">
+            <v-tooltip v-if="isApproverEligible() && item.status === 'APPROVED'" text="Disburse" location="top">
               <template #activator="{ props: tip }">
                 <v-btn v-bind="tip" icon="mdi-cash-fast" variant="tonal" color="secondary" density="comfortable" size="small" :aria-label="`Disburse ${item.cycleCode}`" @click="disburse(item)" />
               </template>
@@ -410,9 +410,9 @@ function openView(cycle: Cycle) {
     <v-dialog v-model="approveDialog" max-width="640">
       <v-card v-if="approveTarget">
         <dialog-close-button @close="approveDialog = false" />
-        <v-card-title>{{ isApproverEligible(approveTarget) ? 'Approve' : 'Review' }} {{ approveTarget.cycleCode }}</v-card-title>
+        <v-card-title>{{ isApproverEligible() ? 'Approve' : 'Review' }} {{ approveTarget.cycleCode }}</v-card-title>
         <v-card-text>
-          <div v-if="!isApproverEligible(approveTarget)" class="text-body-2 text-medium-emphasis mb-3">
+          <div v-if="!isApproverEligible()" class="text-body-2 text-medium-emphasis mb-3">
             Uncheck any households you no longer want in this cycle before it goes to the organisation's approvers.
           </div>
           <div class="mb-3">
@@ -451,7 +451,7 @@ function openView(cycle: Cycle) {
             v-model="approveRejectReason" label="Reason for rejecting the checked households" class="mb-2"
           />
 
-          <template v-if="isApproverEligible(approveTarget)">
+          <template v-if="isApproverEligible()">
             <v-alert type="info" variant="tonal" density="compact" class="mb-3">
               An approval link was emailed when this cycle was submitted. To approve here, request an OTP and enter it below.
             </v-alert>
@@ -464,7 +464,7 @@ function openView(cycle: Cycle) {
         <v-card-actions>
           <v-spacer />
           <v-btn variant="flat" color="error" @click="approveDialog = false">Cancel</v-btn>
-          <v-btn v-if="isApproverEligible(approveTarget)" variant="flat" color="secondary" :loading="approving" :disabled="!approveOtp" @click="confirmApprove">Approve</v-btn>
+          <v-btn v-if="isApproverEligible()" variant="flat" color="secondary" :loading="approving" :disabled="!approveOtp" @click="confirmApprove">Approve</v-btn>
           <v-btn v-else variant="flat" color="secondary" :loading="approving" :disabled="!approveRejectedIds.size" @click="saveRejections">Save changes</v-btn>
         </v-card-actions>
       </v-card>

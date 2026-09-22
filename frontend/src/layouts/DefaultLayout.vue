@@ -37,15 +37,24 @@ interface SubscriptionStatus {
   anchorActive?: boolean
 }
 const subscription = ref<SubscriptionStatus>({ status: 'NONE', anchorActive: true })
+// Starts false so router-view stays hidden (see subscriptionReady's use in the template) until
+// the first GET_SUBSCRIPTION check actually lands -- otherwise `subscription` still holds its
+// optimistic NONE default for that first tick, `isArchived` reads false, and a route like
+// DashboardPage mounts and fires its own data requests immediately, which the backend then
+// rejects with 402 the instant the real (blocked) status arrives a moment later. A quick flash
+// of real content followed by the lockout card, plus a burst of doomed/noisy requests either way.
+const subscriptionReady = ref(false)
 
 async function fetchSubscription() {
-  if (auth.isSystemAdmin || !auth.user?.anchorId) return
+  if (auth.isSystemAdmin || !auth.user?.anchorId) { subscriptionReady.value = true; return }
   try {
     const res = await dispatch<{ results: SubscriptionStatus }>('GET_SUBSCRIPTION')
     subscription.value = res.results ?? { status: 'NONE', anchorActive: true }
   } catch {
     // Fail-open: never block the app because the status check itself failed.
     subscription.value = { status: 'NONE', anchorActive: true }
+  } finally {
+    subscriptionReady.value = true
   }
 }
 
@@ -53,10 +62,17 @@ function goToMakePayment() {
   router.push('/app/subscription/pay')
 }
 
+// True whenever the signed-in anchor's subscription needs attention, independent of which
+// route is currently open -- used to decide what the sidebar should offer (see
+// navLockedToSubscription below), as opposed to isArchived, which additionally excludes the
+// Subscription/Make Payment routes so their own content can still render.
+const subscriptionBlocked = computed(() => !auth.isSystemAdmin && !!auth.user?.anchorId
+  && ['ARCHIVED', 'SUSPENDED', 'CANCELLED'].includes(subscription.value.status))
+
 // The Subscription and Make Payment pages must stay reachable even when archived --
 // otherwise there's no way to see invoices or reach the payment flow that unlocks
 // everything else.
-const isArchived = computed(() => !auth.isSystemAdmin && !!auth.user?.anchorId && ['ARCHIVED', 'SUSPENDED', 'CANCELLED'].includes(subscription.value.status)
+const isArchived = computed(() => subscriptionBlocked.value
   && route.name !== 'subscription' && route.name !== 'subscription-pay')
 const blockedByManagement = computed(() => ['SUSPENDED', 'CANCELLED'].includes(subscription.value.status))
 const inGrace = computed(() => !auth.isSystemAdmin && !!auth.user?.anchorId && subscription.value.status === 'GRACE')
@@ -68,10 +84,13 @@ const inGrace = computed(() => !auth.isSystemAdmin && !!auth.user?.anchorId && s
 const isAnchorDeactivated = computed(() => !auth.isSystemAdmin && !auth.isAnchorAdministrator
   && !!auth.user?.anchorId && subscription.value.anchorActive === false)
 
-// An archived anchor administrator can only reach the Subscription/Make Payment pages
-// (and Log out, which lives outside visibleSections) until they pay; the sidebar itself
-// is trimmed down to match instead of just relying on the content-area gate below.
-const navLockedToSubscription = computed(() => isArchived.value && auth.isAnchorAdministrator)
+// While the anchor's subscription is blocked (any role: anchor administrator, organisation,
+// or field officer), the sidebar is trimmed down to just Dashboard -- the only place with
+// content to show is the lockout card, and (for the anchor administrator) the card's own
+// "View subscription" link, not the sidebar, is how the Subscription page is reached. This
+// stays in effect even while actually on the Subscription/Make Payment routes, unlike
+// isArchived, so the sidebar doesn't spring back open there.
+const navLockedToSubscription = computed(() => subscriptionBlocked.value || isAnchorDeactivated.value)
 
 onMounted(fetchSubscription)
 
@@ -151,7 +170,7 @@ const navSections: NavSection[] = [
 ]
 
 function itemVisible(item: NavItem): boolean {
-  if (navLockedToSubscription.value) return item.to === '/app/subscription'
+  if (navLockedToSubscription.value) return item.to === '/app/dashboard'
   return (!item.roles || auth.isSystemAdmin || (!!auth.role && item.roles.includes(auth.role)))
     && (!item.module || auth.hasModule(item.module))
     && (!item.permission || auth.can(item.permission))
@@ -290,10 +309,17 @@ function onNavClick(event: MouseEvent | KeyboardEvent, to: string) {
         </div>
       </v-alert>
 
+      <!-- Nothing under here may render until the first subscription check actually lands --
+           see subscriptionReady's own comment for why (it prevents a route's content from
+           briefly mounting and firing doomed requests before we know it should be gated). -->
+      <div v-if="!subscriptionReady" class="archived-gate">
+        <v-progress-circular indeterminate color="primary" size="32" />
+      </div>
+
       <!-- Anchor deactivated: distinct from subscription expiry -- the anchor itself was
            switched off by the platform owner, so there's no self-service remedy for anyone
            under it (org or field officer alike); both simply see "Contact your anchor". -->
-      <div v-if="isAnchorDeactivated" class="archived-gate">
+      <div v-else-if="isAnchorDeactivated" class="archived-gate">
         <v-card variant="flat" border class="pa-8 text-center" max-width="520">
           <v-icon icon="mdi-domain-off" size="48" color="error" class="mb-3" />
           <p class="lockout-heading mb-2">Contact Your Anchor</p>
@@ -303,17 +329,18 @@ function onNavClick(event: MouseEvent | KeyboardEvent, to: string) {
       </div>
 
       <!-- Archived: grace exhausted -> gate access behind payment. Message and available
-           actions differ by role: the anchor administrator can act directly; an organisation
-           user is told to contact the anchor above them; a field officer is locked out of the
-           dashboard entirely and told to contact their own organisation above them. -->
+           actions differ by role: the anchor administrator sees the actual subscription
+           status and can act directly; an organisation user is simply told to contact the
+           anchor above them, with no subscription details (they don't pay for it); a field
+           officer is locked out of the dashboard entirely and told to contact their own
+           organisation above them, same as the mobile app's lock screen. -->
       <div v-else-if="isArchived" class="archived-gate">
         <v-card variant="flat" border class="pa-8 text-center" max-width="520">
-          <v-icon icon="mdi-lock-clock" size="48" color="error" class="mb-3" />
-          <h2 class="text-h6 font-weight-bold mb-2">
-            {{ subscription.status === 'SUSPENDED' ? 'Subscription suspended' : subscription.status === 'CANCELLED' ? 'Subscription cancelled' : 'Subscription expired' }}
-          </h2>
-
           <template v-if="auth.isAnchorAdministrator">
+            <v-icon icon="mdi-lock-clock" size="48" color="error" class="mb-3" />
+            <h2 class="text-h6 font-weight-bold mb-2">
+              {{ subscription.status === 'SUSPENDED' ? 'Subscription suspended' : subscription.status === 'CANCELLED' ? 'Subscription cancelled' : 'Subscription expired' }}
+            </h2>
             <p class="text-body-2 text-medium-emphasis mb-4">
               {{ subscription.status === 'SUSPENDED'
                 ? 'Your subscription has been suspended by the platform owner. Contact BioPay to restore access.'
@@ -328,17 +355,19 @@ function onNavClick(event: MouseEvent | KeyboardEvent, to: string) {
             </div>
           </template>
           <template v-else-if="auth.isSupervisor">
+            <v-icon icon="mdi-domain-off" size="48" color="error" class="mb-3" />
             <p class="lockout-heading mb-2">Contact Your Org</p>
             <p class="text-body-2 text-medium-emphasis mb-4">
-              Your organisation's anchor has an expired subscription, so field officer access is locked.
-              Ask your organisation to contact their anchor to restore access.
+              Your organisation's anchor needs to settle their subscription before field officer access is restored.
+              Ask your organisation to contact their anchor.
             </p>
             <v-btn variant="text" size="small" prepend-icon="mdi-logout" @click="handleLogout">Log out</v-btn>
           </template>
           <template v-else>
+            <v-icon icon="mdi-domain-off" size="48" color="error" class="mb-3" />
             <p class="lockout-heading mb-2">Contact Your Anchor</p>
             <p class="text-body-2 text-medium-emphasis mb-4">
-              This organisation's anchor has an expired subscription. Access is restored once the anchor makes a payment.
+              This organisation's anchor needs to settle their subscription. Access is restored once they do.
             </p>
             <v-btn variant="text" size="small" prepend-icon="mdi-logout" @click="handleLogout">Log out</v-btn>
           </template>

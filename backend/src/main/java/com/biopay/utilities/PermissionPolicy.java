@@ -63,7 +63,13 @@ public final class PermissionPolicy {
             Map.entry("CREATE_VOUCHER", "ACCESS_VOUCHERS"), Map.entry("BULK_ISSUE_VOUCHERS", "ACCESS_VOUCHERS"),
             Map.entry("REDEEM_VOUCHER", "ACCESS_VOUCHERS"), Map.entry("VOID_VOUCHER", "ACCESS_VOUCHERS"),
             Map.entry("GET_ATTENDANCE", "ACCESS_ATTENDANCE"), Map.entry("RECORD_ATTENDANCE", "ACCESS_ATTENDANCE"),
-            Map.entry("GET_SUBSCRIPTION", "ACCESS_SUBSCRIPTION"), Map.entry("GET_SUBSCRIPTION_INVOICES", "ACCESS_SUBSCRIPTION"),
+            // GET_SUBSCRIPTION is deliberately NOT gated here (unlike the rest of this group): the
+            // dashboard layout calls it for every anchor-scoped role, including organisation and
+            // field-officer sessions that never hold ACCESS_SUBSCRIPTION, purely to decide whether
+            // to show "Contact your anchor"/"Contact your org" (see DefaultLayout.vue). It only
+            // returns status/expiry/grace flags for the caller's own JWT-derived anchorId -- never
+            // anything the caller doesn't already implicitly know from being locked out.
+            Map.entry("GET_SUBSCRIPTION_INVOICES", "ACCESS_SUBSCRIPTION"),
             Map.entry("GET_SUBSCRIPTION_INVOICE_RECEIPT", "ACCESS_SUBSCRIPTION"), Map.entry("RENEW_SUBSCRIPTION", "ACCESS_SUBSCRIPTION"),
             Map.entry("SET_SUBSCRIPTION_STATE", "ACCESS_SUBSCRIPTION")
     );

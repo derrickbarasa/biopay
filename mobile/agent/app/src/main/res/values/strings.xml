@@ -22,7 +22,7 @@
     <string name="login_security_note">Secure access for authorised field officers</string>
 
     <string name="subscription_locked_title">Subscription expired</string>
-    <string name="subscription_locked_message">Your organisation\'s BioPay subscription is not active. Ask your anchor administrator to check or renew it from the web dashboard, then try again.</string>
+    <string name="subscription_locked_message">Your organisation\'s BioPay subscription is not active. Contact your organisation to resolve this with their anchor, then try again.</string>
     <string name="subscription_locked_retry">Try again</string>
     <string name="subscription_locked_logout">Log out</string>
     <string name="subscription_locked_online_required">Connect to the internet to check whether the anchor subscription has been renewed.</string>
